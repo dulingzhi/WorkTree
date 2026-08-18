@@ -30,3 +30,19 @@ cm:
     matching: "%{count} matching"
     create_in: "Create branch in %{group}…"
     delete_in: "Delete %{count} in %{group}…"
+  status:
+    stage_count: "Stage (%{count})"
+    unstage_count: "Unstage (%{count})"
+    discard_count: "Discard (%{count})"
+    resolve_selected_ours: "Resolve selected using ours (%{count})"
+    resolve_selected_theirs: "Resolve selected using theirs (%{count})"
+    add_gitignore_count: "Add %{count} files to .gitignore…"
+  diff:
+    discard_lines_count: "Discard lines (%{count})"
+    stage_hunks_count: "Stage hunks (%{count})"
+    unstage_hunks_count: "Unstage hunks (%{count})"
+    discard_hunks_count: "Discard hunks (%{count})"
+  pinned:
+    unpin_all_count: "Unpin all (%{count})"
+  conflict:
+    resolve_chunk: "Resolve chunk %{n}"

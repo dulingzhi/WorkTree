@@ -55,7 +55,9 @@ pub(super) fn model(
     if area == DiffArea::Unstaged {
         items.push(ContextMenuItem::Entry {
             label: if lines_count > 1 {
-                format!("Discard lines ({lines_count})").into()
+                crate::i18n::t!("cm.diff.discard_lines_count", count = lines_count)
+                    .into_owned()
+                    .into()
             } else {
                 "Discard line".into()
             },
@@ -78,7 +80,15 @@ pub(super) fn model(
     };
     items.push(ContextMenuItem::Entry {
         label: if hunks_count > 1 {
-            format!("{}s ({hunks_count})", hunk_label).into()
+            match area {
+                DiffArea::Unstaged => {
+                    crate::i18n::t!("cm.diff.stage_hunks_count", count = hunks_count).into_owned()
+                }
+                DiffArea::Staged => {
+                    crate::i18n::t!("cm.diff.unstage_hunks_count", count = hunks_count).into_owned()
+                }
+            }
+            .into()
         } else {
             hunk_label.into()
         },
@@ -95,7 +105,9 @@ pub(super) fn model(
     if area == DiffArea::Unstaged {
         items.push(ContextMenuItem::Entry {
             label: if hunks_count > 1 {
-                format!("Discard hunks ({hunks_count})").into()
+                crate::i18n::t!("cm.diff.discard_hunks_count", count = hunks_count)
+                    .into_owned()
+                    .into()
             } else {
                 "Discard hunk".into()
             },

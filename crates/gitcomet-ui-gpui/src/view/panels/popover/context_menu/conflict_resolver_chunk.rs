@@ -23,7 +23,12 @@ pub(super) fn model(
     output_is_protected: bool,
 ) -> ContextMenuModel {
     let mut items = vec![ContextMenuItem::Header(
-        format!("Resolve chunk {}", conflict_ix.saturating_add(1)).into(),
+        crate::i18n::t!(
+            "cm.conflict.resolve_chunk",
+            n = conflict_ix.saturating_add(1)
+        )
+        .into_owned()
+        .into(),
     )];
 
     if is_three_way {

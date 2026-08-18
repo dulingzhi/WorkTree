@@ -24,3 +24,19 @@ cm:
     matching: "%{count}（匹配）"
     create_in: "在 %{group} 中创建分支…"
     delete_in: "删除 %{group} 中的 %{count}…"
+  status:
+    stage_count: "暂存（%{count} 个）"
+    unstage_count: "取消暂存（%{count} 个）"
+    discard_count: "丢弃（%{count} 个）"
+    resolve_selected_ours: "采用我方解决所选（%{count} 个）"
+    resolve_selected_theirs: "采用对方解决所选（%{count} 个）"
+    add_gitignore_count: "将 %{count} 个文件加入 .gitignore…"
+  diff:
+    discard_lines_count: "放弃 %{count} 行"
+    stage_hunks_count: "暂存 %{count} 个改动块"
+    unstage_hunks_count: "取消暂存 %{count} 个改动块"
+    discard_hunks_count: "放弃 %{count} 个改动块"
+  pinned:
+    unpin_all_count: "全部取消固定（%{count}）"
+  conflict:
+    resolve_chunk: "解决冲突块 %{n}"

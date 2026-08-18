@@ -49,7 +49,9 @@ pub(super) fn model(
     });
 
     items.push(ContextMenuItem::Entry {
-        label: format!("Unpin all ({pinned})").into(),
+        label: crate::i18n::t!("cm.pinned.unpin_all_count", count = pinned)
+            .into_owned()
+            .into(),
         icon: Some("icons/pin.svg".into()),
         shortcut: None,
         disabled: pinned == 0,

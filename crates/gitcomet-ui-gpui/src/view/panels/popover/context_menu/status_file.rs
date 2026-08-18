@@ -227,7 +227,9 @@ pub(super) fn model(
         let n = selected_count;
         items.push(ContextMenuItem::Entry {
             label: if use_selection {
-                format!("Resolve selected using ours ({n})").into()
+                crate::i18n::t!("cm.status.resolve_selected_ours", count = n)
+                    .into_owned()
+                    .into()
             } else {
                 "Resolve using ours".into()
             },
@@ -243,7 +245,9 @@ pub(super) fn model(
         });
         items.push(ContextMenuItem::Entry {
             label: if use_selection {
-                format!("Resolve selected using theirs ({n})").into()
+                crate::i18n::t!("cm.status.resolve_selected_theirs", count = n)
+                    .into_owned()
+                    .into()
             } else {
                 "Resolve using theirs".into()
             },
@@ -294,7 +298,9 @@ pub(super) fn model(
         match area {
             DiffArea::Unstaged => items.push(ContextMenuItem::Entry {
                 label: if use_selection {
-                    format!("Stage ({})", selected_count).into()
+                    crate::i18n::t!("cm.status.stage_count", count = selected_count)
+                        .into_owned()
+                        .into()
                 } else {
                     "Stage".into()
                 },
@@ -309,7 +315,9 @@ pub(super) fn model(
             }),
             DiffArea::Staged => items.push(ContextMenuItem::Entry {
                 label: if use_selection {
-                    format!("Unstage ({})", selected_count).into()
+                    crate::i18n::t!("cm.status.unstage_count", count = selected_count)
+                        .into_owned()
+                        .into()
                 } else {
                     "Unstage".into()
                 },
@@ -329,7 +337,9 @@ pub(super) fn model(
     if show_discard_changes {
         items.push(ContextMenuItem::Entry {
             label: if use_selection {
-                format!("Discard ({})", selected_count).into()
+                crate::i18n::t!("cm.status.discard_count", count = selected_count)
+                    .into_owned()
+                    .into()
             } else {
                 "Discard changes".into()
             },
@@ -351,7 +361,9 @@ pub(super) fn model(
     if can_add_to_gitignore {
         items.push(ContextMenuItem::Entry {
             label: if use_selection {
-                format!("Add {selected_count} files to .gitignore…").into()
+                crate::i18n::t!("cm.status.add_gitignore_count", count = selected_count)
+                    .into_owned()
+                    .into()
             } else {
                 "Add to .gitignore…".into()
             },
@@ -514,7 +526,9 @@ fn submodule_status_model(
         match area {
             DiffArea::Unstaged => items.push(ContextMenuItem::Entry {
                 label: if use_selection {
-                    format!("Stage ({selected_count})").into()
+                    crate::i18n::t!("cm.status.stage_count", count = selected_count)
+                        .into_owned()
+                        .into()
                 } else {
                     "Stage".into()
                 },
@@ -529,7 +543,9 @@ fn submodule_status_model(
             }),
             DiffArea::Staged => items.push(ContextMenuItem::Entry {
                 label: if use_selection {
-                    format!("Unstage ({selected_count})").into()
+                    crate::i18n::t!("cm.status.unstage_count", count = selected_count)
+                        .into_owned()
+                        .into()
                 } else {
                     "Unstage".into()
                 },
@@ -556,7 +572,9 @@ fn submodule_status_model(
     if !(is_conflicted && area == DiffArea::Staged) {
         items.push(ContextMenuItem::Entry {
             label: if use_selection {
-                format!("Discard ({selected_count})").into()
+                crate::i18n::t!("cm.status.discard_count", count = selected_count)
+                    .into_owned()
+                    .into()
             } else {
                 "Discard changes".into()
             },

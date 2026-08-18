@@ -131,9 +131,12 @@ fn active_branch_tracking_upstream_name(host: &PopoverHost) -> Option<String> {
 }
 
 fn action_menu_title(base: &'static str, tracking_branch_name: Option<&str>) -> SharedString {
+    // Gettext-style: the base word ("Pull"/"Push") localizes; the tracking
+    // branch name stays verbatim, and `.localized()` at render passes the
+    // already-translated title through unchanged.
     match tracking_branch_name {
-        Some(name) => format!("{base} {name}").into(),
-        None => base.into(),
+        Some(name) => format!("{} {name}", crate::i18n::tr_en(base)).into(),
+        None => crate::i18n::tr_en(base),
     }
 }
 
