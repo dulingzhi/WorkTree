@@ -4011,6 +4011,7 @@ impl Render for SettingsWindowView {
                         );
                     }
 
+                    general_card = general_card.child(language_row);
                     if self.expanded_section == Some(SettingsSection::Language) {
                         let language_count = crate::i18n::Language::ALL.len();
                         let list = uniform_list(
@@ -4046,7 +4047,6 @@ impl Render for SettingsWindowView {
                         ));
                     }
 
-                    general_card = general_card.child(language_row);
                     general_card = general_card.child(ui_scale_row);
                     if self.expanded_section == Some(SettingsSection::UiScale) {
                         let mut detail =
