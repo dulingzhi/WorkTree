@@ -1,0 +1,14 @@
+# Locale files are keyed by filename (`app.zh-CN.yml` -> locale "zh-CN"), so
+# the content below is the key tree directly — no `zh-CN:` root.
+app:
+  language:
+    title: 语言
+    system: 跟随系统
+    system_with_resolved: "跟随系统（%{language}）"
+  chrome:
+    application_menu: 应用菜单
+    switch_repository: 切换仓库
+    minimize_window: 最小化窗口
+    restore_window: 还原窗口
+    maximize_window: 最大化窗口
+    close_window: 关闭窗口

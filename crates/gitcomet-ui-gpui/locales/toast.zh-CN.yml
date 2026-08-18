@@ -1,0 +1,12 @@
+# 简体中文目录，对应 toast.en.yml；键结构必须一致。
+toast:
+  clone_finished: "克隆完成：%{dest}"
+  clone_aborted: "克隆已中止：%{dest}"
+  failed_save_reminder: "保存 %{name} 提醒偏好失败：%{err}"
+  failed_open_link: "打开链接失败：%{err}"
+  failed_save_preference: "保存 %{name} 偏好失败：%{err}"
+  failed_open_survey: "打开 %{name} 失败：%{err}"
+  abort: 中止
+  aborting: 正在中止…
+  adding_submodule: 正在添加子模块…
+  dismiss_notification: 关闭通知

@@ -10,14 +10,22 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
         Some(Loadable::Ready(tags)) => Some(tags.as_slice()),
         Some(Loadable::Error(err)) => {
             return ContextMenuModel::new(vec![
-                ContextMenuItem::Header(format!("Tags on {short}").into()),
+                ContextMenuItem::Header(
+                    crate::i18n::t!("cm.tag.tags_on", short = short)
+                        .to_string()
+                        .into(),
+                ),
                 ContextMenuItem::Separator,
                 ContextMenuItem::Label(err.clone().into()),
             ]);
         }
         Some(Loadable::Loading) | Some(Loadable::NotLoaded) => {
             return ContextMenuModel::new(vec![
-                ContextMenuItem::Header(format!("Tags on {short}").into()),
+                ContextMenuItem::Header(
+                    crate::i18n::t!("cm.tag.tags_on", short = short)
+                        .to_string()
+                        .into(),
+                ),
                 ContextMenuItem::Separator,
                 ContextMenuItem::Label("Loading tags…".into()),
             ]);
@@ -42,7 +50,9 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
 
     tag_names_model(
         repo_id,
-        format!("Tags on {short}").into(),
+        crate::i18n::t!("cm.tag.tags_on", short = short)
+            .to_string()
+            .into(),
         tag_names,
         remote_names,
         remote_tags,
@@ -65,7 +75,9 @@ pub(super) fn model_for_tag(
     let comparison_mark = comparison_mark_pair(repo);
     tag_names_model(
         repo_id,
-        format!("Tag {name} on {short}").into(),
+        crate::i18n::t!("cm.tag.create_on", name = name, short = short)
+            .to_string()
+            .into(),
         vec![name.clone()],
         remote_names,
         remote_tags,
@@ -131,7 +143,9 @@ fn tag_names_model(
     items.push(ContextMenuItem::Separator);
     // Comparison: mark this tag's commit, or compare it against a mark.
     items.push(ContextMenuItem::Entry {
-        label: format!("Mark {compare_label} for comparison").into(),
+        label: crate::i18n::t!("cm.branch.mark_for_comparison", name = compare_label)
+            .to_string()
+            .into(),
         icon: Some("icons/tag.svg".into()),
         shortcut: None,
         disabled: false,
@@ -157,7 +171,9 @@ fn tag_names_model(
         .map(|(_, label)| label)
     {
         items.push(ContextMenuItem::Entry {
-            label: format!("Compare with {mark_label}").into(),
+            label: crate::i18n::t!("cm.branch.compare_with", name = mark_label)
+                .to_string()
+                .into(),
             icon: Some("icons/open_external.svg".into()),
             shortcut: None,
             disabled: false,
@@ -181,7 +197,9 @@ fn tag_names_model(
             items.push(ContextMenuItem::Separator);
         }
         items.push(ContextMenuItem::Entry {
-            label: format!("Delete tag {name}").into(),
+            label: crate::i18n::t!("cm.tag.delete", name = name)
+                .to_string()
+                .into(),
             icon: Some("icons/trash.svg".into()),
             shortcut: None,
             disabled: false,
@@ -193,7 +211,9 @@ fn tag_names_model(
 
         for remote in &remote_names {
             items.push(ContextMenuItem::Entry {
-                label: format!("Push tag {name} to {remote}").into(),
+                label: crate::i18n::t!("cm.tag.push_to", name = name, remote = remote)
+                    .to_string()
+                    .into(),
                 icon: Some("icons/arrow_up.svg".into()),
                 shortcut: None,
                 disabled: false,
@@ -205,7 +225,9 @@ fn tag_names_model(
             });
             if remote_tags.contains(&(remote.as_str(), name.as_str())) {
                 items.push(ContextMenuItem::Entry {
-                    label: format!("Delete tag {name} from {remote}").into(),
+                    label: crate::i18n::t!("cm.tag.delete_from", name = name, remote = remote)
+                        .to_string()
+                        .into(),
                     icon: Some("icons/trash.svg".into()),
                     shortcut: None,
                     disabled: false,

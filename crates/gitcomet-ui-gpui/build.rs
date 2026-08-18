@@ -98,6 +98,9 @@ fn main() {
     build_themes::generate_embedded_theme_registry();
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=../../assets/splash_backdrop.svg");
+    // `rust_i18n::i18n!` reads `locales/` at macro-expansion time; without
+    // this, editing a catalog alone would not rebuild the crate.
+    println!("cargo:rerun-if-changed=locales");
 
     let manifest_dir =
         PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR missing"));

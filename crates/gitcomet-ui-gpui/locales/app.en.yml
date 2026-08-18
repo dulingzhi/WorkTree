@@ -1,0 +1,16 @@
+# Locale files are keyed by filename (`app.en.yml` -> locale "en"), so the
+# content below is the key tree directly — no `en:` root.
+app:
+  language:
+    # Settings row title / dropdown section for the UI language.
+    title: Language
+    system: System
+    system_with_resolved: "System (%{language})"
+  chrome:
+    # Titlebar / action-bar tooltips in `chrome.rs`.
+    application_menu: Application menu
+    switch_repository: Switch repository
+    minimize_window: Minimize window
+    restore_window: Restore window
+    maximize_window: Maximize window
+    close_window: Close window

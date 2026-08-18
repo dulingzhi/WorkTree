@@ -1,0 +1,66 @@
+# Locale files are keyed by filename (`layout.en.yml` -> locale "en"), so the
+# content below is the key tree directly — no `en:` root.
+# English is also the fallback catalog: every value must stay byte-identical
+# to the source strings in `src/view/panels/layout.rs`, which tests assert.
+layout:
+  loading: Loading
+  no_files: "No files."
+  changed_count: "%{count} changed"
+  multi:
+    commits_selected: "%{count} commits selected"
+  commit_details:
+    title: Commit details
+    close: Close commit details
+    empty_title: Commit
+    no_repository: "No repository."
+    commit_sha: Commit SHA
+    commit_date: Commit date
+    parent_commit_sha: Parent commit SHA
+    committed_files: "Committed files (%{count})"
+  worktree:
+    title: Worktree changes
+    open_in_tab: "Open this worktree in a tab\n%{path}"
+    close: Close
+    loading_files: Loading files…
+  comparison:
+    title: Comparison
+    close: Close comparison
+    changed_files: Changed files
+    viewing_merged_diff: "Viewing merged diff of %{count} commits"
+    viewing_diff: "Viewing diff: %{from} → %{to}"
+  status:
+    unstaged: Unstaged
+    untracked: Untracked
+    staged: Staged
+    stage: Stage
+    discard: Discard
+    unstage: Unstage
+    stage_all: Stage all
+    stage_all_changes: Stage all changes
+    stage_all_untracked: Stage all untracked files
+    stage_all_unstaged: Stage all unstaged changes
+    unstage_all_changes: Unstage all changes
+    all: All
+    file_word: file
+    files_word: files
+    stage_selected_tooltip: "Stage %{count} selected %{file_word}"
+    discard_selected_tooltip: "Discard changes in %{count} selected %{file_word}"
+    unstage_selected_tooltip: "Unstage %{count} selected %{file_word}"
+    loading: Loading…
+    no_unstaged_changes: "No unstaged changes."
+    no_untracked_files: "No untracked files."
+    nothing_staged: "Nothing staged yet."
+    working_tree_clean: "Working tree clean."
+    changes_title: Changes
+    no_repository_selected: "No repository selected."
+  commit_box:
+    commit: Commit
+    commit_and_push: Commit changes and Push
+    amend_previous: Amend Previous Commit
+    amend_and_push: Amend and Push Safely
+    tooltip_commit: Commit staged changes
+    tooltip_commit_and_push: Commit staged changes and push
+    tooltip_amend: Amend the previous commit
+    tooltip_amend_and_push: "Amend the previous commit; published amends require explicit force push with lease"
+    options: Commit options
+    previous_messages: Previous commit messages

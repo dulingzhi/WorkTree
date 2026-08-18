@@ -189,6 +189,8 @@ impl GitCometView {
                             repo_sidebar_collapsed_items: Some(repo_sidebar_collapsed_items),
                             repo_sidebar_pinned_branches: Some(repo_sidebar_pinned_branches),
                             theme_mode: Some(this.theme_mode.key().to_string()),
+                            // Language is owned by the settings window.
+                            language: None,
                             ui_scale_percent: Some(this.ui_scale_percent),
                             ui_font_family: Some(font_preferences.ui_font_family),
                             editor_font_family: Some(font_preferences.editor_font_family),

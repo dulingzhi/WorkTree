@@ -34,7 +34,11 @@ pub(super) fn model(
     let mut items = vec![ContextMenuItem::Header(group_label.clone().into())];
     items.push(ContextMenuItem::Label(
         components::ContextMenuText::path_single_line(if filtered {
-            format!("{} matching the filter", branch_count_label(member_count))
+            crate::i18n::t!(
+                "cm.group.matching_filter",
+                count = branch_count_label(member_count)
+            )
+            .to_string()
         } else {
             branch_count_label(member_count)
         }),
@@ -88,7 +92,9 @@ pub(super) fn model(
     if section == BranchSection::Local {
         items.push(ContextMenuItem::Separator);
         items.push(ContextMenuItem::Entry {
-            label: format!("Create branch in {group_label}…").into(),
+            label: crate::i18n::t!("cm.group.create_in", group = group_label)
+                .to_string()
+                .into(),
             icon: Some("icons/plus.svg".into()),
             shortcut: None,
             disabled: false,
@@ -106,14 +112,24 @@ pub(super) fn model(
     // While a filter is live the group shows only its matches, so the entry
     // says so rather than implying it covers the whole group.
     let count_label = if filtered {
-        format!("{} matching", branch_count_label(deletable_count))
+        crate::i18n::t!(
+            "cm.group.matching",
+            count = branch_count_label(deletable_count)
+        )
+        .to_string()
     } else {
         branch_count_label(deletable_count)
     };
 
     items.push(ContextMenuItem::Separator);
     items.push(ContextMenuItem::Entry {
-        label: format!("Delete {count_label} in {group_label}…").into(),
+        label: crate::i18n::t!(
+            "cm.group.delete_in",
+            count = count_label,
+            group = group_label
+        )
+        .to_string()
+        .into(),
         icon: Some("icons/trash.svg".into()),
         shortcut: None,
         disabled: deletable_count == 0,
@@ -134,10 +150,11 @@ pub(super) fn model(
 }
 
 fn branch_count_label(count: usize) -> String {
-    format!(
-        "{count} {}",
-        gitcomet_state::name_summary::branch_noun(count)
-    )
+    if count == 1 {
+        crate::i18n::t!("cm.group.branch_count_one").to_string()
+    } else {
+        crate::i18n::t!("cm.group.branch_count", count = count).to_string()
+    }
 }
 
 /// Visits the branches the group row is actually showing.

@@ -1,0 +1,26 @@
+# 简体中文目录，对应 context_menu_dynamic.en.yml；键结构必须一致。
+cm:
+  branch:
+    mark_for_comparison: "标记 %{name} 以比较"
+    compare_with: "与 %{name} 比较"
+  rebase_onto: "将 %{current} 变基到 %{target}"
+  interactive_rebase_onto: "交互式变基：将 %{current} 变基到 %{target}"
+  tag:
+    tags_on: "%{short} 上的标签"
+    create_on: "在 %{short} 上创建标签 %{name}"
+    delete: "删除标签 %{name}"
+    push_to: "推送标签 %{name} 到 %{remote}"
+    delete_from: "从 %{remote} 删除标签 %{name}"
+  commit:
+    header: "提交 %{short}"
+    squash: "压缩 %{count} 个提交"
+    cherry_pick: "拣选 %{count} 个提交…"
+    interactive_rebase_child: "交互式变基 %{short} 的 %{count} 个子提交"
+    interactive_rebase_children: "交互式变基 %{short} 的 %{count} 个子提交"
+  group:
+    branch_count_one: "1 个分支"
+    branch_count: "%{count} 个分支"
+    matching_filter: "%{count}（匹配筛选条件）"
+    matching: "%{count}（匹配）"
+    create_in: "在 %{group} 中创建分支…"
+    delete_in: "删除 %{group} 中的 %{count}…"

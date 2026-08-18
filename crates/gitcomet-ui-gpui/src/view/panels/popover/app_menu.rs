@@ -198,7 +198,7 @@ pub(super) fn activate(
                 files: true,
                 directories: false,
                 multiple: false,
-                prompt: Some("Select patch file".into()),
+                prompt: Some(crate::i18n::tr("menu.prompt.apply_patch")),
             });
             window
                 .spawn(cx, async move |cx| {

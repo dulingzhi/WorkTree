@@ -124,7 +124,9 @@ pub(super) fn model(
     if let Some(commit_id) = branch_commit_id {
         let comparison_mark = repo.and_then(|r| r.comparison_mark.clone());
         items.push(ContextMenuItem::Entry {
-            label: format!("Mark {name} for comparison").into(),
+            label: crate::i18n::t!("cm.branch.mark_for_comparison", name = name)
+                .to_string()
+                .into(),
             icon: Some("icons/git_branch.svg".into()),
             shortcut: None,
             disabled: false,
@@ -147,7 +149,9 @@ pub(super) fn model(
         });
         if let Some(mark) = comparison_mark.filter(|mark| mark.commit_id != commit_id) {
             items.push(ContextMenuItem::Entry {
-                label: format!("Compare with {}", mark.label).into(),
+                label: crate::i18n::t!("cm.branch.compare_with", name = mark.label)
+                    .to_string()
+                    .into(),
                 icon: Some("icons/open_external.svg".into()),
                 shortcut: None,
                 disabled: false,
@@ -224,7 +228,13 @@ pub(super) fn model(
                 }),
             });
             items.push(ContextMenuItem::Entry {
-                label: format!("Rebase {current_branch_label} onto {name}").into(),
+                label: crate::i18n::t!(
+                    "cm.rebase_onto",
+                    current = current_branch_label,
+                    target = name
+                )
+                .to_string()
+                .into(),
                 icon: Some("icons/arrow_up.svg".into()),
                 shortcut: Some("B".into()),
                 disabled: history_rewrite_disabled,
@@ -283,7 +293,13 @@ pub(super) fn model(
                 }),
             });
             items.push(ContextMenuItem::Entry {
-                label: format!("Rebase {current_branch_label} onto {name}").into(),
+                label: crate::i18n::t!(
+                    "cm.rebase_onto",
+                    current = current_branch_label,
+                    target = name
+                )
+                .to_string()
+                .into(),
                 icon: Some("icons/arrow_up.svg".into()),
                 shortcut: Some("B".into()),
                 disabled: history_rewrite_disabled,

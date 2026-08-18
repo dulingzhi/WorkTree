@@ -1,0 +1,74 @@
+# 命令面板翻译（简体中文）。键与 palette.en.yml 一一对应；`COMMANDS`
+# 常量表存的是键，显示与搜索时经 `tr_str` 解析。`keywords` 检索词保留英文，
+# 在匹配时与翻译后的标签合并参与搜索。
+palette:
+  placeholder: 搜索命令…
+  results: 结果
+  no_matches: 没有匹配的命令
+
+  cmd:
+    commit: 提交更改
+    stage-all: 暂存所有更改
+    unstage-all: 取消暂存所有更改
+    create-branch: 创建分支
+    checkout-branch: 检出分支
+    delete-branch: 删除分支
+    rename-branch: 重命名分支
+    rebase: 变基到
+    pull: 拉取
+    push: 推送
+    force-push: 强制推送
+    stash: 贮藏更改
+    stash-pop: 弹出贮藏
+    stash-apply: 应用贮藏
+    stash-drop: 丢弃贮藏
+    open-repository: 打开仓库
+    switch-repository: 切换仓库
+    clone-repository: 克隆仓库
+    close-repo-tab: 关闭仓库标签页
+    reload-repository: 重新加载仓库
+    fetch-all: 获取全部
+    toggle-sidebar: 切换侧边栏
+    toggle-details: 切换详情面板
+    toggle-diff-view: 切换差异视图（分栏/内联）
+    toggle-diff-word-wrap: 切换差异换行
+    toggle-line-numbers: 切换差异行号
+    toggle-whitespace-chars: 切换空白字符显示
+    previous-repo-tab: 上一个仓库标签页
+    next-repo-tab: 下一个仓库标签页
+    locate-file-in-explorer: 在文件管理器中显示文件
+    open-active-view-search: 在当前视图中搜索
+    create-tag: 创建标签
+    new-window: 新建窗口
+    open-settings: 打开设置
+    quit: 退出 GitComet
+    minimize-window: 最小化窗口
+    zoom-window: 缩放窗口
+    toggle-fullscreen: 切换全屏
+    increase-ui-scale: 放大界面比例
+    decrease-ui-scale: 缩小界面比例
+    reset-ui-scale: 重置界面比例
+    close-window: 关闭窗口
+    add-remote: 添加远程仓库
+    add-submodule: 添加子模块
+    update-submodules: 更新子模块
+    add-worktree: 添加工作树
+    blame: 追溯 / 注释
+    back: 后退
+    forward: 前进
+
+  cat:
+    commit: 提交
+    working-copy: 工作区
+    branch: 分支
+    sync: 同步
+    stash: 贮藏
+    repository: 仓库
+    view: 视图
+    navigation: 导航
+    tags: 标签
+    window: 窗口
+    remotes: 远程仓库
+    submodules: 子模块
+    worktrees: 工作树
+    history: 历史

@@ -1,4 +1,5 @@
 use crate::assets::GitCometAssets;
+use crate::i18n::{self, t, tr};
 use crate::launch_guard::{UiLaunchError, run_with_panic_guard};
 use crate::ui_scale;
 use crate::view::{
@@ -16,6 +17,8 @@ use gitcomet_core::services::GitBackend;
 use gitcomet_state::session;
 use gitcomet_state::store::AppStore;
 
+#[cfg(target_os = "macos")]
+use crate::i18n::tr_str;
 use gpui::{
     Action, App, AppContext, BorrowAppContext, Bounds, KeyBinding, Pixels, Point, Size,
     TitlebarOptions, Unbind, Window, WindowBackgroundAppearance, WindowBounds, WindowDecorations,
@@ -172,6 +175,7 @@ pub fn run_with_startup_crash_report_and_shutdown_callback(
     startup_crash_report: Option<StartupCrashReport>,
     on_shutdown: Option<impl Fn() + Send + Sync + 'static>,
 ) -> Result<UiRunOutcome, UiLaunchError> {
+    seed_i18n_locale_from_session();
     let launch = normal_launch_config(initial_path, startup_crash_report);
     ensure_graphics_device_available("main GPUI window launch")?;
     let on_shutdown = on_shutdown.map(|callback| Arc::new(callback) as ShutdownCallback);
@@ -196,6 +200,7 @@ pub fn run_focused_mergetool(backend: Arc<dyn GitBackend>, config: FocusedMerget
         return FOCUSED_MERGETOOL_EXIT_ERROR;
     }
 
+    seed_i18n_locale_from_session();
     let exit_code = Arc::new(AtomicI32::new(FOCUSED_MERGETOOL_EXIT_CANCELED));
     let launch = focused_mergetool_launch_config(&config, Some(exit_code.clone()));
     if let Err(err) = run_with_panic_guard("focused mergetool GPUI launch", move || {
@@ -205,6 +210,27 @@ pub fn run_focused_mergetool(backend: Arc<dyn GitBackend>, config: FocusedMerget
         return FOCUSED_MERGETOOL_EXIT_ERROR;
     }
     exit_code.load(Ordering::SeqCst)
+}
+
+/// Seed the process-wide rust-i18n locale from the persisted session.
+///
+/// [`open_gitcomet_window`] later initializes the `i18n::AppLanguage` gpui
+/// global, but the macOS menu bar is installed before any window opens and the
+/// focused-mergetool window title is formatted before the app even runs — both
+/// resolve through `t!`, which reads the process-global locale. Seeding here
+/// keeps those pre-window surfaces in the persisted language; the global init
+/// afterwards re-applies the same locale.
+fn seed_i18n_locale_from_session() {
+    if cfg!(test) {
+        // Tests pin English so string assertions stay deterministic.
+        return;
+    }
+    let language = session::load()
+        .language
+        .as_deref()
+        .and_then(i18n::Language::from_key)
+        .unwrap_or_default();
+    rust_i18n::set_locale(language.resolved_locale());
 }
 
 fn normal_launch_config(
@@ -265,7 +291,7 @@ fn focused_mergetool_window_title(conflicted_file_path: &Path) -> String {
         .file_name()
         .and_then(|name| name.to_str().map(ToOwned::to_owned))
         .unwrap_or_else(|| format!("{conflicted_file_path:?}"));
-    format!("GitComet - Mergetool ({display})")
+    t!("menu.mergetool.window_title", file = display).into_owned()
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -510,6 +536,7 @@ fn open_gitcomet_window(
     clear_clean_shutdown_request(cx);
     let ui_session = session::load();
     let ui_scale = ui_scale::current_or_initialize_from_session(&ui_session, cx);
+    i18n::current_or_initialize_from_session(&ui_session, cx);
     let min_size = main_window_min_size_for_percent(ui_scale.percent);
     let default_size = main_window_default_size_for_percent(ui_scale.percent);
     let restored_w = ui_session
@@ -922,77 +949,78 @@ fn macos_app_menus() -> Vec<Menu> {
 #[cfg(target_os = "macos")]
 fn macos_app_menus_with_external_editor(external_editor_configured: bool) -> Vec<Menu> {
     let mut file_items = vec![
-        MenuItem::action("New Window", NewWindow),
+        MenuItem::action(tr_str("menu.file.new_window"), NewWindow),
         MenuItem::separator(),
-        MenuItem::action(crate::menu_labels::OPEN_REPOSITORY, OpenRepository),
-        MenuItem::action(crate::menu_labels::CLONE_REPOSITORY, CloneRepository),
-        MenuItem::action(
-            crate::menu_labels::INITIALIZE_REPOSITORY,
-            InitializeRepository,
-        ),
-        MenuItem::action("Switch Repository…", SwitchRepository),
+        MenuItem::action(tr_str("menu.file.open"), OpenRepository),
+        MenuItem::action(tr_str("menu.file.clone_repository"), CloneRepository),
+        MenuItem::action(tr_str("menu.file.initialize_repository"), InitializeRepository),
+        MenuItem::action(tr_str("menu.file.switch_repository"), SwitchRepository),
     ];
 
     let recent_repo_items = recent_repo_menu_items();
     if !recent_repo_items.is_empty() {
         file_items.push(MenuItem::submenu(Menu {
-            name: "Recent Repositories".into(),
+            name: tr_str("menu.file.recent_repositories").into(),
             items: recent_repo_items,
             disabled: false,
         }));
     }
     file_items.push(MenuItem::separator());
     if external_editor_configured {
-        file_items.push(MenuItem::action(
-            crate::menu_labels::OPEN_IN_CODE_EDITOR,
-            OpenInCodeEditor,
-        ));
+        file_items.push(MenuItem::action(tr_str("menu.file.open_in_code_editor"), OpenInCodeEditor));
     }
 
     file_items.extend([
-        MenuItem::action(
-            crate::menu_labels::OPEN_IN_FILE_EXPLORER,
-            LocateFileInExplorer,
-        ),
-        MenuItem::action(crate::menu_labels::APPLY_PATCH, ApplyPatch),
+        MenuItem::action(tr_str("menu.file.open_in_explorer"), LocateFileInExplorer),
+        MenuItem::action(tr_str("menu.file.apply_patch"), ApplyPatch),
         MenuItem::separator(),
-        MenuItem::action("Close", Close),
-        MenuItem::action("Close Window", CloseWindow),
+        MenuItem::action(tr_str("menu.file.close"), Close),
+        MenuItem::action(tr_str("menu.file.close_window"), CloseWindow),
     ]);
 
     vec![
         Menu {
+            // The application menu is named after the app itself.
             name: "GitComet".into(),
             items: vec![
-                MenuItem::action(crate::menu_labels::COMMAND_PALETTE, ToggleCommandPalette),
-                MenuItem::action(crate::menu_labels::SETTINGS, OpenSettings),
+                MenuItem::action(tr_str("menu.app.command_palette"), ToggleCommandPalette),
+                MenuItem::action(tr_str("menu.app.settings"), OpenSettings),
                 MenuItem::separator(),
+                // macOS localizes its own Services submenu; leave it to the OS.
                 MenuItem::os_submenu("Services", SystemMenuType::Services),
                 MenuItem::separator(),
-                MenuItem::action("Hide GitComet", Hide),
-                MenuItem::action("Hide Others", HideOthers),
-                MenuItem::action("Show All", ShowAll),
+                MenuItem::action(tr_str("menu.app.hide_gitcomet"), Hide),
+                MenuItem::action(tr_str("menu.app.hide_others"), HideOthers),
+                MenuItem::action(tr_str("menu.app.show_all"), ShowAll),
                 MenuItem::separator(),
-                MenuItem::action("Quit GitComet", Quit),
+                MenuItem::action(tr_str("menu.app.quit_gitcomet"), Quit),
             ],
             disabled: false,
         },
         Menu {
-            name: "File".into(),
+            name: tr_str("menu.file.title").into(),
             items: file_items,
             disabled: false,
         },
         Menu {
-            name: "Edit".into(),
+            name: tr_str("menu.edit.title").into(),
             items: vec![
-                MenuItem::os_action("Undo", crate::kit::Undo, OsAction::Undo),
-                MenuItem::os_action("Redo", crate::kit::Redo, OsAction::Redo),
+                MenuItem::os_action(tr_str("menu.edit.undo"), crate::kit::Undo, OsAction::Undo),
+                MenuItem::os_action(tr_str("menu.edit.redo"), crate::kit::Redo, OsAction::Redo),
                 MenuItem::separator(),
-                MenuItem::os_action("Cut", crate::kit::Cut, OsAction::Cut),
-                MenuItem::os_action("Copy", crate::kit::Copy, OsAction::Copy),
-                MenuItem::os_action("Paste", crate::kit::Paste, OsAction::Paste),
+                MenuItem::os_action(tr_str("menu.edit.cut"), crate::kit::Cut, OsAction::Cut),
+                MenuItem::os_action(tr_str("menu.edit.copy"), crate::kit::Copy, OsAction::Copy),
+                MenuItem::os_action(
+                    tr_str("menu.edit.paste"),
+                    crate::kit::Paste,
+                    OsAction::Paste,
+                ),
                 MenuItem::separator(),
-                MenuItem::os_action("Select All", crate::kit::SelectAll, OsAction::SelectAll),
+                MenuItem::os_action(
+                    tr_str("menu.edit.select_all"),
+                    crate::kit::SelectAll,
+                    OsAction::SelectAll,
+                ),
             ],
             disabled: false,
         },
@@ -1002,19 +1030,22 @@ fn macos_app_menus_with_external_editor(external_editor_configured: bool) -> Vec
             disabled: false,
         },
         Menu {
-            name: "Window".into(),
+            name: tr_str("menu.window.title").into(),
             items: vec![
-                MenuItem::action("Minimize", MinimizeWindow),
-                MenuItem::action("Zoom", ZoomWindow),
+                MenuItem::action(tr_str("menu.window.minimize"), MinimizeWindow),
+                MenuItem::action(tr_str("menu.window.zoom"), ZoomWindow),
                 MenuItem::separator(),
-                MenuItem::action("Zoom In", IncreaseUiScale),
-                MenuItem::action("Zoom Out", DecreaseUiScale),
-                MenuItem::action("Actual Size", ResetUiScale),
+                MenuItem::action(tr_str("menu.window.zoom_in"), IncreaseUiScale),
+                MenuItem::action(tr_str("menu.window.zoom_out"), DecreaseUiScale),
+                MenuItem::action(tr_str("menu.window.actual_size"), ResetUiScale),
                 MenuItem::separator(),
-                MenuItem::action("Previous Repository", PreviousRepository),
-                MenuItem::action("Next Repository", NextRepository),
+                MenuItem::action(
+                    tr_str("menu.window.previous_repository"),
+                    PreviousRepository,
+                ),
+                MenuItem::action(tr_str("menu.window.next_repository"), NextRepository),
                 MenuItem::separator(),
-                MenuItem::action("Toggle Full Screen", ToggleFullScreen),
+                MenuItem::action(tr_str("menu.window.toggle_full_screen"), ToggleFullScreen),
             ],
             disabled: false,
         },
@@ -1724,7 +1755,7 @@ fn prompt_open_repository(cx: &mut App, backend: Arc<dyn GitBackend>) {
         files: false,
         directories: true,
         multiple: false,
-        prompt: Some("Open Git Repository".into()),
+        prompt: Some(tr("menu.prompt.open_repository")),
     });
 
     cx.spawn(async move |cx: &mut gpui::AsyncApp| {
@@ -1763,7 +1794,7 @@ fn prompt_apply_patch(cx: &mut App) {
         files: true,
         directories: false,
         multiple: false,
-        prompt: Some("Select patch file".into()),
+        prompt: Some(tr("menu.prompt.apply_patch")),
     });
 
     cx.spawn(async move |cx: &mut gpui::AsyncApp| {

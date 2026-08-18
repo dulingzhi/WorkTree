@@ -2040,7 +2040,7 @@ impl PopoverHost {
                     ContextMenuItem::Header(title) => components::context_menu_header(
                         theme,
                         ui_scale,
-                        title,
+                        title.localized(),
                         Some(tooltip_host.clone()),
                         cx,
                     )
@@ -2049,7 +2049,7 @@ impl PopoverHost {
                     ContextMenuItem::Description(text) => components::context_menu_description(
                         theme,
                         ui_scale,
-                        text,
+                        text.localized(),
                         Some(tooltip_host.clone()),
                         cx,
                     )
@@ -2058,7 +2058,7 @@ impl PopoverHost {
                     ContextMenuItem::Label(text) => components::context_menu_label(
                         theme,
                         ui_scale,
-                        text,
+                        text.localized(),
                         Some(tooltip_host.clone()),
                         cx,
                     )
@@ -2092,6 +2092,7 @@ impl PopoverHost {
                                 action,
                             } = segment;
                             let debug_selector = id.clone();
+                            let label = crate::i18n::tr_en(label.as_ref());
                             let mut button = components::Button::new(id, label)
                                 .borderless()
                                 .style(components::ButtonStyle::Subtle)
@@ -2102,14 +2103,15 @@ impl PopoverHost {
                                 })
                                 .debug_selector(move || debug_selector.to_string());
                             if let Some(tooltip) = tooltip {
-                                button = button.gitcomet_tooltip(theme, tooltip);
+                                button = button
+                                    .gitcomet_tooltip(theme, crate::i18n::tr_en(tooltip.as_ref()));
                             }
                             control = control.child(button);
                         }
                         components::context_menu_label(
                             theme,
                             ui_scale,
-                            label,
+                            crate::i18n::tr_en(label.as_ref()),
                             Some(tooltip_host.clone()),
                             cx,
                         )

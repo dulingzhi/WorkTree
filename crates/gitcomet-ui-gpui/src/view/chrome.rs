@@ -497,7 +497,7 @@ impl Render for TitleBarView {
                     .rounded(px(theme.radii.control))
                     .block_mouse_except_scroll()
                     .debug_selector(|| "app_menu".to_string())
-                    .gitcomet_tooltip(theme, "Application menu".into()),
+                    .gitcomet_tooltip(theme, crate::i18n::tr("app.chrome.application_menu")),
             );
 
         // Browser-style repository switcher: a bare chevron beside the app menu
@@ -565,7 +565,7 @@ impl Render for TitleBarView {
                             cx,
                         );
                     }))
-                    .gitcomet_tooltip(theme, "Switch repository".into()),
+                    .gitcomet_tooltip(theme, crate::i18n::tr("app.chrome.switch_repository")),
             );
 
         // One drag surface spans the title bar underneath its controls. Each
@@ -637,7 +637,7 @@ impl Render for TitleBarView {
                 }
             }));
 
-        let min_tooltip: SharedString = "Minimize window".into();
+        let min_tooltip: SharedString = crate::i18n::tr("app.chrome.minimize_window");
         let min = titlebar_control_button(
             ui_scale_percent,
             "win_min_btn",
@@ -660,9 +660,9 @@ impl Render for TitleBarView {
             "icons/generic_maximize.svg"
         };
         let max_tooltip: SharedString = if window.is_maximized() {
-            "Restore window".into()
+            crate::i18n::tr("app.chrome.restore_window")
         } else {
-            "Maximize window".into()
+            crate::i18n::tr("app.chrome.maximize_window")
         };
         let max = titlebar_control_button(
             ui_scale_percent,
@@ -681,7 +681,7 @@ impl Render for TitleBarView {
             cx.notify();
         }));
 
-        let close_tooltip: SharedString = "Close window".into();
+        let close_tooltip: SharedString = crate::i18n::tr("app.chrome.close_window");
         let close = titlebar_control_button(
             ui_scale_percent,
             "win_close_btn",

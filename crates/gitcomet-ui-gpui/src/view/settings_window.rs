@@ -1,4 +1,5 @@
 use super::*;
+use crate::i18n::{t, tr, tr_str};
 use crate::ui_scale;
 use gitcomet_core::domain::HistoryMode;
 use gitcomet_core::process::{
@@ -24,6 +25,9 @@ const SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX: f32 = 20.0;
 const SETTINGS_DROPDOWN_DETAIL_ROW_HEIGHT_PX: f32 = 42.0;
 const SETTINGS_DROPDOWN_DETAIL_LIST_EXTRA_HEIGHT_PX: f32 = 24.0;
 const SETTINGS_DROPDOWN_DENSE_DETAIL_ROW_HEIGHT_PX: f32 = 28.0;
+// The user-visible title is translated (`settings.window.title`); the tests
+// below still assert against this literal, which is the English catalog value.
+#[cfg(test)]
 const SETTINGS_WINDOW_TITLE: &str = "Settings: GitComet";
 const SETTINGS_TRAFFIC_LIGHTS_SAFE_INSET_PX: f32 = 78.0;
 const MIN_GIT_MAJOR: u32 = 2;
@@ -102,20 +106,21 @@ fn custom_external_editor_path_prompt_options() -> gpui::PathPromptOptions {
         files: true,
         directories: true,
         multiple: false,
-        prompt: Some("Select external code editor".into()),
+        prompt: Some(tr("settings.external_editor.prompt_select")),
     }
 }
 
+// The third tuple element is a translation key for the row's detail text.
 const CHANGE_TRACKING_OPTIONS: &[(&str, ChangeTrackingView, &str)] = &[
     (
         "settings_window_change_tracking_combined",
         ChangeTrackingView::Combined,
-        "Keep untracked files inside the Unstaged section",
+        "settings.change_tracking.combined_detail",
     ),
     (
         "settings_window_change_tracking_split_untracked",
         ChangeTrackingView::SplitUntracked,
-        "Show an Untracked block above Unstaged",
+        "settings.change_tracking.split_untracked_detail",
     ),
 ];
 
@@ -123,22 +128,22 @@ const DIFF_SCROLL_SYNC_OPTIONS: &[(&str, DiffScrollSync, &str)] = &[
     (
         "settings_window_diff_scroll_sync_vertical",
         DiffScrollSync::Vertical,
-        "Lock vertical scrolling only.",
+        "settings.diff.scroll_sync_vertical_detail",
     ),
     (
         "settings_window_diff_scroll_sync_horizontal",
         DiffScrollSync::Horizontal,
-        "Lock horizontal scrolling only.",
+        "settings.diff.scroll_sync_horizontal_detail",
     ),
     (
         "settings_window_diff_scroll_sync_none",
         DiffScrollSync::None,
-        "Keep split and merge panes independent.",
+        "settings.diff.scroll_sync_none_detail",
     ),
     (
         "settings_window_diff_scroll_sync_both",
         DiffScrollSync::Both,
-        "Lock both vertical and horizontal scrolling.",
+        "settings.diff.scroll_sync_both_detail",
     ),
 ];
 
@@ -146,12 +151,12 @@ const DIFF_CONTENT_MODE_OPTIONS: &[(&str, DiffContentMode, &str)] = &[
     (
         "settings_window_diff_content_mode_collapsed",
         DiffContentMode::Collapsed,
-        "Hide unchanged sections, with hunk controls to reveal more context.",
+        "settings.diff.content_collapsed_detail",
     ),
     (
         "settings_window_diff_content_mode_full",
         DiffContentMode::Full,
-        "Show the full file using the regular file diff view.",
+        "settings.diff.content_full_detail",
     ),
 ];
 
@@ -159,18 +164,19 @@ const DIFF_VIEW_MODE_OPTIONS: &[(&str, DiffViewMode, &str)] = &[
     (
         "settings_window_diff_view_mode_inline",
         DiffViewMode::Inline,
-        "Show changes inline.",
+        "settings.diff.view_inline_detail",
     ),
     (
         "settings_window_diff_view_mode_split",
         DiffViewMode::Split,
-        "Show changes in split view.",
+        "settings.diff.view_split_detail",
     ),
 ];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum SettingsSection {
     Theme,
+    Language,
     UiScale,
     UiFont,
     EditorFont,
@@ -195,6 +201,7 @@ impl SettingsSection {
     fn category(self) -> SettingsCategory {
         match self {
             Self::Theme
+            | Self::Language
             | Self::UiScale
             | Self::UiFont
             | Self::EditorFont
@@ -243,16 +250,16 @@ impl SettingsCategory {
 
     fn label(self) -> &'static str {
         match self {
-            Self::General => "General",
-            Self::Terminal => "Terminal",
-            Self::ChangeTracking => "Change tracking",
-            Self::Diff => "Diff",
-            Self::FileEditing => "File editing",
-            Self::GitLog => "Git log",
-            Self::Tags => "Tags",
-            Self::GitExecutable => "Git executable",
-            Self::Environment => "Environment",
-            Self::Links => "Links",
+            Self::General => tr_str("settings.nav.general"),
+            Self::Terminal => tr_str("settings.nav.terminal"),
+            Self::ChangeTracking => tr_str("settings.nav.change_tracking"),
+            Self::Diff => tr_str("settings.nav.diff"),
+            Self::FileEditing => tr_str("settings.nav.file_editing"),
+            Self::GitLog => tr_str("settings.nav.git_log"),
+            Self::Tags => tr_str("settings.nav.tags"),
+            Self::GitExecutable => tr_str("settings.nav.git_executable"),
+            Self::Environment => tr_str("settings.nav.environment"),
+            Self::Links => tr_str("settings.nav.links"),
         }
     }
 
@@ -291,8 +298,8 @@ impl SettingsCategory {
     fn search_haystack(self) -> &'static str {
         match self {
             Self::General => {
-                "general theme date format ui scale ui font editor font ligatures \
-                 external code editor date timezone appearance"
+                "general theme language ui language date format ui scale ui font editor font \
+                 ligatures external code editor date timezone appearance"
             }
             Self::Terminal => "terminal external terminal action bar terminal button opens",
             Self::ChangeTracking => "change tracking untracked files",
@@ -390,6 +397,7 @@ enum TerminalProgramInputTarget {
 pub(crate) struct SettingsWindowView {
     theme_mode: ThemeMode,
     theme: AppTheme,
+    language: crate::i18n::Language,
     ui_scale_percent: u32,
     ui_font_family: String,
     editor_font_family: String,
@@ -399,6 +407,7 @@ pub(crate) struct SettingsWindowView {
     external_editor_options: Arc<[crate::external_editor::ExternalEditorOption]>,
     settings_window_scroll: ScrollHandle,
     theme_scroll: UniformListScrollHandle,
+    language_scroll: UniformListScrollHandle,
     ui_font_scroll: UniformListScrollHandle,
     editor_font_scroll: UniformListScrollHandle,
     external_editor_scroll: UniformListScrollHandle,
@@ -560,7 +569,7 @@ fn settings_window_titlebar_options() -> TitlebarOptions {
 
 fn settings_window_titlebar_options_for_scale(ui_scale_percent: u32) -> TitlebarOptions {
     TitlebarOptions {
-        title: Some(SETTINGS_WINDOW_TITLE.into()),
+        title: Some(tr_str("settings.window.title").into()),
         // Windows needs a transparent native titlebar to avoid rendering its own
         // caption on top of the custom settings header.
         appears_transparent: cfg!(any(target_os = "macos", target_os = "windows")),
@@ -744,20 +753,20 @@ fn history_columns_settings_label(
 ) -> SharedString {
     let mut columns = Vec::new();
     if show_graph {
-        columns.push("Graph");
+        columns.push(tr_str("settings.git_log.column_graph"));
     }
     if show_author {
-        columns.push("Author");
+        columns.push(tr_str("settings.git_log.column_author"));
     }
     if show_date {
-        columns.push("Commit date");
+        columns.push(tr_str("settings.git_log.column_date"));
     }
     if show_sha {
-        columns.push("SHA");
+        columns.push(tr_str("settings.git_log.column_sha"));
     }
 
     if columns.is_empty() {
-        "None".into()
+        tr_str("settings.git_log.columns_none").into()
     } else {
         columns.join(", ").into()
     }
@@ -765,8 +774,8 @@ fn history_columns_settings_label(
 
 fn git_log_tag_fetch_mode_label(mode: GitLogTagFetchMode) -> &'static str {
     match mode {
-        GitLogTagFetchMode::OnRepositoryActivation => "On repository activation",
-        GitLogTagFetchMode::Disabled => "Disabled",
+        GitLogTagFetchMode::OnRepositoryActivation => tr_str("settings.tags.fetch_on_activation"),
+        GitLogTagFetchMode::Disabled => tr_str("settings.tags.fetch_disabled"),
     }
 }
 
@@ -778,7 +787,7 @@ fn applied_git_executable_path(runtime: &GitRuntimeState) -> Option<PathBuf> {
 }
 
 fn git_executable_scope_note() -> &'static str {
-    "Applies to the main GitComet browser window. Git-invoked command modes keep using git from System PATH. Helper tools such as gpg are resolved by Git from the app environment unless configured in Git."
+    tr_str("settings.git_executable.scope_note")
 }
 
 fn initial_external_editor_setting(
@@ -790,8 +799,6 @@ fn initial_external_editor_setting(
 
 impl SettingsWindowView {
     fn new(window: &mut Window, cx: &mut gpui::Context<Self>) -> Self {
-        window.set_window_title(SETTINGS_WINDOW_TITLE);
-
         let ui_session = session::load();
         let ui_scale = ui_scale::current_or_initialize_from_session(&ui_session, cx);
         let font_preferences =
@@ -801,6 +808,15 @@ impl SettingsWindowView {
             .as_deref()
             .and_then(ThemeMode::from_key)
             .unwrap_or_default();
+        crate::i18n::current_or_initialize_from_session(&ui_session, cx);
+        let language = ui_session
+            .language
+            .as_deref()
+            .and_then(crate::i18n::Language::from_key)
+            .unwrap_or_default();
+        // Set after the i18n global is seeded so the native title follows the
+        // active language.
+        window.set_window_title(tr_str("settings.window.title"));
         let date_time_format = ui_session
             .date_time_format
             .as_deref()
@@ -915,7 +931,7 @@ impl SettingsWindowView {
         let terminal_external_args_input = cx.new(|cx| {
             let mut input = components::TextInput::new(
                 components::TextInputOptions {
-                    placeholder: "One argument per line".into(),
+                    placeholder: tr("settings.terminal.args_placeholder"),
                     multiline: true,
                     ..Default::default()
                 },
@@ -995,7 +1011,7 @@ impl SettingsWindowView {
         let search_input = cx.new(|cx| {
             let mut input = components::TextInput::new(
                 components::TextInputOptions {
-                    placeholder: "Search".into(),
+                    placeholder: tr("settings.search.placeholder"),
                     leading_icon: Some("icons/zoom.svg"),
                     ..Default::default()
                 },
@@ -1043,6 +1059,7 @@ impl SettingsWindowView {
         Self {
             theme_mode,
             theme,
+            language,
             ui_scale_percent: ui_scale.percent,
             ui_font_family: font_preferences.ui_font_family,
             editor_font_family: font_preferences.editor_font_family,
@@ -1052,6 +1069,7 @@ impl SettingsWindowView {
             external_editor_options,
             settings_window_scroll: ScrollHandle::default(),
             theme_scroll: UniformListScrollHandle::default(),
+            language_scroll: UniformListScrollHandle::default(),
             ui_font_scroll: UniformListScrollHandle::default(),
             editor_font_scroll: UniformListScrollHandle::default(),
             external_editor_scroll: UniformListScrollHandle::default(),
@@ -1162,6 +1180,7 @@ impl SettingsWindowView {
             repo_sidebar_collapsed_items: None,
             repo_sidebar_pinned_branches: None,
             theme_mode: Some(self.theme_mode.key().to_string()),
+            language: Some(self.language.key().to_string()),
             ui_scale_percent: Some(self.ui_scale_percent),
             ui_font_family: Some(self.ui_font_family.clone()),
             editor_font_family: Some(self.editor_font_family.clone()),
@@ -1291,7 +1310,7 @@ impl SettingsWindowView {
     fn save_terminal_external_draft(&mut self, cx: &mut gpui::Context<Self>) {
         let next = self.external_terminal_preferences_with_drafts(cx);
         self.apply_terminal_preferences_change(next, cx);
-        self.set_terminal_status(false, "External terminal settings saved.", cx);
+        self.set_terminal_status(false, tr("settings.terminal.status_saved"), cx);
     }
 
     fn reset_terminal_external_draft(&mut self, cx: &mut gpui::Context<Self>) {
@@ -1301,7 +1320,7 @@ impl SettingsWindowView {
         let args = self.terminal_preferences.external_args_multiline();
         self.terminal_external_args_input
             .update(cx, |input, cx| input.set_text(args, cx));
-        self.set_terminal_status(false, "External terminal draft reset.", cx);
+        self.set_terminal_status(false, tr("settings.terminal.status_reset"), cx);
     }
 
     fn browse_terminal_program_input(
@@ -1311,7 +1330,9 @@ impl SettingsWindowView {
         cx: &mut gpui::Context<Self>,
     ) {
         let prompt = match target {
-            TerminalProgramInputTarget::ExternalTerminal => "Select terminal launcher",
+            TerminalProgramInputTarget::ExternalTerminal => {
+                tr_str("settings.terminal.prompt_select_launcher")
+            }
         };
         let allow_directories = cfg!(target_os = "macos");
         let rx = cx.prompt_for_paths(gpui::PathPromptOptions {
@@ -1374,8 +1395,14 @@ impl SettingsWindowView {
         let preferences = self.external_terminal_preferences_with_drafts(cx);
         let context = self.preferred_terminal_launch_context(cx);
         match launch_external_terminal_from_preferences(&preferences, &context) {
-            Ok(()) => self.set_terminal_status(false, "Launch request sent.", cx),
-            Err(err) => self.set_terminal_status(true, format!("Test launch failed: {err}"), cx),
+            Ok(()) => {
+                self.set_terminal_status(false, tr("settings.terminal.status_launch_sent"), cx)
+            }
+            Err(err) => self.set_terminal_status(
+                true,
+                t!("settings.terminal.status_launch_failed", err = err).into_owned(),
+                cx,
+            ),
         }
     }
 
@@ -1401,7 +1428,7 @@ impl SettingsWindowView {
     fn custom_theme_folder_detail(&self) -> SharedString {
         session::user_themes_dir()
             .map(|path| path.display().to_string().into())
-            .unwrap_or_else(|| "Unavailable".into())
+            .unwrap_or_else(|| tr("settings.common.unavailable"))
     }
 
     fn push_main_window_toast(
@@ -1419,7 +1446,7 @@ impl SettingsWindowView {
         let Some(path) = crate::theme::ensure_user_themes_dir_exists() else {
             self.push_main_window_toast(
                 components::ToastKind::Error,
-                "Custom theme folder is unavailable.".to_string(),
+                t!("settings.theme.folder_toast_unavailable").into_owned(),
                 cx,
             );
             return;
@@ -1428,7 +1455,7 @@ impl SettingsWindowView {
         if let Err(err) = super::platform_open::open_path(&path) {
             self.push_main_window_toast(
                 components::ToastKind::Error,
-                format!("Failed to open custom theme folder: {err}"),
+                t!("settings.theme.folder_open_failed", err = err).into_owned(),
                 cx,
             );
         }
@@ -1617,7 +1644,7 @@ impl SettingsWindowView {
     fn font_option_detail(&self, family: &str) -> Option<SharedString> {
         match family {
             crate::font_preferences::UI_SYSTEM_FONT_FAMILY => {
-                Some("Use GitComet's best match for the operating system UI font stack".into())
+                Some(tr("settings.fonts.system_detail"))
             }
             _ => None,
         }
@@ -1625,7 +1652,7 @@ impl SettingsWindowView {
 
     fn font_options_hint(&self, family: &str) -> SharedString {
         self.font_option_detail(family)
-            .unwrap_or_else(|| "Choose from installed system fonts".into())
+            .unwrap_or_else(|| tr("settings.fonts.choose_hint"))
     }
 
     fn font_option_row_for_family(
@@ -1685,6 +1712,43 @@ impl SettingsWindowView {
             });
         });
         cx.notify();
+    }
+
+    fn set_language(&mut self, language: crate::i18n::Language, cx: &mut gpui::Context<Self>) {
+        if self.language == language {
+            return;
+        }
+
+        self.language = language;
+        self.expanded_section = None;
+        crate::i18n::set_current(cx, language);
+        // Rebuild the macOS native menu bar so its labels follow the new
+        // language without a restart.
+        #[cfg(target_os = "macos")]
+        crate::app::refresh_macos_app_menus(cx);
+        self.persist_preferences(cx);
+        self.update_main_windows(cx, move |_view, _window, cx| {
+            cx.notify();
+        });
+        cx.notify();
+    }
+
+    /// Summary value for the language row: the language's own name, with the
+    /// resolved language appended when following the system.
+    fn language_summary(&self) -> gpui::SharedString {
+        self.language_option_label(self.language)
+    }
+
+    fn language_option_label(&self, language: crate::i18n::Language) -> gpui::SharedString {
+        match language {
+            crate::i18n::Language::System => {
+                let resolved = crate::i18n::Language::from_key(language.resolved_locale())
+                    .unwrap_or(crate::i18n::Language::English)
+                    .native_label();
+                crate::i18n::t!("app.language.system_with_resolved", language = resolved).into()
+            }
+            other => other.native_label().into(),
+        }
     }
 
     fn set_ui_font_family(&mut self, family: String, cx: &mut gpui::Context<Self>) {
@@ -2647,22 +2711,26 @@ impl SettingsWindowView {
             GitCompatibility::Supported => (
                 "icons/check.svg",
                 theme.colors.status.success.foreground,
-                format!("Git >= {min_git_version}").into(),
+                t!("settings.git.status_supported", version = min_git_version)
+                    .into_owned()
+                    .into(),
             ),
             GitCompatibility::TooOld => (
                 "icons/warning.svg",
                 theme.colors.status.warning.foreground,
-                format!("Git < {min_git_version}").into(),
+                t!("settings.git.status_too_old", version = min_git_version)
+                    .into_owned()
+                    .into(),
             ),
             GitCompatibility::Unknown => (
                 "icons/warning.svg",
                 theme.colors.status.warning.foreground,
-                "Git version unknown".into(),
+                tr("settings.git.status_unknown"),
             ),
             GitCompatibility::Unavailable => (
                 "icons/warning.svg",
                 theme.colors.status.danger.foreground,
-                "Unavailable".into(),
+                tr("settings.common.unavailable"),
             ),
         };
 
@@ -2689,7 +2757,7 @@ impl SettingsWindowView {
                             .line_clamp(1)
                             .whitespace_nowrap()
                             .overflow_hidden()
-                            .child("Detected runtime"),
+                            .child(tr_str("settings.git.detected_runtime")),
                     ),
             )
             .child(
@@ -2899,6 +2967,31 @@ impl SettingsWindowView {
             .collect()
     }
 
+    fn render_language_option_rows(
+        this: &mut Self,
+        range: Range<usize>,
+        _window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> Vec<AnyElement> {
+        let theme = this.theme;
+        range
+            .filter_map(|ix| crate::i18n::Language::ALL.get(ix).copied())
+            .map(|language| {
+                this.option_row(
+                    format!("settings_window_language_{}", language.key()),
+                    this.language_option_label(language),
+                    None,
+                    this.language == language,
+                    theme,
+                )
+                .on_click(cx.listener(move |this, _e: &ClickEvent, _window, cx| {
+                    this.set_language(language, cx);
+                }))
+                .into_any_element()
+            })
+            .collect()
+    }
+
     fn render_editor_font_option_rows(
         this: &mut Self,
         range: Range<usize>,
@@ -3056,7 +3149,7 @@ impl SettingsWindowView {
                 this.option_row(
                     id,
                     option.label(),
-                    Some(detail.into()),
+                    Some(tr(detail)),
                     this.change_tracking_view == option,
                     theme,
                 )
@@ -3081,7 +3174,7 @@ impl SettingsWindowView {
                 this.option_row(
                     id,
                     option.label(),
-                    Some(detail.into()),
+                    Some(tr(detail)),
                     this.diff_scroll_sync == option,
                     theme,
                 )
@@ -3106,7 +3199,7 @@ impl SettingsWindowView {
                 this.option_row(
                     id,
                     option.settings_label(),
-                    Some(detail.into()),
+                    Some(tr(detail)),
                     this.diff_view_mode == option,
                     theme,
                 )
@@ -3131,7 +3224,7 @@ impl SettingsWindowView {
                 this.option_row(
                     id,
                     option.label(),
-                    Some(detail.into()),
+                    Some(tr(detail)),
                     this.diff_content_mode == option,
                     theme,
                 )
@@ -3270,7 +3363,7 @@ impl SettingsWindowView {
                     .py_1()
                     .text_sm()
                     .text_color(theme.colors.foreground.secondary)
-                    .child("No matching settings"),
+                    .child(tr_str("settings.nav.no_match")),
             );
         }
 
@@ -3402,7 +3495,7 @@ impl Render for SettingsWindowView {
                     .line_height(px(16.0))
                     .font_weight(FontWeight::BOLD)
                     .whitespace_nowrap()
-                    .child(SETTINGS_WINDOW_TITLE),
+                    .child(tr_str("settings.window.title")),
             );
 
         let min = chrome::titlebar_control_button(
@@ -3512,7 +3605,7 @@ impl Render for SettingsWindowView {
                     let theme_row = self
                         .summary_row(
                             "settings_window_theme",
-                            "Theme",
+                            tr_str("settings.row.theme"),
                             self.theme_mode.label().into(),
                             self.expanded_section == Some(SettingsSection::Theme),
                             theme,
@@ -3521,10 +3614,22 @@ impl Render for SettingsWindowView {
                             this.toggle_section(SettingsSection::Theme, cx);
                         }));
 
+                    let language_row = self
+                        .summary_row(
+                            "settings_window_language",
+                            crate::i18n::tr_str("app.language.title"),
+                            self.language_summary(),
+                            self.expanded_section == Some(SettingsSection::Language),
+                            theme,
+                        )
+                        .on_click(cx.listener(|this, _e: &ClickEvent, _window, cx| {
+                            this.toggle_section(SettingsSection::Language, cx);
+                        }));
+
                     let date_format_row = self
                         .summary_row(
                             "settings_window_date_format",
-                            "Date format",
+                            tr_str("settings.row.date_format"),
                             self.date_time_format.label().into(),
                             self.expanded_section == Some(SettingsSection::DateFormat),
                             theme,
@@ -3536,7 +3641,7 @@ impl Render for SettingsWindowView {
                     let ui_scale_row = self
                         .summary_row(
                             "settings_window_ui_scale",
-                            "UI scale",
+                            tr_str("settings.row.ui_scale"),
                             ui_scale::label(self.ui_scale_percent).into(),
                             self.expanded_section == Some(SettingsSection::UiScale),
                             theme,
@@ -3548,7 +3653,7 @@ impl Render for SettingsWindowView {
                     let ui_font_row = self
                         .summary_row(
                             "settings_window_ui_font",
-                            "UI Font",
+                            tr_str("settings.row.ui_font"),
                             crate::font_preferences::display_label(&self.ui_font_family).into(),
                             self.expanded_section == Some(SettingsSection::UiFont),
                             theme,
@@ -3560,7 +3665,7 @@ impl Render for SettingsWindowView {
                     let editor_font_row = self
                         .summary_row(
                             "settings_window_editor_font",
-                            "Editor Font",
+                            tr_str("settings.row.editor_font"),
                             crate::font_preferences::display_label(&self.editor_font_family).into(),
                             self.expanded_section == Some(SettingsSection::EditorFont),
                             theme,
@@ -3572,7 +3677,7 @@ impl Render for SettingsWindowView {
                     let font_ligatures_row = self
                         .toggle_row(
                             "settings_window_use_font_ligatures",
-                            "Use font ligatures",
+                            tr_str("settings.row.font_ligatures"),
                             self.use_font_ligatures,
                             theme,
                         )
@@ -3584,7 +3689,7 @@ impl Render for SettingsWindowView {
                     let external_editor_row = self
                         .summary_row(
                             "settings_window_external_code_editor",
-                            "External code editor",
+                            tr_str("settings.row.external_code_editor"),
                             crate::external_editor::label_for_setting(
                                 self.external_editor_setting.as_ref(),
                             )
@@ -3600,7 +3705,7 @@ impl Render for SettingsWindowView {
                     let timezone_row = self
                         .summary_row(
                             "settings_window_timezone",
-                            "Date timezone",
+                            tr_str("settings.row.date_timezone"),
                             self.timezone.label().into(),
                             self.expanded_section == Some(SettingsSection::Timezone),
                             theme,
@@ -3612,7 +3717,7 @@ impl Render for SettingsWindowView {
                     let show_timezone_row = self
                         .toggle_row(
                             "settings_window_show_timezone",
-                            "Show timezone",
+                            tr_str("settings.row.show_timezone"),
                             self.show_timezone,
                             theme,
                         )
@@ -3624,7 +3729,7 @@ impl Render for SettingsWindowView {
                     let terminal_external_row = self
                         .summary_row(
                             "settings_window_terminal_external",
-                            "External terminal",
+                            tr_str("settings.row.external_terminal"),
                             self.terminal_preferences.external_summary().into(),
                             self.expanded_section == Some(SettingsSection::TerminalExternal),
                             theme,
@@ -3636,7 +3741,7 @@ impl Render for SettingsWindowView {
                     let terminal_action_bar_row = self
                         .summary_row(
                             "settings_window_terminal_action_bar",
-                            "Action bar terminal button opens",
+                            tr_str("settings.row.action_bar_terminal"),
                             self.terminal_preferences
                                 .action_bar_terminal_target
                                 .label()
@@ -3652,7 +3757,7 @@ impl Render for SettingsWindowView {
                     let change_tracking_row = self
                         .summary_row(
                             "settings_window_change_tracking",
-                            "Untracked files",
+                            tr_str("settings.row.untracked_files"),
                             self.change_tracking_view.settings_label().into(),
                             self.expanded_section == Some(SettingsSection::ChangeTracking),
                             theme,
@@ -3665,7 +3770,7 @@ impl Render for SettingsWindowView {
                     let diff_scroll_sync_row = self
                         .summary_row(
                             "settings_window_diff_scroll_sync",
-                            "Scroll sync",
+                            tr_str("settings.row.scroll_sync"),
                             self.diff_scroll_sync.label().into(),
                             self.expanded_section == Some(SettingsSection::Diff),
                             theme,
@@ -3678,7 +3783,7 @@ impl Render for SettingsWindowView {
                     let diff_content_mode_row = self
                         .summary_row(
                             "settings_window_diff_content_mode",
-                            "Diff mode",
+                            tr_str("settings.row.diff_mode"),
                             self.diff_content_mode.settings_label().into(),
                             self.expanded_section == Some(SettingsSection::DiffContentMode),
                             theme,
@@ -3690,7 +3795,7 @@ impl Render for SettingsWindowView {
                     let diff_whitespace_mode_row = self
                         .toggle_row(
                             "settings_window_diff_whitespace_mode",
-                            "Show whitespace changes",
+                            tr_str("settings.row.show_whitespace_changes"),
                             self.diff_whitespace_mode == DiffWhitespaceMode::Show,
                             theme,
                         )
@@ -3701,7 +3806,7 @@ impl Render for SettingsWindowView {
                     let diff_reveal_whitespace_chars_row = self
                         .toggle_row(
                             "settings_window_diff_reveal_whitespace_chars",
-                            "Reveal whitespace characters",
+                            tr_str("settings.row.reveal_whitespace_characters"),
                             self.diff_reveal_whitespace_chars,
                             theme,
                         )
@@ -3715,7 +3820,7 @@ impl Render for SettingsWindowView {
                     let diff_word_wrap_row = self
                         .toggle_row(
                             "settings_window_diff_word_wrap",
-                            "Word wrap",
+                            tr_str("settings.row.word_wrap"),
                             self.diff_word_wrap,
                             theme,
                         )
@@ -3726,7 +3831,7 @@ impl Render for SettingsWindowView {
                     let diff_show_line_numbers_row = self
                         .toggle_row(
                             "settings_window_diff_show_line_numbers",
-                            "Show line numbers",
+                            tr_str("settings.row.show_line_numbers"),
                             self.diff_show_line_numbers,
                             theme,
                         )
@@ -3737,7 +3842,7 @@ impl Render for SettingsWindowView {
                     let history_default_mode_row = self
                         .summary_row(
                             "settings_window_git_log_default_mode",
-                            "Default history mode",
+                            tr_str("settings.row.default_history_mode"),
                             crate::view::history_mode::history_mode_label(
                                 self.default_history_mode,
                             )
@@ -3752,7 +3857,7 @@ impl Render for SettingsWindowView {
                     let history_columns_row = self
                         .summary_row(
                             "settings_window_git_log_columns",
-                            "History columns",
+                            tr_str("settings.row.history_columns"),
                             history_columns_settings_label(
                                 self.history_show_graph,
                                 self.history_show_author,
@@ -3773,7 +3878,7 @@ impl Render for SettingsWindowView {
                     let highlight_commit_chain_row = self
                         .toggle_row(
                             "settings_window_git_log_highlight_commit_chain",
-                            "Highlight selected commit lane",
+                            tr_str("settings.row.highlight_commit_lane"),
                             self.history_highlight_commit_chain,
                             theme,
                         )
@@ -3787,7 +3892,7 @@ impl Render for SettingsWindowView {
                     let relative_dates_row = self
                         .toggle_row(
                             "settings_window_git_log_relative_dates",
-                            "Relative dates in history view",
+                            tr_str("settings.row.relative_dates"),
                             self.history_relative_dates,
                             theme,
                         )
@@ -3798,7 +3903,7 @@ impl Render for SettingsWindowView {
                     let show_history_tags_row = self
                         .toggle_row(
                             "settings_window_git_log_show_tags",
-                            "Show tags in history view",
+                            tr_str("settings.row.show_tags"),
                             self.history_show_tags,
                             theme,
                         )
@@ -3814,7 +3919,7 @@ impl Render for SettingsWindowView {
                     let auto_fetch_tags_row = self
                         .summary_row(
                             "settings_window_git_log_tag_fetch_mode",
-                            "Automatically fetch tags",
+                            tr_str("settings.row.auto_fetch_tags"),
                             git_log_tag_fetch_mode_label(self.history_tag_fetch_mode).into(),
                             self.expanded_section == Some(SettingsSection::GitLogTagFetch),
                             theme,
@@ -3827,10 +3932,14 @@ impl Render for SettingsWindowView {
                         }));
 
                     let mut general_card = self
-                        .card("settings_window_general", "General", theme)
+                        .card(
+                            "settings_window_general",
+                            tr_str("settings.nav.general"),
+                            theme,
+                        )
                         .child(self.subsection_heading(
                             "settings_window_general_appearance",
-                            "Appearance",
+                            tr_str("settings.section.appearance"),
                             theme,
                         ))
                         .child(theme_row);
@@ -3877,7 +3986,7 @@ impl Render for SettingsWindowView {
                                 .child(
                                     self.link_row(
                                         "settings_window_theme_custom_folder",
-                                        "Open custom theme folder",
+                                        tr_str("settings.row.open_theme_folder"),
                                         self.custom_theme_folder_detail(),
                                         theme,
                                     )
@@ -3890,7 +3999,7 @@ impl Render for SettingsWindowView {
                                 .child(
                                     self.link_row(
                                         "settings_window_theme_guide",
-                                        "Theme guide",
+                                        tr_str("settings.row.theme_guide"),
                                         THEMES_GUIDE_URL.into(),
                                         theme,
                                     )
@@ -3902,15 +4011,53 @@ impl Render for SettingsWindowView {
                         );
                     }
 
+                    if self.expanded_section == Some(SettingsSection::Language) {
+                        let language_count = crate::i18n::Language::ALL.len();
+                        let list = uniform_list(
+                            "settings_window_language_list",
+                            language_count,
+                            cx.processor(Self::render_language_option_rows),
+                        )
+                        .w_full()
+                        .min_w(px(0.0))
+                        .h_full()
+                        .min_h(px(0.0))
+                        .track_scroll(&self.language_scroll)
+                        .on_scroll_wheel({
+                            let scroll = self.language_scroll.clone();
+                            move |event, window, cx| {
+                                if uniform_list_should_stop_scroll_propagation(
+                                    &scroll, event, window,
+                                ) {
+                                    cx.stop_propagation();
+                                }
+                            }
+                        });
+                        let list = restrict_scroll_to_vertical_axis(list).into_any_element();
+                        general_card = general_card.child(self.dropdown_list_container(
+                            "settings_window_language_list_container",
+                            "settings_window_language_scrollbar",
+                            self.language_scroll.clone(),
+                            language_count,
+                            SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
+                            SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
+                            list,
+                            theme,
+                        ));
+                    }
+
+                    general_card = general_card.child(language_row);
                     general_card = general_card.child(ui_scale_row);
                     if self.expanded_section == Some(SettingsSection::UiScale) {
                         let mut detail =
                             self.detail_container("settings_window_ui_scale_container", theme);
                         for percent in ui_scale::UI_SCALE_PRESETS.iter().copied() {
                             let detail_text = match percent {
-                                ui_scale::DEFAULT_UI_SCALE_PERCENT => Some("Default scale".into()),
-                                80 | 90 => Some("Fit more on screen".into()),
-                                110 | 125 | 150 => Some("Larger controls and text".into()),
+                                ui_scale::DEFAULT_UI_SCALE_PERCENT => {
+                                    Some(tr("settings.ui_scale.detail_default"))
+                                }
+                                80 | 90 => Some(tr("settings.ui_scale.detail_fit_more")),
+                                110 | 125 | 150 => Some(tr("settings.ui_scale.detail_larger")),
                                 _ => None,
                             };
                             detail = detail.child(
@@ -3935,7 +4082,7 @@ impl Render for SettingsWindowView {
                                     .pb_1()
                                     .text_xs()
                                     .text_color(theme.colors.foreground.secondary)
-                                    .child("Shortcut: Ctrl/Cmd +, -, and 0."),
+                                    .child(tr_str("settings.ui_scale.shortcut")),
                             ),
                         );
                     }
@@ -3943,28 +4090,29 @@ impl Render for SettingsWindowView {
                     general_card = general_card.child(ui_font_row);
                     if self.expanded_section == Some(SettingsSection::UiFont) {
                         let list = if self.ui_font_options.is_empty() {
-                            self.empty_dropdown_list("No fonts available.", theme)
+                            self.empty_dropdown_list(tr_str("settings.fonts.empty"), theme)
                         } else {
-                            restrict_scroll_to_vertical_axis(uniform_list(
-                                "settings_window_ui_font_list",
-                                self.ui_font_options.len(),
-                                cx.processor(Self::render_ui_font_option_rows),
-                            )
-                            .w_full()
-                            .min_w(px(0.0))
-                            .h_full()
-                            .min_h(px(0.0))
-                            .track_scroll(&self.ui_font_scroll)
-                            .on_scroll_wheel({
-                                let scroll = self.ui_font_scroll.clone();
-                                move |event, window, cx| {
-                                    if uniform_list_should_stop_scroll_propagation(
-                                        &scroll, event, window,
-                                    ) {
-                                        cx.stop_propagation();
+                            restrict_scroll_to_vertical_axis(
+                                uniform_list(
+                                    "settings_window_ui_font_list",
+                                    self.ui_font_options.len(),
+                                    cx.processor(Self::render_ui_font_option_rows),
+                                )
+                                .w_full()
+                                .min_w(px(0.0))
+                                .h_full()
+                                .min_h(px(0.0))
+                                .track_scroll(&self.ui_font_scroll)
+                                .on_scroll_wheel({
+                                    let scroll = self.ui_font_scroll.clone();
+                                    move |event, window, cx| {
+                                        if uniform_list_should_stop_scroll_propagation(
+                                            &scroll, event, window,
+                                        ) {
+                                            cx.stop_propagation();
+                                        }
                                     }
-                                }
-                            })
+                                }),
                             )
                             .into_any_element()
                         };
@@ -3992,28 +4140,29 @@ impl Render for SettingsWindowView {
                     general_card = general_card.child(editor_font_row);
                     if self.expanded_section == Some(SettingsSection::EditorFont) {
                         let list = if self.editor_font_options.is_empty() {
-                            self.empty_dropdown_list("No fonts available.", theme)
+                            self.empty_dropdown_list(tr_str("settings.fonts.empty"), theme)
                         } else {
-                            restrict_scroll_to_vertical_axis(uniform_list(
-                                "settings_window_editor_font_list",
-                                self.editor_font_options.len(),
-                                cx.processor(Self::render_editor_font_option_rows),
-                            )
-                            .w_full()
-                            .min_w(px(0.0))
-                            .h_full()
-                            .min_h(px(0.0))
-                            .track_scroll(&self.editor_font_scroll)
-                            .on_scroll_wheel({
-                                let scroll = self.editor_font_scroll.clone();
-                                move |event, window, cx| {
-                                    if uniform_list_should_stop_scroll_propagation(
-                                        &scroll, event, window,
-                                    ) {
-                                        cx.stop_propagation();
+                            restrict_scroll_to_vertical_axis(
+                                uniform_list(
+                                    "settings_window_editor_font_list",
+                                    self.editor_font_options.len(),
+                                    cx.processor(Self::render_editor_font_option_rows),
+                                )
+                                .w_full()
+                                .min_w(px(0.0))
+                                .h_full()
+                                .min_h(px(0.0))
+                                .track_scroll(&self.editor_font_scroll)
+                                .on_scroll_wheel({
+                                    let scroll = self.editor_font_scroll.clone();
+                                    move |event, window, cx| {
+                                        if uniform_list_should_stop_scroll_propagation(
+                                            &scroll, event, window,
+                                        ) {
+                                            cx.stop_propagation();
+                                        }
                                     }
-                                }
-                            })
+                                }),
                             )
                             .into_any_element()
                         };
@@ -4045,7 +4194,7 @@ impl Render for SettingsWindowView {
                     general_card = general_card
                         .child(self.subsection_heading(
                             "settings_window_general_integrations",
-                            "Integrations",
+                            tr_str("settings.section.integrations"),
                             theme,
                         ))
                         .child(external_editor_row);
@@ -4086,12 +4235,13 @@ impl Render for SettingsWindowView {
                     if self.external_editor_is_custom() {
                         let browse_button = components::Button::new(
                             "settings_window_external_code_editor_browse",
-                            "Browse",
+                            tr("settings.action.browse"),
                         )
                         .style(components::ButtonStyle::Outlined)
                         .on_click(theme, cx, |_this, _e, window, cx| {
                             let view = cx.weak_entity();
-                            let rx = cx.prompt_for_paths(custom_external_editor_path_prompt_options());
+                            let rx =
+                                cx.prompt_for_paths(custom_external_editor_path_prompt_options());
 
                             window
                                 .spawn(cx, async move |cx| {
@@ -4122,7 +4272,7 @@ impl Render for SettingsWindowView {
                                     .pt_1()
                                     .text_xs()
                                     .text_color(theme.colors.foreground.secondary)
-                                    .child("Custom editor executable"),
+                                    .child(tr_str("settings.external_editor.custom_executable")),
                             )
                             .child(
                                 div()
@@ -4147,7 +4297,7 @@ impl Render for SettingsWindowView {
                                     .pt_1()
                                     .text_xs()
                                     .text_color(theme.colors.foreground.secondary)
-                                    .child("Arguments"),
+                                    .child(tr_str("settings.external_editor.arguments")),
                             )
                             .child(
                                 div()
@@ -4155,9 +4305,7 @@ impl Render for SettingsWindowView {
                                     .pb_1()
                                     .w_full()
                                     .min_w(px(0.0))
-                                    .child(
-                                        self.external_editor_custom_arguments_input.clone(),
-                                    ),
+                                    .child(self.external_editor_custom_arguments_input.clone()),
                             ),
                         );
                     }
@@ -4165,7 +4313,7 @@ impl Render for SettingsWindowView {
                     general_card = general_card
                         .child(self.subsection_heading(
                             "settings_window_general_date_time",
-                            "Date & Time",
+                            tr_str("settings.section.date_time"),
                             theme,
                         ))
                         .child(date_format_row);
@@ -4240,8 +4388,11 @@ impl Render for SettingsWindowView {
 
                     general_card = general_card.child(show_timezone_row);
 
-                    let mut terminal_card =
-                        self.card("settings_window_terminal_card", "Terminal", theme);
+                    let mut terminal_card = self.card(
+                        "settings_window_terminal_card",
+                        tr_str("settings.nav.terminal"),
+                        theme,
+                    );
 
                     terminal_card = terminal_card.child(terminal_external_row);
                     if self.expanded_section == Some(SettingsSection::TerminalExternal) {
@@ -4252,9 +4403,7 @@ impl Render for SettingsWindowView {
                                     .pb_1()
                                     .text_xs()
                                     .text_color(theme.colors.foreground.secondary)
-                                    .child(
-                                        "System default is best effort. Use a custom launcher for predictable cross-platform behavior.",
-                                    ),
+                                    .child(tr_str("settings.terminal.note_best_effort")),
                             )
                             .child(
                                 div()
@@ -4266,143 +4415,142 @@ impl Render for SettingsWindowView {
                                         self.option_row(
                                             "settings_window_terminal_external_default",
                                             ExternalTerminalMode::SystemDefault.label(),
-                                            Some("Use the platform default when possible".into()),
+                                            Some(tr("settings.terminal.default_detail")),
                                             self.terminal_preferences.external_terminal_mode
                                                 == ExternalTerminalMode::SystemDefault,
                                             theme,
                                         )
-                                        .on_click(cx.listener(
-                                            |this, _e: &ClickEvent, _window, cx| {
+                                        .on_click(
+                                            cx.listener(|this, _e: &ClickEvent, _window, cx| {
                                                 this.set_external_terminal_mode(
                                                     ExternalTerminalMode::SystemDefault,
                                                     cx,
                                                 );
-                                            },
-                                        )),
+                                            }),
+                                        ),
                                     )
                                     .child(
                                         self.option_row(
                                             "settings_window_terminal_external_custom",
                                             ExternalTerminalMode::CustomProgram.label(),
-                                            Some("Choose a launcher and explicit arguments".into()),
+                                            Some(tr("settings.terminal.custom_detail")),
                                             self.terminal_preferences.external_terminal_mode
                                                 == ExternalTerminalMode::CustomProgram,
                                             theme,
                                         )
-                                        .on_click(cx.listener(
-                                            |this, _e: &ClickEvent, _window, cx| {
+                                        .on_click(
+                                            cx.listener(|this, _e: &ClickEvent, _window, cx| {
                                                 this.set_external_terminal_mode(
                                                     ExternalTerminalMode::CustomProgram,
                                                     cx,
                                                 );
-                                            },
-                                        )),
+                                            }),
+                                        ),
                                     ),
                             );
 
                         if self.terminal_preferences.external_terminal_mode
                             == ExternalTerminalMode::CustomProgram
                         {
-                            terminal_card = terminal_card
-                                .child(
-                                    div()
-                                        .px_2()
-                                        .pt_1()
-                                        .text_xs()
-                                        .text_color(theme.colors.foreground.secondary)
-                                        .child("Program"),
-                                )
-                                .child(
-                                    div()
-                                        .px_2()
-                                        .pb_1()
-                                        .w_full()
-                                        .min_w(px(0.0))
-                                        .flex()
-                                        .items_center()
-                                        .gap_2()
-                                        .child(
-                                            div().flex_1().min_w(px(0.0)).child(
+                            terminal_card =
+                                terminal_card
+                                    .child(
+                                        div()
+                                            .px_2()
+                                            .pt_1()
+                                            .text_xs()
+                                            .text_color(theme.colors.foreground.secondary)
+                                            .child(tr_str("settings.terminal.program")),
+                                    )
+                                    .child(
+                                        div()
+                                            .px_2()
+                                            .pb_1()
+                                            .w_full()
+                                            .min_w(px(0.0))
+                                            .flex()
+                                            .items_center()
+                                            .gap_2()
+                                            .child(div().flex_1().min_w(px(0.0)).child(
                                                 self.terminal_external_program_input.clone(),
-                                            ),
-                                        )
-                                        .child(
-                                            components::Button::new(
-                                                "settings_window_terminal_external_browse",
-                                                "Browse",
-                                            )
-                                            .style(components::ButtonStyle::Outlined)
-                                            .on_click(theme, cx, |this, _e, window, cx| {
-                                                this.browse_terminal_program_input(
+                                            ))
+                                            .child(
+                                                components::Button::new(
+                                                    "settings_window_terminal_external_browse",
+                                                    tr("settings.action.browse"),
+                                                )
+                                                .style(components::ButtonStyle::Outlined)
+                                                .on_click(theme, cx, |this, _e, window, cx| {
+                                                    this.browse_terminal_program_input(
                                                     TerminalProgramInputTarget::ExternalTerminal,
                                                     window,
                                                     cx,
                                                 );
-                                            }),
-                                        ),
-                                )
-                                .child(
-                                    div()
-                                        .px_2()
-                                        .pt_1()
-                                        .text_xs()
-                                        .text_color(theme.colors.foreground.secondary)
-                                        .child("Arguments"),
-                                )
-                                .child(
-                                    div()
-                                        .px_2()
-                                        .pb_1()
-                                        .w_full()
-                                        .min_w(px(0.0))
-                                        .child(self.terminal_external_args_input.clone()),
-                                )
-                                .child(
-                                    div()
-                                        .px_2()
-                                        .pb_1()
-                                        .text_xs()
-                                        .text_color(theme.colors.foreground.secondary)
-                                        .child("One argument per line. Use {cwd} and {repo_name} placeholders."),
-                                )
-                                .child(
-                                    div()
-                                        .px_2()
-                                        .pb_1()
-                                        .flex()
-                                        .items_center()
-                                        .gap_1()
-                                        .child(
-                                            components::Button::new(
-                                                "settings_window_terminal_external_save",
-                                                "Save",
+                                                }),
+                                            ),
+                                    )
+                                    .child(
+                                        div()
+                                            .px_2()
+                                            .pt_1()
+                                            .text_xs()
+                                            .text_color(theme.colors.foreground.secondary)
+                                            .child(tr_str("settings.terminal.arguments")),
+                                    )
+                                    .child(
+                                        div()
+                                            .px_2()
+                                            .pb_1()
+                                            .w_full()
+                                            .min_w(px(0.0))
+                                            .child(self.terminal_external_args_input.clone()),
+                                    )
+                                    .child(
+                                        div()
+                                            .px_2()
+                                            .pb_1()
+                                            .text_xs()
+                                            .text_color(theme.colors.foreground.secondary)
+                                            .child(tr_str("settings.terminal.args_hint")),
+                                    )
+                                    .child(
+                                        div()
+                                            .px_2()
+                                            .pb_1()
+                                            .flex()
+                                            .items_center()
+                                            .gap_1()
+                                            .child(
+                                                components::Button::new(
+                                                    "settings_window_terminal_external_save",
+                                                    tr("settings.action.save"),
+                                                )
+                                                .style(components::ButtonStyle::Filled)
+                                                .on_click(theme, cx, |this, _e, _w, cx| {
+                                                    this.save_terminal_external_draft(cx);
+                                                }),
                                             )
-                                            .style(components::ButtonStyle::Filled)
-                                            .on_click(theme, cx, |this, _e, _w, cx| {
-                                                this.save_terminal_external_draft(cx);
-                                            }),
-                                        )
-                                        .child(
-                                            components::Button::new(
-                                                "settings_window_terminal_external_reset",
-                                                "Reset",
+                                            .child(
+                                                components::Button::new(
+                                                    "settings_window_terminal_external_reset",
+                                                    tr("settings.action.reset"),
+                                                )
+                                                .style(components::ButtonStyle::Outlined)
+                                                .on_click(theme, cx, |this, _e, _w, cx| {
+                                                    this.reset_terminal_external_draft(cx);
+                                                }),
                                             )
-                                            .style(components::ButtonStyle::Outlined)
-                                            .on_click(theme, cx, |this, _e, _w, cx| {
-                                                this.reset_terminal_external_draft(cx);
-                                            }),
-                                        )
-                                        .child(
-                                            components::Button::new(
-                                                "settings_window_terminal_external_test",
-                                                "Test launch",
-                                            )
-                                            .style(components::ButtonStyle::Outlined)
-                                            .on_click(theme, cx, |this, _e, _w, cx| {
-                                                this.test_terminal_launch_from_draft(cx);
-                                            }),
-                                        ),
-                                );
+                                            .child(
+                                                components::Button::new(
+                                                    "settings_window_terminal_external_test",
+                                                    tr("settings.action.test_launch"),
+                                                )
+                                                .style(components::ButtonStyle::Outlined)
+                                                .on_click(theme, cx, |this, _e, _w, cx| {
+                                                    this.test_terminal_launch_from_draft(cx);
+                                                }),
+                                            ),
+                                    );
                         }
                     }
 
@@ -4415,9 +4563,7 @@ impl Render for SettingsWindowView {
                                     .pb_1()
                                     .text_xs()
                                     .text_color(theme.colors.foreground.secondary)
-                                    .child(
-                                        "Choose what the action bar terminal button opens. Global shortcuts for each can be configured separately.",
-                                    ),
+                                    .child(tr_str("settings.action_bar_terminal.note")),
                             )
                             .child(
                                 div()
@@ -4429,37 +4575,41 @@ impl Render for SettingsWindowView {
                                         self.option_row(
                                             "settings_window_terminal_action_bar_embedded",
                                             ActionBarTerminalTarget::Embedded.label(),
-                                            Some("Toggle the embedded terminal panel".into()),
+                                            Some(tr(
+                                                "settings.action_bar_terminal.embedded_detail",
+                                            )),
                                             self.terminal_preferences.action_bar_terminal_target
                                                 == ActionBarTerminalTarget::Embedded,
                                             theme,
                                         )
-                                        .on_click(cx.listener(
-                                            |this, _e: &ClickEvent, _window, cx| {
+                                        .on_click(
+                                            cx.listener(|this, _e: &ClickEvent, _window, cx| {
                                                 this.set_action_bar_terminal_target(
                                                     ActionBarTerminalTarget::Embedded,
                                                     cx,
                                                 );
-                                            },
-                                        )),
+                                            }),
+                                        ),
                                     )
                                     .child(
                                         self.option_row(
                                             "settings_window_terminal_action_bar_external",
                                             ActionBarTerminalTarget::External.label(),
-                                            Some("Launch the external terminal".into()),
+                                            Some(tr(
+                                                "settings.action_bar_terminal.external_detail",
+                                            )),
                                             self.terminal_preferences.action_bar_terminal_target
                                                 == ActionBarTerminalTarget::External,
                                             theme,
                                         )
-                                        .on_click(cx.listener(
-                                            |this, _e: &ClickEvent, _window, cx| {
+                                        .on_click(
+                                            cx.listener(|this, _e: &ClickEvent, _window, cx| {
                                                 this.set_action_bar_terminal_target(
                                                     ActionBarTerminalTarget::External,
                                                     cx,
                                                 );
-                                            },
-                                        )),
+                                            }),
+                                        ),
                                     ),
                             );
                     }
@@ -4482,7 +4632,7 @@ impl Render for SettingsWindowView {
                     let mut change_tracking_card = self
                         .card(
                             "settings_window_change_tracking_card",
-                            "Change tracking",
+                            tr_str("settings.nav.change_tracking"),
                             theme,
                         )
                         .child(change_tracking_row);
@@ -4523,7 +4673,11 @@ impl Render for SettingsWindowView {
                     }
 
                     let mut diff_card = self
-                        .card("settings_window_diff_card", "Diff", theme)
+                        .card(
+                            "settings_window_diff_card",
+                            tr_str("settings.nav.diff"),
+                            theme,
+                        )
                         .child(diff_content_mode_row);
 
                     if self.expanded_section == Some(SettingsSection::DiffContentMode) {
@@ -4563,7 +4717,7 @@ impl Render for SettingsWindowView {
                     let diff_view_mode_row = self
                         .summary_row(
                             "settings_window_diff_view_mode",
-                            "View mode",
+                            tr_str("settings.row.view_mode"),
                             self.diff_view_mode.settings_label().into(),
                             self.expanded_section == Some(SettingsSection::DiffViewMode),
                             theme,
@@ -4653,24 +4807,30 @@ impl Render for SettingsWindowView {
                     let file_editing_card = self
                         .card(
                             "settings_window_file_editing_card",
-                            "File editing",
+                            tr_str("settings.nav.file_editing"),
                             theme,
                         )
                         .child(
                             self.toggle_row(
                                 "settings_window_auto_save_file_edits",
-                                "Auto-save edits",
+                                tr_str("settings.row.auto_save"),
                                 self.auto_save_file_edits,
                                 theme,
                             )
                             .border_color(no_separator)
-                            .on_click(cx.listener(|this, _e: &ClickEvent, _window, cx| {
-                                this.set_auto_save_file_edits(!this.auto_save_file_edits, cx);
-                            })),
+                            .on_click(cx.listener(
+                                |this, _e: &ClickEvent, _window, cx| {
+                                    this.set_auto_save_file_edits(!this.auto_save_file_edits, cx);
+                                },
+                            )),
                         );
 
                     let mut git_log_card = self
-                        .card("settings_window_git_log_card", "Git log", theme)
+                        .card(
+                            "settings_window_git_log_card",
+                            tr_str("settings.nav.git_log"),
+                            theme,
+                        )
                         .child(history_default_mode_row);
 
                     if self.expanded_section == Some(SettingsSection::GitLogDefaultMode) {
@@ -4702,9 +4862,7 @@ impl Render for SettingsWindowView {
                                     .pb_1()
                                     .text_xs()
                                     .text_color(theme.colors.foreground.secondary)
-                                    .child(
-                                        "Applies when opening repositories that do not already have a saved history mode.",
-                                    ),
+                                    .child(tr_str("settings.git_log.default_mode_note")),
                             ),
                         );
                     }
@@ -4720,7 +4878,7 @@ impl Render for SettingsWindowView {
                             .child(
                                 self.toggle_row(
                                     "settings_window_git_log_column_graph",
-                                    "Graph",
+                                    tr_str("settings.git_log.column_graph"),
                                     self.history_show_graph,
                                     theme,
                                 )
@@ -4739,7 +4897,7 @@ impl Render for SettingsWindowView {
                             .child(
                                 self.toggle_row(
                                     "settings_window_git_log_column_author",
-                                    "Author",
+                                    tr_str("settings.git_log.column_author"),
                                     self.history_show_author,
                                     theme,
                                 )
@@ -4758,7 +4916,7 @@ impl Render for SettingsWindowView {
                             .child(
                                 self.toggle_row(
                                     "settings_window_git_log_column_date",
-                                    "Commit date",
+                                    tr_str("settings.git_log.column_date"),
                                     self.history_show_date,
                                     theme,
                                 )
@@ -4777,7 +4935,7 @@ impl Render for SettingsWindowView {
                             .child(
                                 self.toggle_row(
                                     "settings_window_git_log_column_sha",
-                                    "SHA",
+                                    tr_str("settings.git_log.column_sha"),
                                     self.history_show_sha,
                                     theme,
                                 )
@@ -4799,13 +4957,13 @@ impl Render for SettingsWindowView {
                                     .pb_1()
                                     .text_xs()
                                     .text_color(theme.colors.foreground.secondary)
-                                    .child("Columns may auto-hide in narrow windows."),
+                                    .child(tr_str("settings.git_log.columns_note")),
                             )
                             .child(
                                 self.link_row(
                                     "settings_window_git_log_reset_widths",
-                                    "Reset column widths",
-                                    "Reset".into(),
+                                    tr_str("settings.git_log.reset_column_widths"),
+                                    tr("settings.action.reset"),
                                     theme,
                                 )
                                 .border_color(no_separator)
@@ -4836,11 +4994,8 @@ impl Render for SettingsWindowView {
                                 .child(
                                     self.option_row(
                                         "settings_window_git_log_tag_fetch_mode_activation",
-                                        "On repository activation",
-                                        Some(
-                                            "Fetch local and remote tags in the background when a repository becomes active."
-                                                .into(),
-                                        ),
+                                        tr_str("settings.tags.fetch_on_activation"),
+                                        Some(tr("settings.tags.fetch_on_activation_detail")),
                                         self.history_tag_fetch_mode
                                             == GitLogTagFetchMode::OnRepositoryActivation,
                                         theme,
@@ -4857,11 +5012,8 @@ impl Render for SettingsWindowView {
                                 .child(
                                     self.option_row(
                                         "settings_window_git_log_tag_fetch_mode_disabled",
-                                        "Disabled",
-                                        Some(
-                                            "Skip automatic tag fetching on repository activation."
-                                                .into(),
-                                        ),
+                                        tr_str("settings.tags.fetch_disabled"),
+                                        Some(tr("settings.tags.fetch_disabled_detail")),
                                         self.history_tag_fetch_mode == GitLogTagFetchMode::Disabled,
                                         theme,
                                     )
@@ -4879,47 +5031,46 @@ impl Render for SettingsWindowView {
                     }
 
                     let tags_card = self
-                        .card("settings_window_tags_card", "Tags", theme)
+                        .card(
+                            "settings_window_tags_card",
+                            tr_str("settings.nav.tags"),
+                            theme,
+                        )
                         .child(
                             self.setting_option_row(
                                 "settings_window_tags_default_lightweight",
-                                "Lightweight",
-                                Some(
-                                    "A simple tag pointing directly to a commit. No message, no GPG signing."
-                                        .into(),
-                                ),
+                                tr_str("settings.tags.lightweight"),
+                                Some(tr("settings.tags.lightweight_detail")),
                                 self.default_tag_type == DefaultTagType::Lightweight,
                                 theme,
                             )
-                            .on_click(cx.listener(|this, _e: &ClickEvent, _window, cx| {
-                                this.set_default_tag_type(DefaultTagType::Lightweight, cx);
-                            })),
+                            .on_click(cx.listener(
+                                |this, _e: &ClickEvent, _window, cx| {
+                                    this.set_default_tag_type(DefaultTagType::Lightweight, cx);
+                                },
+                            )),
                         )
                         .child(
                             self.setting_option_row(
                                 "settings_window_tags_default_annotated",
-                                "Annotated",
-                                Some(
-                                    "Stores tag author, date, and an optional message. Supports GPG signing."
-                                        .into(),
-                                ),
+                                tr_str("settings.tags.annotated"),
+                                Some(tr("settings.tags.annotated_detail")),
                                 self.default_tag_type == DefaultTagType::Annotated,
                                 theme,
                             )
                             .border_color(no_separator)
-                            .on_click(cx.listener(|this, _e: &ClickEvent, _window, cx| {
-                                this.set_default_tag_type(DefaultTagType::Annotated, cx);
-                            })),
+                            .on_click(cx.listener(
+                                |this, _e: &ClickEvent, _window, cx| {
+                                    this.set_default_tag_type(DefaultTagType::Annotated, cx);
+                                },
+                            )),
                         );
 
                     let system_git_row = self
                         .setting_option_row(
                             "settings_window_git_executable_system",
-                            "System PATH",
-                            Some(
-                                "Use the first `git` executable available in the current PATH."
-                                    .into(),
-                            ),
+                            tr_str("settings.git_executable.system_path"),
+                            Some(tr("settings.git_executable.system_detail")),
                             self.git_executable_mode == GitExecutableMode::SystemPath,
                             theme,
                         )
@@ -4928,22 +5079,23 @@ impl Render for SettingsWindowView {
                         }));
 
                     let custom_git_row = self
-                    .setting_option_row(
-                        "settings_window_git_executable_custom",
-                        "Custom executable",
-                        Some(
-                            "Use a specific Git binary and add its directory when Git resolves helper tools."
-                                .into(),
-                        ),
-                        self.git_executable_mode == GitExecutableMode::Custom,
-                        theme,
-                    )
-                    .on_click(cx.listener(|this, _e: &ClickEvent, _window, cx| {
-                        this.set_git_executable_mode(GitExecutableMode::Custom, cx);
-                    }));
+                        .setting_option_row(
+                            "settings_window_git_executable_custom",
+                            tr_str("settings.git_executable.custom"),
+                            Some(tr("settings.git_executable.custom_detail")),
+                            self.git_executable_mode == GitExecutableMode::Custom,
+                            theme,
+                        )
+                        .on_click(cx.listener(|this, _e: &ClickEvent, _window, cx| {
+                            this.set_git_executable_mode(GitExecutableMode::Custom, cx);
+                        }));
 
                     let mut git_executable_card = self
-                        .card("settings_window_git_executable", "Git executable", theme)
+                        .card(
+                            "settings_window_git_executable",
+                            tr_str("settings.nav.git_executable"),
+                            theme,
+                        )
                         .child(
                             div()
                                 .id("settings_window_git_executable_scope_note")
@@ -4959,7 +5111,7 @@ impl Render for SettingsWindowView {
                     if self.git_executable_mode == GitExecutableMode::Custom {
                         let browse_button = components::Button::new(
                             "settings_window_git_executable_browse",
-                            "Browse",
+                            tr("settings.action.browse"),
                         )
                         .style(components::ButtonStyle::Outlined)
                         .on_click(theme, cx, |_this, _e, window, cx| {
@@ -4968,7 +5120,7 @@ impl Render for SettingsWindowView {
                                 files: true,
                                 directories: false,
                                 multiple: false,
-                                prompt: Some("Select Git executable".into()),
+                                prompt: Some(tr("settings.git_executable.prompt_select")),
                             });
 
                             window
@@ -4995,7 +5147,7 @@ impl Render for SettingsWindowView {
 
                         let use_path_button = components::Button::new(
                             "settings_window_git_executable_apply",
-                            "Use Path",
+                            tr("settings.git_executable.use_path"),
                         )
                         .style(components::ButtonStyle::Filled)
                         .on_click(theme, cx, |this, _e, _window, cx| {
@@ -5003,47 +5155,45 @@ impl Render for SettingsWindowView {
                         });
 
                         git_executable_card = git_executable_card.child(
-                        self.detail_container(
-                            "settings_window_git_executable_custom_container",
-                            theme,
-                        )
-                        .child(
-                            div()
-                                .px_2()
-                                .pt_1()
-                                .text_xs()
-                                .text_color(theme.colors.foreground.secondary)
-                                .child("Custom Git executable"),
-                        )
-                        .child(
-                            div()
-                                .px_2()
-                                .pb_1()
-                                .w_full()
-                                .min_w(px(0.0))
-                                .flex()
-                                .items_center()
-                                .gap_2()
-                                .child(
-                                    div()
-                                        .flex_1()
-                                        .min_w(px(0.0))
-                                        .child(self.git_executable_input.clone()),
-                                )
-                                .child(browse_button)
-                                .child(use_path_button),
-                        )
-                        .child(
-                            div()
-                                .px_2()
-                                .pb_1()
-                                .text_xs()
-                                .text_color(theme.colors.foreground.secondary)
-                                .child(
-                                    "Press Enter after editing the path to apply it immediately.",
-                                ),
-                        ),
-                    );
+                            self.detail_container(
+                                "settings_window_git_executable_custom_container",
+                                theme,
+                            )
+                            .child(
+                                div()
+                                    .px_2()
+                                    .pt_1()
+                                    .text_xs()
+                                    .text_color(theme.colors.foreground.secondary)
+                                    .child(tr_str("settings.git_executable.custom_label")),
+                            )
+                            .child(
+                                div()
+                                    .px_2()
+                                    .pb_1()
+                                    .w_full()
+                                    .min_w(px(0.0))
+                                    .flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_w(px(0.0))
+                                            .child(self.git_executable_input.clone()),
+                                    )
+                                    .child(browse_button)
+                                    .child(use_path_button),
+                            )
+                            .child(
+                                div()
+                                    .px_2()
+                                    .pb_1()
+                                    .text_xs()
+                                    .text_color(theme.colors.foreground.secondary)
+                                    .child(tr_str("settings.git_executable.enter_hint")),
+                            ),
+                        );
                     }
 
                     git_executable_card = git_executable_card.child(self.git_runtime_row(theme));
@@ -5061,26 +5211,33 @@ impl Render for SettingsWindowView {
                     }
 
                     let environment_card = self
-                        .card("settings_window_environment", "Environment", theme)
+                        .card(
+                            "settings_window_environment",
+                            tr_str("settings.nav.environment"),
+                            theme,
+                        )
                         .child(self.info_row(
                             "settings_window_build",
-                            "Build",
+                            tr_str("settings.environment.build"),
                             self.runtime_info.app_version_display.clone(),
                             theme,
                         ))
-                        .child(self.info_row(
-                            "settings_window_os",
-                            "Operating system",
-                            self.runtime_info.operating_system.clone(),
-                            theme,
-                        ).border_color(no_separator));
+                        .child(
+                            self.info_row(
+                                "settings_window_os",
+                                tr_str("settings.environment.operating_system"),
+                                self.runtime_info.operating_system.clone(),
+                                theme,
+                            )
+                            .border_color(no_separator),
+                        );
 
                     let links_card = self
-                        .card("settings_window_links", "Links", theme)
+                        .card("settings_window_links", tr_str("settings.nav.links"), theme)
                         .child(
                             self.link_row(
                                 "settings_window_links_theme_guide",
-                                "Theme guide",
+                                tr_str("settings.row.theme_guide"),
                                 "docs/themes.md".into(),
                                 theme,
                             )
@@ -5102,7 +5259,7 @@ impl Render for SettingsWindowView {
                         .child(
                             self.link_row(
                                 "settings_window_license",
-                                "License",
+                                tr_str("settings.links.license"),
                                 LICENSE_NAME.into(),
                                 theme,
                             )
@@ -5113,7 +5270,7 @@ impl Render for SettingsWindowView {
                         .child(
                             self.link_row(
                                 "settings_window_professional_edition_waitlist",
-                                "Professional Edition waitlist",
+                                tr_str("settings.links.professional_waitlist"),
                                 "gitcomet.dev".into(),
                                 theme,
                             )
@@ -5124,8 +5281,8 @@ impl Render for SettingsWindowView {
                         .child(
                             self.link_row(
                                 "settings_window_open_source_licenses",
-                                "Open source licenses",
-                                "Show".into(),
+                                tr_str("settings.links.open_source_licenses"),
+                                tr("settings.action.show"),
                                 theme,
                             )
                             .border_color(no_separator)
@@ -5248,7 +5405,7 @@ impl Render for SettingsWindowView {
                                 .active(move |s| s.bg(theme.colors.interaction.pressed_background))
                                 .text_sm()
                                 .text_color(theme.colors.accent.foreground)
-                                .child("< Settings")
+                                .child(tr_str("settings.licenses.back"))
                                 .on_click(cx.listener(|this, _e: &ClickEvent, _window, cx| {
                                     this.show_root(cx);
                                 })),
@@ -5263,7 +5420,7 @@ impl Render for SettingsWindowView {
                             div()
                                 .text_sm()
                                 .font_weight(FontWeight::BOLD)
-                                .child("Open source licenses"),
+                                .child(tr_str("settings.links.open_source_licenses")),
                         );
 
                     let list = if rows.is_empty() {
@@ -5272,19 +5429,21 @@ impl Render for SettingsWindowView {
                             .py_1()
                             .text_sm()
                             .text_color(theme.colors.foreground.secondary)
-                            .child("No dependency licenses found.")
+                            .child(tr_str("settings.licenses.empty"))
                             .into_any_element()
                     } else {
-                        restrict_scroll_to_vertical_axis(uniform_list(
-                            "settings_window_open_source_licenses_list",
-                            rows.len(),
-                            cx.processor(Self::render_open_source_license_rows),
+                        restrict_scroll_to_vertical_axis(
+                            uniform_list(
+                                "settings_window_open_source_licenses_list",
+                                rows.len(),
+                                cx.processor(Self::render_open_source_license_rows),
+                            )
+                            .w_full()
+                            .min_w(px(0.0))
+                            .h_full()
+                            .min_h(px(0.0))
+                            .track_scroll(&self.open_source_licenses_scroll),
                         )
-                        .w_full()
-                        .min_w(px(0.0))
-                        .h_full()
-                        .min_h(px(0.0))
-                        .track_scroll(&self.open_source_licenses_scroll))
                         .into_any_element()
                     };
 
@@ -5327,7 +5486,7 @@ impl Render for SettingsWindowView {
                     let licenses_card = self
                         .card(
                             "settings_window_open_source_licenses_card",
-                            "Open source licenses",
+                            tr_str("settings.links.open_source_licenses"),
                             theme,
                         )
                         .flex_1()
@@ -5338,7 +5497,9 @@ impl Render for SettingsWindowView {
                                 .pb_1()
                                 .text_xs()
                                 .text_color(theme.colors.foreground.secondary)
-                                .child(format!("{} third-party crates listed", rows.len())),
+                                .child(
+                                    t!("settings.licenses.count", count = rows.len()).into_owned(),
+                                ),
                         )
                         .child(
                             div()
@@ -5353,9 +5514,22 @@ impl Render for SettingsWindowView {
                                 .flex()
                                 .items_center()
                                 .gap_2()
-                                .child(div().w(px(200.0)).child("Crate"))
-                                .child(div().w(px(90.0)).child("Version"))
-                                .child(div().flex_1().min_w(px(0.0)).child("License")),
+                                .child(
+                                    div()
+                                        .w(px(200.0))
+                                        .child(tr_str("settings.licenses.column_crate")),
+                                )
+                                .child(
+                                    div()
+                                        .w(px(90.0))
+                                        .child(tr_str("settings.licenses.column_version")),
+                                )
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .min_w(px(0.0))
+                                        .child(tr_str("settings.licenses.column_license")),
+                                ),
                         )
                         .child(list_container);
 
@@ -5502,8 +5676,11 @@ fn os_display_name(os: &str) -> &str {
 }
 
 fn git_runtime_info_from_state(runtime: GitRuntimeState) -> GitRuntimeInfo {
-    let compatibility_message =
-        format!("GitComet has been tested only with Git {MIN_GIT_MAJOR}.{MIN_GIT_MINOR} or newer.");
+    let compatibility_message = t!(
+        "settings.git.compatibility_note",
+        version = format!("{MIN_GIT_MAJOR}.{MIN_GIT_MINOR}")
+    )
+    .into_owned();
     let compatibility = if !runtime.is_available() {
         GitCompatibility::Unavailable
     } else {
@@ -5516,7 +5693,7 @@ fn git_runtime_info_from_state(runtime: GitRuntimeState) -> GitRuntimeInfo {
 
     let version_display = runtime
         .version_output()
-        .unwrap_or("Unavailable")
+        .unwrap_or(tr_str("settings.common.unavailable"))
         .to_string()
         .into();
 
@@ -8244,7 +8421,10 @@ mod tests {
 
         let mut settings_cx = gpui::VisualTestContext::from_window(*settings_window.deref(), cx);
         settings_cx.run_until_parked();
-        settings_cx.simulate_resize(size(px(SETTINGS_WINDOW_DEFAULT_WIDTH_PX), px(460.0)));
+        // The General page grew by the Language row, which pushed the UI-font
+        // dropdown's hit area below the old 460px window; 520px keeps it in
+        // view while the page still overflows (outer scroll stays active).
+        settings_cx.simulate_resize(size(px(SETTINGS_WINDOW_DEFAULT_WIDTH_PX), px(520.0)));
         settings_cx.run_until_parked();
         settings_cx.update(|window, app| {
             let _ = window.draw(app);

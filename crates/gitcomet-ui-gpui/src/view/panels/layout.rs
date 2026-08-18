@@ -1,4 +1,5 @@
 use super::*;
+use crate::i18n::{t, tr, tr_str};
 use gpui::{AnyElement, Div, Stateful};
 use rustc_hash::FxHashSet;
 
@@ -337,12 +338,25 @@ fn status_action_count_label(
 fn status_action_all_label(labels: StatusActionLabels, full: &'static str) -> &'static str {
     match labels {
         StatusActionLabels::Full => full,
-        StatusActionLabels::Compact => "All",
+        StatusActionLabels::Compact => tr_str("layout.status.all"),
     }
 }
 
 fn status_action_file_count(count: usize) -> &'static str {
-    if count == 1 { "file" } else { "files" }
+    if count == 1 {
+        tr_str("layout.status.file_word")
+    } else {
+        tr_str("layout.status.files_word")
+    }
+}
+
+/// Latin-budgeted width units for a locale-dependent label: CJK and other
+/// full-width glyphs render at roughly double the budgeted Latin advance, so
+/// they count as two. The header budget must measure the translated text, or
+/// a short translated label would claim the room its longer English source
+/// needs and the full wording would be withheld for no reason.
+fn label_width_chars(text: &str) -> usize {
+    text.chars().map(|c| if c.is_ascii() { 1 } else { 2 }).sum()
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -1101,7 +1115,10 @@ impl DetailsPaneView {
                     .text_sm()
                     .font_weight(FontWeight::BOLD)
                     .line_clamp(1)
-                    .child(SharedString::from(format!("{count} commits selected"))),
+                    .child(SharedString::from(t!(
+                        "layout.multi.commits_selected",
+                        count = count
+                    ))),
             )
             .child(
                 components::Button::new("commit_details_close", "")
@@ -1117,7 +1134,7 @@ impl DetailsPaneView {
                         }
                         cx.notify();
                     })
-                    .gitcomet_tooltip(theme, "Close commit details".into()),
+                    .gitcomet_tooltip(theme, tr("layout.commit_details.close")),
             );
 
         let body = self.commit_cards_list(repo_id, count, cx);
@@ -1199,7 +1216,7 @@ impl DetailsPaneView {
                     .font_weight(FontWeight::BOLD)
                     // Not "Uncommitted changes": that is the current repo's
                     // own row, and these are somebody else's.
-                    .child(SharedString::from("Worktree changes")),
+                    .child(tr("layout.worktree.title")),
             )
             .child(div().flex_1().min_w(px(0.0)))
             .child({
@@ -1222,7 +1239,11 @@ impl DetailsPaneView {
                 })
                 .gitcomet_tooltip(
                     theme,
-                    format!("Open this worktree in a tab\n{}", worktree_path.display()).into(),
+                    t!(
+                        "layout.worktree.open_in_tab",
+                        path = worktree_path.display().to_string()
+                    )
+                    .into(),
                 )
                 // A chip is a control of its own: a right or middle click must not
                 // open a repo tab, and a left click must not reach the row behind it.
@@ -1247,7 +1268,7 @@ impl DetailsPaneView {
                         this.store.dispatch(Msg::ClearCommitSelection { repo_id });
                         cx.notify();
                     })
-                    .gitcomet_tooltip(theme, "Close".into()),
+                    .gitcomet_tooltip(theme, tr("layout.worktree.close")),
             );
 
         // No "no files" state: the scan only reports a worktree once
@@ -1263,7 +1284,7 @@ impl DetailsPaneView {
                 .debug_selector(|| "worktree_files_loading".to_string())
                 .text_sm()
                 .text_color(theme.colors.foreground.secondary)
-                .child("Loading files…")
+                .child(tr_str("layout.worktree.loading_files"))
                 .into_any_element()
         } else {
             Self::vertical_scroll_frame(
@@ -1306,7 +1327,10 @@ impl DetailsPaneView {
                             .text_sm()
                             .text_color(theme.colors.foreground.secondary)
                             .line_clamp(1)
-                            .child(SharedString::from(format!("{file_count} changed"))),
+                            .child(SharedString::from(t!(
+                                "layout.changed_count",
+                                count = file_count
+                            ))),
                     )
                     .child(
                         div()
@@ -1366,14 +1390,19 @@ impl DetailsPaneView {
         };
 
         let header_title: SharedString = if is_merged_selection {
-            format!("{card_count} commits selected").into()
+            t!("layout.multi.commits_selected", count = card_count).into()
         } else {
-            "Comparison".into()
+            tr("layout.comparison.title")
         };
         let subheader: SharedString = if is_merged_selection {
-            format!("Viewing merged diff of {card_count} commits").into()
+            t!("layout.comparison.viewing_merged_diff", count = card_count).into()
         } else {
-            format!("Viewing diff: {} → {}", range.from_label, range.to_label).into()
+            t!(
+                "layout.comparison.viewing_diff",
+                from = range.from_label,
+                to = range.to_label
+            )
+            .into()
         };
 
         let header = div()
@@ -1408,7 +1437,7 @@ impl DetailsPaneView {
                         }
                         cx.notify();
                     })
-                    .gitcomet_tooltip(theme, "Close comparison".into()),
+                    .gitcomet_tooltip(theme, tr("layout.comparison.close")),
             );
 
         // Compared-commit preview cards. A two-point comparison has one or two,
@@ -1440,19 +1469,21 @@ impl DetailsPaneView {
         // selector names which of the two the label is, so a test can tell them
         // apart without reading painted text.
         let (files_label, files_label_selector): (SharedString, &'static str) = match &files_state {
-            RangeFilesState::Loading | RangeFilesState::Failed(_) => {
-                ("Changed files".into(), "range_files_label_pending")
-            }
-            RangeFilesState::Loaded(count) => {
-                (format!("{count} changed").into(), "range_files_label_count")
-            }
+            RangeFilesState::Loading | RangeFilesState::Failed(_) => (
+                tr("layout.comparison.changed_files"),
+                "range_files_label_pending",
+            ),
+            RangeFilesState::Loaded(count) => (
+                t!("layout.changed_count", count = *count).into(),
+                "range_files_label_count",
+            ),
         };
         let files_body: AnyElement = match &files_state {
             RangeFilesState::Loading => div()
                 .debug_selector(|| "range_files_loading".to_string())
                 .text_sm()
                 .text_color(theme.colors.foreground.secondary)
-                .child("Loading")
+                .child(tr_str("layout.loading"))
                 .into_any_element(),
             // An error must not render as "No files." — that is exactly what a
             // pair of identical commits looks like, so the user would read a
@@ -1467,7 +1498,7 @@ impl DetailsPaneView {
                 .debug_selector(|| "range_files_empty".to_string())
                 .text_sm()
                 .text_color(theme.colors.foreground.secondary)
-                .child("No files.")
+                .child(tr_str("layout.no_files"))
                 .into_any_element(),
             RangeFilesState::Loaded(count) => Self::vertical_scroll_frame(
                 theme,
@@ -1604,7 +1635,7 @@ impl DetailsPaneView {
                 s.repo_id == repo_id && s.commit_id == selected_id && s.show_loading
             });
 
-            let header_title: SharedString = "Commit details".into();
+            let header_title: SharedString = tr("layout.commit_details.title");
 
             let header = div()
                 .flex()
@@ -1637,7 +1668,7 @@ impl DetailsPaneView {
                             }
                             cx.notify();
                         })
-                        .gitcomet_tooltip(theme, "Close commit details".into()),
+                        .gitcomet_tooltip(theme, tr("layout.commit_details.close")),
                 );
 
             let active_commit_details = self.active_repo().map(|repo| {
@@ -1648,22 +1679,38 @@ impl DetailsPaneView {
             });
             let body: AnyElement = match active_commit_details.as_ref().map(|(details, _)| details)
             {
-                None => {
-                    components::empty_state(theme, "Commit", "No repository.").into_any_element()
-                }
+                None => components::empty_state(
+                    theme,
+                    tr_str("layout.commit_details.empty_title"),
+                    tr_str("layout.commit_details.no_repository"),
+                )
+                .into_any_element(),
                 Some(Loadable::Loading) => {
                     if show_delayed_loading {
-                        components::empty_state(theme, "Commit", "Loading").into_any_element()
+                        components::empty_state(
+                            theme,
+                            tr_str("layout.commit_details.empty_title"),
+                            tr_str("layout.loading"),
+                        )
+                        .into_any_element()
                     } else {
                         div().into_any_element()
                     }
                 }
-                Some(Loadable::Error(e)) => {
-                    components::empty_state(theme, "Commit", e.clone()).into_any_element()
-                }
+                Some(Loadable::Error(e)) => components::empty_state(
+                    theme,
+                    tr_str("layout.commit_details.empty_title"),
+                    e.clone(),
+                )
+                .into_any_element(),
                 Some(Loadable::NotLoaded) => {
                     if show_delayed_loading {
-                        components::empty_state(theme, "Commit", "Loading").into_any_element()
+                        components::empty_state(
+                            theme,
+                            tr_str("layout.commit_details.empty_title"),
+                            tr_str("layout.loading"),
+                        )
+                        .into_any_element()
                     } else {
                         div().into_any_element()
                     }
@@ -1671,7 +1718,12 @@ impl DetailsPaneView {
                 Some(Loadable::Ready(details)) => {
                     if details.id != selected_id {
                         if show_delayed_loading {
-                            components::empty_state(theme, "Commit", "Loading").into_any_element()
+                            components::empty_state(
+                                theme,
+                                tr_str("layout.commit_details.empty_title"),
+                                tr_str("layout.loading"),
+                            )
+                            .into_any_element()
                         } else {
                             let parent = details
                                 .parent_ids
@@ -1683,7 +1735,7 @@ impl DetailsPaneView {
                                 div()
                                     .text_sm()
                                     .text_color(theme.colors.foreground.secondary)
-                                    .child("No files.")
+                                    .child(tr_str("layout.no_files"))
                                     .into_any_element()
                             } else {
                                 Self::vertical_scroll_frame(
@@ -1745,21 +1797,21 @@ impl DetailsPaneView {
                                         ))
                                         .child(commit_details_selectable_row(
                                             theme,
-                                            "Commit SHA",
+                                            tr_str("layout.commit_details.commit_sha"),
                                             commit_details_monospace_value(
                                                 self.commit_details_sha_input.clone(),
                                             ),
                                         ))
                                         .child(commit_details_selectable_row(
                                             theme,
-                                            "Commit date",
+                                            tr_str("layout.commit_details.commit_date"),
                                             commit_details_monospace_value(
                                                 self.commit_details_date_input.clone(),
                                             ),
                                         ))
                                         .child(commit_details_selectable_row(
                                             theme,
-                                            "Parent commit SHA",
+                                            tr_str("layout.commit_details.parent_commit_sha"),
                                             commit_details_monospace_value(
                                                 self.commit_details_parent_input.clone(),
                                             ),
@@ -1800,7 +1852,7 @@ impl DetailsPaneView {
                             div()
                                 .text_sm()
                                 .text_color(theme.colors.foreground.secondary)
-                                .child("No files.")
+                                .child(tr_str("layout.no_files"))
                                 .into_any_element()
                         } else {
                             Self::vertical_scroll_frame(
@@ -1869,7 +1921,7 @@ impl DetailsPaneView {
                                     .children(commit_details_author_row(theme, ui_scale, details))
                                     .child(commit_details_selectable_row(
                                         theme,
-                                        "Commit SHA",
+                                        tr_str("layout.commit_details.commit_sha"),
                                         commit_details_monospace_element(
                                             self.commit_details_sha_link_menu
                                                 .clone()
@@ -1878,14 +1930,14 @@ impl DetailsPaneView {
                                     ))
                                     .child(commit_details_selectable_row(
                                         theme,
-                                        "Commit date",
+                                        tr_str("layout.commit_details.commit_date"),
                                         commit_details_monospace_value(
                                             self.commit_details_date_input.clone(),
                                         ),
                                     ))
                                     .child(commit_details_selectable_row(
                                         theme,
-                                        "Parent commit SHA",
+                                        tr_str("layout.commit_details.parent_commit_sha"),
                                         commit_details_monospace_element(
                                             self.commit_details_parent_link_menu
                                                 .clone()
@@ -1908,10 +1960,10 @@ impl DetailsPaneView {
                                         div()
                                             .text_sm()
                                             .text_color(theme.colors.foreground.secondary)
-                                            .child(format!(
-                                                "Committed files ({})",
-                                                details.files.len()
-                                            )),
+                                            .child(SharedString::from(t!(
+                                                "layout.commit_details.committed_files",
+                                                count = details.files.len()
+                                            ))),
                                     )
                                     .child(files),
                             )
@@ -2040,63 +2092,90 @@ impl DetailsPaneView {
                     ui_scale_percent,
                 )
             };
+        // Locale-dependent words, resolved once so the width budget above and
+        // the painted labels below can never disagree.
+        let unstaged_title = tr_str("layout.status.unstaged");
+        let untracked_title = tr_str("layout.status.untracked");
+        let staged_title = tr_str("layout.status.staged");
+        let stage_word = tr_str("layout.status.stage");
+        let discard_word = tr_str("layout.status.discard");
+        let unstage_word = tr_str("layout.status.unstage");
+        let stage_all_text = tr_str("layout.status.stage_all");
+        let stage_all_changes_text = tr_str("layout.status.stage_all_changes");
+        let unstage_all_changes_text = tr_str("layout.status.unstage_all_changes");
         let count_chars =
-            |word: &str, count: usize| word.chars().count() + 3 + count.to_string().len();
+            |word: &str, count: usize| label_width_chars(word) + 3 + count.to_string().len();
         let unstaged_labels = if selected_combined_unstaged > 0 {
             labels_for(
-                "Unstaged".len(),
+                label_width_chars(unstaged_title),
                 true,
                 &[
-                    count_chars("Stage", selected_combined_unstaged),
-                    count_chars("Discard", selected_combined_unstaged),
-                    "Stage all changes".len(),
+                    count_chars(stage_word, selected_combined_unstaged),
+                    count_chars(discard_word, selected_combined_unstaged),
+                    label_width_chars(stage_all_changes_text),
                 ],
             )
         } else {
-            labels_for("Unstaged".len(), true, &["Stage all changes".len()])
+            labels_for(
+                label_width_chars(unstaged_title),
+                true,
+                &[label_width_chars(stage_all_changes_text)],
+            )
         };
         let untracked_labels = if selected_untracked > 0 {
             labels_for(
-                "Untracked".len(),
+                label_width_chars(untracked_title),
                 true,
                 &[
-                    count_chars("Stage", selected_untracked),
-                    count_chars("Discard", selected_untracked),
-                    "Stage all".len(),
+                    count_chars(stage_word, selected_untracked),
+                    count_chars(discard_word, selected_untracked),
+                    label_width_chars(stage_all_text),
                 ],
             )
         } else {
-            labels_for("Untracked".len(), true, &["Stage all".len()])
+            labels_for(
+                label_width_chars(untracked_title),
+                true,
+                &[label_width_chars(stage_all_text)],
+            )
         };
         let split_unstaged_labels = if selected_split_unstaged > 0 {
             labels_for(
-                "Unstaged".len(),
+                label_width_chars(unstaged_title),
                 true,
                 &[
-                    count_chars("Stage", selected_split_unstaged),
-                    count_chars("Discard", selected_split_unstaged),
-                    "Stage all".len(),
+                    count_chars(stage_word, selected_split_unstaged),
+                    count_chars(discard_word, selected_split_unstaged),
+                    label_width_chars(stage_all_text),
                 ],
             )
         } else {
-            labels_for("Unstaged".len(), true, &["Stage all".len()])
+            labels_for(
+                label_width_chars(unstaged_title),
+                true,
+                &[label_width_chars(stage_all_text)],
+            )
         };
         let staged_labels = if selected_staged > 0 {
             labels_for(
-                "Staged".len(),
+                label_width_chars(staged_title),
                 false,
                 &[
-                    count_chars("Unstage", selected_staged),
-                    "Unstage all changes".len(),
+                    count_chars(unstage_word, selected_staged),
+                    label_width_chars(unstage_all_changes_text),
                 ],
             )
         } else {
-            labels_for("Staged".len(), false, &["Unstage all changes".len()])
+            labels_for(
+                label_width_chars(staged_title),
+                false,
+                &[label_width_chars(unstage_all_changes_text)],
+            )
         };
 
         let stage_all = components::Button::new(
             "stage_all",
-            status_action_all_label(unstaged_labels, "Stage all changes"),
+            status_action_all_label(unstaged_labels, stage_all_changes_text),
         )
         .style(components::ButtonStyle::Subtle)
         .disabled(local_actions_in_flight)
@@ -2107,11 +2186,11 @@ impl DetailsPaneView {
             // Empty paths: this button stages every change there is.
             this.stage_all_with_conflict_confirmation(repo_id, Vec::new(), _w, cx);
         })
-        .gitcomet_tooltip(theme, "Stage all changes".into());
+        .gitcomet_tooltip(theme, tr("layout.status.stage_all_changes"));
 
         let stage_selected = components::Button::new(
             "stage_selected",
-            status_action_count_label(unstaged_labels, "Stage", selected_combined_unstaged),
+            status_action_count_label(unstaged_labels, stage_word, selected_combined_unstaged),
         )
         .style(components::ButtonStyle::Subtle)
         .disabled(local_actions_in_flight)
@@ -2151,16 +2230,17 @@ impl DetailsPaneView {
         .debug_selector(|| "stage_selected_button".to_string())
         .gitcomet_tooltip(
             theme,
-            format!(
-                "Stage {selected_combined_unstaged} selected {}",
-                status_action_file_count(selected_combined_unstaged)
+            t!(
+                "layout.status.stage_selected_tooltip",
+                count = selected_combined_unstaged,
+                file_word = status_action_file_count(selected_combined_unstaged)
             )
             .into(),
         );
 
         let discard_selected = components::Button::new(
             "discard_selected",
-            status_action_count_label(unstaged_labels, "Discard", selected_combined_unstaged),
+            status_action_count_label(unstaged_labels, discard_word, selected_combined_unstaged),
         )
         .style(components::ButtonStyle::Subtle)
         .disabled(local_actions_in_flight)
@@ -2187,9 +2267,10 @@ impl DetailsPaneView {
         })
         .gitcomet_tooltip(
             theme,
-            format!(
-                "Discard changes in {selected_combined_unstaged} selected {}",
-                status_action_file_count(selected_combined_unstaged)
+            t!(
+                "layout.status.discard_selected_tooltip",
+                count = selected_combined_unstaged,
+                file_word = status_action_file_count(selected_combined_unstaged)
             )
             .into(),
         );
@@ -2198,7 +2279,7 @@ impl DetailsPaneView {
             gitcomet_state::msg::RepoPathList::from(untracked_paths.clone());
         let stage_all_untracked = components::Button::new(
             "stage_all_untracked",
-            status_action_all_label(untracked_labels, "Stage all"),
+            status_action_all_label(untracked_labels, stage_all_text),
         )
         .style(components::ButtonStyle::Subtle)
         .disabled(local_actions_in_flight || untracked_paths_for_stage_all.is_empty())
@@ -2217,11 +2298,11 @@ impl DetailsPaneView {
             });
             cx.notify();
         })
-        .gitcomet_tooltip(theme, "Stage all untracked files".into());
+        .gitcomet_tooltip(theme, tr("layout.status.stage_all_untracked"));
 
         let stage_selected_untracked = components::Button::new(
             "stage_selected_untracked",
-            status_action_count_label(untracked_labels, "Stage", selected_untracked),
+            status_action_count_label(untracked_labels, stage_word, selected_untracked),
         )
         .style(components::ButtonStyle::Subtle)
         .disabled(local_actions_in_flight)
@@ -2259,16 +2340,17 @@ impl DetailsPaneView {
         })
         .gitcomet_tooltip(
             theme,
-            format!(
-                "Stage {selected_untracked} selected {}",
-                status_action_file_count(selected_untracked)
+            t!(
+                "layout.status.stage_selected_tooltip",
+                count = selected_untracked,
+                file_word = status_action_file_count(selected_untracked)
             )
             .into(),
         );
 
         let discard_selected_untracked = components::Button::new(
             "discard_selected_untracked",
-            status_action_count_label(untracked_labels, "Discard", selected_untracked),
+            status_action_count_label(untracked_labels, discard_word, selected_untracked),
         )
         .style(components::ButtonStyle::Subtle)
         .disabled(local_actions_in_flight)
@@ -2294,9 +2376,10 @@ impl DetailsPaneView {
         })
         .gitcomet_tooltip(
             theme,
-            format!(
-                "Discard changes in {selected_untracked} selected {}",
-                status_action_file_count(selected_untracked)
+            t!(
+                "layout.status.discard_selected_tooltip",
+                count = selected_untracked,
+                file_word = status_action_file_count(selected_untracked)
             )
             .into(),
         );
@@ -2304,7 +2387,7 @@ impl DetailsPaneView {
         let split_unstaged_paths_for_stage_all = split_unstaged_paths.clone();
         let stage_all_split_unstaged = components::Button::new(
             "stage_all_split_unstaged",
-            status_action_all_label(split_unstaged_labels, "Stage all"),
+            status_action_all_label(split_unstaged_labels, stage_all_text),
         )
         .style(components::ButtonStyle::Subtle)
         .disabled(local_actions_in_flight || split_unstaged_paths_for_stage_all.is_empty())
@@ -2325,11 +2408,11 @@ impl DetailsPaneView {
                 cx,
             );
         })
-        .gitcomet_tooltip(theme, "Stage all unstaged changes".into());
+        .gitcomet_tooltip(theme, tr("layout.status.stage_all_unstaged"));
 
         let stage_selected_split_unstaged = components::Button::new(
             "stage_selected_split_unstaged",
-            status_action_count_label(split_unstaged_labels, "Stage", selected_split_unstaged),
+            status_action_count_label(split_unstaged_labels, stage_word, selected_split_unstaged),
         )
         .style(components::ButtonStyle::Subtle)
         .disabled(local_actions_in_flight)
@@ -2367,16 +2450,17 @@ impl DetailsPaneView {
         })
         .gitcomet_tooltip(
             theme,
-            format!(
-                "Stage {selected_split_unstaged} selected {}",
-                status_action_file_count(selected_split_unstaged)
+            t!(
+                "layout.status.stage_selected_tooltip",
+                count = selected_split_unstaged,
+                file_word = status_action_file_count(selected_split_unstaged)
             )
             .into(),
         );
 
         let discard_selected_split_unstaged = components::Button::new(
             "discard_selected_split_unstaged",
-            status_action_count_label(split_unstaged_labels, "Discard", selected_split_unstaged),
+            status_action_count_label(split_unstaged_labels, discard_word, selected_split_unstaged),
         )
         .style(components::ButtonStyle::Subtle)
         .disabled(local_actions_in_flight)
@@ -2402,16 +2486,17 @@ impl DetailsPaneView {
         })
         .gitcomet_tooltip(
             theme,
-            format!(
-                "Discard changes in {selected_split_unstaged} selected {}",
-                status_action_file_count(selected_split_unstaged)
+            t!(
+                "layout.status.discard_selected_tooltip",
+                count = selected_split_unstaged,
+                file_word = status_action_file_count(selected_split_unstaged)
             )
             .into(),
         );
 
         let unstage_all = components::Button::new(
             "unstage_all",
-            status_action_all_label(staged_labels, "Unstage all changes"),
+            status_action_all_label(staged_labels, unstage_all_changes_text),
         )
         .style(components::ButtonStyle::Subtle)
         .disabled(local_actions_in_flight)
@@ -2427,11 +2512,11 @@ impl DetailsPaneView {
             });
             cx.notify();
         })
-        .gitcomet_tooltip(theme, "Unstage all changes".into());
+        .gitcomet_tooltip(theme, tr("layout.status.unstage_all_changes"));
 
         let unstage_selected = components::Button::new(
             "unstage_selected",
-            status_action_count_label(staged_labels, "Unstage", selected_staged),
+            status_action_count_label(staged_labels, unstage_word, selected_staged),
         )
         .style(components::ButtonStyle::Subtle)
         .disabled(local_actions_in_flight)
@@ -2454,9 +2539,10 @@ impl DetailsPaneView {
         })
         .gitcomet_tooltip(
             theme,
-            format!(
-                "Unstage {selected_staged} selected {}",
-                status_action_file_count(selected_staged)
+            t!(
+                "layout.status.unstage_selected_tooltip",
+                count = selected_staged,
+                file_word = status_action_file_count(selected_staged)
             )
             .into(),
         );
@@ -2589,33 +2675,41 @@ impl DetailsPaneView {
         };
 
         let unstaged_body = if unstaged_loading {
-            components::empty_state_message(theme, "Loading…").into_any_element()
+            components::empty_state_message(theme, tr_str("layout.status.loading"))
+                .into_any_element()
         } else if unstaged_count == 0 {
-            components::empty_state_message(theme, "No unstaged changes.").into_any_element()
+            components::empty_state_message(theme, tr_str("layout.status.no_unstaged_changes"))
+                .into_any_element()
         } else {
             self.status_list(cx, StatusSection::CombinedUnstaged, unstaged_count)
         };
 
         let untracked_body = if untracked_loading {
-            components::empty_state_message(theme, "Loading…").into_any_element()
+            components::empty_state_message(theme, tr_str("layout.status.loading"))
+                .into_any_element()
         } else if untracked_count == 0 {
-            components::empty_state_message(theme, "No untracked files.").into_any_element()
+            components::empty_state_message(theme, tr_str("layout.status.no_untracked_files"))
+                .into_any_element()
         } else {
             self.status_list(cx, StatusSection::Untracked, untracked_count)
         };
 
         let split_unstaged_body = if split_unstaged_loading {
-            components::empty_state_message(theme, "Loading…").into_any_element()
+            components::empty_state_message(theme, tr_str("layout.status.loading"))
+                .into_any_element()
         } else if split_unstaged_count == 0 {
-            components::empty_state_message(theme, "No unstaged changes.").into_any_element()
+            components::empty_state_message(theme, tr_str("layout.status.no_unstaged_changes"))
+                .into_any_element()
         } else {
             self.status_list(cx, StatusSection::Unstaged, split_unstaged_count)
         };
 
         let staged_list = if staged_loading {
-            components::empty_state_message(theme, "Loading…").into_any_element()
+            components::empty_state_message(theme, tr_str("layout.status.loading"))
+                .into_any_element()
         } else if staged_count == 0 {
-            components::empty_state_message(theme, "Nothing staged yet.").into_any_element()
+            components::empty_state_message(theme, tr_str("layout.status.nothing_staged"))
+                .into_any_element()
         } else {
             self.status_list(cx, StatusSection::Staged, staged_count)
         };
@@ -2672,7 +2766,7 @@ impl DetailsPaneView {
             build_change_tracking_header_title(
                 "change_tracking_unstaged_header",
                 "change_tracking_unstaged_header",
-                "Unstaged",
+                unstaged_title,
             )
         };
 
@@ -2680,7 +2774,7 @@ impl DetailsPaneView {
             build_change_tracking_header_title(
                 "change_tracking_untracked_header",
                 "change_tracking_untracked_header",
-                "Untracked",
+                untracked_title,
             )
         };
 
@@ -2854,7 +2948,7 @@ impl DetailsPaneView {
             .overflow_hidden()
             .child(section_header(
                 "staged_header",
-                normal_header_title("Staged"),
+                normal_header_title(staged_title),
                 staged_count > 0,
                 staged_actions,
             ))
@@ -2996,8 +3090,12 @@ impl DetailsPaneView {
                     .child(div().px_2().py_2().child(self.commit_box(cx)))
                     .into_any_element()
             } else {
-                components::empty_state(theme, "Changes", "No repository selected.")
-                    .into_any_element()
+                components::empty_state(
+                    theme,
+                    tr_str("layout.status.changes_title"),
+                    tr_str("layout.status.no_repository_selected"),
+                )
+                .into_any_element()
             })
             .into_any_element()
     }
@@ -3010,8 +3108,11 @@ impl DetailsPaneView {
     ) -> AnyElement {
         let theme = self.theme;
         if count == 0 {
-            return components::empty_state_message(theme, "Working tree clean.")
-                .into_any_element();
+            return components::empty_state_message(
+                theme,
+                tr_str("layout.status.working_tree_clean"),
+            )
+            .into_any_element();
         }
         match section {
             StatusSection::CombinedUnstaged => {
@@ -3176,18 +3277,16 @@ impl DetailsPaneView {
         let icon = |path: &'static str| svg_icon(path, icon_color, px(14.0));
         let spinner = |id: (&'static str, u64)| svg_spinner(id, icon_color, px(14.0));
         let commit_label = match (self.commit_amend_enabled, self.commit_push_after_enabled) {
-            (false, false) => "Commit",
-            (false, true) => "Commit changes and Push",
-            (true, false) => "Amend Previous Commit",
-            (true, true) => "Amend and Push Safely",
+            (false, false) => tr_str("layout.commit_box.commit"),
+            (false, true) => tr_str("layout.commit_box.commit_and_push"),
+            (true, false) => tr_str("layout.commit_box.amend_previous"),
+            (true, true) => tr_str("layout.commit_box.amend_and_push"),
         };
         let commit_tooltip = match (self.commit_amend_enabled, self.commit_push_after_enabled) {
-            (false, false) => "Commit staged changes",
-            (false, true) => "Commit staged changes and push",
-            (true, false) => "Amend the previous commit",
-            (true, true) => {
-                "Amend the previous commit; published amends require explicit force push with lease"
-            }
+            (false, false) => tr_str("layout.commit_box.tooltip_commit"),
+            (false, true) => tr_str("layout.commit_box.tooltip_commit_and_push"),
+            (true, false) => tr_str("layout.commit_box.tooltip_amend"),
+            (true, true) => tr_str("layout.commit_box.tooltip_amend_and_push"),
         };
         let commit_options_invoker: SharedString = "commit_options".into();
         let commit_options_active = self
@@ -3258,7 +3357,7 @@ impl DetailsPaneView {
                     cx,
                 );
             })
-            .gitcomet_tooltip(theme, "Commit options".into());
+            .gitcomet_tooltip(theme, tr("layout.commit_box.options"));
         let previous_messages_menu = components::Button::new("previous_commit_messages", "")
             .start_slot(svg_icon(
                 "icons/history.svg",
@@ -3282,7 +3381,7 @@ impl DetailsPaneView {
                 );
             })
             .debug_selector(|| "previous_commit_messages_button".to_string())
-            .gitcomet_tooltip(theme, "Previous commit messages".into());
+            .gitcomet_tooltip(theme, tr("layout.commit_box.previous_messages"));
         div().flex().flex_col().gap_2().child(commit_message).child(
             div().flex().items_center().justify_end().child(
                 div()

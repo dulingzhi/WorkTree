@@ -1,0 +1,65 @@
+# Locale files are keyed by filename (`layout.zh-CN.yml` -> locale "zh-CN"),
+# so the content below is the key tree directly — no `zh-CN:` root.
+# Keys must mirror `layout.en.yml` one for one.
+layout:
+  loading: 加载中
+  no_files: "没有文件。"
+  changed_count: "%{count} 项更改"
+  multi:
+    commits_selected: "已选择 %{count} 个提交"
+  commit_details:
+    title: 提交详情
+    close: 关闭提交详情
+    empty_title: 提交
+    no_repository: "未打开仓库。"
+    commit_sha: 提交 SHA
+    commit_date: 提交日期
+    parent_commit_sha: 父提交 SHA
+    committed_files: "已提交文件（%{count}）"
+  worktree:
+    title: 工作树更改
+    open_in_tab: "在标签页中打开此工作树\n%{path}"
+    close: 关闭
+    loading_files: 正在加载文件…
+  comparison:
+    title: 比较
+    close: 关闭比较
+    changed_files: 已更改的文件
+    viewing_merged_diff: "正在查看 %{count} 个提交的合并差异"
+    viewing_diff: "正在查看差异：%{from} → %{to}"
+  status:
+    unstaged: 未暂存
+    untracked: 未跟踪
+    staged: 已暂存
+    stage: 暂存
+    discard: 放弃
+    unstage: 取消暂存
+    stage_all: 暂存全部
+    stage_all_changes: 暂存所有更改
+    stage_all_untracked: 暂存所有未跟踪文件
+    stage_all_unstaged: 暂存所有未暂存更改
+    unstage_all_changes: 取消暂存所有更改
+    all: 全部
+    file_word: 个文件
+    files_word: 个文件
+    stage_selected_tooltip: "暂存选中的 %{count} %{file_word}"
+    discard_selected_tooltip: "放弃选中的 %{count} %{file_word}的更改"
+    unstage_selected_tooltip: "取消暂存选中的 %{count} %{file_word}"
+    loading: 加载中…
+    no_unstaged_changes: "没有未暂存的更改。"
+    no_untracked_files: "没有未跟踪的文件。"
+    nothing_staged: "尚未暂存任何内容。"
+    working_tree_clean: "工作区无更改。"
+    changes_title: 更改
+    no_repository_selected: "未选择仓库。"
+  commit_box:
+    commit: 提交
+    commit_and_push: 提交并推送
+    amend_previous: 修补上一次提交
+    amend_and_push: 安全修补并推送
+    tooltip_commit: 提交已暂存的更改
+    tooltip_commit_and_push: 提交已暂存的更改并推送
+    tooltip_amend: 修补上一次提交
+    tooltip_amend_and_push: "修补上一次提交；已发布的修补需要显式使用带租约的强制推送"
+    options: 提交选项
+    previous_messages: 历史提交信息

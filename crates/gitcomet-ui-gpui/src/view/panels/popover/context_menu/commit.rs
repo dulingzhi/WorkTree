@@ -162,7 +162,9 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
         .unwrap_or_default();
 
     let header_text: SharedString = match branch_names.as_slice() {
-        [] => format!("Commit {short}").into(),
+        [] => crate::i18n::t!("cm.commit.header", short = short)
+            .to_string()
+            .into(),
         [name] => name.clone().into(),
         names => names.join(", ").into(),
     };
@@ -209,7 +211,9 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
             gitcomet_core::squash::squash_eligibility(&page.commits, &selection.commits, &head)
         });
     if let Some(plan) = squash_plan {
-        let label = format!("Squash {} commits", plan.commit_count).into();
+        let label = crate::i18n::t!("cm.commit.squash", count = plan.commit_count)
+            .to_string()
+            .into();
         items.push(ContextMenuItem::Entry {
             label,
             icon: Some("icons/git_commit.svg".into()),
@@ -220,7 +224,9 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
         items.push(ContextMenuItem::Separator);
     }
     if !is_head_commit && let Some((entries, source_colors)) = multi_cherry_pick_plan {
-        let label = format!("Cherry-pick {} commits…", entries.len()).into();
+        let label = crate::i18n::t!("cm.commit.cherry_pick", count = entries.len())
+            .to_string()
+            .into();
         items.push(ContextMenuItem::Entry {
             label,
             icon: Some("icons/arrow_up.svg".into()),
@@ -286,7 +292,9 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
         .find(|repo| repo.id == repo_id)
         .and_then(|repo| repo.comparison_mark.clone());
     items.push(ContextMenuItem::Entry {
-        label: format!("Mark {short} for comparison").into(),
+        label: crate::i18n::t!("cm.branch.mark_for_comparison", name = short)
+            .to_string()
+            .into(),
         icon: Some("icons/git_commit.svg".into()),
         shortcut: None,
         disabled: false,
@@ -309,7 +317,9 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
     });
     if let Some(mark) = comparison_mark.filter(|mark| mark.commit_id != *commit_id) {
         items.push(ContextMenuItem::Entry {
-            label: format!("Compare with {}", mark.label).into(),
+            label: crate::i18n::t!("cm.branch.compare_with", name = mark.label)
+                .to_string()
+                .into(),
             icon: Some("icons/open_external.svg".into()),
             shortcut: None,
             disabled: false,
@@ -419,7 +429,13 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
             .into();
         let onto_ref = branch_names.first().cloned().unwrap_or_else(|| sha.clone());
         items.push(ContextMenuItem::Entry {
-            label: format!("Rebase {current_branch} onto {target_label}").into(),
+            label: crate::i18n::t!(
+                "cm.rebase_onto",
+                current = current_branch,
+                target = target_label
+            )
+            .to_string()
+            .into(),
             icon: Some("icons/arrow_up.svg".into()),
             shortcut: Some("B".into()),
             disabled: history_rewrite_disabled,
@@ -448,12 +464,30 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
                     _ => None,
                 }
             });
+        // English pluralizes "child"/"children"; Chinese has one form, so both
+        // keys carry the same Simplified Chinese text.
         let irebase_label: SharedString = match children_count {
-            Some(count) => {
-                let noun = if count == 1 { "child" } else { "children" };
-                format!("Interactive rebase {count} {noun} of {short}").into()
-            }
-            None => format!("Interactive rebase {current_branch} onto {target_label}").into(),
+            Some(1) => crate::i18n::t!(
+                "cm.commit.interactive_rebase_child",
+                count = 1,
+                short = short
+            )
+            .to_string()
+            .into(),
+            Some(count) => crate::i18n::t!(
+                "cm.commit.interactive_rebase_children",
+                count = count,
+                short = short
+            )
+            .to_string()
+            .into(),
+            None => crate::i18n::t!(
+                "cm.interactive_rebase_onto",
+                current = current_branch,
+                target = target_label
+            )
+            .to_string()
+            .into(),
         };
         items.push(ContextMenuItem::Entry {
             label: irebase_label,

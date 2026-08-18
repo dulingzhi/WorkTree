@@ -32,6 +32,9 @@ pub struct UiSession {
     pub details_width: Option<u32>,
     pub sidebar_collapsed: Option<bool>,
     pub theme_mode: Option<String>,
+    /// UI language key (`i18n::Language::key`); `None` follows the system
+    /// locale.
+    pub language: Option<String>,
     pub ui_scale_percent: Option<u32>,
     pub ui_font_family: Option<String>,
     pub editor_font_family: Option<String>,
@@ -173,6 +176,7 @@ struct UiSessionFile {
     details_width: Option<u32>,
     sidebar_collapsed: Option<bool>,
     theme_mode: Option<String>,
+    language: Option<String>,
     ui_scale_percent: Option<u32>,
     ui_font_family: Option<String>,
     editor_font_family: Option<String>,
@@ -295,6 +299,7 @@ pub fn load_from_path(path: &Path) -> UiSession {
         details_width: file.details_width,
         sidebar_collapsed: file.sidebar_collapsed,
         theme_mode: file.theme_mode,
+        language: file.language,
         ui_scale_percent: file.ui_scale_percent,
         ui_font_family: file.ui_font_family,
         editor_font_family: file.editor_font_family,
@@ -738,6 +743,7 @@ pub struct UiSettings {
     pub repo_sidebar_collapsed_items: Option<BTreeMap<PathBuf, BTreeSet<String>>>,
     pub repo_sidebar_pinned_branches: Option<BTreeMap<PathBuf, BTreeSet<String>>>,
     pub theme_mode: Option<String>,
+    pub language: Option<String>,
     pub ui_scale_percent: Option<u32>,
     pub ui_font_family: Option<String>,
     pub editor_font_family: Option<String>,
@@ -819,6 +825,9 @@ pub fn persist_ui_settings_to_path(settings: UiSettings, path: &Path) -> io::Res
         }
         if let Some(theme_mode) = settings.theme_mode {
             file.theme_mode = Some(theme_mode);
+        }
+        if let Some(language) = settings.language {
+            file.language = Some(language);
         }
         if let Some(percent) = settings.ui_scale_percent {
             file.ui_scale_percent = Some(percent);

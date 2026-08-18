@@ -1,0 +1,32 @@
+# Semantic-key companion to the gettext-style `context_menu.zh-CN.yml`:
+# context-menu labels whose English text is assembled with `format!` cannot
+# key on the source string, so those sites call `t!` with these keys and named
+# placeholders instead. Keys are nested under `cm.`; English here must stay
+# byte-identical to the former `format!` templates — it is also the fallback.
+cm:
+  branch:
+    mark_for_comparison: "Mark %{name} for comparison"
+    compare_with: "Compare with %{name}"
+  rebase_onto: "Rebase %{current} onto %{target}"
+  interactive_rebase_onto: "Interactive rebase %{current} onto %{target}"
+  tag:
+    tags_on: "Tags on %{short}"
+    # NB: never name a key `on`/`off`/`yes`/`no` — YAML 1.1 parses them as
+    # booleans and the dot-path silently becomes `cm.tag.true`.
+    create_on: "Tag %{name} on %{short}"
+    delete: "Delete tag %{name}"
+    push_to: "Push tag %{name} to %{remote}"
+    delete_from: "Delete tag %{name} from %{remote}"
+  commit:
+    header: "Commit %{short}"
+    squash: "Squash %{count} commits"
+    cherry_pick: "Cherry-pick %{count} commits…"
+    interactive_rebase_child: "Interactive rebase %{count} child of %{short}"
+    interactive_rebase_children: "Interactive rebase %{count} children of %{short}"
+  group:
+    branch_count_one: "1 branch"
+    branch_count: "%{count} branches"
+    matching_filter: "%{count} matching the filter"
+    matching: "%{count} matching"
+    create_in: "Create branch in %{group}…"
+    delete_in: "Delete %{count} in %{group}…"

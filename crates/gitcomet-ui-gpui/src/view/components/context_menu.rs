@@ -47,6 +47,14 @@ impl ContextMenuText {
         self
     }
 
+    /// Gettext-style localization: look the current text up as an English
+    /// source key in the active locale's catalog. Untranslated text (paths,
+    /// dynamic values, or labels without an entry) is returned unchanged.
+    pub fn localized(mut self) -> Self {
+        self.text = crate::i18n::tr_en(self.text.as_ref());
+        self
+    }
+
     fn resolved_max_lines(&self, default: usize) -> usize {
         self.max_lines.unwrap_or(default).max(1)
     }
@@ -304,6 +312,9 @@ fn context_menu_entry<V: 'static>(
     let ui_scale = ui_scale.into();
     let scaled_px = |value| ui_scale.px(value);
     let max_lines = label.resolved_max_lines(2);
+    // Display text follows the active language; icon and color matching below
+    // keep the English source, which the label-based fallbacks key off.
+    let display_label = label.clone().localized();
     let icon_path = match &icon {
         ContextMenuIconSlot::Icon(name) => context_menu_icon_path(name.as_ref(), label.as_ref()),
         ContextMenuIconSlot::Reserved | ContextMenuIconSlot::None => None,
@@ -366,7 +377,7 @@ fn context_menu_entry<V: 'static>(
                         .when(max_lines == 1, |s| s.whitespace_nowrap().overflow_hidden())
                         .when(max_lines > 1, |s| s.line_clamp(max_lines))
                         .child(context_menu_text_content(
-                            label,
+                            display_label,
                             tooltip_host,
                             cx,
                             max_lines,

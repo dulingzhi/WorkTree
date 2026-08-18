@@ -95,7 +95,8 @@ fn apply_clone_progress_sync(
                         progress_changed: had_progress,
                         notice: Some((
                             components::ToastKind::Success,
-                            format!("Clone finished: {}", op.dest.display()),
+                            crate::i18n::t!("toast.clone_finished", dest = op.dest.display())
+                                .to_string(),
                         )),
                     }
                 } else {
@@ -114,7 +115,8 @@ fn apply_clone_progress_sync(
                         progress_changed: had_progress,
                         notice: Some((
                             components::ToastKind::Warning,
-                            format!("Clone aborted: {}", op.dest.display()),
+                            crate::i18n::t!("toast.clone_aborted", dest = op.dest.display())
+                                .to_string(),
                         )),
                     }
                 } else {
@@ -407,7 +409,12 @@ impl ToastHost {
                 ) {
                     self.push_toast(
                         components::ToastKind::Error,
-                        format!("Failed to save {survey_name} reminder preference: {err}"),
+                        crate::i18n::t!(
+                            "toast.failed_save_reminder",
+                            name = survey_name,
+                            err = err
+                        )
+                        .to_string(),
                         cx,
                     );
                 }
@@ -425,7 +432,7 @@ impl ToastHost {
                 Err(err) => {
                     self.push_toast(
                         components::ToastKind::Error,
-                        format!("Failed to open link: {err}"),
+                        crate::i18n::t!("toast.failed_open_link", err = err).to_string(),
                         cx,
                     );
                 }
@@ -440,7 +447,12 @@ impl ToastHost {
                 {
                     self.push_toast(
                         components::ToastKind::Error,
-                        format!("Failed to save {survey_name} preference: {err}"),
+                        crate::i18n::t!(
+                            "toast.failed_save_preference",
+                            name = survey_name,
+                            err = err
+                        )
+                        .to_string(),
                         cx,
                     );
                 }
@@ -449,7 +461,8 @@ impl ToastHost {
                 if let Err(err) = open_result {
                     self.push_toast(
                         components::ToastKind::Error,
-                        format!("Failed to open {survey_name}: {err}"),
+                        crate::i18n::t!("toast.failed_open_survey", name = survey_name, err = err)
+                            .to_string(),
                         cx,
                     );
                 }
@@ -573,7 +586,11 @@ impl ToastHost {
 
         let mut abort_button = components::Button::new(
             "clone_progress_abort",
-            if aborting { "Aborting…" } else { "Abort" },
+            if aborting {
+                crate::i18n::tr_str("toast.aborting")
+            } else {
+                crate::i18n::tr_str("toast.abort")
+            },
         )
         .style(components::ButtonStyle::Transparent)
         .borderless()
@@ -692,7 +709,7 @@ impl ToastHost {
                         .child(
                             div()
                                 .font_weight(FontWeight::BOLD)
-                                .child("Adding submodule…"),
+                                .child(crate::i18n::tr("toast.adding_submodule")),
                         )
                         .child(
                             div()
@@ -769,7 +786,7 @@ impl Render for ToastHost {
                     ))
                     .style(components::ButtonStyle::Transparent)
                     .render(theme, ui_scale_percent)
-                    .gitcomet_tooltip(theme, "Dismiss notification".into())
+                    .gitcomet_tooltip(theme, crate::i18n::tr("toast.dismiss_notification"))
                     .on_click(cx.listener(move |this, _e: &ClickEvent, _w, cx| {
                         this.dismiss_toast(toast_id, dismiss_behavior.clone(), cx);
                     }));

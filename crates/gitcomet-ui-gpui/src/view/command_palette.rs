@@ -1,3 +1,4 @@
+use crate::i18n::{tr, tr_str};
 use crate::kit::{Scrollbar, ScrollbarAxis};
 use crate::theme::AppTheme;
 use crate::ui_scale;
@@ -14,8 +15,12 @@ use super::{GitCometView, components, restrict_scroll_to_vertical_axis};
 
 pub(crate) struct CommandEntry {
     pub(crate) id: &'static str,
+    /// Translation key (e.g. `palette.cmd.commit`), since a const table cannot
+    /// call translation functions. Resolve with `tr_str(entry.label)` wherever
+    /// the label is displayed or searched.
     pub(crate) label: &'static str,
     pub(crate) shortcut: Shortcut,
+    /// Translation key (e.g. `palette.cat.branch`) for the group header.
     pub(crate) category: &'static str,
     pub(crate) requires_repo: bool,
     /// Extra search terms, matched after the label so wording the user
@@ -26,389 +31,389 @@ pub(crate) struct CommandEntry {
 pub(crate) const COMMANDS: &[CommandEntry] = &[
     CommandEntry {
         id: "commit",
-        label: "Commit Changes",
+        label: "palette.cmd.commit",
         shortcut: Shortcut::None,
-        category: "Commit",
+        category: "palette.cat.commit",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "stage-all",
-        label: "Stage All Changes",
+        label: "palette.cmd.stage-all",
         shortcut: Shortcut::None,
-        category: "Working Copy",
+        category: "palette.cat.working-copy",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "unstage-all",
-        label: "Unstage All Changes",
+        label: "palette.cmd.unstage-all",
         shortcut: Shortcut::None,
-        category: "Working Copy",
+        category: "palette.cat.working-copy",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "create-branch",
-        label: "Create Branch",
+        label: "palette.cmd.create-branch",
         shortcut: Shortcut::None,
-        category: "Branch",
+        category: "palette.cat.branch",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "checkout-branch",
-        label: "Checkout Branch",
+        label: "palette.cmd.checkout-branch",
         shortcut: Shortcut::None,
-        category: "Branch",
+        category: "palette.cat.branch",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "delete-branch",
-        label: "Delete Branch",
+        label: "palette.cmd.delete-branch",
         shortcut: Shortcut::None,
-        category: "Branch",
+        category: "palette.cat.branch",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "rename-branch",
-        label: "Rename Branch",
+        label: "palette.cmd.rename-branch",
         shortcut: Shortcut::None,
-        category: "Branch",
+        category: "palette.cat.branch",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "rebase",
-        label: "Rebase Onto",
+        label: "palette.cmd.rebase",
         shortcut: Shortcut::None,
-        category: "Branch",
+        category: "palette.cat.branch",
         keywords: "rebase onto history rewrite",
         requires_repo: true,
     },
     CommandEntry {
         id: "pull",
-        label: "Pull",
+        label: "palette.cmd.pull",
         shortcut: Shortcut::None,
-        category: "Sync",
+        category: "palette.cat.sync",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "push",
-        label: "Push",
+        label: "palette.cmd.push",
         shortcut: Shortcut::None,
-        category: "Sync",
+        category: "palette.cat.sync",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "force-push",
-        label: "Force Push",
+        label: "palette.cmd.force-push",
         shortcut: Shortcut::None,
-        category: "Sync",
+        category: "palette.cat.sync",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "stash",
-        label: "Stash Changes",
+        label: "palette.cmd.stash",
         shortcut: Shortcut::None,
-        category: "Stash",
+        category: "palette.cat.stash",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "stash-pop",
-        label: "Pop Stash",
+        label: "palette.cmd.stash-pop",
         shortcut: Shortcut::None,
-        category: "Stash",
+        category: "palette.cat.stash",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "stash-apply",
-        label: "Apply Stash",
+        label: "palette.cmd.stash-apply",
         shortcut: Shortcut::None,
-        category: "Stash",
+        category: "palette.cat.stash",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "stash-drop",
-        label: "Drop Stash",
+        label: "palette.cmd.stash-drop",
         shortcut: Shortcut::None,
-        category: "Stash",
+        category: "palette.cat.stash",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "open-repository",
-        label: "Open Repository",
+        label: "palette.cmd.open-repository",
         shortcut: Shortcut::Secondary("O"),
-        category: "Repository",
+        category: "palette.cat.repository",
         keywords: "",
         requires_repo: false,
     },
     CommandEntry {
         id: "switch-repository",
-        label: "Switch Repository",
+        label: "palette.cmd.switch-repository",
         shortcut: Shortcut::Platform {
             macos: "Option+Cmd+O",
             other: "Ctrl+Shift+O",
         },
-        category: "Repository",
+        category: "palette.cat.repository",
         keywords: "recent reopen",
         requires_repo: false,
     },
     CommandEntry {
         id: "clone-repository",
-        label: "Clone Repository",
+        label: "palette.cmd.clone-repository",
         shortcut: Shortcut::None,
-        category: "Repository",
+        category: "palette.cat.repository",
         keywords: "",
         requires_repo: false,
     },
     CommandEntry {
         id: "close-repo-tab",
-        label: "Close Repository Tab",
+        label: "palette.cmd.close-repo-tab",
         shortcut: Shortcut::Secondary("W"),
-        category: "Repository",
+        category: "palette.cat.repository",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "reload-repository",
-        label: "Reload Repository",
+        label: "palette.cmd.reload-repository",
         shortcut: Shortcut::None,
-        category: "Repository",
+        category: "palette.cat.repository",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "fetch-all",
-        label: "Fetch All",
+        label: "palette.cmd.fetch-all",
         shortcut: Shortcut::None,
-        category: "Repository",
+        category: "palette.cat.repository",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "toggle-sidebar",
-        label: "Toggle Sidebar",
+        label: "palette.cmd.toggle-sidebar",
         shortcut: Shortcut::None,
-        category: "View",
+        category: "palette.cat.view",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "toggle-details",
-        label: "Toggle Details Pane",
+        label: "palette.cmd.toggle-details",
         shortcut: Shortcut::None,
-        category: "View",
+        category: "palette.cat.view",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "toggle-diff-view",
-        label: "Toggle Diff View (Split/Inline)",
+        label: "palette.cmd.toggle-diff-view",
         shortcut: Shortcut::None,
-        category: "View",
+        category: "palette.cat.view",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "toggle-diff-word-wrap",
-        label: "Toggle Diff Word Wrap",
+        label: "palette.cmd.toggle-diff-word-wrap",
         shortcut: Shortcut::None,
-        category: "View",
+        category: "palette.cat.view",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "toggle-line-numbers",
-        label: "Toggle Diff Line Numbers",
+        label: "palette.cmd.toggle-line-numbers",
         shortcut: Shortcut::None,
-        category: "View",
+        category: "palette.cat.view",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "toggle-whitespace-chars",
-        label: "Toggle Whitespace Characters",
+        label: "palette.cmd.toggle-whitespace-chars",
         shortcut: Shortcut::None,
-        category: "View",
+        category: "palette.cat.view",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "previous-repo-tab",
-        label: "Previous Repository Tab",
+        label: "palette.cmd.previous-repo-tab",
         shortcut: Shortcut::Platform {
             macos: "Cmd+Shift+[",
             other: "Ctrl+Shift+Tab",
         },
-        category: "Navigation",
+        category: "palette.cat.navigation",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "next-repo-tab",
-        label: "Next Repository Tab",
+        label: "palette.cmd.next-repo-tab",
         shortcut: Shortcut::Platform {
             macos: "Cmd+Shift+]",
             other: "Ctrl+Tab",
         },
-        category: "Navigation",
+        category: "palette.cat.navigation",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "locate-file-in-explorer",
-        label: crate::menu_labels::OPEN_IN_FILE_EXPLORER,
+        label: "palette.cmd.locate-file-in-explorer",
         shortcut: Shortcut::Secondary("Shift+L"),
-        category: "Navigation",
+        category: "palette.cat.navigation",
         keywords: "show locate reveal find sidebar tree folder current",
         requires_repo: true,
     },
     CommandEntry {
         id: "open-active-view-search",
-        label: "Search in Current View",
+        label: "palette.cmd.open-active-view-search",
         shortcut: Shortcut::Secondary("F"),
-        category: "Navigation",
+        category: "palette.cat.navigation",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "create-tag",
-        label: "Create Tag",
+        label: "palette.cmd.create-tag",
         shortcut: Shortcut::None,
-        category: "Tags",
+        category: "palette.cat.tags",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "new-window",
-        label: "New Window",
+        label: "palette.cmd.new-window",
         shortcut: Shortcut::Secondary("N"),
-        category: "Window",
+        category: "palette.cat.window",
         keywords: "",
         requires_repo: false,
     },
     CommandEntry {
         id: "open-settings",
-        label: "Open Settings",
+        label: "palette.cmd.open-settings",
         shortcut: Shortcut::Secondary(","),
-        category: "Window",
+        category: "palette.cat.window",
         keywords: "",
         requires_repo: false,
     },
     CommandEntry {
         id: "quit",
-        label: "Quit GitComet",
+        label: "palette.cmd.quit",
         shortcut: Shortcut::Secondary("Q"),
-        category: "Window",
+        category: "palette.cat.window",
         keywords: "",
         requires_repo: false,
     },
     CommandEntry {
         id: "minimize-window",
-        label: "Minimize Window",
+        label: "palette.cmd.minimize-window",
         shortcut: Shortcut::MacOs("Cmd+M"),
-        category: "Window",
+        category: "palette.cat.window",
         keywords: "",
         requires_repo: false,
     },
     CommandEntry {
         id: "zoom-window",
-        label: "Zoom Window",
+        label: "palette.cmd.zoom-window",
         shortcut: Shortcut::None,
-        category: "Window",
+        category: "palette.cat.window",
         keywords: "",
         requires_repo: false,
     },
     CommandEntry {
         id: "toggle-fullscreen",
-        label: "Toggle Full Screen",
+        label: "palette.cmd.toggle-fullscreen",
         shortcut: Shortcut::Platform {
             macos: "Ctrl+Cmd+F",
             other: "F11",
         },
-        category: "Window",
+        category: "palette.cat.window",
         keywords: "",
         requires_repo: false,
     },
     CommandEntry {
         id: "increase-ui-scale",
-        label: "Increase UI Scale",
+        label: "palette.cmd.increase-ui-scale",
         shortcut: Shortcut::Secondary("="),
-        category: "Window",
+        category: "palette.cat.window",
         keywords: "",
         requires_repo: false,
     },
     CommandEntry {
         id: "decrease-ui-scale",
-        label: "Decrease UI Scale",
+        label: "palette.cmd.decrease-ui-scale",
         shortcut: Shortcut::Secondary("-"),
-        category: "Window",
+        category: "palette.cat.window",
         keywords: "",
         requires_repo: false,
     },
     CommandEntry {
         id: "reset-ui-scale",
-        label: "Reset UI Scale",
+        label: "palette.cmd.reset-ui-scale",
         shortcut: Shortcut::Secondary("0"),
-        category: "Window",
+        category: "palette.cat.window",
         keywords: "",
         requires_repo: false,
     },
     CommandEntry {
         id: "close-window",
-        label: "Close Window",
+        label: "palette.cmd.close-window",
         shortcut: Shortcut::Secondary("Shift+W"),
-        category: "Window",
+        category: "palette.cat.window",
         keywords: "",
         requires_repo: false,
     },
     CommandEntry {
         id: "add-remote",
-        label: "Add Remote",
+        label: "palette.cmd.add-remote",
         shortcut: Shortcut::None,
-        category: "Remotes",
+        category: "palette.cat.remotes",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "add-submodule",
-        label: "Add Submodule",
+        label: "palette.cmd.add-submodule",
         shortcut: Shortcut::None,
-        category: "Submodules",
+        category: "palette.cat.submodules",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "update-submodules",
-        label: "Update Submodules",
+        label: "palette.cmd.update-submodules",
         shortcut: Shortcut::None,
-        category: "Submodules",
+        category: "palette.cat.submodules",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "add-worktree",
-        label: "Add Worktree",
+        label: "palette.cmd.add-worktree",
         shortcut: Shortcut::None,
-        category: "Worktrees",
+        category: "palette.cat.worktrees",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "blame",
-        label: "Blame / Annotate",
+        label: "palette.cmd.blame",
         shortcut: Shortcut::Alt("B"),
-        category: "History",
+        category: "palette.cat.history",
         keywords: "",
         requires_repo: true,
     },
@@ -422,17 +427,17 @@ pub(crate) const COMMANDS: &[CommandEntry] = &[
     },
     CommandEntry {
         id: "back",
-        label: "Navigate Back",
+        label: "palette.cmd.back",
         shortcut: Shortcut::Alt("Left"),
-        category: "Navigation",
+        category: "palette.cat.navigation",
         keywords: "",
         requires_repo: true,
     },
     CommandEntry {
         id: "forward",
-        label: "Navigate Forward",
+        label: "palette.cmd.forward",
         shortcut: Shortcut::Alt("Right"),
-        category: "Navigation",
+        category: "palette.cat.navigation",
         keywords: "",
         requires_repo: true,
     },
@@ -453,8 +458,10 @@ pub(crate) const COMMANDS: &[CommandEntry] = &[
 ];
 
 /// A palette entry that survived filtering, plus the label byte positions the
-/// query matched (for highlighting). Derefs to the entry so callers keep using
-/// `cmd.label` / `cmd.id` / `cmd.category` directly.
+/// query matched (for highlighting, relative to the translated label). Derefs
+/// to the entry so callers keep using `cmd.id` directly; `cmd.label` /
+/// `cmd.category` are translation keys, resolved with `tr_str` at display
+/// time.
 #[derive(Clone)]
 pub(crate) struct CommandMatch {
     pub(crate) entry: &'static CommandEntry,
@@ -490,7 +497,10 @@ pub(crate) fn filtered_commands(has_active_repo: bool, query: &str) -> Vec<Comma
     let mut out: Vec<(i32, usize, CommandMatch)> = available
         .enumerate()
         .filter_map(|(order, entry)| {
-            fuzzy_subsequence_match(entry.label, query)
+            // Match against the translated label so the query can be typed in
+            // the active language ("提交" finds the commit command under zh-CN)
+            // while the English `keywords` below stay reachable as a fallback.
+            fuzzy_subsequence_match(tr_str(entry.label), query)
                 .map(|(score, positions)| (score, order, CommandMatch { entry, positions }))
                 .or_else(|| {
                     // Keyword hits carry no highlight positions and sort behind
@@ -511,7 +521,7 @@ pub(crate) fn filtered_commands(has_active_repo: bool, query: &str) -> Vec<Comma
 
     out.sort_by(|a, b| {
         a.0.cmp(&b.0)
-            .then_with(|| a.2.label.len().cmp(&b.2.label.len()))
+            .then_with(|| tr_str(a.2.label).len().cmp(&tr_str(b.2.label).len()))
             .then_with(|| a.1.cmp(&b.1))
     });
     out.into_iter().map(|(_, _, m)| m).collect()
@@ -543,6 +553,7 @@ pub(crate) fn command_list_item_index(
 
 #[derive(Clone, Copy)]
 enum PaletteRow {
+    /// Translation key of the section header.
     Header(&'static str),
     Command(usize),
 }
@@ -575,7 +586,7 @@ impl CommandPaletteView {
         let query_input = cx.new(|cx| {
             let mut input = components::TextInput::new(
                 components::TextInputOptions {
-                    placeholder: "Search commands…".into(),
+                    placeholder: tr("palette.placeholder"),
                     chromeless: true,
                     ..Default::default()
                 },
@@ -684,7 +695,7 @@ impl CommandPaletteView {
 
         if !self.query.is_empty() {
             if !self.matches.is_empty() {
-                self.rows.push(PaletteRow::Header("Results"));
+                self.rows.push(PaletteRow::Header("palette.results"));
             }
             for command_index in 0..self.matches.len() {
                 self.command_row_indices.push(self.rows.len());
@@ -878,7 +889,7 @@ impl CommandPaletteView {
                             .text_xs()
                             .font_weight(FontWeight::MEDIUM)
                             .text_color(theme.colors.foreground.secondary)
-                            .child(title)
+                            .child(tr_str(title))
                             .into_any_element(),
                         false,
                     ),
@@ -908,7 +919,11 @@ impl CommandPaletteView {
                             .overflow_hidden()
                             .flex_1()
                             .min_w(px(0.0))
-                            .child(self.render_label(command.label, &command.positions, cx));
+                            .child(self.render_label(
+                                tr_str(command.label),
+                                &command.positions,
+                                cx,
+                            ));
 
                         let mut content = command_row.child(label);
                         if let Some(shortcut_text) = command.shortcut.label() {
@@ -995,7 +1010,7 @@ impl Render for CommandPaletteView {
                 .px(scaled_px(12.0))
                 .text_sm()
                 .text_color(theme.colors.foreground.secondary)
-                .child("No matching commands")
+                .child(tr_str("palette.no_matches"))
                 .into_any_element()
         } else {
             let scrollbar_gutter =
@@ -1068,8 +1083,10 @@ impl Render for CommandPaletteView {
     }
 }
 
-/// Case-insensitive subsequence match of `query` inside `label` (both ASCII).
-/// Returns `(score, matched byte positions)`; lower scores are better.
+/// Case-insensitive subsequence match of `query` inside `label`. Works on
+/// bytes: ASCII case-folding only, so non-ASCII (e.g. CJK) labels match exact
+/// byte subsequences. Returns `(score, matched byte positions)`; lower scores
+/// are better.
 /// Contiguous matches beat gapped ones, word-boundary hits beat mid-word hits,
 /// and earlier matches beat later ones — so "push" ranks "Push" over
 /// "Force Push", and "cb" still finds "Create Branch".
@@ -1159,10 +1176,10 @@ mod tests {
     fn filtered_commands_ranks_prefix_hits_first_and_keeps_positions() {
         let matches = filtered_commands(true, "push");
         let first = matches.first().expect("at least one match");
-        assert_eq!(first.label, "Push");
+        assert_eq!(tr_str(first.label), "Push");
         assert_eq!(first.positions, vec![0, 1, 2, 3]);
         assert!(
-            matches.iter().any(|m| m.label == "Force Push"),
+            matches.iter().any(|m| tr_str(m.label) == "Force Push"),
             "substring hits elsewhere in the label must still be included"
         );
     }

@@ -1,0 +1,86 @@
+# Command palette catalog.
+#
+# `COMMANDS` in `src/view/command_palette.rs` is a const table and therefore
+# cannot call translation functions at compile time: it stores these keys in its
+# `label`/`category` fields, and every display or match site resolves them with
+# `tr_str`. English is the fallback locale, so values here are byte-identical to
+# the historical English strings (tests assert them exactly).
+#
+# Keyed by filename (`palette.en.yml` -> locale "en"); the content below is the
+# key tree directly — no `en:` root.
+palette:
+  # Search input placeholder.
+  placeholder: Search commands…
+  # Shared header above search results.
+  results: Results
+  # Empty-state text when a query matches nothing.
+  no_matches: No matching commands
+
+  # Command labels, keyed by the `COMMANDS` entry id.
+  cmd:
+    commit: Commit Changes
+    stage-all: Stage All Changes
+    unstage-all: Unstage All Changes
+    create-branch: Create Branch
+    checkout-branch: Checkout Branch
+    delete-branch: Delete Branch
+    rename-branch: Rename Branch
+    rebase: Rebase Onto
+    pull: Pull
+    push: Push
+    force-push: Force Push
+    stash: Stash Changes
+    stash-pop: Pop Stash
+    stash-apply: Apply Stash
+    stash-drop: Drop Stash
+    open-repository: Open Repository
+    switch-repository: Switch Repository
+    clone-repository: Clone Repository
+    close-repo-tab: Close Repository Tab
+    reload-repository: Reload Repository
+    fetch-all: Fetch All
+    toggle-sidebar: Toggle Sidebar
+    toggle-details: Toggle Details Pane
+    toggle-diff-view: Toggle Diff View (Split/Inline)
+    toggle-diff-word-wrap: Toggle Diff Word Wrap
+    toggle-line-numbers: Toggle Diff Line Numbers
+    toggle-whitespace-chars: Toggle Whitespace Characters
+    previous-repo-tab: Previous Repository Tab
+    next-repo-tab: Next Repository Tab
+    locate-file-in-explorer: Show File in Explorer
+    open-active-view-search: Search in Current View
+    create-tag: Create Tag
+    new-window: New Window
+    open-settings: Open Settings
+    quit: Quit GitComet
+    minimize-window: Minimize Window
+    zoom-window: Zoom Window
+    toggle-fullscreen: Toggle Full Screen
+    increase-ui-scale: Increase UI Scale
+    decrease-ui-scale: Decrease UI Scale
+    reset-ui-scale: Reset UI Scale
+    close-window: Close Window
+    add-remote: Add Remote
+    add-submodule: Add Submodule
+    update-submodules: Update Submodules
+    add-worktree: Add Worktree
+    blame: Blame / Annotate
+    back: Navigate Back
+    forward: Navigate Forward
+
+  # Category headers, one per distinct `category` value in `COMMANDS`.
+  cat:
+    commit: Commit
+    working-copy: Working Copy
+    branch: Branch
+    sync: Sync
+    stash: Stash
+    repository: Repository
+    view: View
+    navigation: Navigation
+    tags: Tags
+    window: Window
+    remotes: Remotes
+    submodules: Submodules
+    worktrees: Worktrees
+    history: History

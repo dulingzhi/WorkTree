@@ -1,0 +1,45 @@
+# Locale files are keyed by filename (`menu.en.yml` -> locale "en"), so the
+# content below is the key tree directly — no `en:` root.
+menu:
+  # Native macOS menu bar built in `app.rs`, plus the open-panel prompts it
+  # triggers. The application menu name ("GitComet") and the macOS-managed
+  # "Services" submenu intentionally stay untranslated.
+  app:
+    settings: Settings…
+    hide_gitcomet: Hide GitComet
+    hide_others: Hide Others
+    show_all: Show All
+    quit_gitcomet: Quit GitComet
+  file:
+    title: File
+    new_window: New Window
+    open: Open…
+    switch_repository: Switch Repository…
+    recent_repositories: Recent Repositories
+    open_in_code_editor: Open in code editor
+    apply_patch: Apply Patch…
+    close: Close
+    close_window: Close Window
+  edit:
+    title: Edit
+    undo: Undo
+    redo: Redo
+    cut: Cut
+    copy: Copy
+    paste: Paste
+    select_all: Select All
+  window:
+    title: Window
+    minimize: Minimize
+    zoom: Zoom
+    zoom_in: Zoom In
+    zoom_out: Zoom Out
+    actual_size: Actual Size
+    previous_repository: Previous Repository
+    next_repository: Next Repository
+    toggle_full_screen: Toggle Full Screen
+  prompt:
+    open_repository: Open Git Repository
+    apply_patch: Select patch file
+  mergetool:
+    window_title: "GitComet - Mergetool (%{file})"

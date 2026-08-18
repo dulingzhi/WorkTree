@@ -40,6 +40,7 @@ mimalloc = { workspace = true }
 palette = { workspace = true }
 pulldown-cmark = { workspace = true }
 regex = { workspace = true }
+rust-i18n = { workspace = true }
 rustc-hash = { workspace = true }
 resvg = { workspace = true }
 semver = { workspace = true }
@@ -48,6 +49,7 @@ serde_json = { workspace = true }
 smallvec = { workspace = true }
 smol = { workspace = true }
 stats_alloc = { workspace = true }
+sys-locale = { workspace = true }
 sysinfo = { workspace = true }
 tempfile = { workspace = true }
 tree-sitter = { workspace = true }

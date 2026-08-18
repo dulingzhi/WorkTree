@@ -1,0 +1,153 @@
+# Locale files are keyed by filename (`settings.zh-CN.yml` -> locale "zh-CN"),
+# so the content below is the key tree directly — no `zh-CN:` root.
+settings:
+  window:
+    title: "设置：GitComet"
+  nav:
+    general: 常规
+    terminal: 终端
+    change_tracking: 更改跟踪
+    diff: 差异
+    file_editing: 文件编辑
+    git_log: Git 历史
+    tags: 标签
+    git_executable: Git 可执行文件
+    environment: 环境
+    links: 链接
+    no_match: 没有匹配的设置
+  search:
+    placeholder: 搜索
+  section:
+    appearance: 外观
+    integrations: 集成
+    date_time: 日期与时间
+  row:
+    theme: 主题
+    date_format: 日期格式
+    ui_scale: 界面缩放
+    ui_font: 界面字体
+    editor_font: 编辑器字体
+    font_ligatures: 使用字体连字
+    external_code_editor: 外部代码编辑器
+    date_timezone: 日期时区
+    show_timezone: 显示时区
+    external_terminal: 外部终端
+    action_bar_terminal: 操作栏终端按钮打开
+    untracked_files: 未跟踪文件
+    scroll_sync: 滚动同步
+    diff_mode: 差异模式
+    show_whitespace_changes: 显示空白更改
+    reveal_whitespace_characters: 显示空白字符
+    word_wrap: 自动换行
+    show_line_numbers: 显示行号
+    default_history_mode: 默认历史模式
+    history_columns: 历史列
+    highlight_commit_lane: 高亮选中提交的泳道
+    relative_dates: 在历史视图中显示相对日期
+    show_tags: 在历史视图中显示标签
+    auto_fetch_tags: 自动获取标签
+    view_mode: 视图模式
+    auto_save: 自动保存编辑
+    open_theme_folder: 打开自定义主题文件夹
+    theme_guide: 主题指南
+  ui_scale:
+    detail_default: 默认缩放
+    detail_fit_more: 在屏幕上显示更多内容
+    detail_larger: 更大的控件和文本
+    shortcut: "快捷键：Ctrl/Cmd +、- 和 0。"
+  fonts:
+    empty: 没有可用字体。
+    system_detail: 使用 GitComet 为操作系统界面字体栈挑选的最佳匹配
+    choose_hint: 从已安装的系统字体中选择
+  external_editor:
+    prompt_select: 选择外部代码编辑器
+    custom_executable: 自定义编辑器可执行文件
+    arguments: 参数
+  terminal:
+    prompt_select_launcher: 选择终端启动器
+    note_best_effort: 系统默认仅为尽力而为。使用自定义启动器可获得可预测的跨平台行为。
+    default_detail: 尽可能使用平台默认值
+    custom_detail: 选择启动器并显式指定参数
+    program: 程序
+    arguments: 参数
+    args_placeholder: 每行一个参数
+    args_hint: "每行一个参数。使用 {cwd} 和 {repo_name} 占位符。"
+    status_saved: 外部终端设置已保存。
+    status_reset: 外部终端草稿已重置。
+    status_launch_sent: 已发送启动请求。
+    status_launch_failed: "测试启动失败：%{err}"
+  action_bar_terminal:
+    note: 选择操作栏终端按钮打开的目标。各自的全局快捷键可单独配置。
+    embedded_detail: 切换内嵌终端面板
+    external_detail: 启动外部终端
+  action:
+    browse: 浏览
+    save: 保存
+    reset: 重置
+    test_launch: 测试启动
+    show: 显示
+  git_log:
+    default_mode_note: 仅在打开尚未保存历史模式的仓库时生效。
+    column_graph: 图形
+    column_author: 作者
+    column_date: 提交日期
+    column_sha: SHA
+    columns_none: 无
+    columns_note: 窗口较窄时，部分列可能会自动隐藏。
+    reset_column_widths: 重置列宽
+  tags:
+    fetch_on_activation: 仓库激活时
+    fetch_on_activation_detail: 仓库变为活动状态时，在后台获取本地和远程标签。
+    fetch_disabled: 已禁用
+    fetch_disabled_detail: 仓库激活时跳过自动获取标签。
+    lightweight: 轻量标签
+    lightweight_detail: 直接指向某个提交的简单标签。没有消息，也不进行 GPG 签名。
+    annotated: 附注标签
+    annotated_detail: 存储标签作者、日期和可选消息。支持 GPG 签名。
+  git_executable:
+    system_path: 系统 PATH
+    system_detail: "使用当前 PATH 中第一个可用的 `git` 可执行文件。"
+    custom: 自定义可执行文件
+    custom_detail: 使用特定的 Git 二进制文件，并在 Git 解析辅助工具时加入其所在目录。
+    prompt_select: 选择 Git 可执行文件
+    use_path: 使用该路径
+    custom_label: 自定义 Git 可执行文件
+    enter_hint: 编辑路径后按 Enter 可立即应用。
+    scope_note: 仅应用于 GitComet 主浏览器窗口。Git 调用的命令模式仍使用系统 PATH 中的 git。gpg 等辅助工具由 Git 从应用环境中解析，除非在 Git 中另行配置。
+  git:
+    detected_runtime: 检测到的运行时
+    status_supported: "Git >= %{version}"
+    status_too_old: "Git < %{version}"
+    status_unknown: Git 版本未知
+    compatibility_note: GitComet 仅在 Git %{version} 及更高版本上经过测试。
+  common:
+    unavailable: 不可用
+  environment:
+    build: 构建
+    operating_system: 操作系统
+  links:
+    license: 许可证
+    professional_waitlist: 专业版候补名单
+    open_source_licenses: 开源许可证
+  licenses:
+    back: "< 设置"
+    empty: 未找到依赖许可证。
+    count: "已列出 %{count} 个第三方 crate"
+    column_crate: Crate
+    column_version: 版本
+    column_license: 许可证
+  theme:
+    folder_toast_unavailable: 自定义主题文件夹不可用。
+    folder_open_failed: "打开自定义主题文件夹失败：%{err}"
+  change_tracking:
+    combined_detail: 将未跟踪文件保留在未暂存区域内
+    split_untracked_detail: 在未暂存区域上方显示未跟踪区块
+  diff:
+    scroll_sync_vertical_detail: 仅锁定垂直滚动。
+    scroll_sync_horizontal_detail: 仅锁定水平滚动。
+    scroll_sync_none_detail: 保持拆分和合并窗格各自独立。
+    scroll_sync_both_detail: 同时锁定垂直和水平滚动。
+    content_collapsed_detail: 隐藏未更改的区段，并使用改动块控件显示更多上下文。
+    content_full_detail: 使用常规文件差异视图显示完整文件。
+    view_inline_detail: 内联显示更改。
+    view_split_detail: 以拆分视图显示更改。

@@ -6,6 +6,7 @@ mod external_editor;
 pub mod focused_diff;
 mod font_preferences;
 mod http;
+mod i18n;
 mod kit;
 mod launch_guard;
 mod linux_gui_env;
@@ -43,3 +44,8 @@ pub mod benchmarks {
 mod smoke_tests;
 #[cfg(test)]
 mod test_support;
+
+// Embeds every `locales/*.en.yml` / `locales/*.zh-CN.yml` catalog into the
+// binary and generates the crate-root lookup functions that `t!` calls. Must
+// stay at the crate root: `t!` expands to `crate::_rust_i18n_try_translate`.
+rust_i18n::i18n!("locales", fallback = ["en"]);
