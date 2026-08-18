@@ -130,7 +130,7 @@ impl GixRepo {
         let exit_code = output.status.code();
 
         let cmd_output = CommandOutput {
-            command: format!("mergetool ({tool_name})"),
+            command: rust_i18n::t!("git.mergetool_command", tool = tool_name).into_owned(),
             stdout,
             stderr,
             exit_code,

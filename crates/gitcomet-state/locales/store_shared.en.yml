@@ -1,0 +1,9 @@
+# Shared keys for `name_summary.rs` (branch-batch wording reused by the
+# reducer toast, the effects failure message, and the UI confirm dialog).
+# Keyed by filename (`store_shared.en.yml` -> locale "en"); content is the
+# key tree directly — no `en:` root.
+store:
+  shared:
+    branch_noun_one: branch
+    branch_noun_other: branches
+    elision_suffix: "…and %{rest} more"

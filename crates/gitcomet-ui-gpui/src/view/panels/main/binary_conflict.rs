@@ -18,7 +18,7 @@ impl MainPaneView {
 
         let format_size = |size: Option<usize>| -> SharedString {
             match size {
-                None => "absent".into(),
+                None => crate::i18n::tr("conflict.binary.size_absent"),
                 Some(n) if n < 1024 => format!("{} B", n).into(),
                 Some(n) if n < 1024 * 1024 => format!("{:.1} KiB", n as f64 / 1024.0).into(),
                 Some(n) => format!("{:.1} MiB", n as f64 / (1024.0 * 1024.0)).into(),
@@ -28,11 +28,11 @@ impl MainPaneView {
         let side_row = |label: &'static str, size: Option<usize>, has_text: bool| -> gpui::Div {
             let size_label = format_size(size);
             let kind_label: SharedString = if has_text {
-                "text (valid UTF-8)".into()
+                crate::i18n::tr("conflict.binary.kind_text")
             } else if size.is_some() {
-                "binary (non-UTF8)".into()
+                crate::i18n::tr("conflict.binary.kind_binary")
             } else {
-                "not present".into()
+                crate::i18n::tr("conflict.binary.kind_not_present")
             };
 
             div()
@@ -74,9 +74,21 @@ impl MainPaneView {
             .flex_col()
             .gap_1()
             .p_3()
-            .child(side_row("Base", base_size, file.base.is_some()))
-            .child(side_row("Ours", ours_size, file.ours.is_some()))
-            .child(side_row("Theirs", theirs_size, file.theirs.is_some()));
+            .child(side_row(
+                crate::i18n::tr_str("conflict.pick.base"),
+                base_size,
+                file.base.is_some(),
+            ))
+            .child(side_row(
+                crate::i18n::tr_str("conflict.pick.ours"),
+                ours_size,
+                file.ours.is_some(),
+            ))
+            .child(side_row(
+                crate::i18n::tr_str("conflict.pick.theirs"),
+                theirs_size,
+                file.theirs.is_some(),
+            ));
 
         let base_path = path.clone();
         let ours_path = path.clone();
@@ -102,9 +114,9 @@ impl MainPaneView {
                 components::Button::new(
                     "binary_use_base",
                     if focused_mergetool {
-                        "Use Base & close"
+                        crate::i18n::tr_str("conflict.binary.use_base_and_close")
                     } else {
-                        "Use Base (ancestor)"
+                        crate::i18n::tr_str("conflict.binary.use_base")
                     },
                 )
                 .style(components::ButtonStyle::Outlined)
@@ -128,9 +140,9 @@ impl MainPaneView {
                 components::Button::new(
                     "binary_use_ours",
                     if focused_mergetool {
-                        "Use Ours & close"
+                        crate::i18n::tr_str("conflict.binary.use_ours_and_close")
                     } else {
-                        "Use Ours (local)"
+                        crate::i18n::tr_str("conflict.binary.use_ours")
                     },
                 )
                 .style(components::ButtonStyle::Outlined)
@@ -155,9 +167,9 @@ impl MainPaneView {
                 components::Button::new(
                     "binary_use_theirs",
                     if focused_mergetool {
-                        "Use Theirs & close"
+                        crate::i18n::tr_str("conflict.binary.use_theirs_and_close")
                     } else {
-                        "Use Theirs (remote)"
+                        crate::i18n::tr_str("conflict.binary.use_theirs")
                     },
                 )
                 .style(components::ButtonStyle::Outlined)
@@ -184,14 +196,17 @@ impl MainPaneView {
             .when(show_external_mergetool_actions(self.view_mode), |d| {
                 d.child(div().w(px(1.0)).h(px(16.0)).bg(theme.colors.stroke.default))
                     .child(
-                        components::Button::new("binary_launch_mergetool", "External Mergetool")
-                            .style(components::ButtonStyle::Outlined)
-                            .on_click(theme, cx, move |this, _e, _w, _cx| {
-                                this.store.dispatch(Msg::LaunchMergetool {
-                                    repo_id,
-                                    path: mergetool_path.clone(),
-                                });
-                            }),
+                        components::Button::new(
+                            "binary_launch_mergetool",
+                            crate::i18n::tr_str("conflict.binary.external_mergetool"),
+                        )
+                        .style(components::ButtonStyle::Outlined)
+                        .on_click(theme, cx, move |this, _e, _w, _cx| {
+                            this.store.dispatch(Msg::LaunchMergetool {
+                                repo_id,
+                                path: mergetool_path.clone(),
+                            });
+                        }),
                     )
             });
 
@@ -257,7 +272,7 @@ impl MainPaneView {
                                 Loadable::NotLoaded | Loadable::Loading if has_source => div()
                                     .text_xs()
                                     .text_color(theme.colors.foreground.secondary)
-                                    .child("Processing image...")
+                                    .child(crate::i18n::tr("conflict.binary.processing_image"))
                                     .into_any_element(),
                                 Loadable::Error(error) => div()
                                     .text_xs()
@@ -267,12 +282,12 @@ impl MainPaneView {
                                 Loadable::Ready(None) if has_source => div()
                                     .text_xs()
                                     .text_color(theme.colors.foreground.secondary)
-                                    .child("Preview unavailable.")
+                                    .child(crate::i18n::tr("conflict.preview.unavailable"))
                                     .into_any_element(),
                                 _ => div()
                                     .text_xs()
                                     .text_color(theme.colors.foreground.secondary)
-                                    .child("No image")
+                                    .child(crate::i18n::tr("conflict.binary.no_image"))
                                     .into_any_element(),
                             }),
                     )
@@ -286,7 +301,7 @@ impl MainPaneView {
                         .text_sm()
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(theme.colors.foreground.primary)
-                        .child("Image preview"),
+                        .child(crate::i18n::tr("conflict.binary.image_title")),
                 )
                 .child(
                     div()
@@ -297,19 +312,19 @@ impl MainPaneView {
                         .gap_2()
                         .child(image_cell(
                             "binary_conflict_preview_base",
-                            "Base (A)",
+                            crate::i18n::tr_str("conflict.columns.base_a"),
                             base_image,
                             has_base,
                         ))
                         .child(image_cell(
                             "binary_conflict_preview_ours",
-                            "Ours (B)",
+                            crate::i18n::tr_str("conflict.columns.ours_b"),
                             ours_image,
                             has_ours,
                         ))
                         .child(image_cell(
                             "binary_conflict_preview_theirs",
-                            "Theirs (C)",
+                            crate::i18n::tr_str("conflict.columns.theirs_c"),
                             theirs_image,
                             has_theirs,
                         )),
@@ -317,7 +332,9 @@ impl MainPaneView {
         });
 
         let title: SharedString =
-            format!("Resolve conflict: {}", self.cached_path_display(&path)).into();
+            crate::i18n::t!("conflict.title", path = self.cached_path_display(&path))
+                .to_string()
+                .into();
 
         div()
             .id("binary_conflict_resolver_panel")
@@ -361,11 +378,14 @@ impl MainPaneView {
                             .text_lg()
                             .font_weight(FontWeight::BOLD)
                             .text_color(theme.colors.status.warning.foreground)
-                            .child("Binary file conflict"),
+                            .child(crate::i18n::tr("conflict.binary.heading")),
                     )
-                    .child(div().text_sm().text_color(theme.colors.foreground.secondary).child(
-                        "This file contains binary or non-UTF8 data and cannot be merged as text.",
-                    ))
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(theme.colors.foreground.secondary)
+                            .child(crate::i18n::tr("conflict.binary.description")),
+                    )
                     .when_some(image_preview, |d, preview| d.child(preview))
                     // Side info
                     .child(

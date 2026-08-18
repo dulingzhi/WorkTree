@@ -1,0 +1,4 @@
+# 简体中文目录，对应 gix.en.yml；键结构必须一致。
+git:
+  ssh_host_verification_prompt: "SSH 主机验证提示：\n"
+  mergetool_command: "合并工具（%{tool}）"

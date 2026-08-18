@@ -1,0 +1,58 @@
+# Locale files are keyed by filename (`panels.en.yml` -> locale "en"), so the
+# content below is the key tree directly — no `en:` root. English is also the
+# fallback locale, so every value must stay byte-identical to the string it
+# replaces in the panels (tests assert these exact texts).
+panels:
+  author_filter:
+    all_authors: All authors
+    search_input_not_initialized: Search input not initialized
+    no_authors: No authors
+    no_match_hint: "No match — Enter filters on what you typed"
+  action_bar:
+    pull: Pull
+    push: Push
+    terminal: Terminal
+    stash: Stash
+    branch: Branch
+    pull_behind: "Pull %{count} behind"
+    pull_behind_with_branch: "Pull %{count} behind\n%{name}"
+    push_ahead: "Push %{count} ahead"
+    push_ahead_with_branch: "Push %{count} ahead\n%{name}"
+    browsing_commit: "Browsing commit %{sha} — click for history / go live"
+    state_cherry_picking: CHERRY-PICKING
+    state_apply_rebase: APPLY/REBASE
+    state_merging: MERGING
+    continue_cherry_pick: Continue the in-progress cherry-pick
+    continue_rebase_or_apply: Continue the in-progress rebase or apply
+    resolve_conflicts_first: Resolve all conflicts before continuing
+    navigate_back: "Navigate Back (%{shortcut})"
+    navigate_forward: "Navigate Forward (%{shortcut})"
+    switch_worktree: "Switch worktree\n%{workdir}"
+    detached_label: detached
+    detached_tooltip: "Detached HEAD — click to check out a branch"
+    on_branch_tooltip: "On branch %{branch} — click to switch"
+    open_external_terminal: Open external terminal
+    show_terminal: Show terminal
+    hide_terminal: Hide terminal
+    push_no_remotes: "Cannot push: no remotes configured"
+    create_stash: Create stash
+    no_changes_to_stash: No changes to stash
+    create_branch: Create branch
+    abort_merge: Abort merge
+    abort: Abort
+    continue: Continue
+  discard_confirm:
+    title: Discard changes
+    body: "This will discard working tree changes for %{detail}."
+    files_count: "%{count} files"
+    file: file
+    no_files_selected: No files selected.
+    discard: Discard
+  delete_branches_confirm:
+    title_local: "Delete %{count} %{noun} in %{group}?"
+    title_remote: "Delete %{count} %{noun} in %{group} on the remote?"
+    body_local: "The current branch is never included. Branches that are not fully merged need Force delete."
+    body_remote: "This deletes the branches on the remote for everyone, not just here."
+    delete: Delete
+    force_delete: Force delete
+    delete_on_remote: Delete on remote

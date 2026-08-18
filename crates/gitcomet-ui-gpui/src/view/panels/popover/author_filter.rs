@@ -2,7 +2,10 @@ use super::*;
 use rustc_hash::FxHashSet;
 use std::sync::Arc;
 
-const ALL_AUTHORS_LABEL: &str = "All authors";
+/// The always-offered first row ("All authors"), localized.
+fn all_authors_label() -> &'static str {
+    crate::i18n::tr_str("panels.author_filter.all_authors")
+}
 
 /// What activating a row does: clear the filter, or filter to one author.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -112,7 +115,7 @@ pub(super) fn rows(authors: &[SharedString], current: Option<&str>) -> AuthorRow
     let mut items = Vec::with_capacity(authors.len() + 1);
     let mut targets = Vec::with_capacity(authors.len() + 1);
     items.push(components::PickerPromptItem::from(SharedString::from(
-        ALL_AUTHORS_LABEL,
+        all_authors_label(),
     )));
     targets.push(AuthorTarget::All);
     let mut marked_index = current.is_none().then_some(0);
@@ -219,7 +222,7 @@ pub(super) fn panel(
                 components::context_menu_label(
                     theme,
                     ui_scale_percent,
-                    "Search input not initialized",
+                    crate::i18n::tr("panels.author_filter.search_input_not_initialized"),
                     Some(this.tooltip_host.clone()),
                     cx,
                 )
@@ -242,9 +245,9 @@ pub(super) fn panel(
     // Suggestions only cover the commits loaded so far, so a name that is not
     // in the list is still a valid filter — say so instead of a dead end.
     let empty_text = if query.is_empty() {
-        "No authors"
+        crate::i18n::tr_str("panels.author_filter.no_authors")
     } else {
-        "No match — Enter filters on what you typed"
+        crate::i18n::tr_str("panels.author_filter.no_match_hint")
     };
 
     // Items and layout together, so the rows rendered and the rows navigation
@@ -310,7 +313,7 @@ mod tests {
 
     fn target_label(target: &AuthorTarget) -> String {
         match target {
-            AuthorTarget::All => ALL_AUTHORS_LABEL.to_owned(),
+            AuthorTarget::All => all_authors_label().to_owned(),
             AuthorTarget::Author(name) => name.to_string(),
         }
     }

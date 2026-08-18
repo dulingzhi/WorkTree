@@ -425,7 +425,7 @@ fn append_host_prompt_to_stderr(stderr: &mut Vec<u8>, askpass: &AskPassScript) {
     if !stderr.is_empty() && !stderr.ends_with(b"\n") {
         stderr.push(b'\n');
     }
-    stderr.extend_from_slice(b"SSH host verification prompt:\n");
+    stderr.extend_from_slice(rust_i18n::t!("git.ssh_host_verification_prompt").as_bytes());
     stderr.extend_from_slice(prompt_log.as_bytes());
     stderr.push(b'\n');
 }

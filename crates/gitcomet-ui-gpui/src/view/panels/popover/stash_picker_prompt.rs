@@ -144,7 +144,7 @@ pub(super) fn panel(
                     components::PickerPrompt::new(search, this.picker_prompt_scroll.clone())
                         .prebuilt_items(Rc::clone(&built.items), Rc::clone(&built.layout))
                         .tooltip_host(this.tooltip_host.clone())
-                        .empty_text("No stashes")
+                        .empty_text(crate::i18n::tr("ui.picker.stash.empty"))
                         .max_height(scaled_px(STASH_PICKER_LIST_MAX_HEIGHT_PX))
                         .selected_index(this.stash_picker_prompt_selected_index)
                         .render(
@@ -165,9 +165,9 @@ pub(super) fn panel(
                     .map(|r| matches!(&r.stashes, Loadable::Loading))
                     .unwrap_or(false);
                 let text = if is_loading {
-                    "Loading…"
+                    crate::i18n::tr("ui.common.loading_ellipsis")
                 } else {
-                    "No stashes"
+                    crate::i18n::tr("ui.picker.stash.empty")
                 };
                 menu = menu.child(components::context_menu_label(
                     theme,

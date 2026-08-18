@@ -37,7 +37,7 @@ pub(super) fn panel(
                     cx,
                 )
                 .tooltip_host(this.tooltip_host.clone())
-                .empty_text("No matches")
+                .empty_text(crate::i18n::tr("ui.common.no_matches"))
                 .max_height(scaled_px(branch_picker::REF_PICKER_LIST_MAX_HEIGHT_PX))
                 .selected_index(this.branch_picker_selected_index)
                 .select_on_mouse_down()

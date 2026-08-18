@@ -1,0 +1,148 @@
+store:
+  reducer:
+    # Failure labels (command log / toast headline for a failed command)
+    label_fetch: Fetch
+    label_clone: Clone
+    label_commit: Commit
+    label_amend: Amend
+    label_pull: Pull
+    label_merge: Merge
+    label_squash: Squash
+    label_push: Push
+    label_push_after_commit: "Push after commit"
+    label_force_push: "Force push"
+    label_force_push_with_lease: "Force push with lease"
+    label_prune_merged_branches: "Prune merged branches"
+    label_prune_local_tags: "Prune local tags"
+    label_set_tracking_upstream: "Set as tracking upstream"
+    label_unlink_upstream: "Unlink upstream branch"
+    label_delete_remote_branch: "Delete remote branch"
+    label_delete_remote_branches: "Delete remote branches"
+    label_push_tag: "Push tag"
+    label_delete_remote_tag: "Delete remote tag"
+    label_reset: Reset
+    label_rebase: Rebase
+    label_interactive_rebase: "Interactive rebase"
+    label_cherry_pick: "Cherry-pick"
+    label_tag: Tag
+    label_remote: Remote
+    label_checkout_ours: "Checkout ours"
+    label_checkout_theirs: "Checkout theirs"
+    label_accept_deletion: "Accept deletion"
+    label_checkout_base: "Checkout base"
+    label_mergetool: Mergetool
+    label_save_file: "Save file"
+    label_update_gitignore: "Update .gitignore"
+    label_patch: Patch
+    label_worktree: Worktree
+    label_submodule: Submodule
+    label_hunk: Hunk
+    label_discard: Discard
+
+    # Failure templates
+    cmd_failed: "%{label} failed"
+    cmd_failed_details: "%{label} failed:\n\n%{details}"
+
+    # Outcome fragments embedded into success summaries
+    base_up_to_date: "Already up to date"
+    base_already_up_to_date: "Already up-to-date"
+    base_fast_forwarded: "Fast-forwarded"
+    base_merged: "Merged"
+    base_completed: "Completed"
+    base_staged: "Staged"
+    base_everything_up_to_date: "Everything up-to-date"
+    base_pushed: "Pushed"
+    state_paused: "Paused at a conflict"
+
+    # Success summaries (command log / announce toast)
+    fetch_up_to_date: "Fetch: Already up to date"
+    fetch_synchronized: "Fetch: Synchronized"
+    prune_merged_branches_done: "Prune merged branches: Completed"
+    prune_local_tags_done: "Prune local tags: Completed"
+    pull_up_to_date: "Pull: Already up to date"
+    pull_fast_forwarded: "Pull: Fast-forwarded"
+    pull_merged: "Pull: Merged"
+    pull_rebase_complete: "Pull: Rebasing complete"
+    pull_done: "Pull: Completed"
+    pull_branch: "Pull %{remote}/%{branch}: %{base}"
+    merge_ref: "Merge %{reference}: %{base}"
+    squash_ref: "Squash %{reference}: %{base}"
+    push_uptodate: "Push: Everything up-to-date"
+    push_done: "Push: Completed"
+    push_after_commit_done: "Push after commit: %{base}"
+    push_after_commit_u_done: "Push after commit -u: %{base}"
+    force_push_uptodate: "Force push: Everything up-to-date"
+    force_push_done: "Force push: Completed"
+    force_push_lease_uptodate: "Force push with lease: Everything up-to-date"
+    force_push_lease_done: "Force push with lease: Completed"
+    push_set_upstream: "Push -u %{remote}/%{branch}: %{base}"
+    upstream_set: "Branch %{branch}: Upstream set to %{upstream}"
+    upstream_unlinked: "Branch %{branch}: Upstream unlinked"
+    remote_branch_deleted: "Remote branch %{remote}/%{branch}: Deleted"
+    remote_branches_deleted: "%{count} remote %{noun} on %{remote}: Deleted"
+    tag_pushed: "Tag %{name} → %{remote}: Pushed"
+    tag_already_up_to_date: "Tag %{name} → %{remote}: Already up-to-date"
+    remote_tag_deleted: "Tag %{name} on %{remote}: Deleted"
+    resolved_ours: "Resolved using ours"
+    resolved_theirs: "Resolved using theirs"
+    resolved_by_deletion: "Resolved by accepting deletion → %{path}"
+    resolved_base: "Resolved using base → %{path}"
+    mergetool_resolved: "Mergetool: Resolved %{path}"
+    saved_and_staged: "Saved and staged → %{path}"
+    saved: "Saved → %{path}"
+    gitignore_nothing_added: "Already in .gitignore; nothing added"
+    gitignore_added: "Added %{pattern} to .gitignore"
+    gitignore_added_many: "Added %{count} patterns to .gitignore"
+    reset_done: "Reset (--%{mode}) %{target}: Completed"
+    squash_commits_done: "Squash %{count} commits: Completed"
+    rebase_onto_done: "Rebase onto %{onto}: Completed"
+    sequencer_paused_next: "%{operation}: Paused at the next conflict"
+    sequencer_continued: "%{operation}: Continued"
+    sequencer_aborted: "%{operation}: Aborted"
+    interactive_rebase_state: "Interactive rebase onto %{base}: %{state}"
+    rebase_onto_state: "Rebase onto %{base}: %{state}"
+    cherry_pick_state: "Cherry-pick %{count} commits: %{state}"
+    cherry_pick_already_applied: "Current branch already has all the changes from the cherry-picked commit."
+    cherry_picked: "Cherry-picked %{sha}: %{summary}"
+    cherry_picked_no_commit: "Cherry-picked %{sha} without committing: %{summary}"
+    merge_aborted: "Merge: Aborted"
+    tag_created: "Tag %{name} → %{target}: Created"
+    tag_deleted: "Tag %{name}: Deleted"
+    remote_added: "Remote %{name}: Added"
+    remote_removed: "Remote %{name}: Removed"
+    remote_url_updated: "Remote %{name} (%{kind}): URL updated"
+    patch_exported: "Patch exported → %{path}"
+    patch_applied_to: "Patch applied → %{path}"
+    patch_applied: "Patch applied"
+    worktree_added: "Worktree added → %{path}"
+    worktree_added_ref: "Worktree added → %{path} (%{reference})"
+    worktree_removed: "Worktree removed → %{path}"
+    worktree_force_removed: "Worktree force removed → %{path}"
+    submodule_added: "Submodule added → %{path}"
+    submodules_updated: "Submodules: Updated"
+    submodule_loaded: "Submodule loaded → %{path}"
+    submodule_pointer_updated: "Submodule pointer updated → %{path} (%{reference})"
+    submodule_removed: "Submodule removed → %{path}"
+    hunk_staged: "Hunk staged"
+    hunk_unstaged: "Hunk unstaged"
+    changes_discarded: "Changes discarded"
+
+    # Session persistence
+    persist_failed: "Failed to persist session state while %{action}: %{error}"
+
+    # Auth prompt validation
+    auth_secret_empty: "credential/passphrase/confirmation cannot be empty"
+    auth_username_empty: "username cannot be empty"
+
+    # Flow notices
+    squash_cancelled: "Squash cancelled: the selected commits are no longer squashable."
+    commit_done: "Commit: Completed"
+    amend_done: "Amend: Completed"
+    push_after_commit_blocked: "Push after commit blocked: %{summary}"
+    start_of_history: "start of history"
+    squash_rebase_load_failed: "Failed to load commits for squash rebase: %{error}"
+    commit_reveal_failed: "Could not find commit %{reference}: %{error}"
+    folder_not_a_repo: "Folder is not a git repository: %{path}"
+    invalid_cherry_pick_selection: "Repository returned an invalid ordered cherry-pick selection"
+    unexpected_commit_in_order: "Commit ordering returned an unexpected commit %{id}"
+    commit_order_load_failed: "Failed to load and order selected commit %{missing}"

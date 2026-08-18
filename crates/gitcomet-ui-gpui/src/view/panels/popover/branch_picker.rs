@@ -67,9 +67,11 @@ fn metadata_parts(
         // dropping the line, so one branch does not leave a short row in a list
         // of tall ones.
         return vec![
-            components::PickerPromptItemPart::new("No commits found")
-                .searchable(false)
-                .tooltip(false),
+            components::PickerPromptItemPart::new(crate::i18n::tr(
+                "ui.picker.branch.no_commits_found",
+            ))
+            .searchable(false)
+            .tooltip(false),
         ];
     };
 
@@ -535,9 +537,13 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
         let row_payloads = Rc::clone(&built.payloads);
         let menu_payloads = Rc::clone(&built.payloads);
         let empty_text = match this.active_repo().map(|repo| &repo.branches) {
-            Some(Loadable::Loading) | Some(Loadable::NotLoaded) => "Loading",
-            Some(Loadable::Error(_)) => "Could not list branches",
-            _ => "No branches",
+            Some(Loadable::Loading) | Some(Loadable::NotLoaded) => {
+                crate::i18n::tr_str("ui.common.loading")
+            }
+            Some(Loadable::Error(_)) => {
+                crate::i18n::tr_str("ui.picker.branch.could_not_list_branches")
+            }
+            _ => crate::i18n::tr_str("ui.picker.branch.no_branches"),
         };
 
         menu = menu.child(
@@ -615,7 +621,7 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
                     menu = menu.child(
                         ref_picker_prompt(search, this.picker_prompt_scroll.clone(), &built, cx)
                             .tooltip_host(this.tooltip_host.clone())
-                            .empty_text("No branches")
+                            .empty_text(crate::i18n::tr("ui.picker.branch.no_branches"))
                             .max_height(scaled_px(REF_PICKER_LIST_MAX_HEIGHT_PX))
                             .selected_index(this.branch_picker_selected_index)
                             .render(
@@ -663,13 +669,21 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
                 }
             }
             Loadable::Loading => {
-                menu = menu.child(branch_picker_status_panel(this, "Loading", cx));
+                menu = menu.child(branch_picker_status_panel(
+                    this,
+                    crate::i18n::tr("ui.common.loading"),
+                    cx,
+                ));
             }
             Loadable::Error(e) => {
                 menu = menu.child(branch_picker_status_panel(this, e.clone(), cx));
             }
             Loadable::NotLoaded => {
-                menu = menu.child(branch_picker_status_panel(this, "Not loaded", cx));
+                menu = menu.child(branch_picker_status_panel(
+                    this,
+                    crate::i18n::tr("ui.common.not_loaded"),
+                    cx,
+                ));
             }
         }
     }

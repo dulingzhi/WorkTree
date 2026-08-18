@@ -111,14 +111,17 @@ impl CollapsedSidebarSection {
         }
     }
 
+    /// Display title for the collapsed-rail sections. The English text is the
+    /// gettext catalog key (shared with the expanded sidebar's section
+    /// headers); `element_id` below is the locale-free identity.
     pub(in crate::view) fn title(self) -> &'static str {
         match self {
-            Self::Local => "Local Branches",
-            Self::Remote => "Remote Branches",
-            Self::Worktrees => "Worktrees",
-            Self::Submodules => "Submodules",
-            Self::Stashes => "Stashes",
-            Self::Files => "Files",
+            Self::Local => crate::i18n::tr_str("Local Branches"),
+            Self::Remote => crate::i18n::tr_str("Remote Branches"),
+            Self::Worktrees => crate::i18n::tr_str("Worktrees"),
+            Self::Submodules => crate::i18n::tr_str("Submodules"),
+            Self::Stashes => crate::i18n::tr_str("Stashes"),
+            Self::Files => crate::i18n::tr_str("Files"),
         }
     }
 

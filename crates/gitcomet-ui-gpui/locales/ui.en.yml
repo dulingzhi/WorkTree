@@ -1,0 +1,101 @@
+# Locale files are keyed by filename (`ui.en.yml` -> locale "en"), so the
+# content below is the key tree directly — no `en:` root. English is also the
+# fallback locale, so every value must stay byte-identical to the string it
+# replaces in the sources (tests assert these exact texts).
+#
+# This catalog covers the small surfaces that live outside the per-window
+# files: picker status/empty strings, search-input placeholders, and the
+# `fn label()` option-label helpers (change tracking, diff modes, terminal
+# modes, timezone, whitespace, external editor, theme "Automatic").
+ui:
+  common:
+    loading: Loading
+    loading_ellipsis: Loading…
+    not_loaded: Not loaded
+    no_repository: No repository
+    search_input_not_initialized: Search input not initialized
+    no_matches: No matches
+  picker:
+    filter:
+      repositories: Filter repositories
+      branches: Filter branches
+      worktrees: Filter worktrees
+      submodules: Filter submodules
+      stashes: Filter stashes
+      commits: Filter commits
+      authors: Filter authors
+    repo:
+      sort:
+        newest: Newest
+        oldest: Oldest
+        name: "Name (A–Z)"
+        path: "Path (A–Z)"
+        toggle: "Sort: %{label}"
+      empty: No repositories
+      remove_recently_closed: Remove from recently closed
+    branch:
+      no_branches: No branches
+      no_commits_found: No commits found
+      could_not_list_branches: Could not list branches
+    worktree:
+      empty: No worktrees
+    submodule:
+      empty: No submodules
+    stash:
+      empty: No stashes
+    file_history:
+      no_commits: No commits
+  label:
+    autosquash:
+      to_top_commit: To Top Commit
+      neighboring_commit: Neighboring Commit
+      to_bottom_commit: To Bottom Commit
+    theme:
+      automatic: Automatic
+    change_tracking:
+      combined_with_unstaged: Combined with Unstaged
+      separate_section: Separate section
+      combine_with_unstaged: Combine with Unstaged
+      show_separate_untracked_block: Show separate Untracked block
+      combined: Combined
+    diff:
+      scroll_sync:
+        vertical: Vertical
+        horizontal: Horizontal
+        none: None
+        both: Both
+      content:
+        full: Full
+        collapsed: Collapsed
+      view:
+        inline: Inline
+        split: Split
+    preview:
+      image: Image
+      preview: Preview
+      code: Code
+      text: Text
+    terminal:
+      embedded: Embedded terminal
+      external: External terminal
+      system_default: System default
+      custom_launcher: Custom launcher
+    timezone:
+      system_local: System local
+      device_timezone: This device's timezone
+    whitespace:
+      show: Show
+      ignore: Ignore
+      summary: "Whitespace: %{mode}"
+    external_editor:
+      none: None
+      custom: Custom
+      custom_with_path: "Custom: %{path}"
+      missing: "%{name} (missing)"
+  clone:
+    title:
+      cloning: Cloning repository…
+      aborting: Aborting clone…
+    phase:
+      stopping: Stopping clone
+      remote_objects: Remote objects

@@ -40,7 +40,6 @@ fn schedule_repo_command<F>(
 }
 
 fn normalize_worktree_relative_path(path: &Path) -> Result<PathBuf, Error> {
-    const OUTSIDE_WORKDIR_ERROR: &str = "refusing to write outside repository workdir";
     let mut normalized = PathBuf::new();
     for component in path.components() {
         match component {
@@ -49,20 +48,20 @@ fn normalize_worktree_relative_path(path: &Path) -> Result<PathBuf, Error> {
             Component::ParentDir => {
                 if !normalized.pop() {
                     return Err(Error::new(ErrorKind::Backend(
-                        OUTSIDE_WORKDIR_ERROR.to_string(),
+                        rust_i18n::t!("store.effects.outside_workdir_error").to_string(),
                     )));
                 }
             }
             Component::RootDir | Component::Prefix(_) => {
                 return Err(Error::new(ErrorKind::Backend(
-                    OUTSIDE_WORKDIR_ERROR.to_string(),
+                    rust_i18n::t!("store.effects.outside_workdir_error").to_string(),
                 )));
             }
         }
     }
     if normalized.as_os_str().is_empty() {
         return Err(Error::new(ErrorKind::Backend(
-            "worktree file path must not be empty".to_string(),
+            rust_i18n::t!("store.effects.worktree_path_empty").to_string(),
         )));
     }
     Ok(normalized)
@@ -124,11 +123,19 @@ pub(super) fn schedule_save_worktree_file(
                 repo.stage(&[path_ref])?;
             }
             Ok(CommandOutput {
-                command: format!(
-                    "Save {}{}",
-                    relative_path.display(),
-                    if stage { " (staged)" } else { "" }
-                ),
+                command: if stage {
+                    rust_i18n::t!(
+                        "store.effects.save_worktree_file_staged_label",
+                        path = relative_path.display()
+                    )
+                    .to_string()
+                } else {
+                    rust_i18n::t!(
+                        "store.effects.save_worktree_file_label",
+                        path = relative_path.display()
+                    )
+                    .to_string()
+                },
                 stdout: String::new(),
                 stderr: String::new(),
                 exit_code: Some(0),
@@ -171,9 +178,13 @@ pub(super) fn schedule_append_gitignore_patterns(
             // the user nothing about what to do next. Never rewrite it lossily.
             let existing = match std::fs::read(&full) {
                 Ok(bytes) => String::from_utf8(bytes).map_err(|_| {
-                    Error::new(ErrorKind::Backend(format!(
-                        "{GITIGNORE_FILE_NAME} is not valid UTF-8; edit it manually"
-                    )))
+                    Error::new(ErrorKind::Backend(
+                        rust_i18n::t!(
+                            "store.effects.gitignore_not_utf8",
+                            file = GITIGNORE_FILE_NAME
+                        )
+                        .to_string(),
+                    ))
                 })?,
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
                 Err(e) => return Err(Error::new(ErrorKind::Io(e.kind()))),
@@ -182,7 +193,11 @@ pub(super) fn schedule_append_gitignore_patterns(
             let Some(updated) = gitcomet_core::gitignore::append_patterns(&existing, &patterns)
             else {
                 return Ok(CommandOutput {
-                    command: format!("Update {GITIGNORE_FILE_NAME}"),
+                    command: rust_i18n::t!(
+                        "store.effects.update_gitignore_label",
+                        file = GITIGNORE_FILE_NAME
+                    )
+                    .to_string(),
                     stdout: gitcomet_core::gitignore::NOTHING_TO_ADD.to_string(),
                     stderr: String::new(),
                     exit_code: Some(0),
@@ -193,7 +208,11 @@ pub(super) fn schedule_append_gitignore_patterns(
                 .map_err(|e| Error::new(ErrorKind::Io(e.kind())))?;
 
             Ok(CommandOutput {
-                command: format!("Update {GITIGNORE_FILE_NAME}"),
+                command: rust_i18n::t!(
+                    "store.effects.update_gitignore_label",
+                    file = GITIGNORE_FILE_NAME
+                )
+                .to_string(),
                 stdout: String::new(),
                 stderr: String::new(),
                 exit_code: Some(0),
@@ -1348,17 +1367,24 @@ pub(super) fn schedule_launch_mergetool(
                 Ok(mergetool_result) => {
                     if mergetool_result.success {
                         Ok(CommandOutput {
-                            command: format!("mergetool ({})", mergetool_result.tool_name),
+                            command: rust_i18n::t!(
+                                "store.effects.mergetool_label",
+                                tool = mergetool_result.tool_name
+                            )
+                            .to_string(),
                             stdout: mergetool_result.output.stdout,
                             stderr: mergetool_result.output.stderr,
                             exit_code: mergetool_result.output.exit_code,
                         })
                     } else {
                         Err(gitcomet_core::error::Error::new(
-                            gitcomet_core::error::ErrorKind::Backend(format!(
-                                "Mergetool '{}' did not complete successfully",
-                                mergetool_result.tool_name
-                            )),
+                            gitcomet_core::error::ErrorKind::Backend(
+                                rust_i18n::t!(
+                                    "store.effects.mergetool_failed",
+                                    tool = mergetool_result.tool_name
+                                )
+                                .to_string(),
+                            ),
                         ))
                     }
                 }

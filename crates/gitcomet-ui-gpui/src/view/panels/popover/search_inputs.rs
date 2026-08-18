@@ -167,7 +167,7 @@ impl PopoverHost {
     ) -> Entity<components::TextInput> {
         let input = Self::ensure_search_input_entity(
             &mut self.repo_picker_search_input,
-            "Filter repositories",
+            crate::i18n::tr_str("ui.picker.filter.repositories"),
             window,
             cx,
         );
@@ -235,7 +235,7 @@ impl PopoverHost {
     ) -> Entity<components::TextInput> {
         let input = Self::ensure_search_input_entity(
             &mut self.branch_picker_search_input,
-            "Filter branches",
+            crate::i18n::tr_str("ui.picker.filter.branches"),
             window,
             cx,
         );
@@ -383,7 +383,7 @@ impl PopoverHost {
     ) -> Entity<components::TextInput> {
         let input = Self::ensure_search_input_entity(
             &mut self.worktree_picker_search_input,
-            "Filter worktrees",
+            crate::i18n::tr_str("ui.picker.filter.worktrees"),
             window,
             cx,
         );
@@ -540,7 +540,7 @@ impl PopoverHost {
     ) -> Entity<components::TextInput> {
         let input = Self::ensure_search_input_entity(
             &mut self.submodule_picker_search_input,
-            "Filter submodules",
+            crate::i18n::tr_str("ui.picker.filter.submodules"),
             window,
             cx,
         );
@@ -599,7 +599,7 @@ impl PopoverHost {
     ) -> Entity<components::TextInput> {
         let input = Self::ensure_search_input_entity(
             &mut self.stash_picker_search_input,
-            "Filter stashes",
+            crate::i18n::tr_str("ui.picker.filter.stashes"),
             window,
             cx,
         );
@@ -651,7 +651,7 @@ impl PopoverHost {
     ) -> Entity<components::TextInput> {
         let input = Self::ensure_search_input_entity(
             &mut self.file_history_search_input,
-            "Filter commits",
+            crate::i18n::tr_str("ui.picker.filter.commits"),
             window,
             cx,
         );
@@ -713,7 +713,7 @@ impl PopoverHost {
     ) -> Entity<components::TextInput> {
         let input = Self::ensure_search_input_entity(
             &mut self.history_author_filter_search_input,
-            "Filter authors",
+            crate::i18n::tr_str("ui.picker.filter.authors"),
             window,
             cx,
         );

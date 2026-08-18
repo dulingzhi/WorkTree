@@ -1,0 +1,7 @@
+# User-visible strings this backend emits into stderr annotations and command
+# logs. Keyed by filename (`gix.en.yml` -> locale "en"); content is the key
+# tree directly — no `en:` root. The locale is process-global, set by the UI
+# crate; unset it falls back to English.
+git:
+  ssh_host_verification_prompt: "SSH host verification prompt:\n"
+  mergetool_command: "mergetool (%{tool})"

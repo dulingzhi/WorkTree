@@ -1,0 +1,55 @@
+# 简体中文目录，对应 panels.en.yml；键结构必须一致，%{…} 占位符原样保留。
+panels:
+  author_filter:
+    all_authors: 所有作者
+    search_input_not_initialized: 搜索输入未初始化
+    no_authors: 暂无作者
+    no_match_hint: 无匹配 —— 按 Enter 按所输入的内容筛选
+  action_bar:
+    pull: 拉取
+    push: 推送
+    terminal: 终端
+    stash: 贮藏
+    branch: 分支
+    pull_behind: "落后 %{count} 个提交"
+    pull_behind_with_branch: "落后 %{count} 个提交\n%{name}"
+    push_ahead: "领先 %{count} 个提交"
+    push_ahead_with_branch: "领先 %{count} 个提交\n%{name}"
+    browsing_commit: 正在浏览提交 %{sha} —— 点击查看历史 / 返回实时状态
+    state_cherry_picking: 拣选中
+    state_apply_rebase: 变基/应用中
+    state_merging: 合并中
+    continue_cherry_pick: 继续进行中的拣选
+    continue_rebase_or_apply: 继续进行中的变基或应用
+    resolve_conflicts_first: 继续之前请先解决所有冲突
+    navigate_back: 向后导航（%{shortcut}）
+    navigate_forward: 向前导航（%{shortcut}）
+    switch_worktree: "切换工作树\n%{workdir}"
+    detached_label: 分离 HEAD
+    detached_tooltip: 分离 HEAD —— 点击检出分支
+    on_branch_tooltip: 位于分支 %{branch} —— 点击切换
+    open_external_terminal: 打开外部终端
+    show_terminal: 显示终端
+    hide_terminal: 隐藏终端
+    push_no_remotes: 无法推送：未配置远程仓库
+    create_stash: 创建贮藏
+    no_changes_to_stash: 没有可贮藏的更改
+    create_branch: 创建分支
+    abort_merge: 中止合并
+    abort: 中止
+    continue: 继续
+  discard_confirm:
+    title: 丢弃更改
+    body: 这将丢弃 %{detail} 的工作树更改。
+    files_count: "%{count} 个文件"
+    file: 文件
+    no_files_selected: 未选择任何文件。
+    discard: 丢弃
+  delete_branches_confirm:
+    title_local: 删除 %{group} 中的 %{count} %{noun}？
+    title_remote: 删除远程 %{group} 中的 %{count} %{noun}？
+    body_local: 不会包含当前分支。未完全合并的分支需要强制删除。
+    body_remote: 这会为所有人删除远程上的分支，而不只是本地。
+    delete: 删除
+    force_delete: 强制删除
+    delete_on_remote: 删除远程分支

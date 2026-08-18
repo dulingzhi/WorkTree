@@ -1,0 +1,93 @@
+# 简体中文目录，对应 ui.en.yml；键结构必须一致，%{...} 占位符须一一对应。
+ui:
+  common:
+    loading: 加载中
+    loading_ellipsis: 加载中…
+    not_loaded: 未加载
+    no_repository: 未打开仓库
+    search_input_not_initialized: 搜索输入未初始化
+    no_matches: 无匹配项
+  picker:
+    filter:
+      repositories: 筛选仓库
+      branches: 筛选分支
+      worktrees: 筛选工作树
+      submodules: 筛选子模块
+      stashes: 筛选贮藏
+      commits: 筛选提交
+      authors: 筛选作者
+    repo:
+      sort:
+        newest: 最新
+        oldest: 最旧
+        name: "名称（A–Z）"
+        path: "路径（A–Z）"
+        toggle: "排序：%{label}"
+      empty: 没有仓库
+      remove_recently_closed: 从最近关闭中移除
+    branch:
+      no_branches: 没有分支
+      no_commits_found: 未找到提交
+      could_not_list_branches: 无法列出分支
+    worktree:
+      empty: 没有工作树
+    submodule:
+      empty: 没有子模块
+    stash:
+      empty: 没有贮藏
+    file_history:
+      no_commits: 没有提交
+  label:
+    autosquash:
+      to_top_commit: 并入顶部提交
+      neighboring_commit: 并入相邻提交
+      to_bottom_commit: 并入底部提交
+    theme:
+      automatic: 自动
+    change_tracking:
+      combined_with_unstaged: 与未暂存合并
+      separate_section: 单独分区
+      combine_with_unstaged: 与未暂存合并
+      show_separate_untracked_block: 显示单独的未跟踪区块
+      combined: 合并
+    diff:
+      scroll_sync:
+        vertical: 垂直
+        horizontal: 水平
+        none: 无
+        both: 两者
+      content:
+        full: 完整
+        collapsed: 折叠
+      view:
+        inline: 内联
+        split: 拆分
+    preview:
+      image: 图像
+      preview: 预览
+      code: 代码
+      text: 文本
+    terminal:
+      embedded: 内置终端
+      external: 外部终端
+      system_default: 系统默认
+      custom_launcher: 自定义启动器
+    timezone:
+      system_local: 系统本地
+      device_timezone: 本设备的时区
+    whitespace:
+      show: 显示
+      ignore: 忽略
+      summary: "空白字符：%{mode}"
+    external_editor:
+      none: 无
+      custom: 自定义
+      custom_with_path: "自定义：%{path}"
+      missing: "%{name}（缺失）"
+  clone:
+    title:
+      cloning: 正在克隆仓库…
+      aborting: 正在中止克隆…
+    phase:
+      stopping: 正在停止克隆
+      remote_objects: 远程对象

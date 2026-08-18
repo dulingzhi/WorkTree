@@ -281,7 +281,7 @@ pub(super) fn panel(
         return components::context_menu_label(
             theme,
             ui_scale_percent,
-            "Search input not initialized",
+            crate::i18n::tr("ui.common.search_input_not_initialized"),
             Some(this.tooltip_host.clone()),
             cx,
         );
@@ -305,7 +305,7 @@ pub(super) fn panel(
             .tooltip_host(this.tooltip_host.clone())
             // Only reachable when the repo is gone: the create row always
             // matches, so a present repo never yields an empty list.
-            .empty_text("No repository")
+            .empty_text(crate::i18n::tr("ui.common.no_repository"))
             .max_height(scaled_px(components::PICKER_LIST_MAX_HEIGHT_PX))
             .selected_index(
                 // While a row menu is open the arrow keys walk its entries, so

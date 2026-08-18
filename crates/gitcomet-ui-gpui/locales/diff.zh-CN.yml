@@ -1,0 +1,106 @@
+# 简体中文目录，对应 diff.en.yml；键结构必须一致，%{...} 占位符须一一对应。
+# 覆盖差异视图的工具栏、搜索浮层、子模块摘要、分栏表头与空状态。
+diff:
+  common:
+    no_repository: 未打开仓库。
+    select_a_file: 请选择文件。
+    loading: 加载中
+    empty_file: 空文件。
+    nothing_to_render: 没有可渲染的内容。
+    no_file_contents: 没有可用的文件内容。
+    no_differences: 无差异。
+    processing_file: 正在处理文件…
+  pane:
+    diff: 差异
+    preview: 预览
+    file: 文件
+    submodule: 子模块
+    resolve: 解决
+    directory: 目录
+  toolbar:
+    blame: 追溯
+    edit: 编辑
+    edit_dirty: "编辑 •"
+    save: 保存
+    discard: 丢弃
+    back: 返回
+    inline: 内联
+    split: 分栏
+  tooltip:
+    blame_preview_unavailable: "渲染预览中无法使用追溯\n切换到文本以显示追溯信息"
+    blame_loading: 正在加载追溯…
+    blame_failed: "追溯失败：%{message}\n关闭后重新打开可重试"
+    blame_toggle: "切换追溯批注（%{shortcut}）"
+    edit_preview_unavailable: "渲染预览中无法编辑\n切换到文本以编辑"
+    edit_not_text: 此文件不是文本，不支持编辑
+    edit_no_working_tree_file: 此视图没有可编辑的工作树文件
+    edit_unsaved: "未保存的更改 — 按 %{shortcut} 保存"
+    edit_toggle: "编辑工作树文件（%{shortcut}）"
+    save_and_return: "保存文件并返回（%{shortcut}）"
+    discard_dirty: 丢弃未保存的更改并返回上一个视图
+    discard_clean: 没有未保存的更改
+    prev_change: "上一个更改（F2 / Shift+F7 / %{shortcut}）"
+    next_change: "下一个更改（F3 / F7 / %{shortcut}）"
+    inline_view: "内联差异视图（%{shortcut}）"
+    split_view: "分栏差异视图（%{shortcut}）"
+    mergetool_settings: 合并工具设置
+    diff_actions: 差异操作
+    close_diff: 关闭差异
+  search:
+    type_to_search: 输入以搜索
+    invalid_regex: 无效的正则表达式
+    no_matches: 无匹配项
+    insert_newline: "插入换行符（Shift+Enter）"
+    match_case: 区分大小写
+    match_whole_word: 全字匹配
+    use_regex: 使用正则表达式
+  split:
+    parent: 父提交
+    this_commit: 此提交
+    from_commit: 起始提交
+    to_commit: 目标提交
+    staged: 已暂存
+    index: 暂存区
+    working_tree: 工作树
+    image_before: "A（之前）"
+    image_after: "B（之后）"
+  submodule:
+    missing: 缺失
+    no_submodule_selected: 未选择子模块。
+    loading_summary: 正在加载子模块摘要…
+    no_inner_changes: 没有内部更改。
+    hashes: 哈希
+    changes_between_hashes: 哈希之间的更改
+    open: 打开子模块
+    load: 加载子模块
+    change_pointer: 更改指针…
+    uncommitted_inner_staged: 未提交的内部暂存更改
+    uncommitted_inner_unstaged: 未提交的内部未暂存更改
+    range:
+      staged_pointer: "已提交 -> 暂存区"
+      unstaged_pointer: "暂存区 -> 已检出"
+      commit_history: "父提交 -> 该提交"
+    status:
+      loaded: 已加载
+      not_loaded: 未加载
+      head_mismatch: HEAD 不匹配
+      conflict: 冲突
+      missing_mapping: 缺少映射
+      unknown: 未知
+  image:
+    no_contents: 没有可用的图像内容。
+    processing: 正在处理图像…
+    preview_unavailable: 预览不可用。
+    no_image: 无图像
+  preview:
+    processing: 正在处理预览…
+  conflict:
+    no_file_selected: 未选择冲突文件。
+    title: "解决冲突：%{path}"
+    loading_data: 正在加载冲突数据…
+    no_data: 没有冲突数据。
+    ours: 我方
+    ours_deleted: "我方（已删除）"
+    theirs: 对方
+    theirs_deleted: "对方（已删除）"
+    no_diff_to_show: 没有可显示的冲突差异。

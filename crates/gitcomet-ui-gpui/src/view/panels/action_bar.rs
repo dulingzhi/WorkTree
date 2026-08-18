@@ -55,15 +55,25 @@ fn head_branch_tracking_upstream_name(
 
 fn pull_tooltip_text(pull_count: usize, tracking_branch_name: Option<&str>) -> SharedString {
     match tracking_branch_name {
-        Some(name) => format!("Pull {pull_count} behind\n{name}").into(),
-        None => format!("Pull {pull_count} behind").into(),
+        Some(name) => crate::i18n::t!(
+            "panels.action_bar.pull_behind_with_branch",
+            count = pull_count,
+            name = name
+        )
+        .into(),
+        None => crate::i18n::t!("panels.action_bar.pull_behind", count = pull_count).into(),
     }
 }
 
 fn push_tooltip_text(push_count: usize, tracking_branch_name: Option<&str>) -> SharedString {
     match tracking_branch_name {
-        Some(name) => format!("Push {push_count} ahead\n{name}").into(),
-        None => format!("Push {push_count} ahead").into(),
+        Some(name) => crate::i18n::t!(
+            "panels.action_bar.push_ahead_with_branch",
+            count = push_count,
+            name = name
+        )
+        .into(),
+        None => crate::i18n::t!("panels.action_bar.push_ahead", count = push_count).into(),
     }
 }
 
@@ -305,7 +315,7 @@ impl Render for ActionBarView {
                     .debug_selector(|| "historical_browse_badge".to_string())
                     .gitcomet_tooltip(
                         theme,
-                        format!("Browsing commit {sha} — click for history / go live").into(),
+                        crate::i18n::t!("panels.action_bar.browsing_commit", sha = sha).into(),
                     )
             });
 
@@ -327,9 +337,9 @@ impl Render for ActionBarView {
         let is_rebase_or_apply_in_progress =
             sequencer_state == gitcomet_core::services::SequencerState::RebaseOrApply;
         let sequencer_label = if is_cherry_pick_in_progress {
-            "CHERRY-PICKING"
+            crate::i18n::tr_str("panels.action_bar.state_cherry_picking")
         } else {
-            "APPLY/REBASE"
+            crate::i18n::tr_str("panels.action_bar.state_apply_rebase")
         };
         let sequencer_abort_id = if is_cherry_pick_in_progress {
             "abort_cherry_pick"
@@ -342,9 +352,9 @@ impl Render for ActionBarView {
             "continue_rebase_or_apply"
         };
         let sequencer_continue_tooltip = if is_cherry_pick_in_progress {
-            "Continue the in-progress cherry-pick"
+            crate::i18n::tr_str("panels.action_bar.continue_cherry_pick")
         } else {
-            "Continue the in-progress rebase or apply"
+            crate::i18n::tr_str("panels.action_bar.continue_rebase_or_apply")
         };
         let rebase_has_unstaged_conflicts =
             self.active_repo().is_some_and(|r| r.has_unstaged_conflicts);
@@ -403,9 +413,9 @@ impl Render for ActionBarView {
             })
             .gitcomet_tooltip(
                 theme,
-                format!(
-                    "Navigate Back ({})",
-                    crate::view::shortcut_labels::alt_shortcut("Left")
+                crate::i18n::t!(
+                    "panels.action_bar.navigate_back",
+                    shortcut = crate::view::shortcut_labels::alt_shortcut("Left")
                 )
                 .into(),
             );
@@ -427,9 +437,9 @@ impl Render for ActionBarView {
             })
             .gitcomet_tooltip(
                 theme,
-                format!(
-                    "Navigate Forward ({})",
-                    crate::view::shortcut_labels::alt_shortcut("Right")
+                crate::i18n::t!(
+                    "panels.action_bar.navigate_forward",
+                    shortcut = crate::view::shortcut_labels::alt_shortcut("Right")
                 )
                 .into(),
             );
@@ -469,7 +479,10 @@ impl Render for ActionBarView {
                     );
                 })
                 .debug_selector(|| "workspace_badge".to_string())
-                .gitcomet_tooltip(theme, format!("Switch worktree\n{workdir}").into())
+                .gitcomet_tooltip(
+                    theme,
+                    crate::i18n::t!("panels.action_bar.switch_worktree", workdir = workdir).into(),
+                )
         });
 
         let branch_badge = self.active_repo().and_then(|repo| {
@@ -480,7 +493,7 @@ impl Render for ActionBarView {
             // rather than pretending it is a branch.
             let detached = head == "HEAD";
             let label: SharedString = if detached {
-                "detached".into()
+                crate::i18n::tr("panels.action_bar.detached_label")
             } else {
                 truncate_badge_label(head)
             };
@@ -489,9 +502,9 @@ impl Render for ActionBarView {
                 .as_ref()
                 .is_some_and(|id| id.as_ref() == invoker.as_ref());
             let tooltip: SharedString = if detached {
-                "Detached HEAD — click to check out a branch".into()
+                crate::i18n::tr("panels.action_bar.detached_tooltip")
             } else {
-                format!("On branch {head} — click to switch").into()
+                crate::i18n::t!("panels.action_bar.on_branch_tooltip", branch = head).into()
             };
             Some(
                 components::Button::new("branch_badge", label)
@@ -520,15 +533,16 @@ impl Render for ActionBarView {
         } else {
             icon_muted
         };
-        let mut pull_main = components::Button::new("pull_main", "Pull")
-            .rounded_left()
-            .start_slot(if pull_loading {
-                spinner(("pull_spinner", active_repo_key), pull_color).into_any_element()
-            } else {
-                icon("icons/arrow_down.svg", pull_color).into_any_element()
-            })
-            .style(components::ButtonStyle::Subtle)
-            .disabled(!pull_default_enabled);
+        let mut pull_main =
+            components::Button::new("pull_main", crate::i18n::tr("panels.action_bar.pull"))
+                .rounded_left()
+                .start_slot(if pull_loading {
+                    spinner(("pull_spinner", active_repo_key), pull_color).into_any_element()
+                } else {
+                    icon("icons/arrow_down.svg", pull_color).into_any_element()
+                })
+                .style(components::ButtonStyle::Subtle)
+                .disabled(!pull_default_enabled);
         if pull_count > 0 {
             pull_main = pull_main.end_slot(count_badge(pull_count, pull_color));
         }
@@ -596,32 +610,34 @@ impl Render for ActionBarView {
                 .active_repo_id()
                 .is_some_and(|repo_id| self.open_terminal_repo_ids.contains(&repo_id));
         let terminal_tooltip: SharedString = if terminal_opens_external {
-            "Open external terminal".into()
+            crate::i18n::tr("panels.action_bar.open_external_terminal")
         } else if terminal_is_open {
-            "Hide terminal".into()
+            crate::i18n::tr("panels.action_bar.hide_terminal")
         } else {
-            "Show terminal".into()
+            crate::i18n::tr("panels.action_bar.show_terminal")
         };
-        let terminal = components::Button::new("terminal", "Terminal")
-            .start_slot(icon("icons/terminal.svg", icon_primary))
-            .style(components::ButtonStyle::Subtle)
-            .selected(terminal_is_open)
-            .selected_bg(menu_selected_bg)
-            .disabled(self.active_repo_id().is_none())
-            .on_click(theme, cx, move |this, _e, window, cx| {
-                let _ = this.root_view.update(cx, |root, cx| {
-                    root.activate_terminal_button_for_active_repo(window, cx);
-                });
-            })
-            .gitcomet_tooltip(theme, terminal_tooltip);
-        let mut push_main = components::Button::new("push_main", "Push")
-            .rounded_left()
-            .start_slot(if push_loading {
-                spinner(("push_spinner", active_repo_key), push_color).into_any_element()
-            } else {
-                icon("icons/arrow_up.svg", push_color).into_any_element()
-            })
-            .style(components::ButtonStyle::Subtle);
+        let terminal =
+            components::Button::new("terminal", crate::i18n::tr("panels.action_bar.terminal"))
+                .start_slot(icon("icons/terminal.svg", icon_primary))
+                .style(components::ButtonStyle::Subtle)
+                .selected(terminal_is_open)
+                .selected_bg(menu_selected_bg)
+                .disabled(self.active_repo_id().is_none())
+                .on_click(theme, cx, move |this, _e, window, cx| {
+                    let _ = this.root_view.update(cx, |root, cx| {
+                        root.activate_terminal_button_for_active_repo(window, cx);
+                    });
+                })
+                .gitcomet_tooltip(theme, terminal_tooltip);
+        let mut push_main =
+            components::Button::new("push_main", crate::i18n::tr("panels.action_bar.push"))
+                .rounded_left()
+                .start_slot(if push_loading {
+                    spinner(("push_spinner", active_repo_key), push_color).into_any_element()
+                } else {
+                    icon("icons/arrow_up.svg", push_color).into_any_element()
+                })
+                .style(components::ButtonStyle::Subtle);
         if push_count > 0 {
             push_main = push_main.end_slot(count_badge(push_count, push_color));
         }
@@ -694,7 +710,7 @@ impl Render for ActionBarView {
 
                             this.push_toast(
                                 components::ToastKind::Error,
-                                "Cannot push: no remotes configured".to_string(),
+                                crate::i18n::t!("panels.action_bar.push_no_remotes").into_owned(),
                                 cx,
                             );
                             return;
@@ -729,7 +745,7 @@ impl Render for ActionBarView {
             .active_context_menu_invoker
             .as_ref()
             .is_some_and(|id| id.as_ref() == stash_prompt_invoker.as_ref());
-        let stash = components::Button::new("stash", "Stash")
+        let stash = components::Button::new("stash", crate::i18n::tr("panels.action_bar.stash"))
             .start_slot(icon(crate::view::icons::STASH_ICON_PATH, icon_primary))
             .style(components::ButtonStyle::Subtle)
             .selected(stash_prompt_active)
@@ -742,9 +758,9 @@ impl Render for ActionBarView {
             .gitcomet_tooltip(
                 theme,
                 if can_stash {
-                    "Create stash".into()
+                    crate::i18n::tr("panels.action_bar.create_stash")
                 } else {
-                    "No changes to stash".into()
+                    crate::i18n::tr("panels.action_bar.no_changes_to_stash")
                 },
             );
 
@@ -753,38 +769,39 @@ impl Render for ActionBarView {
             .active_context_menu_invoker
             .as_ref()
             .is_some_and(|id| id.as_ref() == create_branch_invoker.as_ref());
-        let create_branch = components::Button::new("create_branch", "Branch")
-            .start_slot(icon("icons/git_branch.svg", icon_primary))
-            .style(components::ButtonStyle::Subtle)
-            .selected(create_branch_active)
-            .selected_bg(menu_selected_bg)
-            .on_click_with_bounds(theme, cx, move |this, _e, bounds, window, cx| {
-                this.activate_context_menu_invoker(create_branch_invoker.clone(), cx);
-                if let Some(repo_id) = this.state.active_repo {
-                    let target = this
-                        .active_repo()
-                        .and_then(|repo| {
-                            if let Loadable::Ready(head) = &repo.head_branch {
-                                Some(head.clone())
-                            } else {
-                                None
-                            }
-                        })
-                        .unwrap_or_else(|| "HEAD".to_string());
-                    this.open_popover_for_bounds(
-                        PopoverKind::CreateBranchFromRefPrompt {
-                            repo_id,
-                            target,
-                            source_selectable: true,
-                            name_prefix: String::new(),
-                        },
-                        bounds,
-                        window,
-                        cx,
-                    );
-                }
-            })
-            .gitcomet_tooltip(theme, "Create branch".into());
+        let create_branch =
+            components::Button::new("create_branch", crate::i18n::tr("panels.action_bar.branch"))
+                .start_slot(icon("icons/git_branch.svg", icon_primary))
+                .style(components::ButtonStyle::Subtle)
+                .selected(create_branch_active)
+                .selected_bg(menu_selected_bg)
+                .on_click_with_bounds(theme, cx, move |this, _e, bounds, window, cx| {
+                    this.activate_context_menu_invoker(create_branch_invoker.clone(), cx);
+                    if let Some(repo_id) = this.state.active_repo {
+                        let target = this
+                            .active_repo()
+                            .and_then(|repo| {
+                                if let Loadable::Ready(head) = &repo.head_branch {
+                                    Some(head.clone())
+                                } else {
+                                    None
+                                }
+                            })
+                            .unwrap_or_else(|| "HEAD".to_string());
+                        this.open_popover_for_bounds(
+                            PopoverKind::CreateBranchFromRefPrompt {
+                                repo_id,
+                                target,
+                                source_selectable: true,
+                                name_prefix: String::new(),
+                            },
+                            bounds,
+                            window,
+                            cx,
+                        );
+                    }
+                })
+                .gitcomet_tooltip(theme, crate::i18n::tr("panels.action_bar.create_branch"));
 
         div()
             .w_full()
@@ -816,12 +833,20 @@ impl Render for ActionBarView {
                                         .text_xs()
                                         .text_color(theme.colors.status.warning.foreground)
                                         .font_weight(FontWeight::BOLD)
-                                        .child("MERGING"),
+                                        .child(crate::i18n::tr_str(
+                                            "panels.action_bar.state_merging",
+                                        )),
                                 )
                                 .child(
-                                    components::Button::new("abort_merge", "Abort merge")
-                                        .style(components::ButtonStyle::Danger)
-                                        .on_click(theme, cx, |this, e: &ClickEvent, window, cx| {
+                                    components::Button::new(
+                                        "abort_merge",
+                                        crate::i18n::tr("panels.action_bar.abort_merge"),
+                                    )
+                                    .style(components::ButtonStyle::Danger)
+                                    .on_click(
+                                        theme,
+                                        cx,
+                                        |this, e: &ClickEvent, window, cx| {
                                             if let Some(repo_id) = this.active_repo_id() {
                                                 this.open_popover_at(
                                                     PopoverKind::MergeAbortConfirm { repo_id },
@@ -830,7 +855,8 @@ impl Render for ActionBarView {
                                                     cx,
                                                 );
                                             }
-                                        }),
+                                        },
+                                    ),
                                 ),
                         )
                     })
@@ -851,43 +877,49 @@ impl Render for ActionBarView {
                                             .child(sequencer_label),
                                     )
                                     .child(
-                                        components::Button::new(sequencer_abort_id, "Abort")
-                                            .style(components::ButtonStyle::Danger)
-                                            .on_click(
-                                                theme,
-                                                cx,
-                                                |this, e: &ClickEvent, window, cx| {
-                                                    if let Some(repo_id) = this.active_repo_id() {
-                                                        this.open_popover_at(
-                                                            PopoverKind::MergeAbortConfirm {
-                                                                repo_id,
-                                                            },
-                                                            e.position(),
-                                                            window,
-                                                            cx,
-                                                        );
-                                                    }
-                                                },
-                                            ),
+                                        components::Button::new(
+                                            sequencer_abort_id,
+                                            crate::i18n::tr("panels.action_bar.abort"),
+                                        )
+                                        .style(components::ButtonStyle::Danger)
+                                        .on_click(
+                                            theme,
+                                            cx,
+                                            |this, e: &ClickEvent, window, cx| {
+                                                if let Some(repo_id) = this.active_repo_id() {
+                                                    this.open_popover_at(
+                                                        PopoverKind::MergeAbortConfirm { repo_id },
+                                                        e.position(),
+                                                        window,
+                                                        cx,
+                                                    );
+                                                }
+                                            },
+                                        ),
                                     )
                                     .child(
-                                        components::Button::new(sequencer_continue_id, "Continue")
-                                            .style(components::ButtonStyle::Outlined)
-                                            .disabled(rebase_has_unstaged_conflicts)
-                                            .on_click(theme, cx, |this, _e, _w, _cx| {
-                                                if let Some(repo_id) = this.active_repo_id() {
-                                                    this.store
-                                                        .dispatch(Msg::RebaseContinue { repo_id });
-                                                }
-                                            })
-                                            .gitcomet_tooltip(
-                                                theme,
-                                                if rebase_has_unstaged_conflicts {
-                                                    "Resolve all conflicts before continuing".into()
-                                                } else {
-                                                    sequencer_continue_tooltip.into()
-                                                },
-                                            ),
+                                        components::Button::new(
+                                            sequencer_continue_id,
+                                            crate::i18n::tr("panels.action_bar.continue"),
+                                        )
+                                        .style(components::ButtonStyle::Outlined)
+                                        .disabled(rebase_has_unstaged_conflicts)
+                                        .on_click(theme, cx, |this, _e, _w, _cx| {
+                                            if let Some(repo_id) = this.active_repo_id() {
+                                                this.store
+                                                    .dispatch(Msg::RebaseContinue { repo_id });
+                                            }
+                                        })
+                                        .gitcomet_tooltip(
+                                            theme,
+                                            if rebase_has_unstaged_conflicts {
+                                                crate::i18n::tr(
+                                                    "panels.action_bar.resolve_conflicts_first",
+                                                )
+                                            } else {
+                                                sequencer_continue_tooltip.into()
+                                            },
+                                        ),
                                     ),
                             )
                         },

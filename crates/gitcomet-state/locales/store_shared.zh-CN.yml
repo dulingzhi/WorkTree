@@ -1,0 +1,6 @@
+# 简体中文目录，对应 store_shared.en.yml；键结构必须一致。
+store:
+  shared:
+    branch_noun_one: 个分支
+    branch_noun_other: 个分支
+    elision_suffix: "…还有 %{rest} 个"

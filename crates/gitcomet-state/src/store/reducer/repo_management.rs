@@ -1059,7 +1059,10 @@ pub(super) fn clone_repo_finished(
             {
                 CloneOpStatus::Cancelled
             }
-            Err(e) => CloneOpStatus::FinishedErr(format_failure_summary("Clone", &e)),
+            Err(e) => CloneOpStatus::FinishedErr(format_failure_summary(
+                &rust_i18n::t!("store.reducer.label_clone"),
+                &e,
+            )),
         };
         op.seq = op.seq.wrapping_add(1);
     } else {
@@ -1068,7 +1071,10 @@ pub(super) fn clone_repo_finished(
             dest: Arc::new(dest),
             status: match result {
                 Ok(_) => CloneOpStatus::FinishedOk,
-                Err(e) => CloneOpStatus::FinishedErr(format_failure_summary("Clone", &e)),
+                Err(e) => CloneOpStatus::FinishedErr(format_failure_summary(
+                    &rust_i18n::t!("store.reducer.label_clone"),
+                    &e,
+                )),
             },
             progress: CloneProgressMeter::default(),
             seq: 1,
@@ -1211,7 +1217,11 @@ pub(super) fn repo_opened_err(
         push_notification(
             state,
             AppNotificationKind::Error,
-            format!("Folder is not a git repository: {}", spec.workdir.display()),
+            rust_i18n::t!(
+                "store.reducer.folder_not_a_repo",
+                path = spec.workdir.display()
+            )
+            .to_string(),
         );
 
         let remove_recent_result = session::remove_recent_repo(&spec.workdir);

@@ -540,7 +540,7 @@ pub(super) fn squash_commits(
         super::util::push_notification(
             state,
             crate::model::AppNotificationKind::Warning,
-            "Squash cancelled: the selected commits are no longer squashable.".to_string(),
+            rust_i18n::t!("store.reducer.squash_cancelled").to_string(),
         );
         return Vec::new();
     }
@@ -836,15 +836,21 @@ pub(super) fn commit_finished(
             push_action_log(
                 repo_state,
                 true,
-                "Commit".to_string(),
-                "Commit: Completed".to_string(),
+                rust_i18n::t!("store.reducer.label_commit").to_string(),
+                rust_i18n::t!("store.reducer.commit_done").to_string(),
                 None,
             );
         }
         Err(e) => {
-            let summary = format_failure_summary("Commit", &e);
+            let summary = format_failure_summary(&rust_i18n::t!("store.reducer.label_commit"), &e);
             repo_state.last_error = Some(summary.clone());
-            push_action_log(repo_state, false, "Commit".to_string(), summary, Some(&e));
+            push_action_log(
+                repo_state,
+                false,
+                rust_i18n::t!("store.reducer.label_commit").to_string(),
+                summary,
+                Some(&e),
+            );
         }
     }
     if clear_banner {
@@ -890,15 +896,21 @@ pub(super) fn commit_amend_finished(
             push_action_log(
                 repo_state,
                 true,
-                "Amend".to_string(),
-                "Amend: Completed".to_string(),
+                rust_i18n::t!("store.reducer.label_amend").to_string(),
+                rust_i18n::t!("store.reducer.amend_done").to_string(),
                 None,
             );
         }
         Err(e) => {
-            let summary = format_failure_summary("Amend", &e);
+            let summary = format_failure_summary(&rust_i18n::t!("store.reducer.label_amend"), &e);
             repo_state.last_error = Some(summary.clone());
-            push_action_log(repo_state, false, "Amend".to_string(), summary, Some(&e));
+            push_action_log(
+                repo_state,
+                false,
+                rust_i18n::t!("store.reducer.label_amend").to_string(),
+                summary,
+                Some(&e),
+            );
         }
     }
     if clear_banner {
@@ -940,13 +952,15 @@ pub(super) fn safe_push_after_commit_finished(
             let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
                 return Vec::new();
             };
-            let full_summary = format!("Push after commit blocked: {summary}");
+            let full_summary =
+                rust_i18n::t!("store.reducer.push_after_commit_blocked", summary = summary)
+                    .to_string();
             repo_state.pending_force_push_lease = lease;
             repo_state.last_error = Some(full_summary.clone());
             push_action_log(
                 repo_state,
                 false,
-                "Push after commit".to_string(),
+                rust_i18n::t!("store.reducer.label_push_after_commit").to_string(),
                 full_summary,
                 None,
             );
@@ -958,12 +972,13 @@ pub(super) fn safe_push_after_commit_finished(
                 return Vec::new();
             };
             repo_state.pending_force_push_lease = None;
-            let summary = format_failure_summary("Push after commit", &e);
+            let summary =
+                format_failure_summary(&rust_i18n::t!("store.reducer.label_push_after_commit"), &e);
             repo_state.last_error = Some(summary.clone());
             push_action_log(
                 repo_state,
                 false,
-                "Push after commit".to_string(),
+                rust_i18n::t!("store.reducer.label_push_after_commit").to_string(),
                 summary,
                 Some(&e),
             );

@@ -160,7 +160,7 @@ pub(super) fn panel(
         None => components::context_menu_label(
             theme,
             ui_scale_percent,
-            "No repository",
+            crate::i18n::tr("ui.common.no_repository"),
             Some(this.tooltip_host.clone()),
             cx,
         )
@@ -168,7 +168,7 @@ pub(super) fn panel(
         Some(Loadable::Loading) => components::context_menu_label(
             theme,
             ui_scale_percent,
-            "Loading",
+            crate::i18n::tr("ui.common.loading"),
             Some(this.tooltip_host.clone()),
             cx,
         )
@@ -184,7 +184,7 @@ pub(super) fn panel(
         Some(Loadable::NotLoaded) => components::context_menu_label(
             theme,
             ui_scale_percent,
-            "Not loaded",
+            crate::i18n::tr("ui.common.not_loaded"),
             Some(this.tooltip_host.clone()),
             cx,
         )
@@ -200,7 +200,7 @@ pub(super) fn panel(
                         std::rc::Rc::clone(&built.layout),
                     )
                     .tooltip_host(this.tooltip_host.clone())
-                    .empty_text("No commits")
+                    .empty_text(crate::i18n::tr("ui.picker.file_history.no_commits"))
                     .max_height(scaled_px(FILE_HISTORY_LIST_MAX_HEIGHT_PX))
                     .selected_index(this.file_history_selected_index)
                     .render(theme, ui_scale_percent, cx, move |this, ix, _e, _w, cx| {
@@ -224,7 +224,7 @@ pub(super) fn panel(
                 components::context_menu_label(
                     theme,
                     ui_scale_percent,
-                    "Search input not initialized",
+                    crate::i18n::tr("ui.common.search_input_not_initialized"),
                     Some(this.tooltip_host.clone()),
                     cx,
                 )

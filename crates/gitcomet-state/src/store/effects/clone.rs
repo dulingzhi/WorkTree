@@ -262,7 +262,7 @@ fn validate_clone_url(url: &str) -> Result<(), Error> {
     let url = url.trim();
     if url.is_empty() {
         return Err(Error::new(ErrorKind::Backend(
-            "clone URL cannot be empty".to_string(),
+            rust_i18n::t!("store.effects.clone_url_empty").to_string(),
         )));
     }
 
@@ -272,15 +272,19 @@ fn validate_clone_url(url: &str) -> Result<(), Error> {
 
     let scheme = url[..scheme_end].to_ascii_lowercase();
     if !ALLOWED_CLONE_URL_SCHEMES.contains(&scheme.as_str()) {
-        return Err(Error::new(ErrorKind::Backend(format!(
-            "unsupported clone URL scheme `{scheme}` (allowed: https, ssh, git, file)"
-        ))));
+        return Err(Error::new(ErrorKind::Backend(
+            rust_i18n::t!(
+                "store.effects.clone_url_unsupported_scheme",
+                scheme = scheme
+            )
+            .to_string(),
+        )));
     }
 
     if !url[scheme_end..].starts_with("://") {
-        return Err(Error::new(ErrorKind::Backend(format!(
-            "invalid clone URL format for `{scheme}`; expected `{scheme}://...`"
-        ))));
+        return Err(Error::new(ErrorKind::Backend(
+            rust_i18n::t!("store.effects.clone_url_invalid_format", scheme = scheme).to_string(),
+        )));
     }
 
     Ok(())
@@ -515,7 +519,7 @@ fn append_host_prompt_to_stderr(stderr: &mut String, askpass: &AskPassScript) {
     if !stderr.is_empty() && !stderr.ends_with('\n') {
         stderr.push('\n');
     }
-    stderr.push_str("SSH host verification prompt:\n");
+    stderr.push_str(&rust_i18n::t!("store.effects.ssh_host_verification_prompt"));
     stderr.push_str(prompt_log);
     stderr.push('\n');
 }
@@ -571,10 +575,14 @@ fn cleanup_aborted_clone_destination(dest: &Path, dest_preexisted: bool) -> Resu
         Ok(metadata) => metadata,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(err) => {
-            return Err(Error::new(ErrorKind::Backend(format!(
-                "clone aborted, but failed to inspect partially created destination `{}`: {err}",
-                dest.display()
-            ))));
+            return Err(Error::new(ErrorKind::Backend(
+                rust_i18n::t!(
+                    "store.effects.clone_aborted_cleanup_inspect_failed",
+                    dest = dest.display(),
+                    err = err
+                )
+                .to_string(),
+            )));
         }
     };
 
@@ -585,10 +593,14 @@ fn cleanup_aborted_clone_destination(dest: &Path, dest_preexisted: bool) -> Resu
     };
 
     removal_result.map_err(|err| {
-        Error::new(ErrorKind::Backend(format!(
-            "clone aborted, but failed to remove partially created destination `{}`: {err}",
-            dest.display()
-        )))
+        Error::new(ErrorKind::Backend(
+            rust_i18n::t!(
+                "store.effects.clone_aborted_cleanup_remove_failed",
+                dest = dest.display(),
+                err = err
+            )
+            .to_string(),
+        ))
     })
 }
 
@@ -742,10 +754,15 @@ pub(super) fn schedule_clone_repo(
         let mut result = match status {
             Ok(status) => {
                 if timed_out {
-                    Err(Error::new(ErrorKind::Backend(format!(
-                        "{command_str} timed out after {} seconds (set {GIT_COMMAND_TIMEOUT_ENV} to override)",
-                        timeout.as_secs()
-                    ))))
+                    Err(Error::new(ErrorKind::Backend(
+                        rust_i18n::t!(
+                            "store.effects.git_command_timed_out",
+                            command = command_str.as_str(),
+                            secs = timeout.as_secs(),
+                            env = GIT_COMMAND_TIMEOUT_ENV
+                        )
+                        .to_string(),
+                    )))
                 } else if active_clone.cancel_requested() && !status.success() {
                     Err(Error::new(ErrorKind::Backend("clone aborted".to_string())))
                 } else {
@@ -771,13 +788,15 @@ pub(super) fn schedule_clone_repo(
             Err(e) => Err(Error::new(ErrorKind::Io(e.kind()))),
         };
 
-        if result.is_err() && active_clone.cancel_requested()
-            && let Err(cleanup_err) = cleanup_aborted_clone_destination(&dest, dest_preexisted) {
-                result = Err(match result {
-                    Ok(_) => cleanup_err,
-                    Err(err) => Error::new(ErrorKind::Backend(format!("{err}; {cleanup_err}"))),
-                });
-            }
+        if result.is_err()
+            && active_clone.cancel_requested()
+            && let Err(cleanup_err) = cleanup_aborted_clone_destination(&dest, dest_preexisted)
+        {
+            result = Err(match result {
+                Ok(_) => cleanup_err,
+                Err(err) => Error::new(ErrorKind::Backend(format!("{err}; {cleanup_err}"))),
+            });
+        }
 
         if result.is_ok() {
             remember_successful_prompt_auth(prompt_auth.as_ref(), &askpass_script);

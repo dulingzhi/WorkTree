@@ -1,0 +1,110 @@
+# Diff-view surfaces (toolbar, search overlay, submodule summary, split
+# column headers, empty states) in `view/panels/main/diff_view.rs` and
+# `view/panels/main/diff.rs`. Keyed by filename (`diff.en.yml` -> locale
+# "en"); the content below is the key tree directly — no `en:` root. English
+# is the fallback locale, so every value must stay byte-identical to the
+# string it replaces in the sources (tests assert these exact texts).
+diff:
+  common:
+    no_repository: "No repository."
+    select_a_file: "Select a file."
+    loading: Loading
+    empty_file: "Empty file."
+    nothing_to_render: "Nothing to render."
+    no_file_contents: "No file contents available."
+    no_differences: "No differences."
+    processing_file: "Processing file..."
+  pane:
+    diff: Diff
+    preview: Preview
+    file: File
+    submodule: Submodule
+    resolve: Resolve
+    directory: Directory
+  toolbar:
+    blame: Blame
+    edit: Edit
+    edit_dirty: "Edit •"
+    save: Save
+    discard: Discard
+    back: Back
+    inline: Inline
+    split: Split
+  tooltip:
+    blame_preview_unavailable: "Blame is unavailable in the rendered preview\nSwitch to Text to annotate"
+    blame_loading: "Loading blame…"
+    blame_failed: "Blame failed: %{message}\nToggle off and on to retry"
+    blame_toggle: "Toggle blame annotations (%{shortcut})"
+    edit_preview_unavailable: "Editing is unavailable in the rendered preview\nSwitch to Text to edit"
+    edit_not_text: "This file is not text; editing is not supported"
+    edit_no_working_tree_file: "This view has no working-tree file to edit"
+    edit_unsaved: "Unsaved changes — %{shortcut} saves"
+    edit_toggle: "Edit the working-tree file (%{shortcut})"
+    save_and_return: "Save the file and return (%{shortcut})"
+    discard_dirty: "Throw away the unsaved changes and return to the previous view"
+    discard_clean: "No unsaved changes"
+    prev_change: "Previous change (F2 / Shift+F7 / %{shortcut})"
+    next_change: "Next change (F3 / F7 / %{shortcut})"
+    inline_view: "Inline diff view (%{shortcut})"
+    split_view: "Split diff view (%{shortcut})"
+    mergetool_settings: "Merge tool settings"
+    diff_actions: "Diff actions"
+    close_diff: "Close diff"
+  search:
+    type_to_search: "Type to search"
+    invalid_regex: "Invalid regex"
+    no_matches: "No matches"
+    insert_newline: "Insert newline (Shift+Enter)"
+    match_case: "Match case"
+    match_whole_word: "Match whole word"
+    use_regex: "Use regular expression"
+  split:
+    parent: Parent
+    this_commit: "This commit"
+    from_commit: "From commit"
+    to_commit: "To commit"
+    staged: Staged
+    index: Index
+    working_tree: "Working tree"
+    image_before: "A (before)"
+    image_after: "B (after)"
+  submodule:
+    missing: missing
+    no_submodule_selected: "No submodule selected."
+    loading_summary: "Loading submodule summary…"
+    no_inner_changes: "No inner changes."
+    hashes: Hashes
+    changes_between_hashes: "Changes between hashes"
+    open: "Open submodule"
+    load: "Load submodule"
+    change_pointer: "Change pointer…"
+    uncommitted_inner_staged: "Uncommitted inner staged"
+    uncommitted_inner_unstaged: "Uncommitted inner unstaged"
+    range:
+      staged_pointer: "Committed -> Index"
+      unstaged_pointer: "Index -> Checked out"
+      commit_history: "Parent -> Commit"
+    status:
+      loaded: Loaded
+      not_loaded: "Not loaded"
+      head_mismatch: "Head mismatch"
+      conflict: Conflict
+      missing_mapping: "Missing mapping"
+      unknown: Unknown
+  image:
+    no_contents: "No image contents available."
+    processing: "Processing image..."
+    preview_unavailable: "Preview unavailable."
+    no_image: "No image"
+  preview:
+    processing: "Processing preview..."
+  conflict:
+    no_file_selected: "No conflicted file selected."
+    title: "Resolve conflict: %{path}"
+    loading_data: "Loading conflict data…"
+    no_data: "No conflict data."
+    ours: "Ours"
+    ours_deleted: "Ours (deleted)"
+    theirs: "Theirs"
+    theirs_deleted: "Theirs (deleted)"
+    no_diff_to_show: "No conflict diff to show."

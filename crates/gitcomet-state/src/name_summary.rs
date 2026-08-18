@@ -13,9 +13,14 @@
 /// screen.
 pub const LISTED_NAMES: usize = 8;
 
-/// `"branch"` or `"branches"` for `count`.
-pub fn branch_noun(count: usize) -> &'static str {
-    if count == 1 { "branch" } else { "branches" }
+/// `"branch"` or `"branches"` for `count` (locale-aware: Chinese has one
+/// form). Callers only interpolate the noun into a sentence.
+pub fn branch_noun(count: usize) -> String {
+    if count == 1 {
+        rust_i18n::t!("store.shared.branch_noun_one").into_owned()
+    } else {
+        rust_i18n::t!("store.shared.branch_noun_other").into_owned()
+    }
 }
 
 /// What to append when `total` names did not all fit, or `None` when they did.
@@ -25,7 +30,7 @@ pub fn branch_noun(count: usize) -> &'static str {
 /// same count and in the same words.
 pub fn elision_suffix(total: usize) -> Option<String> {
     let rest = total.saturating_sub(LISTED_NAMES);
-    (rest > 0).then(|| format!("…and {rest} more"))
+    (rest > 0).then(|| rust_i18n::t!("store.shared.elision_suffix", rest = rest).to_string())
 }
 
 /// The first [`LISTED_NAMES`] names joined by `separator`, with

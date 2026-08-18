@@ -1,0 +1,102 @@
+# Conflict-resolution surfaces: the kdiff3-style text resolver toolbar,
+# footer, columns and previews (`conflict_resolver_view.rs`) plus the binary
+# side-pick panel (`binary_conflict.rs`). Keyed by filename
+# (`conflict.en.yml` -> locale "en"); the content below is the key tree
+# directly — no `en:` root. English is the fallback locale, so every value
+# stays byte-identical to the source string it replaces.
+conflict:
+  title: "Resolve conflict: %{path}"
+  tab: Resolve
+  empty:
+    no_repository: "No repository."
+    no_conflicted_file: "No conflicted file selected."
+    loading: "Loading conflict data…"
+    no_data: "No conflict data."
+    repository_unavailable: "Repository context unavailable."
+    inputs: Inputs
+    stage_data_unavailable: "Stage data not available."
+    preview: Preview
+    preview_unavailable: "Preview is not available for this file."
+  toolbar:
+    resolved_count: "Resolved %{resolved}/%{total}"
+    unresolved_count: "%{count} unresolved"
+    first_delta: "First delta (Ctrl+Home)"
+    previous_conflict: "Previous conflict (F2 / Shift+F7 / %{shortcut})"
+    next_conflict: "Next conflict (F3 / F7 / %{shortcut})"
+    last_delta: "Last delta (Ctrl+End)"
+    previous_unresolved: "Previous unresolved conflict (Shift+F2)"
+    next_unresolved: "Next unresolved conflict (Shift+F3)"
+  pick:
+    base: Base
+    ours: Ours
+    theirs: Theirs
+    both: Both
+    local: Local
+    remote: Remote
+    tooltip:
+      base: "Pick the base (ancestor) version for the active conflict (A or Ctrl+1; U un-resolves)"
+      three_way_ours: "Pick the local (ours) version for the active conflict (B or Ctrl+2; U un-resolves)"
+      three_way_theirs: "Pick the incoming (theirs) version for the active conflict (C or Ctrl+3; U un-resolves)"
+      three_way_both: "Keep both versions (ours, then theirs) for the active conflict (D; U un-resolves)"
+      two_way_local: "Pick the local (ours) version for the active conflict (A or Ctrl+1; U un-resolves)"
+      two_way_remote: "Pick the incoming (theirs) version for the active conflict (B or Ctrl+2; U un-resolves)"
+      two_way_both: "Keep both versions (ours, then theirs) for the active conflict (C or Ctrl+3; U un-resolves)"
+  save:
+    label: Save
+    save_and_close: "Save & close"
+    save_and_stage: "Save & stage"
+    disabled_one: "Disabled: %{count} conflict is still unresolved"
+    disabled_many: "Disabled: %{count} conflicts are still unresolved"
+  footer:
+    no_conflicts: "No conflicts in this file"
+    unresolved_one: "⚠ %{count} conflict unresolved"
+    unresolved_many: "⚠ %{count} conflicts unresolved"
+    resolution_progress: "Resolution progress"
+    all_resolved: "✓ All conflicts resolved"
+    resolution_complete: "Resolution complete"
+    whitespace_one: "%{count} whitespace conflict"
+    whitespace_many: "%{count} whitespace conflicts"
+    markers_remain: "markers remain"
+    reset_markers: "Reset conflict markers"
+  toggle:
+    show_resolved: "Show resolved"
+    hide_resolved: "Hide resolved"
+    text: Text
+    preview: Preview
+  columns:
+    base_index: "Base (A, index :1)"
+    local_index: "Local (B, index :2)"
+    remote_index: "Remote (C, index :3)"
+    local_only: "Local (index :2)"
+    remote_only: "Remote (index :3)"
+    base_a: "Base (A)"
+    local_b: "Local (B)"
+    remote_c: "Remote (C)"
+    ours_b: "Ours (B)"
+    theirs_c: "Theirs (C)"
+  output:
+    heading: "Resolved output"
+    modified: "[Modified]"
+  preview:
+    processing: "Processing preview..."
+    processing_ellipsis: "Processing preview…"
+    unavailable: "Preview unavailable."
+    empty: "(empty)"
+    empty_file: "Empty file."
+  binary:
+    heading: "Binary file conflict"
+    description: "This file contains binary or non-UTF8 data and cannot be merged as text."
+    size_absent: absent
+    kind_text: "text (valid UTF-8)"
+    kind_binary: "binary (non-UTF8)"
+    kind_not_present: "not present"
+    use_base_and_close: "Use Base & close"
+    use_base: "Use Base (ancestor)"
+    use_ours_and_close: "Use Ours & close"
+    use_ours: "Use Ours (local)"
+    use_theirs_and_close: "Use Theirs & close"
+    use_theirs: "Use Theirs (remote)"
+    external_mergetool: "External Mergetool"
+    image_title: "Image preview"
+    processing_image: "Processing image..."
+    no_image: "No image"

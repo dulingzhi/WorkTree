@@ -937,7 +937,12 @@ pub(super) fn handle_session_persist_result(
     let Err(error) = result else {
         return;
     };
-    let message = format!("Failed to persist session state while {action}: {error}");
+    let message = rust_i18n::t!(
+        "store.reducer.persist_failed",
+        action = action,
+        error = error
+    )
+    .to_string();
     push_notification(state, AppNotificationKind::Error, message.clone());
     if let Some(repo_id) = repo_id
         && let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id)
@@ -1084,17 +1089,17 @@ fn sequencer_paused(output: &CommandOutput) -> bool {
 /// Continue/abort share one UI action and backend entry point for rebases,
 /// `git am`, and cherry-picks. Use the command that actually ran so native
 /// cherry-picks are not recorded as rebases in action history.
-fn sequencer_operation_label(output: &CommandOutput, error: Option<&Error>) -> &'static str {
+fn sequencer_operation_label(output: &CommandOutput, error: Option<&Error>) -> String {
     let is_cherry_pick = |command: &str| command.trim_start().starts_with("git cherry-pick");
     if is_cherry_pick(&output.command) {
-        return "Cherry-pick";
+        return rust_i18n::t!("store.reducer.label_cherry_pick").to_string();
     }
     if let Some((command, _)) = error.and_then(try_format_git_backend_error)
         && is_cherry_pick(&command)
     {
-        return "Cherry-pick";
+        return rust_i18n::t!("store.reducer.label_cherry_pick").to_string();
     }
-    "Rebase"
+    rust_i18n::t!("store.reducer.label_rebase").to_string()
 }
 
 fn summarize_command(
@@ -1107,231 +1112,364 @@ fn summarize_command(
 
     if !ok {
         let label = match command {
-            RepoCommandKind::FetchAll => "Fetch",
-            RepoCommandKind::PruneMergedBranches => "Prune merged branches",
-            RepoCommandKind::PruneLocalTags => "Prune local tags",
-            RepoCommandKind::Pull { .. } => "Pull",
-            RepoCommandKind::PullBranch { .. } => "Pull",
-            RepoCommandKind::MergeRef { .. } => "Merge",
-            RepoCommandKind::SquashRef { .. } => "Squash",
-            RepoCommandKind::Push => "Push",
-            RepoCommandKind::PushAfterCommit { .. } => "Push after commit",
-            RepoCommandKind::ForcePush => "Force push",
-            RepoCommandKind::ForcePushWithLease { .. } => "Force push with lease",
-            RepoCommandKind::PushSetUpstream { .. } => "Push",
-            RepoCommandKind::SetUpstreamBranch { .. } => "Set as tracking upstream",
-            RepoCommandKind::UnsetUpstreamBranch { .. } => "Unlink upstream branch",
-            RepoCommandKind::DeleteRemoteBranch { .. } => "Delete remote branch",
-            RepoCommandKind::DeleteRemoteBranches { .. } => "Delete remote branches",
-            RepoCommandKind::PushTag { .. } => "Push tag",
-            RepoCommandKind::DeleteRemoteTag { .. } => "Delete remote tag",
-            RepoCommandKind::Reset { .. } => "Reset",
-            RepoCommandKind::SquashCommits { .. } => "Squash",
-            RepoCommandKind::Rebase { .. } => "Rebase",
+            RepoCommandKind::FetchAll => rust_i18n::t!("store.reducer.label_fetch").to_string(),
+            RepoCommandKind::PruneMergedBranches => {
+                rust_i18n::t!("store.reducer.label_prune_merged_branches").to_string()
+            }
+            RepoCommandKind::PruneLocalTags => {
+                rust_i18n::t!("store.reducer.label_prune_local_tags").to_string()
+            }
+            RepoCommandKind::Pull { .. } => rust_i18n::t!("store.reducer.label_pull").to_string(),
+            RepoCommandKind::PullBranch { .. } => {
+                rust_i18n::t!("store.reducer.label_pull").to_string()
+            }
+            RepoCommandKind::MergeRef { .. } => {
+                rust_i18n::t!("store.reducer.label_merge").to_string()
+            }
+            RepoCommandKind::SquashRef { .. } => {
+                rust_i18n::t!("store.reducer.label_squash").to_string()
+            }
+            RepoCommandKind::Push => rust_i18n::t!("store.reducer.label_push").to_string(),
+            RepoCommandKind::PushAfterCommit { .. } => {
+                rust_i18n::t!("store.reducer.label_push_after_commit").to_string()
+            }
+            RepoCommandKind::ForcePush => {
+                rust_i18n::t!("store.reducer.label_force_push").to_string()
+            }
+            RepoCommandKind::ForcePushWithLease { .. } => {
+                rust_i18n::t!("store.reducer.label_force_push_with_lease").to_string()
+            }
+            RepoCommandKind::PushSetUpstream { .. } => {
+                rust_i18n::t!("store.reducer.label_push").to_string()
+            }
+            RepoCommandKind::SetUpstreamBranch { .. } => {
+                rust_i18n::t!("store.reducer.label_set_tracking_upstream").to_string()
+            }
+            RepoCommandKind::UnsetUpstreamBranch { .. } => {
+                rust_i18n::t!("store.reducer.label_unlink_upstream").to_string()
+            }
+            RepoCommandKind::DeleteRemoteBranch { .. } => {
+                rust_i18n::t!("store.reducer.label_delete_remote_branch").to_string()
+            }
+            RepoCommandKind::DeleteRemoteBranches { .. } => {
+                rust_i18n::t!("store.reducer.label_delete_remote_branches").to_string()
+            }
+            RepoCommandKind::PushTag { .. } => {
+                rust_i18n::t!("store.reducer.label_push_tag").to_string()
+            }
+            RepoCommandKind::DeleteRemoteTag { .. } => {
+                rust_i18n::t!("store.reducer.label_delete_remote_tag").to_string()
+            }
+            RepoCommandKind::Reset { .. } => rust_i18n::t!("store.reducer.label_reset").to_string(),
+            RepoCommandKind::SquashCommits { .. } => {
+                rust_i18n::t!("store.reducer.label_squash").to_string()
+            }
+            RepoCommandKind::Rebase { .. } => {
+                rust_i18n::t!("store.reducer.label_rebase").to_string()
+            }
             RepoCommandKind::RebaseContinue | RepoCommandKind::RebaseAbort => {
                 sequencer_operation_label(output, error)
             }
             RepoCommandKind::InteractiveRebase { interactive, .. } => {
                 if *interactive {
-                    "Interactive rebase"
+                    rust_i18n::t!("store.reducer.label_interactive_rebase").to_string()
                 } else {
-                    "Rebase"
+                    rust_i18n::t!("store.reducer.label_rebase").to_string()
                 }
             }
-            RepoCommandKind::InteractiveCherryPick { .. } => "Cherry-pick",
-            RepoCommandKind::CherryPick { .. } => "Cherry-pick",
-            RepoCommandKind::MergeAbort => "Merge",
-            RepoCommandKind::CreateTag { .. } => "Tag",
-            RepoCommandKind::DeleteTag { .. } => "Tag",
-            RepoCommandKind::AddRemote { .. } => "Remote",
-            RepoCommandKind::RemoveRemote { .. } => "Remote",
-            RepoCommandKind::SetRemoteUrl { .. } => "Remote",
+            RepoCommandKind::InteractiveCherryPick { .. } => {
+                rust_i18n::t!("store.reducer.label_cherry_pick").to_string()
+            }
+            RepoCommandKind::CherryPick { .. } => {
+                rust_i18n::t!("store.reducer.label_cherry_pick").to_string()
+            }
+            RepoCommandKind::MergeAbort => rust_i18n::t!("store.reducer.label_merge").to_string(),
+            RepoCommandKind::CreateTag { .. } => {
+                rust_i18n::t!("store.reducer.label_tag").to_string()
+            }
+            RepoCommandKind::DeleteTag { .. } => {
+                rust_i18n::t!("store.reducer.label_tag").to_string()
+            }
+            RepoCommandKind::AddRemote { .. } => {
+                rust_i18n::t!("store.reducer.label_remote").to_string()
+            }
+            RepoCommandKind::RemoveRemote { .. } => {
+                rust_i18n::t!("store.reducer.label_remote").to_string()
+            }
+            RepoCommandKind::SetRemoteUrl { .. } => {
+                rust_i18n::t!("store.reducer.label_remote").to_string()
+            }
             RepoCommandKind::CheckoutConflict { side, .. } => match side {
-                ConflictSide::Ours => "Checkout ours",
-                ConflictSide::Theirs => "Checkout theirs",
+                ConflictSide::Ours => {
+                    rust_i18n::t!("store.reducer.label_checkout_ours").to_string()
+                }
+                ConflictSide::Theirs => {
+                    rust_i18n::t!("store.reducer.label_checkout_theirs").to_string()
+                }
             },
-            RepoCommandKind::AcceptConflictDeletion { .. } => "Accept deletion",
-            RepoCommandKind::CheckoutConflictBase { .. } => "Checkout base",
-            RepoCommandKind::LaunchMergetool { .. } => "Mergetool",
-            RepoCommandKind::SaveWorktreeFile { .. } => "Save file",
-            RepoCommandKind::AppendGitignorePatterns { .. } => "Update .gitignore",
-            RepoCommandKind::ExportPatch { .. } | RepoCommandKind::ApplyPatch { .. } => "Patch",
+            RepoCommandKind::AcceptConflictDeletion { .. } => {
+                rust_i18n::t!("store.reducer.label_accept_deletion").to_string()
+            }
+            RepoCommandKind::CheckoutConflictBase { .. } => {
+                rust_i18n::t!("store.reducer.label_checkout_base").to_string()
+            }
+            RepoCommandKind::LaunchMergetool { .. } => {
+                rust_i18n::t!("store.reducer.label_mergetool").to_string()
+            }
+            RepoCommandKind::SaveWorktreeFile { .. } => {
+                rust_i18n::t!("store.reducer.label_save_file").to_string()
+            }
+            RepoCommandKind::AppendGitignorePatterns { .. } => {
+                rust_i18n::t!("store.reducer.label_update_gitignore").to_string()
+            }
+            RepoCommandKind::ExportPatch { .. } | RepoCommandKind::ApplyPatch { .. } => {
+                rust_i18n::t!("store.reducer.label_patch").to_string()
+            }
             RepoCommandKind::AddWorktree { .. }
             | RepoCommandKind::RemoveWorktree { .. }
-            | RepoCommandKind::ForceRemoveWorktree { .. } => "Worktree",
+            | RepoCommandKind::ForceRemoveWorktree { .. } => {
+                rust_i18n::t!("store.reducer.label_worktree").to_string()
+            }
             RepoCommandKind::AddSubmodule { .. }
             | RepoCommandKind::UpdateSubmodules { .. }
             | RepoCommandKind::LoadSubmodule { .. }
             | RepoCommandKind::ChangeSubmodulePointer { .. }
-            | RepoCommandKind::RemoveSubmodule { .. } => "Submodule",
-            RepoCommandKind::StageHunk | RepoCommandKind::UnstageHunk => "Hunk",
+            | RepoCommandKind::RemoveSubmodule { .. } => {
+                rust_i18n::t!("store.reducer.label_submodule").to_string()
+            }
+            RepoCommandKind::StageHunk | RepoCommandKind::UnstageHunk => {
+                rust_i18n::t!("store.reducer.label_hunk").to_string()
+            }
             RepoCommandKind::ApplyWorktreePatch { reverse } => {
                 if *reverse {
-                    "Discard"
+                    rust_i18n::t!("store.reducer.label_discard").to_string()
                 } else {
-                    "Patch"
+                    rust_i18n::t!("store.reducer.label_patch").to_string()
                 }
             }
         };
         if let Some(error) = error
             && let Some((git_command, details)) = try_format_git_backend_error(error)
         {
-            return (git_command, format!("{label} failed:\n\n{details}"));
+            return (
+                git_command,
+                rust_i18n::t!(
+                    "store.reducer.cmd_failed_details",
+                    label = label,
+                    details = details
+                )
+                .to_string(),
+            );
         }
 
         return (
-            output.command.clone().if_empty_else(|| label.to_string()),
+            output.command.clone().if_empty_else(|| label.clone()),
             error
-                .map(|e| format!("{label} failed:\n\n{}", format_error_for_user(e)))
-                .unwrap_or_else(|| format!("{label} failed")),
+                .map(|e| {
+                    rust_i18n::t!(
+                        "store.reducer.cmd_failed_details",
+                        label = label,
+                        details = format_error_for_user(e)
+                    )
+                    .to_string()
+                })
+                .unwrap_or_else(|| {
+                    rust_i18n::t!("store.reducer.cmd_failed", label = label).to_string()
+                }),
         );
     }
 
     let summary = match command {
         RepoCommandKind::FetchAll => {
             if output.stderr.trim().is_empty() && output.stdout.trim().is_empty() {
-                "Fetch: Already up to date".to_string()
+                rust_i18n::t!("store.reducer.fetch_up_to_date").to_string()
             } else {
-                "Fetch: Synchronized".to_string()
+                rust_i18n::t!("store.reducer.fetch_synchronized").to_string()
             }
         }
-        RepoCommandKind::PruneMergedBranches => "Prune merged branches: Completed".to_string(),
-        RepoCommandKind::PruneLocalTags => "Prune local tags: Completed".to_string(),
+        RepoCommandKind::PruneMergedBranches => {
+            rust_i18n::t!("store.reducer.prune_merged_branches_done").to_string()
+        }
+        RepoCommandKind::PruneLocalTags => {
+            rust_i18n::t!("store.reducer.prune_local_tags_done").to_string()
+        }
         RepoCommandKind::Pull { .. } => {
             if output.stdout.contains("Already up to date") {
-                "Pull: Already up to date".to_string()
+                rust_i18n::t!("store.reducer.pull_up_to_date").to_string()
             } else if output.stdout.starts_with("Updating") {
-                "Pull: Fast-forwarded".to_string()
+                rust_i18n::t!("store.reducer.pull_fast_forwarded").to_string()
             } else if output.stdout.starts_with("Merge") {
-                "Pull: Merged".to_string()
+                rust_i18n::t!("store.reducer.pull_merged").to_string()
             } else if output.stdout.contains("Successfully rebased") {
-                "Pull: Rebasing complete".to_string()
+                rust_i18n::t!("store.reducer.pull_rebase_complete").to_string()
             } else {
-                "Pull: Completed".to_string()
+                rust_i18n::t!("store.reducer.pull_done").to_string()
             }
         }
         RepoCommandKind::PullBranch { remote, branch } => {
             let base = if output.stdout.contains("Already up to date") {
-                "Already up to date"
+                rust_i18n::t!("store.reducer.base_up_to_date")
             } else if output.stdout.starts_with("Updating") {
-                "Fast-forwarded"
+                rust_i18n::t!("store.reducer.base_fast_forwarded")
             } else if output.stdout.starts_with("Merge") {
-                "Merged"
+                rust_i18n::t!("store.reducer.base_merged")
             } else {
-                "Completed"
+                rust_i18n::t!("store.reducer.base_completed")
             };
-            format!("Pull {remote}/{branch}: {base}")
+            rust_i18n::t!(
+                "store.reducer.pull_branch",
+                remote = remote,
+                branch = branch,
+                base = base
+            )
+            .to_string()
         }
         RepoCommandKind::MergeRef { reference } => {
             let base = if output.stdout.contains("Already up to date") {
-                "Already up to date"
+                rust_i18n::t!("store.reducer.base_up_to_date")
             } else if output.stdout.contains("Fast-forward")
                 || output.stdout.starts_with("Updating")
             {
-                "Fast-forwarded"
+                rust_i18n::t!("store.reducer.base_fast_forwarded")
             } else if output.stdout.contains("Merge made by") {
-                "Merged"
+                rust_i18n::t!("store.reducer.base_merged")
             } else {
-                "Completed"
+                rust_i18n::t!("store.reducer.base_completed")
             };
-            format!("Merge {reference}: {base}")
+            rust_i18n::t!(
+                "store.reducer.merge_ref",
+                reference = reference,
+                base = base
+            )
+            .to_string()
         }
         RepoCommandKind::SquashRef { reference } => {
             let base = if output.stdout.contains("Already up to date") {
-                "Already up to date"
+                rust_i18n::t!("store.reducer.base_up_to_date")
             } else if output.stdout.contains("Squash commit -- not updating HEAD")
                 || output
                     .stdout
                     .contains("Automatic merge went well; stopped before committing as requested")
             {
-                "Staged"
+                rust_i18n::t!("store.reducer.base_staged")
             } else {
-                "Completed"
+                rust_i18n::t!("store.reducer.base_completed")
             };
-            format!("Squash {reference}: {base}")
+            rust_i18n::t!(
+                "store.reducer.squash_ref",
+                reference = reference,
+                base = base
+            )
+            .to_string()
         }
         RepoCommandKind::Push => {
             if output.stderr.contains("Everything up-to-date") {
-                "Push: Everything up-to-date".to_string()
+                rust_i18n::t!("store.reducer.push_uptodate").to_string()
             } else {
-                "Push: Completed".to_string()
+                rust_i18n::t!("store.reducer.push_done").to_string()
             }
         }
         RepoCommandKind::PushAfterCommit { set_upstream, .. } => {
             let base = if output.stderr.contains("Everything up-to-date") {
-                "Everything up-to-date"
+                rust_i18n::t!("store.reducer.base_everything_up_to_date")
             } else {
-                "Completed"
+                rust_i18n::t!("store.reducer.base_completed")
             };
             if *set_upstream {
-                format!("Push after commit -u: {base}")
+                rust_i18n::t!("store.reducer.push_after_commit_u_done", base = base).to_string()
             } else {
-                format!("Push after commit: {base}")
+                rust_i18n::t!("store.reducer.push_after_commit_done", base = base).to_string()
             }
         }
         RepoCommandKind::ForcePush => {
             if output.stderr.contains("Everything up-to-date") {
-                "Force push: Everything up-to-date".to_string()
+                rust_i18n::t!("store.reducer.force_push_uptodate").to_string()
             } else {
-                "Force push: Completed".to_string()
+                rust_i18n::t!("store.reducer.force_push_done").to_string()
             }
         }
         RepoCommandKind::ForcePushWithLease { .. } => {
             if output.stderr.contains("Everything up-to-date") {
-                "Force push with lease: Everything up-to-date".to_string()
+                rust_i18n::t!("store.reducer.force_push_lease_uptodate").to_string()
             } else {
-                "Force push with lease: Completed".to_string()
+                rust_i18n::t!("store.reducer.force_push_lease_done").to_string()
             }
         }
         RepoCommandKind::PushSetUpstream { remote, branch } => {
             let base = if output.stderr.contains("Everything up-to-date") {
-                "Everything up-to-date"
+                rust_i18n::t!("store.reducer.base_everything_up_to_date")
             } else {
-                "Completed"
+                rust_i18n::t!("store.reducer.base_completed")
             };
-            format!("Push -u {remote}/{branch}: {base}")
+            rust_i18n::t!(
+                "store.reducer.push_set_upstream",
+                remote = remote,
+                branch = branch,
+                base = base
+            )
+            .to_string()
         }
-        RepoCommandKind::SetUpstreamBranch { branch, upstream } => {
-            format!("Branch {branch}: Upstream set to {upstream}")
-        }
+        RepoCommandKind::SetUpstreamBranch { branch, upstream } => rust_i18n::t!(
+            "store.reducer.upstream_set",
+            branch = branch,
+            upstream = upstream
+        )
+        .to_string(),
         RepoCommandKind::UnsetUpstreamBranch { branch } => {
-            format!("Branch {branch}: Upstream unlinked")
+            rust_i18n::t!("store.reducer.upstream_unlinked", branch = branch).to_string()
         }
-        RepoCommandKind::DeleteRemoteBranch { remote, branch } => {
-            format!("Remote branch {remote}/{branch}: Deleted")
-        }
+        RepoCommandKind::DeleteRemoteBranch { remote, branch } => rust_i18n::t!(
+            "store.reducer.remote_branch_deleted",
+            remote = remote,
+            branch = branch
+        )
+        .to_string(),
         RepoCommandKind::DeleteRemoteBranches { remote, branches } => {
             let noun = crate::name_summary::branch_noun(branches.len());
-            format!("{} remote {noun} on {remote}: Deleted", branches.len())
+            rust_i18n::t!(
+                "store.reducer.remote_branches_deleted",
+                count = branches.len(),
+                noun = noun,
+                remote = remote
+            )
+            .to_string()
         }
         RepoCommandKind::PushTag { remote, name } => {
             if output.stderr.contains("Everything up-to-date") {
-                format!("Tag {name} → {remote}: Already up-to-date")
+                rust_i18n::t!(
+                    "store.reducer.tag_already_up_to_date",
+                    name = name,
+                    remote = remote
+                )
+                .to_string()
             } else {
-                format!("Tag {name} → {remote}: Pushed")
+                rust_i18n::t!("store.reducer.tag_pushed", name = name, remote = remote).to_string()
             }
         }
-        RepoCommandKind::DeleteRemoteTag { remote, name } => {
-            format!("Tag {name} on {remote}: Deleted")
-        }
+        RepoCommandKind::DeleteRemoteTag { remote, name } => rust_i18n::t!(
+            "store.reducer.remote_tag_deleted",
+            name = name,
+            remote = remote
+        )
+        .to_string(),
         RepoCommandKind::CheckoutConflict { side, .. } => match side {
-            ConflictSide::Ours => "Resolved using ours".to_string(),
-            ConflictSide::Theirs => "Resolved using theirs".to_string(),
+            ConflictSide::Ours => rust_i18n::t!("store.reducer.resolved_ours").to_string(),
+            ConflictSide::Theirs => rust_i18n::t!("store.reducer.resolved_theirs").to_string(),
         },
         RepoCommandKind::AcceptConflictDeletion { path } => {
-            format!("Resolved by accepting deletion → {}", path.display())
+            rust_i18n::t!("store.reducer.resolved_by_deletion", path = path.display()).to_string()
         }
         RepoCommandKind::CheckoutConflictBase { path } => {
-            format!("Resolved using base → {}", path.display())
+            rust_i18n::t!("store.reducer.resolved_base", path = path.display()).to_string()
         }
         RepoCommandKind::LaunchMergetool { path } => {
-            format!("Mergetool: Resolved {}", path.display())
+            rust_i18n::t!("store.reducer.mergetool_resolved", path = path.display()).to_string()
         }
         RepoCommandKind::SaveWorktreeFile { path, stage } => {
             if *stage {
-                format!("Saved and staged → {}", path.display())
+                rust_i18n::t!("store.reducer.saved_and_staged", path = path.display()).to_string()
             } else {
-                format!("Saved → {}", path.display())
+                rust_i18n::t!("store.reducer.saved", path = path.display()).to_string()
             }
         }
         // Deliberately "added to .gitignore" rather than "ignored": a later
@@ -1343,11 +1481,15 @@ fn summarize_command(
         // user looking for a file that has not moved.
         RepoCommandKind::AppendGitignorePatterns { patterns } => {
             if output.stdout.trim() == gitcomet_core::gitignore::NOTHING_TO_ADD {
-                "Already in .gitignore; nothing added".to_string()
+                rust_i18n::t!("store.reducer.gitignore_nothing_added").to_string()
             } else {
                 match patterns.as_slice() {
-                    [pattern] => format!("Added {pattern} to .gitignore"),
-                    patterns => format!("Added {} patterns to .gitignore", patterns.len()),
+                    [pattern] => rust_i18n::t!("store.reducer.gitignore_added", pattern = pattern)
+                        .to_string(),
+                    patterns => {
+                        rust_i18n::t!("store.reducer.gitignore_added_many", count = patterns.len())
+                            .to_string()
+                    }
                 }
             }
         }
@@ -1357,42 +1499,63 @@ fn summarize_command(
                 gitcomet_core::services::ResetMode::Mixed => "mixed",
                 gitcomet_core::services::ResetMode::Hard => "hard",
             };
-            format!("Reset (--{mode}) {target}: Completed")
+            rust_i18n::t!("store.reducer.reset_done", mode = mode, target = target).to_string()
         }
         RepoCommandKind::SquashCommits { count, .. } => {
-            format!("Squash {count} commits: Completed")
+            rust_i18n::t!("store.reducer.squash_commits_done", count = count).to_string()
         }
-        RepoCommandKind::Rebase { onto } => format!("Rebase onto {onto}: Completed"),
+        RepoCommandKind::Rebase { onto } => {
+            rust_i18n::t!("store.reducer.rebase_onto_done", onto = onto).to_string()
+        }
         RepoCommandKind::RebaseContinue => {
             let operation = sequencer_operation_label(output, None);
             if sequencer_paused(output) {
-                format!("{operation}: Paused at the next conflict")
+                rust_i18n::t!("store.reducer.sequencer_paused_next", operation = operation)
+                    .to_string()
             } else {
-                format!("{operation}: Continued")
+                rust_i18n::t!("store.reducer.sequencer_continued", operation = operation)
+                    .to_string()
             }
         }
-        RepoCommandKind::RebaseAbort => {
-            format!("{}: Aborted", sequencer_operation_label(output, None))
-        }
+        RepoCommandKind::RebaseAbort => rust_i18n::t!(
+            "store.reducer.sequencer_aborted",
+            operation = sequencer_operation_label(output, None)
+        )
+        .to_string(),
         RepoCommandKind::InteractiveRebase { base, interactive } => {
             let state = if sequencer_paused(output) {
-                "Paused at a conflict"
+                rust_i18n::t!("store.reducer.state_paused")
             } else {
-                "Completed"
+                rust_i18n::t!("store.reducer.base_completed")
             };
             if *interactive {
-                format!("Interactive rebase onto {base}: {state}")
+                rust_i18n::t!(
+                    "store.reducer.interactive_rebase_state",
+                    base = base,
+                    state = state
+                )
+                .to_string()
             } else {
-                format!("Rebase onto {base}: {state}")
+                rust_i18n::t!(
+                    "store.reducer.rebase_onto_state",
+                    base = base,
+                    state = state
+                )
+                .to_string()
             }
         }
         RepoCommandKind::InteractiveCherryPick { entries } => {
             let state = if sequencer_paused(output) {
-                "Paused at a conflict"
+                rust_i18n::t!("store.reducer.state_paused")
             } else {
-                "Completed"
+                rust_i18n::t!("store.reducer.base_completed")
             };
-            format!("Cherry-pick {} commits: {state}", entries.len())
+            rust_i18n::t!(
+                "store.reducer.cherry_pick_state",
+                count = entries.len(),
+                state = state
+            )
+            .to_string()
         }
         RepoCommandKind::CherryPick {
             commit_id,
@@ -1404,73 +1567,99 @@ fn summarize_command(
                 .stdout
                 .contains("GITCOMET_CHERRY_PICK_ALREADY_APPLIED")
             {
-                "Current branch already has all the changes from the cherry-picked commit."
-                    .to_string()
+                rust_i18n::t!("store.reducer.cherry_pick_already_applied").to_string()
             } else {
                 let sha = commit_id.as_ref();
                 let short = sha.get(0..7).unwrap_or(sha);
                 let summary = summary.lines().next().unwrap_or("").trim();
                 if *commit {
-                    format!("Cherry-picked {short}: {summary}")
+                    rust_i18n::t!(
+                        "store.reducer.cherry_picked",
+                        sha = short,
+                        summary = summary
+                    )
+                    .to_string()
                 } else {
-                    format!("Cherry-picked {short} without committing: {summary}")
+                    rust_i18n::t!(
+                        "store.reducer.cherry_picked_no_commit",
+                        sha = short,
+                        summary = summary
+                    )
+                    .to_string()
                 }
             }
         }
-        RepoCommandKind::MergeAbort => "Merge: Aborted".to_string(),
+        RepoCommandKind::MergeAbort => rust_i18n::t!("store.reducer.merge_aborted").to_string(),
         RepoCommandKind::CreateTag { name, target, .. } => {
-            format!("Tag {name} → {target}: Created")
+            rust_i18n::t!("store.reducer.tag_created", name = name, target = target).to_string()
         }
-        RepoCommandKind::DeleteTag { name } => format!("Tag {name}: Deleted"),
-        RepoCommandKind::AddRemote { name, .. } => format!("Remote {name}: Added"),
-        RepoCommandKind::RemoveRemote { name } => format!("Remote {name}: Removed"),
+        RepoCommandKind::DeleteTag { name } => {
+            rust_i18n::t!("store.reducer.tag_deleted", name = name).to_string()
+        }
+        RepoCommandKind::AddRemote { name, .. } => {
+            rust_i18n::t!("store.reducer.remote_added", name = name).to_string()
+        }
+        RepoCommandKind::RemoveRemote { name } => {
+            rust_i18n::t!("store.reducer.remote_removed", name = name).to_string()
+        }
         RepoCommandKind::SetRemoteUrl { name, kind, .. } => {
             let kind = match kind {
                 gitcomet_core::services::RemoteUrlKind::Fetch => "fetch",
                 gitcomet_core::services::RemoteUrlKind::Push => "push",
             };
-            format!("Remote {name} ({kind}): URL updated")
+            rust_i18n::t!("store.reducer.remote_url_updated", name = name, kind = kind).to_string()
         }
         RepoCommandKind::ExportPatch { dest, .. } => {
-            format!("Patch exported → {}", dest.display())
+            rust_i18n::t!("store.reducer.patch_exported", path = dest.display()).to_string()
         }
-        RepoCommandKind::ApplyPatch { patch } => format!("Patch applied → {}", patch.display()),
+        RepoCommandKind::ApplyPatch { patch } => {
+            rust_i18n::t!("store.reducer.patch_applied_to", path = patch.display()).to_string()
+        }
         RepoCommandKind::AddWorktree { path, reference } => {
             if let Some(reference) = reference {
-                format!("Worktree added → {} ({reference})", path.display())
+                rust_i18n::t!(
+                    "store.reducer.worktree_added_ref",
+                    path = path.display(),
+                    reference = reference
+                )
+                .to_string()
             } else {
-                format!("Worktree added → {}", path.display())
+                rust_i18n::t!("store.reducer.worktree_added", path = path.display()).to_string()
             }
         }
         RepoCommandKind::RemoveWorktree { path } => {
-            format!("Worktree removed → {}", path.display())
+            rust_i18n::t!("store.reducer.worktree_removed", path = path.display()).to_string()
         }
-        RepoCommandKind::ForceRemoveWorktree { path } => {
-            format!("Worktree force removed → {}", path.display())
-        }
+        RepoCommandKind::ForceRemoveWorktree { path } => rust_i18n::t!(
+            "store.reducer.worktree_force_removed",
+            path = path.display()
+        )
+        .to_string(),
         RepoCommandKind::AddSubmodule { path, .. } => {
-            format!("Submodule added → {}", path.display())
+            rust_i18n::t!("store.reducer.submodule_added", path = path.display()).to_string()
         }
-        RepoCommandKind::UpdateSubmodules { .. } => "Submodules: Updated".to_string(),
+        RepoCommandKind::UpdateSubmodules { .. } => {
+            rust_i18n::t!("store.reducer.submodules_updated").to_string()
+        }
         RepoCommandKind::LoadSubmodule { path, .. } => {
-            format!("Submodule loaded → {}", path.display())
+            rust_i18n::t!("store.reducer.submodule_loaded", path = path.display()).to_string()
         }
-        RepoCommandKind::ChangeSubmodulePointer { path, reference } => {
-            format!(
-                "Submodule pointer updated → {} ({reference})",
-                path.display()
-            )
-        }
+        RepoCommandKind::ChangeSubmodulePointer { path, reference } => rust_i18n::t!(
+            "store.reducer.submodule_pointer_updated",
+            path = path.display(),
+            reference = reference
+        )
+        .to_string(),
         RepoCommandKind::RemoveSubmodule { path } => {
-            format!("Submodule removed → {}", path.display())
+            rust_i18n::t!("store.reducer.submodule_removed", path = path.display()).to_string()
         }
-        RepoCommandKind::StageHunk => "Hunk staged".to_string(),
-        RepoCommandKind::UnstageHunk => "Hunk unstaged".to_string(),
+        RepoCommandKind::StageHunk => rust_i18n::t!("store.reducer.hunk_staged").to_string(),
+        RepoCommandKind::UnstageHunk => rust_i18n::t!("store.reducer.hunk_unstaged").to_string(),
         RepoCommandKind::ApplyWorktreePatch { reverse } => {
             if *reverse {
-                "Changes discarded".to_string()
+                rust_i18n::t!("store.reducer.changes_discarded").to_string()
             } else {
-                "Patch applied".to_string()
+                rust_i18n::t!("store.reducer.patch_applied").to_string()
             }
         }
     };
@@ -1488,9 +1677,19 @@ pub(super) fn format_error_for_user(error: &Error) -> String {
 
 pub(super) fn format_failure_summary(label: &str, error: &Error) -> String {
     if let Some((_git_command, details)) = try_format_git_backend_error(error) {
-        return format!("{label} failed:\n\n{details}");
+        return rust_i18n::t!(
+            "store.reducer.cmd_failed_details",
+            label = label,
+            details = details
+        )
+        .to_string();
     }
-    format!("{label} failed:\n\n{}", format_error_for_user(error))
+    rust_i18n::t!(
+        "store.reducer.cmd_failed_details",
+        label = label,
+        details = format_error_for_user(error)
+    )
+    .to_string()
 }
 
 pub(super) fn detect_auth_prompt_kind(error: &Error) -> Option<AuthPromptKind> {
@@ -1564,12 +1763,12 @@ pub(super) fn prepare_staged_git_auth(
 
     if normalized_secret.trim().is_empty() {
         return Err(Error::new(ErrorKind::Backend(
-            "credential/passphrase/confirmation cannot be empty".to_string(),
+            rust_i18n::t!("store.reducer.auth_secret_empty").to_string(),
         )));
     }
     if kind.requires_username() && username.unwrap_or_default().trim().is_empty() {
         return Err(Error::new(ErrorKind::Backend(
-            "username cannot be empty".to_string(),
+            rust_i18n::t!("store.reducer.auth_username_empty").to_string(),
         )));
     }
 

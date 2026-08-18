@@ -23,9 +23,21 @@ pub(super) fn panel(
     // `group_label` is `origin/feat/` for a remote group, so naming it says both
     // which remote and which scope — "on origin" alone would read as the whole
     // remote when several groups live under it.
-    let title = match section {
-        BranchSection::Remote => format!("Delete {count} {noun} in {group_label} on the remote?"),
-        BranchSection::Local => format!("Delete {count} {noun} in {group_label}?"),
+    let title: SharedString = match section {
+        BranchSection::Remote => crate::i18n::t!(
+            "panels.delete_branches_confirm.title_remote",
+            count = count,
+            noun = noun,
+            group = group_label
+        )
+        .into(),
+        BranchSection::Local => crate::i18n::t!(
+            "panels.delete_branches_confirm.title_local",
+            count = count,
+            noun = noun,
+            group = group_label
+        )
+        .into(),
     };
 
     // Elided the same way the name list is. Spelling out 300 refs would wrap to
@@ -46,11 +58,10 @@ pub(super) fn panel(
             theme,
             match section {
                 BranchSection::Local => {
-                    "The current branch is never included. Branches that are not fully merged \
-                     need Force delete."
+                    crate::i18n::tr_str("panels.delete_branches_confirm.body_local")
                 }
                 BranchSection::Remote => {
-                    "This deletes the branches on the remote for everyone, not just here."
+                    crate::i18n::tr_str("panels.delete_branches_confirm.body_remote")
                 }
             },
         )
@@ -74,28 +85,34 @@ pub(super) fn panel(
                     .items_center()
                     .gap_2()
                     .child(
-                        components::Button::new("delete_branches_go", "Delete")
-                            .style(components::ButtonStyle::Danger)
-                            .on_click(theme, cx, move |this, _e, _w, cx| {
-                                this.store.dispatch(Msg::DeleteBranches {
-                                    repo_id,
-                                    names: names.clone(),
-                                    force: false,
-                                });
-                                this.close_popover(cx);
-                            }),
+                        components::Button::new(
+                            "delete_branches_go",
+                            crate::i18n::tr("panels.delete_branches_confirm.delete"),
+                        )
+                        .style(components::ButtonStyle::Danger)
+                        .on_click(theme, cx, move |this, _e, _w, cx| {
+                            this.store.dispatch(Msg::DeleteBranches {
+                                repo_id,
+                                names: names.clone(),
+                                force: false,
+                            });
+                            this.close_popover(cx);
+                        }),
                     )
                     .child(
-                        components::Button::new("delete_branches_force", "Force delete")
-                            .style(components::ButtonStyle::Danger)
-                            .on_click(theme, cx, move |this, _e, _w, cx| {
-                                this.store.dispatch(Msg::DeleteBranches {
-                                    repo_id,
-                                    names: force_names.clone(),
-                                    force: true,
-                                });
-                                this.close_popover(cx);
-                            }),
+                        components::Button::new(
+                            "delete_branches_force",
+                            crate::i18n::tr("panels.delete_branches_confirm.force_delete"),
+                        )
+                        .style(components::ButtonStyle::Danger)
+                        .on_click(theme, cx, move |this, _e, _w, cx| {
+                            this.store.dispatch(Msg::DeleteBranches {
+                                repo_id,
+                                names: force_names.clone(),
+                                force: true,
+                            });
+                            this.close_popover(cx);
+                        }),
                     ),
                 cx,
             )
@@ -105,16 +122,19 @@ pub(super) fn panel(
             dialog.render(
                 theme,
                 cancel,
-                components::Button::new("delete_branches_go", "Delete on remote")
-                    .style(components::ButtonStyle::Danger)
-                    .on_click(theme, cx, move |this, _e, _w, cx| {
-                        this.store.dispatch(Msg::DeleteRemoteBranches {
-                            repo_id,
-                            remote: remote.clone(),
-                            branches: names.clone(),
-                        });
-                        this.close_popover(cx);
-                    }),
+                components::Button::new(
+                    "delete_branches_go",
+                    crate::i18n::tr("panels.delete_branches_confirm.delete_on_remote"),
+                )
+                .style(components::ButtonStyle::Danger)
+                .on_click(theme, cx, move |this, _e, _w, cx| {
+                    this.store.dispatch(Msg::DeleteRemoteBranches {
+                        repo_id,
+                        remote: remote.clone(),
+                        branches: names.clone(),
+                    });
+                    this.close_popover(cx);
+                }),
                 cx,
             )
         }

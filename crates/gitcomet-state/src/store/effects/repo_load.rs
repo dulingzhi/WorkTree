@@ -145,10 +145,9 @@ mod selected_diff_guard_tests {
 }
 
 fn missing_repo_error(repo_id: RepoId) -> Error {
-    Error::new(ErrorKind::Backend(format!(
-        "Repository handle not found for repo_id {}",
-        repo_id.0
-    )))
+    Error::new(ErrorKind::Backend(
+        rust_i18n::t!("store.effects.repo_handle_not_found", repo_id = repo_id.0).to_string(),
+    ))
 }
 
 fn trace_side_stats(bytes: Option<&[u8]>, text: Option<&str>) -> MergetoolTraceSideStats {
@@ -1364,7 +1363,8 @@ pub(super) fn schedule_load_file_browser(
                 }
                 gitcomet_core::domain::FileSource::Branch(_name) => {
                     Err(Error::new(gitcomet_core::error::ErrorKind::Backend(
-                        "branch file listing is not yet implemented".to_string(),
+                        rust_i18n::t!("store.effects.branch_file_listing_unimplemented")
+                            .to_string(),
                     )))
                 }
             };
@@ -1527,10 +1527,13 @@ pub(super) fn schedule_load_hover_commit_message(
                 .commit_messages(std::slice::from_ref(&commit_id))
                 .and_then(|mut messages| {
                     if messages.is_empty() {
-                        Err(Error::new(ErrorKind::Backend(format!(
-                            "no message for commit {}",
-                            commit_id.as_ref()
-                        ))))
+                        Err(Error::new(ErrorKind::Backend(
+                            rust_i18n::t!(
+                                "store.effects.no_commit_message",
+                                commit = commit_id.as_ref()
+                            )
+                            .to_string(),
+                        )))
                     } else {
                         Ok(messages.remove(0))
                     }
@@ -1759,7 +1762,8 @@ pub(super) fn schedule_open_file_at_commit_parent(
                     &msg_tx,
                     Msg::ShowBannerError {
                         repo_id: Some(repo_id),
-                        message: format!("Could not open file at parent commit: {e}"),
+                        message: rust_i18n::t!("store.effects.open_parent_commit_failed", err = e)
+                            .to_string(),
                     },
                 );
             }
@@ -2176,7 +2180,7 @@ pub(super) fn schedule_load_interactive_cherry_pick_messages(
                         repo_id,
                         requested_ids: fallback_ids,
                         result: Err(Error::new(ErrorKind::Backend(
-                            "repository unavailable while loading cherry-pick commit messages"
+                            rust_i18n::t!("store.effects.repo_unavailable_cherry_pick_messages")
                                 .to_string(),
                         ))),
                     },

@@ -18,6 +18,7 @@ test-support = []
 gitcomet-core = { workspace = true }
 gix = { workspace = true }
 notify = { workspace = true }
+rust-i18n = { workspace = true }
 smol = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

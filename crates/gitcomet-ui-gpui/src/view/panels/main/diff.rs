@@ -94,8 +94,12 @@ impl MainPaneView {
 
             let diff_file_state = match self.rendered_file_image_diff_loadable() {
                 None => {
-                    return components::empty_state(theme, "Diff", "No repository.")
-                        .into_any_element();
+                    return components::empty_state(
+                        theme,
+                        crate::i18n::tr("diff.pane.diff"),
+                        crate::i18n::tr("diff.common.no_repository"),
+                    )
+                    .into_any_element();
                 }
                 Some(Loadable::NotLoaded) => DiffFileImageState::NotLoaded,
                 Some(Loadable::Loading) => DiffFileImageState::Loading,
@@ -107,12 +111,18 @@ impl MainPaneView {
 
             self.ensure_file_image_diff_cache(cx);
             match diff_file_state {
-                DiffFileImageState::NotLoaded => {
-                    components::empty_state(theme, "Diff", "Select a file.").into_any_element()
-                }
-                DiffFileImageState::Loading => {
-                    components::empty_state(theme, "Diff", "Loading").into_any_element()
-                }
+                DiffFileImageState::NotLoaded => components::empty_state(
+                    theme,
+                    crate::i18n::tr("diff.pane.diff"),
+                    crate::i18n::tr("diff.common.select_a_file"),
+                )
+                .into_any_element(),
+                DiffFileImageState::Loading => components::empty_state(
+                    theme,
+                    crate::i18n::tr("diff.pane.diff"),
+                    crate::i18n::tr("diff.common.loading"),
+                )
+                .into_any_element(),
                 DiffFileImageState::Error(e) => {
                     self.diff_raw_input.update(cx, |input, cx| {
                         input.set_theme(theme, cx);
@@ -133,14 +143,22 @@ impl MainPaneView {
                 }
                 DiffFileImageState::Ready { has_file } => {
                     if !has_file {
-                        components::empty_state(theme, "Diff", "No image contents available.")
-                            .into_any_element()
+                        components::empty_state(
+                            theme,
+                            crate::i18n::tr("diff.pane.diff"),
+                            crate::i18n::tr("diff.image.no_contents"),
+                        )
+                        .into_any_element()
                     } else if image_diff_ready_shows_processing(
                         has_file,
                         self.is_file_image_diff_view_active(),
                     ) {
-                        components::empty_state(theme, "Diff", "Processing image...")
-                            .into_any_element()
+                        components::empty_state(
+                            theme,
+                            crate::i18n::tr("diff.pane.diff"),
+                            crate::i18n::tr("diff.image.processing"),
+                        )
+                        .into_any_element()
                     } else {
                         enum CachedDiffImageSource {
                             Path(std::path::PathBuf),
@@ -204,14 +222,16 @@ impl MainPaneView {
                                                 div()
                                                     .text_sm()
                                                     .text_color(muted)
-                                                    .child("Processing image...")
+                                                    .child(crate::i18n::tr("diff.image.processing"))
                                                     .into_any_element()
                                             })
                                             .with_fallback(move || {
                                                 div()
                                                     .text_sm()
                                                     .text_color(muted)
-                                                    .child("Preview unavailable.")
+                                                    .child(crate::i18n::tr(
+                                                        "diff.image.preview_unavailable",
+                                                    ))
                                                     .into_any_element()
                                             })
                                             .into_any_element()
@@ -225,14 +245,16 @@ impl MainPaneView {
                                                 div()
                                                     .text_sm()
                                                     .text_color(muted)
-                                                    .child("Processing image...")
+                                                    .child(crate::i18n::tr("diff.image.processing"))
                                                     .into_any_element()
                                             })
                                             .with_fallback(move || {
                                                 div()
                                                     .text_sm()
                                                     .text_color(muted)
-                                                    .child("Preview unavailable.")
+                                                    .child(crate::i18n::tr(
+                                                        "diff.image.preview_unavailable",
+                                                    ))
                                                     .into_any_element()
                                             })
                                             .into_any_element()
@@ -240,7 +262,7 @@ impl MainPaneView {
                                     None => div()
                                         .text_sm()
                                         .text_color(theme.colors.foreground.secondary)
-                                        .child("No image")
+                                        .child(crate::i18n::tr("diff.image.no_image"))
                                         .into_any_element(),
                                 })
                         };
@@ -274,8 +296,8 @@ impl MainPaneView {
                         let columns_header = components::split_columns_header(
                             theme,
                             ui_scale_percent,
-                            "A (before)",
-                            "B (after)",
+                            crate::i18n::tr("diff.split.image_before"),
+                            crate::i18n::tr("diff.split.image_after"),
                         );
 
                         div()
@@ -312,8 +334,12 @@ impl MainPaneView {
 
             let diff_file_state = match self.rendered_file_diff_loadable() {
                 None => {
-                    return components::empty_state(theme, "Diff", "No repository.")
-                        .into_any_element();
+                    return components::empty_state(
+                        theme,
+                        crate::i18n::tr("diff.pane.diff"),
+                        crate::i18n::tr("diff.common.no_repository"),
+                    )
+                    .into_any_element();
                 }
                 Some(Loadable::NotLoaded) => DiffFileState::NotLoaded,
                 Some(Loadable::Loading) => DiffFileState::Loading,
@@ -328,20 +354,25 @@ impl MainPaneView {
             }
 
             match diff_file_state {
-                DiffFileState::NotLoaded => {
-                    components::empty_state(theme, "Diff", "Select a file.").into_any_element()
-                }
+                DiffFileState::NotLoaded => components::empty_state(
+                    theme,
+                    crate::i18n::tr("diff.pane.diff"),
+                    crate::i18n::tr("diff.common.select_a_file"),
+                )
+                .into_any_element(),
                 DiffFileState::Loading => {
                     let label = if wants_markdown_preview {
-                        "Preview"
+                        crate::i18n::tr_str("diff.pane.preview")
                     } else {
-                        "Diff"
+                        crate::i18n::tr_str("diff.pane.diff")
                     };
-                    components::empty_state(theme, label, "Loading").into_any_element()
+                    components::empty_state(theme, label, crate::i18n::tr("diff.common.loading"))
+                        .into_any_element()
                 }
                 DiffFileState::Error(e) => {
                     if wants_markdown_preview {
-                        components::empty_state(theme, "Preview", e).into_any_element()
+                        components::empty_state(theme, crate::i18n::tr("diff.pane.preview"), e)
+                            .into_any_element()
                     } else {
                         self.diff_raw_input.update(cx, |input, cx| {
                             input.set_theme(theme, cx);
@@ -363,19 +394,27 @@ impl MainPaneView {
                 }
                 DiffFileState::Ready { has_file } if wants_markdown_preview => {
                     if !has_file {
-                        components::empty_state(theme, "Preview", "No file contents available.")
-                            .into_any_element()
+                        components::empty_state(
+                            theme,
+                            crate::i18n::tr("diff.pane.preview"),
+                            crate::i18n::tr("diff.common.no_file_contents"),
+                        )
+                        .into_any_element()
                     } else {
                         self.ensure_file_markdown_preview_cache(cx);
                         match &self.file_markdown_preview {
-                            Loadable::NotLoaded | Loadable::Loading => {
-                                components::empty_state(theme, "Preview", "Processing preview...")
-                                    .into_any_element()
-                            }
-                            Loadable::Error(e) => {
-                                components::empty_state(theme, "Preview", e.clone())
-                                    .into_any_element()
-                            }
+                            Loadable::NotLoaded | Loadable::Loading => components::empty_state(
+                                theme,
+                                crate::i18n::tr("diff.pane.preview"),
+                                crate::i18n::tr("diff.preview.processing"),
+                            )
+                            .into_any_element(),
+                            Loadable::Error(e) => components::empty_state(
+                                theme,
+                                crate::i18n::tr("diff.pane.preview"),
+                                e.clone(),
+                            )
+                            .into_any_element(),
                             Loadable::Ready(preview) => {
                                 let preview = std::sync::Arc::clone(preview);
                                 let document_rev = self.file_markdown_preview_seq;
@@ -399,8 +438,12 @@ impl MainPaneView {
                         DiffContentMode::Collapsed => self.is_collapsed_diff_projection_active(),
                     };
                     if !has_file {
-                        components::empty_state(theme, "Diff", "No file contents available.")
-                            .into_any_element()
+                        components::empty_state(
+                            theme,
+                            crate::i18n::tr("diff.pane.diff"),
+                            crate::i18n::tr("diff.common.no_file_contents"),
+                        )
+                        .into_any_element()
                     } else if let Some(error) = self.file_diff_cache_error.clone() {
                         self.diff_raw_input.update(cx, |input, cx| {
                             input.set_theme(theme, cx);
@@ -424,8 +467,12 @@ impl MainPaneView {
                         self.file_diff_cache_inflight.is_some(),
                         self.file_diff_cache_content_signature.is_some(),
                     ) {
-                        components::empty_state(theme, "Diff", "Processing file...")
-                            .into_any_element()
+                        components::empty_state(
+                            theme,
+                            crate::i18n::tr("diff.pane.diff"),
+                            crate::i18n::tr("diff.common.processing_file"),
+                        )
+                        .into_any_element()
                     } else {
                         self.ensure_diff_visible_indices();
                         self.ensure_diff_wrap_visible_rows(window, cx);
@@ -440,10 +487,19 @@ impl MainPaneView {
                             }
                         };
                         if total_len == 0 {
-                            components::empty_state(theme, "Diff", "Empty file.").into_any_element()
+                            components::empty_state(
+                                theme,
+                                crate::i18n::tr("diff.pane.diff"),
+                                crate::i18n::tr("diff.common.empty_file"),
+                            )
+                            .into_any_element()
                         } else if self.diff_visible_len() == 0 {
-                            components::empty_state(theme, "Diff", "Nothing to render.")
-                                .into_any_element()
+                            components::empty_state(
+                                theme,
+                                crate::i18n::tr("diff.pane.diff"),
+                                crate::i18n::tr("diff.common.nothing_to_render"),
+                            )
+                            .into_any_element()
                         } else {
                             let markers = self.diff_scrollbar_markers_cache.clone();
                             match self.diff_view {
@@ -923,7 +979,12 @@ impl MainPaneView {
     ) -> AnyElement {
         let ui_scale_percent = crate::ui_scale::UiScale::current(cx).percent();
         if old_len == 0 && new_len == 0 {
-            return components::empty_state(theme, "Preview", "Empty file.").into_any_element();
+            return components::empty_state(
+                theme,
+                crate::i18n::tr("diff.pane.preview"),
+                crate::i18n::tr("diff.common.empty_file"),
+            )
+            .into_any_element();
         }
 
         self.maybe_autoscroll_diff_to_first_change();
@@ -952,7 +1013,7 @@ impl MainPaneView {
                 .justify_center()
                 .text_sm()
                 .text_color(theme.colors.foreground.secondary)
-                .child("Empty file.")
+                .child(crate::i18n::tr("diff.common.empty_file"))
                 .into_any_element()
         };
 
@@ -1021,8 +1082,12 @@ impl MainPaneView {
 
         if self.diff_view == DiffViewMode::Inline {
             if inline_len == 0 {
-                return components::empty_state(theme, "Preview", "Nothing to render.")
-                    .into_any_element();
+                return components::empty_state(
+                    theme,
+                    crate::i18n::tr("diff.pane.preview"),
+                    crate::i18n::tr("diff.common.nothing_to_render"),
+                )
+                .into_any_element();
             }
 
             let scroll_handle = self.diff_scroll.0.borrow().base_handle.clone();
@@ -1185,8 +1250,8 @@ impl MainPaneView {
                     .child(components::split_columns_header(
                         theme,
                         ui_scale_percent,
-                        "A (before)",
-                        "B (after)",
+                        crate::i18n::tr("diff.split.image_before"),
+                        crate::i18n::tr("diff.split.image_after"),
                     ))
                     .child(
                         div()

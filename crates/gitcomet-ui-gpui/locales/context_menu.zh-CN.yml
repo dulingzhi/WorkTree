@@ -3,6 +3,7 @@
 # changes are needed — `ContextMenuText::localized` looks these up at render
 # time. English is the fallback, hence no `*.en.yml` companion.
 "Activate": "激活"
+"Auto Squash": "自动压缩"
 "Add remote…": "添加远程仓库…"
 "Add submodule…": "添加子模块…"
 "Add tag…": "添加标签…"
@@ -131,3 +132,28 @@
 "Pick C (Remote)": "选用 C（远程）"
 "Three-way merge view: Base, Local and Remote side by side": "三向合并视图：基准、本地与远程并排显示"
 "Two-way diff view: Local against Remote": "双向差异视图：本地与远程对比"
+
+# Section headers shared by the repo/branch pickers (`PickerPrompt` section
+# rows), the branch sidebar, and the collapsed sidebar rail. The English string
+# doubles as the persisted collapse-state key, so only the display is
+# translated (`tr_en` at the render site); the constants stay English.
+"Files": "文件"
+"First-parent": "仅第一父提交"
+"Full reachable": "全部可达"
+"Local Branches": "本地分支"
+"Open Repositories": "打开的仓库"
+"Pinned": "已固定"
+"Pinned Local Branches": "已固定的本地分支"
+"Pinned Remote Branches": "已固定的远程分支"
+"Recently Closed": "最近关闭"
+"Remote Branches": "远程分支"
+"Merges only": "仅合并提交"
+"No merges": "排除合并"
+"All branches": "所有分支"
+"Stash": "贮藏"
+"Stashes": "贮藏"
+"Stashes (Right-click for actions)": "贮藏（右键点击查看操作）"
+"Submodules": "子模块"
+"Submodules (Add / Update / Open / Remove)": "子模块（添加 / 更新 / 打开 / 移除）"
+"Worktrees": "工作树"
+"Worktrees (Add / Refresh / Open / Remove)": "工作树（添加 / 刷新 / 打开 / 移除）"

@@ -1,5 +1,6 @@
 use super::super::super::path_display;
 use super::*;
+use crate::i18n::t;
 use std::collections::BTreeSet;
 
 /// Height this picker caps its row list at. Taller than the badge pickers'
@@ -64,10 +65,10 @@ impl RepoPickerSort {
 
     pub(super) fn label(self) -> &'static str {
         match self {
-            Self::Newest => "Newest",
-            Self::Oldest => "Oldest",
-            Self::Name => "Name (A–Z)",
-            Self::Path => "Path (A–Z)",
+            Self::Newest => crate::i18n::tr_str("ui.picker.repo.sort.newest"),
+            Self::Oldest => crate::i18n::tr_str("ui.picker.repo.sort.oldest"),
+            Self::Name => crate::i18n::tr_str("ui.picker.repo.sort.name"),
+            Self::Path => crate::i18n::tr_str("ui.picker.repo.sort.path"),
         }
     }
 
@@ -584,7 +585,7 @@ fn sort_toggle(this: &PopoverHost, cx: &mut gpui::Context<PopoverHost>) -> impl 
 }
 
 fn sort_toggle_label(sort: RepoPickerSort) -> String {
-    format!("Sort: {}", sort.label())
+    t!("ui.picker.repo.sort.toggle", label = sort.label()).to_string()
 }
 
 /// The sort options, rendered in place of the repository rows while the menu is
@@ -701,7 +702,7 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
             // navigation scrolls by the row geometry to match
             // (`scroll_picker_prompt_to_row`), which has to be told the same
             .tooltip_host(this.tooltip_host.clone())
-            .empty_text("No repositories")
+            .empty_text(crate::i18n::tr("ui.picker.repo.empty"))
             .max_height(scaled_px(REPO_PICKER_LIST_MAX_HEIGHT_PX))
             // While a row menu is open the arrow keys walk its actions, so the
             // list's highlight marks the invoking row instead — without the
@@ -714,7 +715,7 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
             .marked_index(built.marked_index)
             .accent_selection()
             .padded_query_row()
-            .remove_tooltip("Remove from recently closed")
+            .remove_tooltip(crate::i18n::tr("ui.picker.repo.remove_recently_closed"))
             .on_context_menu(cx.listener(
                 move |this, event: &components::PickerPromptContextMenuEvent, _window, cx| {
                     let Some(entry) = row_entries.get(event.original_index).cloned() else {
@@ -785,7 +786,9 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
                 menu = menu.child(components::context_menu_header(
                     theme,
                     ui_scale_percent,
-                    entry_section.to_owned(),
+                    // `entry_section` is the English state key; only the header
+                    // text on screen is localized.
+                    crate::i18n::tr_en(entry_section),
                     None,
                     cx,
                 ));

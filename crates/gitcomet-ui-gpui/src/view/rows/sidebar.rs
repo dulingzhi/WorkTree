@@ -531,8 +531,14 @@ impl SidebarPaneView {
                     collapse_key,
                 } => {
                     let (label, selector_suffix): (SharedString, &'static str) = match section {
-                        BranchSection::Local => ("Pinned Local Branches".into(), "local"),
-                        BranchSection::Remote => ("Pinned Remote Branches".into(), "remote"),
+                        // The header text is localized at the render site; the
+                        // collapse key and selector suffix stay locale-free.
+                        BranchSection::Local => {
+                            (crate::i18n::tr_en("Pinned Local Branches"), "local")
+                        }
+                        BranchSection::Remote => {
+                            (crate::i18n::tr_en("Pinned Remote Branches"), "remote")
+                        }
                     };
                     let context_menu_invoker: SharedString =
                         format!("pinned_section_menu_{}_{selector_suffix}", repo_id.0).into();
@@ -604,8 +610,12 @@ impl SidebarPaneView {
                     collapse_key,
                 } => {
                     let (icon_path, label): (&'static str, SharedString) = match section {
-                        BranchSection::Local => ("icons/computer.svg", "Local Branches".into()),
-                        BranchSection::Remote => ("icons/cloud.svg", "Remote Branches".into()),
+                        BranchSection::Local => {
+                            ("icons/computer.svg", crate::i18n::tr_en("Local Branches"))
+                        }
+                        BranchSection::Remote => {
+                            ("icons/cloud.svg", crate::i18n::tr_en("Remote Branches"))
+                        }
                     };
                     let tooltip = label.clone();
                     let section_key = match section {
@@ -674,8 +684,12 @@ impl SidebarPaneView {
                 }
                 BranchSidebarRow::FilterGroupHeader { section } => {
                     let (icon_path, label): (&'static str, SharedString) = match section {
-                        BranchSection::Local => ("icons/computer.svg", "Local Branches".into()),
-                        BranchSection::Remote => ("icons/cloud.svg", "Remote Branches".into()),
+                        BranchSection::Local => {
+                            ("icons/computer.svg", crate::i18n::tr_en("Local Branches"))
+                        }
+                        BranchSection::Remote => {
+                            ("icons/cloud.svg", crate::i18n::tr_en("Remote Branches"))
+                        }
                     };
                     let selector_suffix = match section {
                         BranchSection::Local => "local",
@@ -756,7 +770,7 @@ impl SidebarPaneView {
                                 .whitespace_nowrap()
                                 .font_weight(FontWeight::BOLD)
                                 .text_color(theme.colors.foreground.primary)
-                                .child("Stash"),
+                                .child(crate::i18n::tr_en("Stash")),
                         )
                         .when(show_stash_spinner, |d| {
                             d.child(
@@ -769,7 +783,10 @@ impl SidebarPaneView {
                                     )),
                             )
                         })
-                        .gitcomet_tooltip(theme, "Stashes (Right-click for actions)".into())
+                        .gitcomet_tooltip(
+                            theme,
+                            crate::i18n::tr_en("Stashes (Right-click for actions)"),
+                        )
                         .on_click(cx.listener(move |this, e: &ClickEvent, _w, cx| {
                             if !e.standard_click() || e.click_count() != 1 {
                                 return;
@@ -934,7 +951,7 @@ impl SidebarPaneView {
                                 .whitespace_nowrap()
                                 .font_weight(FontWeight::BOLD)
                                 .text_color(theme.colors.foreground.primary)
-                                .child("Worktrees"),
+                                .child(crate::i18n::tr_en("Worktrees")),
                         )
                         .when(show_worktrees_spinner, |d| {
                             d.child(
@@ -949,7 +966,10 @@ impl SidebarPaneView {
                                     )),
                             )
                         })
-                        .gitcomet_tooltip(theme, "Worktrees (Add / Refresh / Open / Remove)".into())
+                        .gitcomet_tooltip(
+                            theme,
+                            crate::i18n::tr_en("Worktrees (Add / Refresh / Open / Remove)"),
+                        )
                         .on_click(cx.listener(move |this, e: &ClickEvent, _w, cx| {
                             if !e.standard_click() || e.click_count() != 1 {
                                 return;
@@ -1211,7 +1231,7 @@ impl SidebarPaneView {
                                 .whitespace_nowrap()
                                 .font_weight(FontWeight::BOLD)
                                 .text_color(theme.colors.foreground.primary)
-                                .child("Submodules"),
+                                .child(crate::i18n::tr_en("Submodules")),
                         )
                         .when(show_submodules_spinner, |d| {
                             d.child(
@@ -1226,7 +1246,10 @@ impl SidebarPaneView {
                                     )),
                             )
                         })
-                        .gitcomet_tooltip(theme, "Submodules (Add / Update / Open / Remove)".into())
+                        .gitcomet_tooltip(
+                            theme,
+                            crate::i18n::tr_en("Submodules (Add / Update / Open / Remove)"),
+                        )
                         .on_click(cx.listener(move |this, e: &ClickEvent, _w, cx| {
                             if !e.standard_click() || e.click_count() != 1 {
                                 return;

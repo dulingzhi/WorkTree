@@ -1,5 +1,7 @@
 use gitcomet_core::process::background_command;
 use gitcomet_state::session::{self, ExternalCodeEditorSetting};
+
+use crate::i18n::t;
 use std::collections::BTreeSet;
 use std::env;
 use std::ffi::OsString;
@@ -605,19 +607,27 @@ pub(crate) fn setting_is_configured(setting: &ExternalCodeEditorSetting) -> bool
 
 pub(crate) fn label_for_setting(setting: Option<&ExternalCodeEditorSetting>) -> String {
     match setting {
-        None => "None".to_string(),
+        None => crate::i18n::tr_str("ui.label.external_editor.none").to_string(),
         Some(ExternalCodeEditorSetting::Detected { id, path }) => {
             if !path.exists() {
-                format!("{} (missing)", editor_label_for_id(id))
+                t!(
+                    "ui.label.external_editor.missing",
+                    name = editor_label_for_id(id)
+                )
+                .to_string()
             } else {
                 editor_label_for_id(id).to_string()
             }
         }
         Some(ExternalCodeEditorSetting::Custom { executable, .. }) => {
             if executable.as_os_str().is_empty() {
-                "Custom".to_string()
+                crate::i18n::tr_str("ui.label.external_editor.custom").to_string()
             } else {
-                format!("Custom: {}", executable.display())
+                t!(
+                    "ui.label.external_editor.custom_with_path",
+                    path = executable.display().to_string()
+                )
+                .to_string()
             }
         }
     }

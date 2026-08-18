@@ -77,20 +77,26 @@ fn short_submodule_hash(commit_id: &CommitId) -> String {
 fn short_submodule_hash_opt(commit_id: Option<&CommitId>) -> String {
     commit_id
         .map(short_submodule_hash)
-        .unwrap_or_else(|| "missing".to_string())
+        .unwrap_or_else(|| crate::i18n::tr_str("diff.submodule.missing").to_string())
 }
 
 fn full_submodule_hash_opt(commit_id: Option<&CommitId>) -> String {
     commit_id
         .map(|commit_id| commit_id.as_ref().to_string())
-        .unwrap_or_else(|| "missing".to_string())
+        .unwrap_or_else(|| crate::i18n::tr_str("diff.submodule.missing").to_string())
 }
 
 fn submodule_range_label(kind: SubmoduleDiffRangeKind) -> &'static str {
     match kind {
-        SubmoduleDiffRangeKind::StagedPointer => "Committed -> Index",
-        SubmoduleDiffRangeKind::UnstagedPointer => "Index -> Checked out",
-        SubmoduleDiffRangeKind::CommitHistory => "Parent -> Commit",
+        SubmoduleDiffRangeKind::StagedPointer => {
+            crate::i18n::tr_str("diff.submodule.range.staged_pointer")
+        }
+        SubmoduleDiffRangeKind::UnstagedPointer => {
+            crate::i18n::tr_str("diff.submodule.range.unstaged_pointer")
+        }
+        SubmoduleDiffRangeKind::CommitHistory => {
+            crate::i18n::tr_str("diff.submodule.range.commit_history")
+        }
     }
 }
 
@@ -165,13 +171,22 @@ impl MainPaneView {
             _ => repo.diff_state.diff_target.as_ref(),
         });
         match target {
-            Some(DiffTarget::Commit { .. }) => ("Parent", "This commit"),
-            Some(DiffTarget::CommitRange { .. }) => ("From commit", "To commit"),
+            Some(DiffTarget::Commit { .. }) => (
+                crate::i18n::tr_str("diff.split.parent"),
+                crate::i18n::tr_str("diff.split.this_commit"),
+            ),
+            Some(DiffTarget::CommitRange { .. }) => (
+                crate::i18n::tr_str("diff.split.from_commit"),
+                crate::i18n::tr_str("diff.split.to_commit"),
+            ),
             Some(DiffTarget::WorkingTree {
                 area: DiffArea::Staged,
                 ..
-            }) => ("HEAD", "Staged"),
-            Some(DiffTarget::WorkingTree { .. }) | None => ("Index", "Working tree"),
+            }) => ("HEAD", crate::i18n::tr_str("diff.split.staged")),
+            Some(DiffTarget::WorkingTree { .. }) | None => (
+                crate::i18n::tr_str("diff.split.index"),
+                crate::i18n::tr_str("diff.split.working_tree"),
+            ),
         }
     }
 
@@ -1260,21 +1275,24 @@ impl MainPaneView {
         let preview_blocks_blame = self.is_markdown_preview_active();
         let (tooltip, errored): (SharedString, bool) = if preview_blocks_blame {
             (
-                "Blame is unavailable in the rendered preview\nSwitch to Text to annotate".into(),
+                crate::i18n::tr("diff.tooltip.blame_preview_unavailable"),
                 false,
             )
         } else {
             match blame_status {
-                Some(Loadable::Loading) => ("Loading blame…".into(), false),
+                Some(Loadable::Loading) => (crate::i18n::tr("diff.tooltip.blame_loading"), false),
                 Some(Loadable::Error(message)) => (
-                    format!("Blame failed: {message}\nToggle off and on to retry").into(),
+                    crate::i18n::t!("diff.tooltip.blame_failed", message = message)
+                        .to_string()
+                        .into(),
                     true,
                 ),
                 _ => (
-                    format!(
-                        "Toggle blame annotations ({})",
-                        crate::view::shortcut_labels::alt_shortcut("B")
+                    crate::i18n::t!(
+                        "diff.tooltip.blame_toggle",
+                        shortcut = crate::view::shortcut_labels::alt_shortcut("B")
                     )
+                    .to_string()
                     .into(),
                     false,
                 ),
@@ -1288,7 +1306,7 @@ impl MainPaneView {
         } else {
             selected_bg
         };
-        components::Button::new("diff_annotate", "Blame")
+        components::Button::new("diff_annotate", crate::i18n::tr("diff.toolbar.blame"))
             .borderless()
             .style(components::ButtonStyle::Subtle)
             .disabled(preview_blocks_blame)
@@ -1334,36 +1352,45 @@ impl MainPaneView {
             .is_some_and(|p| self.content_preview_is_picture(p));
         let disabled = path.is_none() || blocked_by_preview || blocked_by_kind;
         let tooltip: SharedString = if blocked_by_preview {
-            "Editing is unavailable in the rendered preview\nSwitch to Text to edit".into()
+            crate::i18n::tr("diff.tooltip.edit_preview_unavailable")
         } else if blocked_by_kind {
-            "This file is not text; editing is not supported".into()
+            crate::i18n::tr("diff.tooltip.edit_not_text")
         } else if path.is_none() {
-            "This view has no working-tree file to edit".into()
+            crate::i18n::tr("diff.tooltip.edit_no_working_tree_file")
         } else if dirty {
-            format!(
-                "Unsaved changes — {} saves",
-                crate::view::shortcut_labels::secondary_shortcut("S")
+            crate::i18n::t!(
+                "diff.tooltip.edit_unsaved",
+                shortcut = crate::view::shortcut_labels::secondary_shortcut("S")
             )
+            .to_string()
             .into()
         } else {
-            format!(
-                "Edit the working-tree file ({})",
-                crate::view::shortcut_labels::alt_shortcut("E")
+            crate::i18n::t!(
+                "diff.tooltip.edit_toggle",
+                shortcut = crate::view::shortcut_labels::alt_shortcut("E")
             )
+            .to_string()
             .into()
         };
 
-        components::Button::new("diff_edit", if dirty { "Edit •" } else { "Edit" })
-            .borderless()
-            .style(components::ButtonStyle::Subtle)
-            .disabled(disabled)
-            .selected(editing)
-            .selected_bg(selected_bg)
-            .on_click(theme, cx, move |this, _e, window, cx| {
-                this.toggle_file_editor(window, cx);
-            })
-            .debug_selector(|| "diff_edit".to_string())
-            .gitcomet_tooltip(theme, tooltip)
+        components::Button::new(
+            "diff_edit",
+            if dirty {
+                crate::i18n::tr("diff.toolbar.edit_dirty")
+            } else {
+                crate::i18n::tr("diff.toolbar.edit")
+            },
+        )
+        .borderless()
+        .style(components::ButtonStyle::Subtle)
+        .disabled(disabled)
+        .selected(editing)
+        .selected_bg(selected_bg)
+        .on_click(theme, cx, move |this, _e, window, cx| {
+            this.toggle_file_editor(window, cx);
+        })
+        .debug_selector(|| "diff_edit".to_string())
+        .gitcomet_tooltip(theme, tooltip)
     }
 
     /// Whether the file on screen has text the editor can open.
@@ -1459,7 +1486,7 @@ impl MainPaneView {
         theme: AppTheme,
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
-        components::Button::new("file_editor_save", "Save")
+        components::Button::new("file_editor_save", crate::i18n::tr("diff.toolbar.save"))
             .style(components::ButtonStyle::Outlined)
             .disabled(!self.file_editor_is_dirty())
             .on_click(theme, cx, |this, _e, window, cx| {
@@ -1468,10 +1495,11 @@ impl MainPaneView {
             .debug_selector(|| "file_editor_save".to_string())
             .gitcomet_tooltip(
                 theme,
-                format!(
-                    "Save the file and return ({})",
-                    crate::view::shortcut_labels::secondary_shortcut("S")
+                crate::i18n::t!(
+                    "diff.tooltip.save_and_return",
+                    shortcut = crate::view::shortcut_labels::secondary_shortcut("S")
                 )
+                .to_string()
                 .into(),
             )
     }
@@ -1489,22 +1517,25 @@ impl MainPaneView {
         cx: &mut gpui::Context<Self>,
     ) -> impl gpui::IntoElement {
         let dirty = self.file_editor_is_dirty();
-        components::Button::new("file_editor_discard", "Discard")
-            .style(components::ButtonStyle::Subtle)
-            .borderless()
-            .disabled(!dirty)
-            .on_click(theme, cx, |this, _e, window, cx| {
-                this.discard_file_editor_buffer_and_exit(window, cx);
-            })
-            .debug_selector(|| "file_editor_discard".to_string())
-            .gitcomet_tooltip(
-                theme,
-                if dirty {
-                    "Throw away the unsaved changes and return to the previous view".into()
-                } else {
-                    SharedString::from("No unsaved changes")
-                },
-            )
+        components::Button::new(
+            "file_editor_discard",
+            crate::i18n::tr("diff.toolbar.discard"),
+        )
+        .style(components::ButtonStyle::Subtle)
+        .borderless()
+        .disabled(!dirty)
+        .on_click(theme, cx, |this, _e, window, cx| {
+            this.discard_file_editor_buffer_and_exit(window, cx);
+        })
+        .debug_selector(|| "file_editor_discard".to_string())
+        .gitcomet_tooltip(
+            theme,
+            if dirty {
+                crate::i18n::tr("diff.tooltip.discard_dirty")
+            } else {
+                crate::i18n::tr("diff.tooltip.discard_clean")
+            },
+        )
     }
 
     pub(in crate::view) fn open_search_for_active_view(
@@ -1537,11 +1568,11 @@ impl MainPaneView {
         let query = self.diff_search_query.as_ref();
         let regex_invalid = self.diff_search_regex_error.is_some();
         let match_label: SharedString = if query.is_empty() {
-            "Type to search".into()
+            crate::i18n::tr("diff.search.type_to_search")
         } else if regex_invalid {
-            "Invalid regex".into()
+            crate::i18n::tr("diff.search.invalid_regex")
         } else if self.diff_search_matches.is_empty() {
-            "No matches".into()
+            crate::i18n::tr("diff.search.no_matches")
         } else {
             let ix = self
                 .diff_search_match_ix
@@ -1618,7 +1649,7 @@ impl MainPaneView {
                     })
                     .w(compact_icon_button_width)
                     .h(compact_control_height)
-                    .gitcomet_tooltip(theme, "Insert newline (Shift+Enter)".into())
+                    .gitcomet_tooltip(theme, crate::i18n::tr("diff.search.insert_newline"))
                     .debug_selector(|| "diff_search_newline".to_string()),
             )
             .child(
@@ -1634,7 +1665,7 @@ impl MainPaneView {
                     })
                     .w(compact_option_button_width)
                     .h(compact_control_height)
-                    .gitcomet_tooltip(theme, "Match case".into())
+                    .gitcomet_tooltip(theme, crate::i18n::tr("diff.search.match_case"))
                     .debug_selector(|| "diff_search_match_case".to_string()),
             )
             .child(
@@ -1650,7 +1681,7 @@ impl MainPaneView {
                     })
                     .w(compact_option_button_width)
                     .h(compact_control_height)
-                    .gitcomet_tooltip(theme, "Match whole word".into())
+                    .gitcomet_tooltip(theme, crate::i18n::tr("diff.search.match_whole_word"))
                     .debug_selector(|| "diff_search_whole_word".to_string()),
             )
             .child(
@@ -1666,7 +1697,7 @@ impl MainPaneView {
                     })
                     .w(compact_option_button_width)
                     .h(compact_control_height)
-                    .gitcomet_tooltip(theme, "Use regular expression".into())
+                    .gitcomet_tooltip(theme, crate::i18n::tr("diff.search.use_regex"))
                     .debug_selector(|| "diff_search_regex".to_string()),
             )
             .child(
@@ -1760,16 +1791,28 @@ impl MainPaneView {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let Some(repo) = self.active_repo() else {
-            return components::empty_state(theme, "Submodule", "No repository.")
-                .into_any_element();
+            return components::empty_state(
+                theme,
+                crate::i18n::tr("diff.pane.submodule"),
+                crate::i18n::tr("diff.common.no_repository"),
+            )
+            .into_any_element();
         };
         let Some(repo_id) = self.active_repo_id() else {
-            return components::empty_state(theme, "Submodule", "No repository.")
-                .into_any_element();
+            return components::empty_state(
+                theme,
+                crate::i18n::tr("diff.pane.submodule"),
+                crate::i18n::tr("diff.common.no_repository"),
+            )
+            .into_any_element();
         };
         let Some(selected_target) = repo.diff_state.diff_target.as_ref().cloned() else {
-            return components::empty_state(theme, "Submodule", "No submodule selected.")
-                .into_any_element();
+            return components::empty_state(
+                theme,
+                crate::i18n::tr("diff.pane.submodule"),
+                crate::i18n::tr("diff.submodule.no_submodule_selected"),
+            )
+            .into_any_element();
         };
         let (submodule_path, selected_area) = match &selected_target {
             DiffTarget::WorkingTree { path, area } => (path.clone(), Some(*area)),
@@ -1777,8 +1820,12 @@ impl MainPaneView {
                 path: Some(path), ..
             } => (path.clone(), None),
             _ => {
-                return components::empty_state(theme, "Submodule", "No submodule selected.")
-                    .into_any_element();
+                return components::empty_state(
+                    theme,
+                    crate::i18n::tr("diff.pane.submodule"),
+                    crate::i18n::tr("diff.submodule.no_submodule_selected"),
+                )
+                .into_any_element();
             }
         };
 
@@ -1794,10 +1841,12 @@ impl MainPaneView {
         let fallback_initialized = open_path.join(".git").exists();
 
         match &repo.diff_state.submodule_summary {
-            Loadable::NotLoaded | Loadable::Loading => {
-                components::empty_state(theme, "Submodule", "Loading submodule summary…")
-                    .into_any_element()
-            }
+            Loadable::NotLoaded | Loadable::Loading => components::empty_state(
+                theme,
+                crate::i18n::tr("diff.pane.submodule"),
+                crate::i18n::tr("diff.submodule.loading_summary"),
+            )
+            .into_any_element(),
             Loadable::Error(error) => {
                 components::empty_state(theme, "Submodule", error.clone()).into_any_element()
             }
@@ -1826,28 +1875,33 @@ impl MainPaneView {
 
                 let status_badge = |status: SubmoduleStatus| {
                     let (label, color) = match status {
-                        SubmoduleStatus::UpToDate => {
-                            ("Loaded", theme.colors.status.success.foreground)
-                        }
+                        SubmoduleStatus::UpToDate => (
+                            crate::i18n::tr_str("diff.submodule.status.loaded"),
+                            theme.colors.status.success.foreground,
+                        ),
                         SubmoduleStatus::NotInitialized => (
-                            "Not loaded",
+                            crate::i18n::tr_str("diff.submodule.status.not_loaded"),
                             with_alpha(
                                 theme.colors.foreground.secondary,
                                 if theme.is_dark { 0.86 } else { 0.94 },
                             ),
                         ),
-                        SubmoduleStatus::HeadMismatch => {
-                            ("Head mismatch", theme.colors.status.warning.foreground)
-                        }
-                        SubmoduleStatus::MergeConflict => {
-                            ("Conflict", theme.colors.status.danger.foreground)
-                        }
-                        SubmoduleStatus::MissingMapping => {
-                            ("Missing mapping", theme.colors.status.danger.foreground)
-                        }
-                        SubmoduleStatus::Unknown(_) => {
-                            ("Unknown", theme.colors.foreground.secondary)
-                        }
+                        SubmoduleStatus::HeadMismatch => (
+                            crate::i18n::tr_str("diff.submodule.status.head_mismatch"),
+                            theme.colors.status.warning.foreground,
+                        ),
+                        SubmoduleStatus::MergeConflict => (
+                            crate::i18n::tr_str("diff.submodule.status.conflict"),
+                            theme.colors.status.danger.foreground,
+                        ),
+                        SubmoduleStatus::MissingMapping => (
+                            crate::i18n::tr_str("diff.submodule.status.missing_mapping"),
+                            theme.colors.status.danger.foreground,
+                        ),
+                        SubmoduleStatus::Unknown(_) => (
+                            crate::i18n::tr_str("diff.submodule.status.unknown"),
+                            theme.colors.foreground.secondary,
+                        ),
                     };
 
                     div()
@@ -1892,7 +1946,7 @@ impl MainPaneView {
                                     .py_1()
                                     .text_sm()
                                     .text_color(theme.colors.foreground.secondary)
-                                    .child("No inner changes.")
+                                    .child(crate::i18n::tr("diff.submodule.no_inner_changes"))
                                     .into_any_element(),
                             ];
                         }
@@ -2152,7 +2206,7 @@ impl MainPaneView {
                                     div()
                                         .text_xs()
                                         .text_color(theme.colors.foreground.secondary)
-                                        .child("Hashes"),
+                                        .child(crate::i18n::tr("diff.submodule.hashes")),
                                 )
                                 .child(
                                     div()
@@ -2174,7 +2228,7 @@ impl MainPaneView {
                         );
                     }
                     section = section.child(render_change_section(
-                        "Changes between hashes",
+                        crate::i18n::tr_str("diff.submodule.changes_between_hashes"),
                         &format!("submodule_range_{:?}", range.kind),
                         &range.changes,
                         range_commits,
@@ -2246,7 +2300,7 @@ impl MainPaneView {
                                     .child(
                                         components::Button::new(
                                             "submodule_summary_open",
-                                            "Open submodule",
+                                            crate::i18n::tr("diff.submodule.open"),
                                         )
                                         .style(components::ButtonStyle::Outlined)
                                         .disabled(!can_open)
@@ -2267,7 +2321,7 @@ impl MainPaneView {
                                         row.child(
                                             components::Button::new(
                                                 "submodule_summary_load",
-                                                "Load submodule",
+                                                crate::i18n::tr("diff.submodule.load"),
                                             )
                                             .style(components::ButtonStyle::Outlined)
                                             .on_click(
@@ -2286,7 +2340,7 @@ impl MainPaneView {
                                     .child(
                                         components::Button::new(
                                             "submodule_summary_change_pointer",
-                                            "Change pointer…",
+                                            crate::i18n::tr("diff.submodule.change_pointer"),
                                         )
                                         .style(components::ButtonStyle::Outlined)
                                         .disabled(!can_change_pointer)
@@ -2320,7 +2374,7 @@ impl MainPaneView {
                             && !summary.live_staged.is_empty(),
                         |this| {
                             this.child(render_change_section(
-                                "Uncommitted inner staged",
+                                crate::i18n::tr_str("diff.submodule.uncommitted_inner_staged"),
                                 "submodule_live_staged",
                                 &summary.live_staged,
                                 None,
@@ -2335,7 +2389,7 @@ impl MainPaneView {
                             && !summary.live_unstaged.is_empty(),
                         |this| {
                             this.child(render_change_section(
-                                "Uncommitted inner unstaged",
+                                crate::i18n::tr_str("diff.submodule.uncommitted_inner_unstaged"),
                                 "submodule_live_unstaged",
                                 &summary.live_unstaged,
                                 None,
@@ -2496,14 +2550,17 @@ impl MainPaneView {
             && let Some(repo_id) = repo_id
         {
             controls = controls.child(
-                components::Button::new("inline_submodule_back", "Back")
-                    .separated_end_slot(Self::diff_nav_hotkey_hint(theme, "Esc"))
-                    .style(components::ButtonStyle::Outlined)
-                    .on_click(theme, cx, move |this, _e, _w, cx| {
-                        this.store
-                            .dispatch(Msg::CloseInlineSubmoduleDiff { repo_id });
-                        cx.notify();
-                    }),
+                components::Button::new(
+                    "inline_submodule_back",
+                    crate::i18n::tr("diff.toolbar.back"),
+                )
+                .separated_end_slot(Self::diff_nav_hotkey_hint(theme, "Esc"))
+                .style(components::ButtonStyle::Outlined)
+                .on_click(theme, cx, move |this, _e, _w, cx| {
+                    this.store
+                        .dispatch(Msg::CloseInlineSubmoduleDiff { repo_id });
+                    cx.notify();
+                }),
             );
         }
         let is_simple_conflict_strategy = matches!(
@@ -2626,10 +2683,11 @@ impl MainPaneView {
                     })
                     .gitcomet_tooltip(
                         theme,
-                        format!(
-                            "Previous change (F2 / Shift+F7 / {})",
-                            crate::view::shortcut_labels::alt_shortcut("Up")
+                        crate::i18n::t!(
+                            "diff.tooltip.prev_change",
+                            shortcut = crate::view::shortcut_labels::alt_shortcut("Up")
                         )
+                        .to_string()
                         .into(),
                     );
 
@@ -2647,70 +2705,75 @@ impl MainPaneView {
                     })
                     .gitcomet_tooltip(
                         theme,
-                        format!(
-                            "Next change (F3 / F7 / {})",
-                            crate::view::shortcut_labels::alt_shortcut("Down")
+                        crate::i18n::t!(
+                            "diff.tooltip.next_change",
+                            shortcut = crate::view::shortcut_labels::alt_shortcut("Down")
                         )
+                        .to_string()
                         .into(),
                     );
 
-                let diff_inline_btn = components::Button::new("diff_inline", "Inline")
-                    .borderless()
-                    .rounded_left()
-                    .style(components::ButtonStyle::Subtle)
-                    .selected(self.diff_view == DiffViewMode::Inline)
-                    .selected_bg(view_toggle_selected_bg)
-                    .on_click(theme, cx, |this, _e, window, cx| {
-                        this.set_diff_view_mode(DiffViewMode::Inline, cx);
-                        this.restore_diff_panel_focus_after_toolbar_action(window, cx);
-                        let root_view = this.root_view.clone();
-                        cx.defer(move |cx| {
-                            if let Some(root) = root_view.upgrade() {
-                                root.update(cx, |root, cx| {
-                                    root.set_diff_view_mode(DiffViewMode::Inline, cx);
-                                });
-                            }
-                        });
-                        cx.notify();
-                    })
-                    .debug_selector(|| "diff_inline".to_string())
-                    .gitcomet_tooltip(
-                        theme,
-                        format!(
-                            "Inline diff view ({})",
-                            crate::view::shortcut_labels::alt_shortcut("I")
-                        )
-                        .into(),
-                    );
+                let diff_inline_btn =
+                    components::Button::new("diff_inline", crate::i18n::tr("diff.toolbar.inline"))
+                        .borderless()
+                        .rounded_left()
+                        .style(components::ButtonStyle::Subtle)
+                        .selected(self.diff_view == DiffViewMode::Inline)
+                        .selected_bg(view_toggle_selected_bg)
+                        .on_click(theme, cx, |this, _e, window, cx| {
+                            this.set_diff_view_mode(DiffViewMode::Inline, cx);
+                            this.restore_diff_panel_focus_after_toolbar_action(window, cx);
+                            let root_view = this.root_view.clone();
+                            cx.defer(move |cx| {
+                                if let Some(root) = root_view.upgrade() {
+                                    root.update(cx, |root, cx| {
+                                        root.set_diff_view_mode(DiffViewMode::Inline, cx);
+                                    });
+                                }
+                            });
+                            cx.notify();
+                        })
+                        .debug_selector(|| "diff_inline".to_string())
+                        .gitcomet_tooltip(
+                            theme,
+                            crate::i18n::t!(
+                                "diff.tooltip.inline_view",
+                                shortcut = crate::view::shortcut_labels::alt_shortcut("I")
+                            )
+                            .to_string()
+                            .into(),
+                        );
 
-                let diff_split_btn = components::Button::new("diff_split", "Split")
-                    .borderless()
-                    .rounded_right()
-                    .style(components::ButtonStyle::Subtle)
-                    .selected(self.diff_view == DiffViewMode::Split)
-                    .selected_bg(view_toggle_selected_bg)
-                    .on_click(theme, cx, |this, _e, window, cx| {
-                        this.set_diff_view_mode(DiffViewMode::Split, cx);
-                        this.restore_diff_panel_focus_after_toolbar_action(window, cx);
-                        let root_view = this.root_view.clone();
-                        cx.defer(move |cx| {
-                            if let Some(root) = root_view.upgrade() {
-                                root.update(cx, |root, cx| {
-                                    root.set_diff_view_mode(DiffViewMode::Split, cx);
-                                });
-                            }
-                        });
-                        cx.notify();
-                    })
-                    .debug_selector(|| "diff_split".to_string())
-                    .gitcomet_tooltip(
-                        theme,
-                        format!(
-                            "Split diff view ({})",
-                            crate::view::shortcut_labels::alt_shortcut("S")
-                        )
-                        .into(),
-                    );
+                let diff_split_btn =
+                    components::Button::new("diff_split", crate::i18n::tr("diff.toolbar.split"))
+                        .borderless()
+                        .rounded_right()
+                        .style(components::ButtonStyle::Subtle)
+                        .selected(self.diff_view == DiffViewMode::Split)
+                        .selected_bg(view_toggle_selected_bg)
+                        .on_click(theme, cx, |this, _e, window, cx| {
+                            this.set_diff_view_mode(DiffViewMode::Split, cx);
+                            this.restore_diff_panel_focus_after_toolbar_action(window, cx);
+                            let root_view = this.root_view.clone();
+                            cx.defer(move |cx| {
+                                if let Some(root) = root_view.upgrade() {
+                                    root.update(cx, |root, cx| {
+                                        root.set_diff_view_mode(DiffViewMode::Split, cx);
+                                    });
+                                }
+                            });
+                            cx.notify();
+                        })
+                        .debug_selector(|| "diff_split".to_string())
+                        .gitcomet_tooltip(
+                            theme,
+                            crate::i18n::t!(
+                                "diff.tooltip.split_view",
+                                shortcut = crate::view::shortcut_labels::alt_shortcut("S")
+                            )
+                            .to_string()
+                            .into(),
+                        );
 
                 let diff_edit_btn = self
                     .file_edit_toggle_button(theme, view_toggle_selected_bg, is_file_editor, cx)
@@ -2851,13 +2914,13 @@ impl MainPaneView {
                     (
                         "mergetool_settings_menu",
                         PopoverKind::MergetoolSettingsMenu,
-                        "Merge tool settings",
+                        crate::i18n::tr_str("diff.tooltip.mergetool_settings"),
                     )
                 } else {
                     (
                         "diff_action_menu",
                         PopoverKind::DiffActionMenu,
-                        "Diff actions",
+                        crate::i18n::tr_str("diff.tooltip.diff_actions"),
                     )
                 };
             let diff_action_invoker: SharedString = cog_id.into();
@@ -2896,7 +2959,7 @@ impl MainPaneView {
                         cx.notify();
                     })
                     .debug_selector(|| "diff_close".to_string())
-                    .gitcomet_tooltip(theme, "Close diff".into()),
+                    .gitcomet_tooltip(theme, crate::i18n::tr("diff.tooltip.close_diff")),
             );
         }
 
@@ -2935,39 +2998,54 @@ impl MainPaneView {
         let body: AnyElement = if has_submodule_summary && !inline_submodule_diff_active {
             self.render_submodule_summary(theme, cx)
         } else if let Some(message) = untracked_directory_notice {
-            components::empty_state(theme, "Directory", message).into_any_element()
+            components::empty_state(theme, crate::i18n::tr("diff.pane.directory"), message)
+                .into_any_element()
         } else if is_file_editor {
             self.render_file_editor(theme, cx)
         } else if is_file_preview {
             if is_markdown_preview_view {
                 match &self.worktree_preview {
-                    Loadable::NotLoaded | Loadable::Loading => {
-                        components::empty_state(theme, "Preview", "Loading").into_any_element()
-                    }
-                    Loadable::Error(e) => {
-                        components::empty_state(theme, "Preview", e.clone()).into_any_element()
-                    }
+                    Loadable::NotLoaded | Loadable::Loading => components::empty_state(
+                        theme,
+                        crate::i18n::tr("diff.pane.preview"),
+                        crate::i18n::tr("diff.common.loading"),
+                    )
+                    .into_any_element(),
+                    Loadable::Error(e) => components::empty_state(
+                        theme,
+                        crate::i18n::tr("diff.pane.preview"),
+                        e.clone(),
+                    )
+                    .into_any_element(),
                     Loadable::Ready(_) => {
                         self.ensure_single_markdown_preview_cache(cx);
                         self.watch_pending_markdown_preview_images(cx);
                         match &self.worktree_markdown_preview {
-                            Loadable::NotLoaded | Loadable::Loading => {
-                                components::empty_state(theme, "Preview", "Loading")
-                                    .into_any_element()
-                            }
-                            Loadable::Error(e) => {
-                                components::empty_state(theme, "Preview", e.clone())
-                                    .into_any_element()
-                            }
+                            Loadable::NotLoaded | Loadable::Loading => components::empty_state(
+                                theme,
+                                crate::i18n::tr("diff.pane.preview"),
+                                crate::i18n::tr("diff.common.loading"),
+                            )
+                            .into_any_element(),
+                            Loadable::Error(e) => components::empty_state(
+                                theme,
+                                crate::i18n::tr("diff.pane.preview"),
+                                e.clone(),
+                            )
+                            .into_any_element(),
                             Loadable::Ready(document) => {
                                 if document.rows.is_empty() {
                                     let message = if self.worktree_preview_line_count() == Some(0) {
-                                        "Empty file."
+                                        crate::i18n::tr("diff.common.empty_file")
                                     } else {
-                                        "Nothing to render."
+                                        crate::i18n::tr("diff.common.nothing_to_render")
                                     };
-                                    components::empty_state(theme, "Preview", message)
-                                        .into_any_element()
+                                    components::empty_state(
+                                        theme,
+                                        crate::i18n::tr("diff.pane.preview"),
+                                        message,
+                                    )
+                                    .into_any_element()
                                 } else {
                                     // A single document lays out as one flowing
                                     // element tree rather than a uniform row
@@ -3061,9 +3139,12 @@ impl MainPaneView {
                 }
             } else {
                 match &self.worktree_preview {
-                    Loadable::NotLoaded | Loadable::Loading => {
-                        components::empty_state(theme, "File", "Loading").into_any_element()
-                    }
+                    Loadable::NotLoaded | Loadable::Loading => components::empty_state(
+                        theme,
+                        crate::i18n::tr("diff.pane.file"),
+                        crate::i18n::tr("diff.common.loading"),
+                    )
+                    .into_any_element(),
                     Loadable::Error(e) => {
                         self.diff_raw_input.update(cx, |input, cx| {
                             input.set_theme(theme, cx);
@@ -3085,7 +3166,12 @@ impl MainPaneView {
                     Loadable::Ready(line_count) => {
                         let line_count = *line_count;
                         if line_count == 0 {
-                            components::empty_state(theme, "File", "Empty file.").into_any_element()
+                            components::empty_state(
+                                theme,
+                                crate::i18n::tr("diff.pane.file"),
+                                crate::i18n::tr("diff.common.empty_file"),
+                            )
+                            .into_any_element()
                         } else {
                             // Word wrap turns one line into several rows, so the
                             // projection has to be built before the list is
@@ -3170,39 +3256,51 @@ impl MainPaneView {
             )
         } else if is_conflict_compare {
             match (repo, conflict_target_path) {
-                (None, _) => {
-                    components::empty_state(theme, "Resolve", "No repository.").into_any_element()
-                }
-                (_, None) => {
-                    components::empty_state(theme, "Resolve", "No conflicted file selected.")
-                        .into_any_element()
-                }
+                (None, _) => components::empty_state(
+                    theme,
+                    crate::i18n::tr("diff.pane.resolve"),
+                    crate::i18n::tr("diff.common.no_repository"),
+                )
+                .into_any_element(),
+                (_, None) => components::empty_state(
+                    theme,
+                    crate::i18n::tr("diff.pane.resolve"),
+                    crate::i18n::tr("diff.conflict.no_file_selected"),
+                )
+                .into_any_element(),
                 (Some(repo), Some(path)) => {
+                    let path_display = self.cached_path_display(&path);
                     let title: SharedString =
-                        format!("Resolve conflict: {}", self.cached_path_display(&path)).into();
+                        crate::i18n::t!("diff.conflict.title", path = path_display)
+                            .to_string()
+                            .into();
 
                     match renderable_conflict_file(repo, &self.conflict_resolver, &path) {
-                        RenderableConflictFile::Loading => {
-                            components::empty_state(theme, title, "Loading conflict data…")
-                                .into_any_element()
-                        }
+                        RenderableConflictFile::Loading => components::empty_state(
+                            theme,
+                            title,
+                            crate::i18n::tr("diff.conflict.loading_data"),
+                        )
+                        .into_any_element(),
                         RenderableConflictFile::Error(error) => {
                             components::empty_state(theme, title, error).into_any_element()
                         }
-                        RenderableConflictFile::Missing => {
-                            components::empty_state(theme, title, "No conflict data.")
-                                .into_any_element()
-                        }
+                        RenderableConflictFile::Missing => components::empty_state(
+                            theme,
+                            title,
+                            crate::i18n::tr("diff.conflict.no_data"),
+                        )
+                        .into_any_element(),
                         RenderableConflictFile::File(file) => {
                             let ours_label: SharedString = if file.ours.is_some() {
-                                "Ours".into()
+                                crate::i18n::tr("diff.conflict.ours")
                             } else {
-                                "Ours (deleted)".into()
+                                crate::i18n::tr("diff.conflict.ours_deleted")
                             };
                             let theirs_label: SharedString = if file.theirs.is_some() {
-                                "Theirs".into()
+                                crate::i18n::tr("diff.conflict.theirs")
                             } else {
-                                "Theirs (deleted)".into()
+                                crate::i18n::tr("diff.conflict.theirs_deleted")
                             };
 
                             // The body reserves this gutter for its vertical scrollbar; the
@@ -3223,8 +3321,12 @@ impl MainPaneView {
                             let diff_len = self.conflict_resolver.two_way_split_visible_len();
 
                             let diff_body: AnyElement = if diff_len == 0 {
-                                components::empty_state(theme, "Diff", "No conflict diff to show.")
-                                    .into_any_element()
+                                components::empty_state(
+                                    theme,
+                                    crate::i18n::tr("diff.pane.diff"),
+                                    crate::i18n::tr("diff.conflict.no_diff_to_show"),
+                                )
+                                .into_any_element()
                             } else {
                                 let scroll_handle = self.diff_scroll.0.borrow().base_handle.clone();
                                 let list = uniform_list(
@@ -3291,14 +3393,25 @@ impl MainPaneView {
             self.render_selected_file_diff(theme, window, cx)
         } else {
             match repo {
-                None => components::empty_state(theme, "Diff", "No repository.").into_any_element(),
+                None => components::empty_state(
+                    theme,
+                    crate::i18n::tr("diff.pane.diff"),
+                    crate::i18n::tr("diff.common.no_repository"),
+                )
+                .into_any_element(),
                 Some(_repo) => match self.rendered_patch_diff_loadable() {
-                    Some(Loadable::NotLoaded) | None => {
-                        components::empty_state(theme, "Diff", "Select a file.").into_any_element()
-                    }
-                    Some(Loadable::Loading) => {
-                        components::empty_state(theme, "Diff", "Loading").into_any_element()
-                    }
+                    Some(Loadable::NotLoaded) | None => components::empty_state(
+                        theme,
+                        crate::i18n::tr("diff.pane.diff"),
+                        crate::i18n::tr("diff.common.select_a_file"),
+                    )
+                    .into_any_element(),
+                    Some(Loadable::Loading) => components::empty_state(
+                        theme,
+                        crate::i18n::tr("diff.pane.diff"),
+                        crate::i18n::tr("diff.common.loading"),
+                    )
+                    .into_any_element(),
                     Some(Loadable::Error(e)) => {
                         self.diff_raw_input.update(cx, |input, cx| {
                             input.set_theme(theme, cx);
@@ -3326,11 +3439,19 @@ impl MainPaneView {
 
                             {
                                 if self.patch_diff_row_len() == 0 {
-                                    components::empty_state(theme, "Diff", "No differences.")
-                                        .into_any_element()
+                                    components::empty_state(
+                                        theme,
+                                        crate::i18n::tr("diff.pane.diff"),
+                                        crate::i18n::tr("diff.common.no_differences"),
+                                    )
+                                    .into_any_element()
                                 } else if self.diff_visible_len() == 0 {
-                                    components::empty_state(theme, "Diff", "Nothing to render.")
-                                        .into_any_element()
+                                    components::empty_state(
+                                        theme,
+                                        crate::i18n::tr("diff.pane.diff"),
+                                        crate::i18n::tr("diff.common.nothing_to_render"),
+                                    )
+                                    .into_any_element()
                                 } else {
                                     let markers = self.diff_scrollbar_markers_cache.clone();
                                     match self.diff_view {

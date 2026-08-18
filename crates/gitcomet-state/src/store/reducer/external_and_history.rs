@@ -480,7 +480,7 @@ pub(super) fn interactive_cherry_pick_messages_loaded(
                         .all(|entry| returned_ids.contains(entry.commit_id.as_str()))
                 {
                     setup.full_messages = Loadable::Error(
-                        "Repository returned an invalid ordered cherry-pick selection".to_string(),
+                        rust_i18n::t!("store.reducer.invalid_cherry_pick_selection").to_string(),
                     );
                     return vec![];
                 }
@@ -492,18 +492,20 @@ pub(super) fn interactive_cherry_pick_messages_loaded(
                 let mut ordered_entries = Vec::with_capacity(messages.len());
                 for (id, message) in messages {
                     let Some(mut entry) = entries_by_id.remove(&id) else {
-                        setup.full_messages = Loadable::Error(format!(
-                            "Commit ordering returned an unexpected commit {id}"
-                        ));
+                        setup.full_messages = Loadable::Error(
+                            rust_i18n::t!("store.reducer.unexpected_commit_in_order", id = id)
+                                .to_string(),
+                        );
                         return vec![];
                     };
                     entry.message = message;
                     ordered_entries.push(entry);
                 }
                 if let Some((missing, _)) = entries_by_id.into_iter().next() {
-                    setup.full_messages = Loadable::Error(format!(
-                        "Failed to load and order selected commit {missing}"
-                    ));
+                    setup.full_messages = Loadable::Error(
+                        rust_i18n::t!("store.reducer.commit_order_load_failed", missing = missing)
+                            .to_string(),
+                    );
                     return vec![];
                 }
                 setup.entries = ordered_entries;

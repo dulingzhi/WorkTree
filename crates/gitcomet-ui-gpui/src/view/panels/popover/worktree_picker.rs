@@ -168,11 +168,11 @@ pub(super) fn panel(
         };
 
     let Some(repo) = repo_for(this, repo_id) else {
-        return label(this, "No repository".into(), cx);
+        return label(this, crate::i18n::tr("ui.common.no_repository"), cx);
     };
     match &repo.worktrees {
-        Loadable::Loading => return label(this, "Loading".into(), cx),
-        Loadable::NotLoaded => return label(this, "Not loaded".into(), cx),
+        Loadable::Loading => return label(this, crate::i18n::tr("ui.common.loading"), cx),
+        Loadable::NotLoaded => return label(this, crate::i18n::tr("ui.common.not_loaded"), cx),
         Loadable::Error(e) => {
             let e = e.clone();
             return label(this, e.into(), cx);
@@ -181,7 +181,11 @@ pub(super) fn panel(
     }
 
     let Some(search) = this.worktree_picker_search_input.clone() else {
-        return label(this, "Search input not initialized".into(), cx);
+        return label(
+            this,
+            crate::i18n::tr("ui.common.search_input_not_initialized"),
+            cx,
+        );
     };
     let query = search.read(cx).text().trim().to_string();
     let built = cached(this, repo_id, is_remove, &query);
@@ -192,7 +196,7 @@ pub(super) fn panel(
         components::PickerPrompt::new(search, this.picker_prompt_scroll.clone())
             .prebuilt_items(Rc::clone(&built.items), Rc::clone(&built.layout))
             .tooltip_host(this.tooltip_host.clone())
-            .empty_text("No worktrees")
+            .empty_text(crate::i18n::tr("ui.picker.worktree.empty"))
             .max_height(scaled_px(WORKTREE_PICKER_LIST_MAX_HEIGHT_PX))
             .selected_index(this.worktree_picker_selected_index)
             .render(

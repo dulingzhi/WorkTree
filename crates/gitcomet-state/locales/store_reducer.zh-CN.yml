@@ -1,0 +1,148 @@
+store:
+  reducer:
+    # Failure labels (command log / toast headline for a failed command)
+    label_fetch: 获取
+    label_clone: 克隆
+    label_commit: 提交
+    label_amend: 修补
+    label_pull: 拉取
+    label_merge: 合并
+    label_squash: 压缩
+    label_push: 推送
+    label_push_after_commit: "提交后推送"
+    label_force_push: "强制推送"
+    label_force_push_with_lease: "带租约的强制推送"
+    label_prune_merged_branches: "清理已合并分支"
+    label_prune_local_tags: "清理本地标签"
+    label_set_tracking_upstream: "设为跟踪上游"
+    label_unlink_upstream: "取消关联上游分支"
+    label_delete_remote_branch: "删除远程分支"
+    label_delete_remote_branches: "删除多个远程分支"
+    label_push_tag: "推送标签"
+    label_delete_remote_tag: "删除远程标签"
+    label_reset: 重置
+    label_rebase: 变基
+    label_interactive_rebase: "交互式变基"
+    label_cherry_pick: "拣选"
+    label_tag: 标签
+    label_remote: 远程
+    label_checkout_ours: "检出我方版本"
+    label_checkout_theirs: "检出对方版本"
+    label_accept_deletion: "接受删除"
+    label_checkout_base: "检出基础版本"
+    label_mergetool: "合并工具"
+    label_save_file: "保存文件"
+    label_update_gitignore: "更新 .gitignore"
+    label_patch: 补丁
+    label_worktree: 工作树
+    label_submodule: 子模块
+    label_hunk: 代码块
+    label_discard: 放弃
+
+    # Failure templates
+    cmd_failed: "%{label}失败"
+    cmd_failed_details: "%{label}失败：\n\n%{details}"
+
+    # Outcome fragments embedded into success summaries
+    base_up_to_date: "已是最新"
+    base_already_up_to_date: "已是最新"
+    base_fast_forwarded: "已快进"
+    base_merged: "已合并"
+    base_completed: "已完成"
+    base_staged: "已暂存"
+    base_everything_up_to_date: "所有内容均已是最新"
+    base_pushed: "已推送"
+    state_paused: "在冲突处暂停"
+
+    # Success summaries (command log / announce toast)
+    fetch_up_to_date: "获取：已是最新"
+    fetch_synchronized: "获取：已同步"
+    prune_merged_branches_done: "清理已合并分支：已完成"
+    prune_local_tags_done: "清理本地标签：已完成"
+    pull_up_to_date: "拉取：已是最新"
+    pull_fast_forwarded: "拉取：已快进"
+    pull_merged: "拉取：已合并"
+    pull_rebase_complete: "拉取：变基完成"
+    pull_done: "拉取：已完成"
+    pull_branch: "拉取 %{remote}/%{branch}：%{base}"
+    merge_ref: "合并 %{reference}：%{base}"
+    squash_ref: "压缩 %{reference}：%{base}"
+    push_uptodate: "推送：所有内容均已是最新"
+    push_done: "推送：已完成"
+    push_after_commit_done: "提交后推送：%{base}"
+    push_after_commit_u_done: "提交后推送 -u：%{base}"
+    force_push_uptodate: "强制推送：所有内容均已是最新"
+    force_push_done: "强制推送：已完成"
+    force_push_lease_uptodate: "带租约的强制推送：所有内容均已是最新"
+    force_push_lease_done: "带租约的强制推送：已完成"
+    push_set_upstream: "推送 -u %{remote}/%{branch}：%{base}"
+    upstream_set: "分支 %{branch}：上游已设为 %{upstream}"
+    upstream_unlinked: "分支 %{branch}：已取消关联上游"
+    remote_branch_deleted: "远程分支 %{remote}/%{branch}：已删除"
+    remote_branches_deleted: "%{remote} 上的 %{count} 个远程%{noun}：已删除"
+    tag_pushed: "标签 %{name} → %{remote}：已推送"
+    tag_already_up_to_date: "标签 %{name} → %{remote}：已是最新"
+    remote_tag_deleted: "标签 %{name}（%{remote}）：已删除"
+    resolved_ours: "已使用我方版本解决"
+    resolved_theirs: "已使用对方版本解决"
+    resolved_by_deletion: "已接受删除解决 → %{path}"
+    resolved_base: "已使用基础版本解决 → %{path}"
+    mergetool_resolved: "合并工具：已解决 %{path}"
+    saved_and_staged: "已保存并暂存 → %{path}"
+    saved: "已保存 → %{path}"
+    gitignore_nothing_added: "已在 .gitignore 中；未添加任何内容"
+    gitignore_added: "已将 %{pattern} 添加到 .gitignore"
+    gitignore_added_many: "已将 %{count} 个模式添加到 .gitignore"
+    reset_done: "重置（--%{mode}）%{target}：已完成"
+    squash_commits_done: "压缩 %{count} 个提交：已完成"
+    rebase_onto_done: "变基到 %{onto}：已完成"
+    sequencer_paused_next: "%{operation}：在下一个冲突处暂停"
+    sequencer_continued: "%{operation}：已继续"
+    sequencer_aborted: "%{operation}：已中止"
+    interactive_rebase_state: "交互式变基到 %{base}：%{state}"
+    rebase_onto_state: "变基到 %{base}：%{state}"
+    cherry_pick_state: "拣选 %{count} 个提交：%{state}"
+    cherry_pick_already_applied: "当前分支已包含被拣选提交的全部更改。"
+    cherry_picked: "已拣选 %{sha}：%{summary}"
+    cherry_picked_no_commit: "已拣选 %{sha}（未提交）：%{summary}"
+    merge_aborted: "合并：已中止"
+    tag_created: "标签 %{name} → %{target}：已创建"
+    tag_deleted: "标签 %{name}：已删除"
+    remote_added: "远程 %{name}：已添加"
+    remote_removed: "远程 %{name}：已移除"
+    remote_url_updated: "远程 %{name}（%{kind}）：URL 已更新"
+    patch_exported: "补丁已导出 → %{path}"
+    patch_applied_to: "补丁已应用 → %{path}"
+    patch_applied: "补丁已应用"
+    worktree_added: "工作树已添加 → %{path}"
+    worktree_added_ref: "工作树已添加 → %{path}（%{reference}）"
+    worktree_removed: "工作树已移除 → %{path}"
+    worktree_force_removed: "工作树已强制移除 → %{path}"
+    submodule_added: "子模块已添加 → %{path}"
+    submodules_updated: "子模块：已更新"
+    submodule_loaded: "子模块已加载 → %{path}"
+    submodule_pointer_updated: "子模块指针已更新 → %{path}（%{reference}）"
+    submodule_removed: "子模块已移除 → %{path}"
+    hunk_staged: "代码块已暂存"
+    hunk_unstaged: "代码块已取消暂存"
+    changes_discarded: "已放弃更改"
+
+    # Session persistence
+    persist_failed: "会话状态持久化失败（%{action}）：%{error}"
+
+    # Auth prompt validation
+    auth_secret_empty: "凭据/密码短语/确认信息不能为空"
+    auth_username_empty: "用户名不能为空"
+
+    # Flow notices
+    squash_cancelled: "压缩已取消：所选提交已不再可压缩。"
+    commit_done: "提交：已完成"
+    amend_done: "修补：已完成"
+    push_after_commit_blocked: "提交后推送被阻止：%{summary}"
+    start_of_history: "历史起点"
+    squash_rebase_load_failed: "加载用于压缩变基的提交失败：%{error}"
+    commit_reveal_failed: "找不到提交 %{reference}：%{error}"
+    folder_not_a_repo: "该文件夹不是 git 仓库：%{path}"
+    invalid_cherry_pick_selection: "仓库返回了无效的有序拣选选择"
+    unexpected_commit_in_order: "提交排序返回了意外的提交 %{id}"
+    commit_order_load_failed: "加载并排序所选提交 %{missing} 失败"

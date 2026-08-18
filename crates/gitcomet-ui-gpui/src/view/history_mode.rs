@@ -58,6 +58,9 @@ pub(crate) fn history_mode_label(mode: HistoryMode) -> &'static str {
     history_mode_ui_specs()
         .iter()
         .find(|spec| spec.mode == mode)
-        .map(|spec| spec.label)
+        // The spec table keeps English labels (the dropdown's keyboard
+        // shortcuts and row ids hang off it); only this display lookup
+        // localizes, gettext-style.
+        .map(|spec| crate::i18n::tr_str(spec.label))
         .unwrap_or("Unknown")
 }

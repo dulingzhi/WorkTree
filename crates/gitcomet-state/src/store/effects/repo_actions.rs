@@ -362,14 +362,29 @@ fn delete_branches_failure_message(
     first_error: Option<&str>,
 ) -> String {
     let deleted = total - failed.len();
-    let noun = crate::name_summary::branch_noun(total);
+    let noun = if total == 1 {
+        rust_i18n::t!("store.effects.branch_noun_one")
+    } else {
+        rust_i18n::t!("store.effects.branch_noun_other")
+    }
+    .to_string();
     let names = crate::name_summary::elide_names(failed, ", ");
-    let mut message = format!("Deleted {deleted} of {total} {noun}. Failed: {names}");
+    let mut message = rust_i18n::t!(
+        "store.effects.deleted_n_of_m",
+        deleted = deleted,
+        total = total,
+        noun = noun,
+        names = names
+    )
+    .to_string();
     if let Some(error) = first_error.map(str::trim).filter(|error| !error.is_empty()) {
-        message.push_str(&format!(". {error}"));
+        message.push_str(&rust_i18n::t!(
+            "store.effects.failure_detail_suffix",
+            error = error
+        ));
     }
     if !force {
-        message.push_str(". Branches that are not fully merged need Force delete.");
+        message.push_str(&rust_i18n::t!("store.effects.need_force_delete_suffix"));
     }
     message
 }

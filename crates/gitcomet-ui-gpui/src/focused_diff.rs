@@ -4,6 +4,7 @@
 //! The user reviews the diff and closes the window (exit 0).
 
 use crate::assets::GitCometAssets;
+use crate::i18n::t;
 use crate::launch_guard::run_with_panic_guard;
 use crate::theme::AppTheme;
 use crate::view::components;
@@ -114,10 +115,10 @@ impl FocusedDiffWhitespaceMode {
         }
     }
 
-    const fn label(self) -> &'static str {
+    fn label(self) -> &'static str {
         match self {
-            Self::Show => "Show",
-            Self::Ignore => "Ignore",
+            Self::Show => crate::i18n::tr_str("ui.label.whitespace.show"),
+            Self::Ignore => crate::i18n::tr_str("ui.label.whitespace.ignore"),
         }
     }
 
@@ -383,7 +384,10 @@ impl Render for FocusedDiffView {
                     .child(
                         components::Button::new(
                             "btn-whitespace-mode",
-                            format!("Whitespace: {}", self.diff_whitespace_mode.label()),
+                            t!(
+                                "ui.label.whitespace.summary",
+                                mode = self.diff_whitespace_mode.label()
+                            ),
                         )
                         .style(components::ButtonStyle::Outlined)
                         .on_click(

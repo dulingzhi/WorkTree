@@ -35,13 +35,18 @@ pub(super) fn panel(
             let detail = if selected_count == 1 {
                 clicked_path.display().to_string()
             } else {
-                format!("{selected_count} files")
+                crate::i18n::t!("panels.discard_confirm.files_count", count = selected_count)
+                    .into_owned()
             };
             (selected_count, detail, true)
         }
         None => {
             if selected_paths_count == 0 {
-                (0, "No files selected.".to_string(), false)
+                (
+                    0,
+                    crate::i18n::t!("panels.discard_confirm.no_files_selected").into_owned(),
+                    false,
+                )
             } else if selected_paths_count == 1 {
                 let selected_path = this
                     .details_pane
@@ -50,38 +55,48 @@ pub(super) fn panel(
                     .get(&repo_id)
                     .and_then(|sel| sel.first_selected_for_area(area))
                     .map(|p| p.display().to_string())
-                    .unwrap_or_else(|| "file".to_string());
+                    .unwrap_or_else(|| crate::i18n::t!("panels.discard_confirm.file").into_owned());
                 (1, selected_path, true)
             } else {
                 (
                     selected_paths_count,
-                    format!("{selected_paths_count} files"),
+                    crate::i18n::t!(
+                        "panels.discard_confirm.files_count",
+                        count = selected_paths_count
+                    )
+                    .into_owned(),
                     true,
                 )
             }
         }
     };
 
-    ConfirmDialog::new("Discard changes", DIALOG_420_WIDTH)
-        .text(
+    ConfirmDialog::new(
+        crate::i18n::tr("panels.discard_confirm.title"),
+        DIALOG_420_WIDTH,
+    )
+    .text(
+        theme,
+        crate::i18n::t!("panels.discard_confirm.body", detail = detail).into_owned(),
+    )
+    .render(
+        theme,
+        dialog_cancel_button(
+            "discard_changes_cancel",
+            "discard_changes_cancel_hint",
             theme,
-            format!("This will discard working tree changes for {detail}."),
-        )
-        .render(
-            theme,
-            dialog_cancel_button(
-                "discard_changes_cancel",
-                "discard_changes_cancel_hint",
-                theme,
-                cx,
-            ),
-            components::Button::new("discard_changes_go", "Discard")
-                .style(components::ButtonStyle::Danger)
-                .disabled(!can_discard)
-                .on_click(theme, cx, move |this, _e, _w, cx| {
-                    this.discard_worktree_changes_confirmed(repo_id, area, path.clone(), cx);
-                    this.close_popover(cx);
-                }),
             cx,
+        ),
+        components::Button::new(
+            "discard_changes_go",
+            crate::i18n::tr("panels.discard_confirm.discard"),
         )
+        .style(components::ButtonStyle::Danger)
+        .disabled(!can_discard)
+        .on_click(theme, cx, move |this, _e, _w, cx| {
+            this.discard_worktree_changes_confirmed(repo_id, area, path.clone(), cx);
+            this.close_popover(cx);
+        }),
+        cx,
+    )
 }

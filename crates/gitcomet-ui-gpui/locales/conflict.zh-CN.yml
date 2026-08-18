@@ -1,0 +1,97 @@
+# 简体中文目录，对应 conflict.en.yml；键结构必须一致，%{...} 占位符须一一对应。
+conflict:
+  title: "解决冲突：%{path}"
+  tab: 解决
+  empty:
+    no_repository: "未打开仓库。"
+    no_conflicted_file: "未选择冲突文件。"
+    loading: "正在加载冲突数据…"
+    no_data: "无冲突数据。"
+    repository_unavailable: "仓库上下文不可用。"
+    inputs: 输入
+    stage_data_unavailable: "暂存数据不可用。"
+    preview: 预览
+    preview_unavailable: "此文件无法预览。"
+  toolbar:
+    resolved_count: "已解决 %{resolved}/%{total}"
+    unresolved_count: "%{count} 个未解决"
+    first_delta: "第一个差异块（Ctrl+Home）"
+    previous_conflict: "上一个冲突（F2 / Shift+F7 / %{shortcut}）"
+    next_conflict: "下一个冲突（F3 / F7 / %{shortcut}）"
+    last_delta: "最后一个差异块（Ctrl+End）"
+    previous_unresolved: "上一个未解决冲突（Shift+F2）"
+    next_unresolved: "下一个未解决冲突（Shift+F3）"
+  pick:
+    base: 基础版本
+    ours: 我方
+    theirs: 他方
+    both: 两者
+    local: 本地
+    remote: 远程
+    tooltip:
+      base: "为当前冲突选取基础（祖先）版本（A 或 Ctrl+1；U 取消解决）"
+      three_way_ours: "为当前冲突选取本地（我方）版本（B 或 Ctrl+2；U 取消解决）"
+      three_way_theirs: "为当前冲突选取传入（他方）版本（C 或 Ctrl+3；U 取消解决）"
+      three_way_both: "为当前冲突保留两个版本（先我方后他方）（D；U 取消解决）"
+      two_way_local: "为当前冲突选取本地（我方）版本（A 或 Ctrl+1；U 取消解决）"
+      two_way_remote: "为当前冲突选取传入（他方）版本（B 或 Ctrl+2；U 取消解决）"
+      two_way_both: "为当前冲突保留两个版本（先我方后他方）（C 或 Ctrl+3；U 取消解决）"
+  save:
+    label: 保存
+    save_and_close: 保存并关闭
+    save_and_stage: 保存并暂存
+    disabled_one: "已禁用：还有 %{count} 个冲突未解决"
+    disabled_many: "已禁用：还有 %{count} 个冲突未解决"
+  footer:
+    no_conflicts: 此文件中没有冲突
+    unresolved_one: "⚠ %{count} 个冲突未解决"
+    unresolved_many: "⚠ %{count} 个冲突未解决"
+    resolution_progress: 解决进度
+    all_resolved: "✓ 所有冲突已解决"
+    resolution_complete: 解决完成
+    whitespace_one: "%{count} 个空白冲突"
+    whitespace_many: "%{count} 个空白冲突"
+    markers_remain: 仍存在冲突标记
+    reset_markers: 重置冲突标记
+  toggle:
+    show_resolved: 显示已解决
+    hide_resolved: 隐藏已解决
+    text: 文本
+    preview: 预览
+  columns:
+    base_index: "基础版本（A，索引 :1）"
+    local_index: "本地（B，索引 :2）"
+    remote_index: "远程（C，索引 :3）"
+    local_only: "本地（索引 :2）"
+    remote_only: "远程（索引 :3）"
+    base_a: "基础版本（A）"
+    local_b: "本地（B）"
+    remote_c: "远程（C）"
+    ours_b: "我方（B）"
+    theirs_c: "他方（C）"
+  output:
+    heading: 解决后的输出
+    modified: "[已修改]"
+  preview:
+    processing: "正在处理预览…"
+    processing_ellipsis: "正在处理预览…"
+    unavailable: "预览不可用。"
+    empty: "（空）"
+    empty_file: "空文件。"
+  binary:
+    heading: 二进制文件冲突
+    description: "此文件包含二进制或非 UTF8 数据，无法作为文本合并。"
+    size_absent: 缺失
+    kind_text: "文本（有效 UTF-8）"
+    kind_binary: "二进制（非 UTF8）"
+    kind_not_present: "不存在"
+    use_base_and_close: "使用基础版本并关闭"
+    use_base: "使用基础版本（祖先）"
+    use_ours_and_close: "使用我方并关闭"
+    use_ours: "使用我方（本地）"
+    use_theirs_and_close: "使用他方并关闭"
+    use_theirs: "使用他方（远程）"
+    external_mergetool: 外部合并工具
+    image_title: 图片预览
+    processing_image: "正在处理图片…"
+    no_image: 无图片

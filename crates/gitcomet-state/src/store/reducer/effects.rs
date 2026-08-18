@@ -979,7 +979,7 @@ fn merged_selection_range(
 fn range_endpoint_label(id: &CommitId) -> String {
     let full = id.as_ref();
     if full == EMPTY_TREE_ID {
-        return "start of history".to_string();
+        return rust_i18n::t!("store.reducer.start_of_history").to_string();
     }
     full.get(..8).unwrap_or(full).to_string()
 }
@@ -2556,7 +2556,7 @@ pub(super) fn squash_rebase_setup_loaded(
             push_notification(
                 state,
                 AppNotificationKind::Error,
-                format!("Failed to load commits for squash rebase: {e}"),
+                rust_i18n::t!("store.reducer.squash_rebase_load_failed", error = e).to_string(),
             );
             return Vec::new();
         }
@@ -2598,7 +2598,7 @@ pub(super) fn squash_rebase_setup_loaded(
         push_notification(
             state,
             AppNotificationKind::Warning,
-            "Squash cancelled: the selected commits are no longer squashable.".to_string(),
+            rust_i18n::t!("store.reducer.squash_cancelled").to_string(),
         );
         return Vec::new();
     }
@@ -2658,7 +2658,12 @@ pub(super) fn commit_reveal_resolved(
             push_notification(
                 state,
                 crate::model::AppNotificationKind::Warning,
-                format!("Could not find commit {reference}: {e}"),
+                rust_i18n::t!(
+                    "store.reducer.commit_reveal_failed",
+                    reference = reference,
+                    error = e
+                )
+                .to_string(),
             );
             return Vec::new();
         }

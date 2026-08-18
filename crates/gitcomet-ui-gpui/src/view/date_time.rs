@@ -103,7 +103,10 @@ impl Timezone {
 
     pub(super) fn label(self) -> &'static str {
         match self {
-            Timezone::SystemLocal => "System local",
+            // Localized for the settings dropdown; the formatted-timestamp
+            // suffix below never uses this arm (`SystemLocal` prints its
+            // resolved offset instead), and `Utc`/`Fixed` stay locale-free.
+            Timezone::SystemLocal => crate::i18n::tr_str("ui.label.timezone.system_local"),
             Timezone::Utc => "UTC",
             Timezone::Fixed(s) => match s {
                 -43200 => "UTC\u{2212}12",
@@ -170,7 +173,8 @@ impl Timezone {
 
     pub(super) fn cities(self) -> &'static str {
         match self {
-            Timezone::SystemLocal => "This device's timezone",
+            // City names are proper nouns and stay untranslated.
+            Timezone::SystemLocal => crate::i18n::tr_str("ui.label.timezone.device_timezone"),
             Timezone::Utc => "London, Reykjavik",
             Timezone::Fixed(s) => match s {
                 -43200 => "Baker Island",

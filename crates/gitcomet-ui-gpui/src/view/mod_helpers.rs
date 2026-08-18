@@ -196,10 +196,10 @@ impl DiffViewMode {
         }
     }
 
-    pub(super) const fn settings_label(self) -> &'static str {
+    pub(super) fn settings_label(self) -> &'static str {
         match self {
-            Self::Inline => "Inline",
-            Self::Split => "Split",
+            Self::Inline => crate::i18n::tr_str("ui.label.diff.view.inline"),
+            Self::Split => crate::i18n::tr_str("ui.label.diff.view.split"),
         }
     }
 }
@@ -213,15 +213,15 @@ pub(super) enum RenderedPreviewKind {
 impl RenderedPreviewKind {
     pub(super) fn rendered_label(self) -> &'static str {
         match self {
-            Self::Svg => "Image",
-            Self::Markdown => "Preview",
+            Self::Svg => crate::i18n::tr_str("ui.label.preview.image"),
+            Self::Markdown => crate::i18n::tr_str("ui.label.preview.preview"),
         }
     }
 
     pub(super) fn source_label(self) -> &'static str {
         match self {
-            Self::Svg => "Code",
-            Self::Markdown => "Text",
+            Self::Svg => crate::i18n::tr_str("ui.label.preview.code"),
+            Self::Markdown => crate::i18n::tr_str("ui.label.preview.text"),
         }
     }
 
@@ -4412,9 +4412,11 @@ pub(super) enum AutosquashMode {
 impl AutosquashMode {
     pub(super) fn label(self) -> &'static str {
         match self {
-            AutosquashMode::ToTop => "To Top Commit",
-            AutosquashMode::Neighbor => "Neighboring Commit",
-            AutosquashMode::ToBottom => "To Bottom Commit",
+            AutosquashMode::ToTop => crate::i18n::tr_str("ui.label.autosquash.to_top_commit"),
+            AutosquashMode::Neighbor => {
+                crate::i18n::tr_str("ui.label.autosquash.neighboring_commit")
+            }
+            AutosquashMode::ToBottom => crate::i18n::tr_str("ui.label.autosquash.to_bottom_commit"),
         }
     }
 }
@@ -5427,7 +5429,8 @@ impl ThemeMode {
 
     pub(super) fn label(&self) -> String {
         match self {
-            Self::Automatic => "Automatic".to_string(),
+            Self::Automatic => crate::i18n::tr_str("ui.label.theme.automatic").to_string(),
+            // Theme names come from the theme files themselves and stay as-is.
             Self::Named(key) => crate::theme::theme_label(key).unwrap_or_else(|| key.clone()),
         }
     }
@@ -5468,24 +5471,32 @@ impl ChangeTrackingView {
         }
     }
 
-    pub(super) const fn label(self) -> &'static str {
+    pub(super) fn label(self) -> &'static str {
         match self {
-            Self::Combined => "Combined with Unstaged",
-            Self::SplitUntracked => "Separate section",
+            Self::Combined => {
+                crate::i18n::tr_str("ui.label.change_tracking.combined_with_unstaged")
+            }
+            Self::SplitUntracked => {
+                crate::i18n::tr_str("ui.label.change_tracking.separate_section")
+            }
         }
     }
 
-    pub(super) const fn menu_label(self) -> &'static str {
+    pub(super) fn menu_label(self) -> &'static str {
         match self {
-            Self::Combined => "Combine with Unstaged",
-            Self::SplitUntracked => "Show separate Untracked block",
+            Self::Combined => crate::i18n::tr_str("ui.label.change_tracking.combine_with_unstaged"),
+            Self::SplitUntracked => {
+                crate::i18n::tr_str("ui.label.change_tracking.show_separate_untracked_block")
+            }
         }
     }
 
-    pub(super) const fn settings_label(self) -> &'static str {
+    pub(super) fn settings_label(self) -> &'static str {
         match self {
-            Self::Combined => "Combined",
-            Self::SplitUntracked => "Separate section",
+            Self::Combined => crate::i18n::tr_str("ui.label.change_tracking.combined"),
+            Self::SplitUntracked => {
+                crate::i18n::tr_str("ui.label.change_tracking.separate_section")
+            }
         }
     }
 }
@@ -5519,12 +5530,12 @@ impl DiffScrollSync {
         }
     }
 
-    pub(super) const fn label(self) -> &'static str {
+    pub(super) fn label(self) -> &'static str {
         match self {
-            Self::Vertical => "Vertical",
-            Self::Horizontal => "Horizontal",
-            Self::None => "None",
-            Self::Both => "Both",
+            Self::Vertical => crate::i18n::tr_str("ui.label.diff.scroll_sync.vertical"),
+            Self::Horizontal => crate::i18n::tr_str("ui.label.diff.scroll_sync.horizontal"),
+            Self::None => crate::i18n::tr_str("ui.label.diff.scroll_sync.none"),
+            Self::Both => crate::i18n::tr_str("ui.label.diff.scroll_sync.both"),
         }
     }
 
@@ -5560,14 +5571,14 @@ impl DiffContentMode {
         }
     }
 
-    pub(super) const fn label(self) -> &'static str {
+    pub(super) fn label(self) -> &'static str {
         match self {
-            Self::Full => "Full",
-            Self::Collapsed => "Collapsed",
+            Self::Full => crate::i18n::tr_str("ui.label.diff.content.full"),
+            Self::Collapsed => crate::i18n::tr_str("ui.label.diff.content.collapsed"),
         }
     }
 
-    pub(super) const fn settings_label(self) -> &'static str {
+    pub(super) fn settings_label(self) -> &'static str {
         self.label()
     }
 }

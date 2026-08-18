@@ -89,14 +89,27 @@ impl MainPaneView {
                     } else {
                         theme.colors.foreground.secondary
                     })
-                    .child(format!("Resolved {resolved_count}/{conflict_count}")),
+                    .child(
+                        crate::i18n::t!(
+                            "conflict.toolbar.resolved_count",
+                            resolved = resolved_count,
+                            total = conflict_count
+                        )
+                        .to_string(),
+                    ),
             );
             if unresolved_count > 0 {
                 controls = controls.child(
                     div()
                         .text_xs()
                         .text_color(theme.colors.status.danger.foreground)
-                        .child(format!("{unresolved_count} unresolved")),
+                        .child(
+                            crate::i18n::t!(
+                                "conflict.toolbar.unresolved_count",
+                                count = unresolved_count
+                            )
+                            .to_string(),
+                        ),
                 );
             }
         }
@@ -148,7 +161,7 @@ impl MainPaneView {
                         .on_click(theme, cx, |this, _e, _w, cx| {
                             this.conflict_jump_first(cx);
                         })
-                        .gitcomet_tooltip(theme, "First delta (Ctrl+Home)".into()),
+                        .gitcomet_tooltip(theme, crate::i18n::tr("conflict.toolbar.first_delta")),
                 )
                 .child(
                     components::Button::new("conflict_prev", "")
@@ -166,10 +179,11 @@ impl MainPaneView {
                         })
                         .gitcomet_tooltip(
                             theme,
-                            format!(
-                                "Previous conflict (F2 / Shift+F7 / {})",
-                                crate::view::shortcut_labels::alt_shortcut("Up")
+                            crate::i18n::t!(
+                                "conflict.toolbar.previous_conflict",
+                                shortcut = crate::view::shortcut_labels::alt_shortcut("Up")
                             )
+                            .to_string()
                             .into(),
                         ),
                 )
@@ -189,10 +203,11 @@ impl MainPaneView {
                         })
                         .gitcomet_tooltip(
                             theme,
-                            format!(
-                                "Next conflict (F3 / F7 / {})",
-                                crate::view::shortcut_labels::alt_shortcut("Down")
+                            crate::i18n::t!(
+                                "conflict.toolbar.next_conflict",
+                                shortcut = crate::view::shortcut_labels::alt_shortcut("Down")
                             )
+                            .to_string()
                             .into(),
                         ),
                 )
@@ -209,7 +224,7 @@ impl MainPaneView {
                         .on_click(theme, cx, |this, _e, _w, cx| {
                             this.conflict_jump_last(cx);
                         })
-                        .gitcomet_tooltip(theme, "Last delta (Ctrl+End)".into()),
+                        .gitcomet_tooltip(theme, crate::i18n::tr("conflict.toolbar.last_delta")),
                 )
                 .child(
                     components::Button::new("conflict_prev_unresolved", "")
@@ -224,7 +239,10 @@ impl MainPaneView {
                         .on_click(theme, cx, |this, _e, _w, cx| {
                             this.conflict_jump_prev_unresolved(cx);
                         })
-                        .gitcomet_tooltip(theme, "Previous unresolved conflict (Shift+F2)".into()),
+                        .gitcomet_tooltip(
+                            theme,
+                            crate::i18n::tr("conflict.toolbar.previous_unresolved"),
+                        ),
                 )
                 .child(
                     components::Button::new("conflict_next_unresolved", "")
@@ -239,7 +257,10 @@ impl MainPaneView {
                         .on_click(theme, cx, |this, _e, _w, cx| {
                             this.conflict_jump_next_unresolved(cx);
                         })
-                        .gitcomet_tooltip(theme, "Next unresolved conflict (Shift+F3)".into()),
+                        .gitcomet_tooltip(
+                            theme,
+                            crate::i18n::tr("conflict.toolbar.next_unresolved"),
+                        ),
                 )
             })
             .when(
@@ -281,68 +302,61 @@ impl MainPaneView {
                         cluster
                             .child(pick_btn(
                                 "conflict_pick_base",
-                                "Base",
+                                crate::i18n::tr_str("conflict.pick.base"),
                                 "A",
                                 conflict_resolver::ConflictChoice::Base,
                                 has_base && output_actions_enabled,
-                                "Pick the base (ancestor) version for the active conflict \
-                                 (A or Ctrl+1; U un-resolves)",
+                                crate::i18n::tr_str("conflict.pick.tooltip.base"),
                             ))
                             .child(pick_btn(
                                 "conflict_pick_ours",
-                                "Ours",
+                                crate::i18n::tr_str("conflict.pick.ours"),
                                 "B",
                                 conflict_resolver::ConflictChoice::Ours,
                                 output_actions_enabled,
-                                "Pick the local (ours) version for the active conflict \
-                                 (B or Ctrl+2; U un-resolves)",
+                                crate::i18n::tr_str("conflict.pick.tooltip.three_way_ours"),
                             ))
                             .child(pick_btn(
                                 "conflict_pick_theirs",
-                                "Theirs",
+                                crate::i18n::tr_str("conflict.pick.theirs"),
                                 "C",
                                 conflict_resolver::ConflictChoice::Theirs,
                                 output_actions_enabled,
-                                "Pick the incoming (theirs) version for the active conflict \
-                                 (C or Ctrl+3; U un-resolves)",
+                                crate::i18n::tr_str("conflict.pick.tooltip.three_way_theirs"),
                             ))
                             .child(pick_btn(
                                 "conflict_pick_both",
-                                "Both",
+                                crate::i18n::tr_str("conflict.pick.both"),
                                 "D",
                                 conflict_resolver::ConflictChoice::Both,
                                 output_actions_enabled,
-                                "Keep both versions (ours, then theirs) for the active conflict \
-                                 (D; U un-resolves)",
+                                crate::i18n::tr_str("conflict.pick.tooltip.three_way_both"),
                             ))
                     } else {
                         cluster
                             .child(pick_btn(
                                 "conflict_pick_ours",
-                                "Local",
+                                crate::i18n::tr_str("conflict.pick.local"),
                                 "A",
                                 conflict_resolver::ConflictChoice::Ours,
                                 output_actions_enabled,
-                                "Pick the local (ours) version for the active conflict \
-                                 (A or Ctrl+1; U un-resolves)",
+                                crate::i18n::tr_str("conflict.pick.tooltip.two_way_local"),
                             ))
                             .child(pick_btn(
                                 "conflict_pick_theirs",
-                                "Remote",
+                                crate::i18n::tr_str("conflict.pick.remote"),
                                 "B",
                                 conflict_resolver::ConflictChoice::Theirs,
                                 output_actions_enabled,
-                                "Pick the incoming (theirs) version for the active conflict \
-                                 (B or Ctrl+2; U un-resolves)",
+                                crate::i18n::tr_str("conflict.pick.tooltip.two_way_remote"),
                             ))
                             .child(pick_btn(
                                 "conflict_pick_both",
-                                "Both",
+                                crate::i18n::tr_str("conflict.pick.both"),
                                 "C",
                                 conflict_resolver::ConflictChoice::Both,
                                 output_actions_enabled,
-                                "Keep both versions (ours, then theirs) for the active conflict \
-                                 (C or Ctrl+3; U un-resolves)",
+                                crate::i18n::tr_str("conflict.pick.tooltip.two_way_both"),
                             ))
                     }
                 },
@@ -355,9 +369,9 @@ impl MainPaneView {
             let unresolved = total.saturating_sub(resolved);
             let focused_mergetool_mode = self.view_mode == GitCometViewMode::FocusedMergetool;
             let save_label = if focused_mergetool_mode {
-                "Save & close"
+                crate::i18n::tr_str("conflict.save.save_and_close")
             } else {
-                "Save"
+                crate::i18n::tr_str("conflict.save.label")
             };
             let save_path = path.clone();
             let stage_path = path.clone();
@@ -419,44 +433,46 @@ impl MainPaneView {
                 )
                 .child(save_button)
                 .when(show_conflict_save_stage_action(self.view_mode), |d| {
-                    let mut save_stage_btn =
-                        components::Button::new("conflict_save_stage", "Save & stage")
-                            .style(components::ButtonStyle::Filled)
-                            .disabled(gate_unresolved > 0)
-                            .on_click(theme, cx, move |this, _e, _window, cx| {
-                                let text = this.current_conflict_resolved_output_text(cx);
-                                let blocks_stage = if this.conflict_resolver.output_is_protected {
-                                    conflict_resolver::text_contains_conflict_markers(&text)
-                                } else {
-                                    conflict_resolver::conflict_stage_safety_check(
-                                        &text,
-                                        &this.conflict_resolver.marker_segments,
-                                        &this.conflict_resolved_output_block_map,
-                                    )
-                                    .blocks_save()
-                                };
-                                if blocks_stage {
-                                    cx.notify();
-                                } else {
-                                    let text = this.conflict_resolver_save_contents_from_text(text);
-                                    this.store.dispatch(Msg::SaveWorktreeFile {
-                                        repo_id,
-                                        path: stage_path.clone(),
-                                        contents: text,
-                                        stage: true,
-                                    });
-                                }
-                            });
-                    if gate_unresolved > 0 {
-                        let noun = if gate_unresolved == 1 {
-                            "conflict is"
+                    let mut save_stage_btn = components::Button::new(
+                        "conflict_save_stage",
+                        crate::i18n::tr_str("conflict.save.save_and_stage"),
+                    )
+                    .style(components::ButtonStyle::Filled)
+                    .disabled(gate_unresolved > 0)
+                    .on_click(theme, cx, move |this, _e, _window, cx| {
+                        let text = this.current_conflict_resolved_output_text(cx);
+                        let blocks_stage = if this.conflict_resolver.output_is_protected {
+                            conflict_resolver::text_contains_conflict_markers(&text)
                         } else {
-                            "conflicts are"
+                            conflict_resolver::conflict_stage_safety_check(
+                                &text,
+                                &this.conflict_resolver.marker_segments,
+                                &this.conflict_resolved_output_block_map,
+                            )
+                            .blocks_save()
                         };
-                        save_stage_btn = save_stage_btn.gitcomet_tooltip(
-                            theme,
-                            format!("Disabled: {gate_unresolved} {noun} still unresolved").into(),
-                        );
+                        if blocks_stage {
+                            cx.notify();
+                        } else {
+                            let text = this.conflict_resolver_save_contents_from_text(text);
+                            this.store.dispatch(Msg::SaveWorktreeFile {
+                                repo_id,
+                                path: stage_path.clone(),
+                                contents: text,
+                                stage: true,
+                            });
+                        }
+                    });
+                    if gate_unresolved > 0 {
+                        let disabled_tooltip = if gate_unresolved == 1 {
+                            crate::i18n::t!("conflict.save.disabled_one", count = gate_unresolved)
+                                .to_string()
+                        } else {
+                            crate::i18n::t!("conflict.save.disabled_many", count = gate_unresolved)
+                                .to_string()
+                        };
+                        save_stage_btn =
+                            save_stage_btn.gitcomet_tooltip(theme, disabled_tooltip.into());
                     }
                     d.child(save_stage_btn)
                 });
@@ -504,24 +520,24 @@ impl MainPaneView {
             div()
                 .text_xs()
                 .text_color(theme.colors.foreground.secondary)
-                .child("No conflicts in this file")
+                .child(crate::i18n::tr("conflict.footer.no_conflicts"))
                 .into_any_element()
         } else if unresolved > 0 {
-            let noun = if unresolved == 1 {
-                "conflict"
+            let unresolved_text = if unresolved == 1 {
+                crate::i18n::t!("conflict.footer.unresolved_one", count = unresolved).to_string()
             } else {
-                "conflicts"
+                crate::i18n::t!("conflict.footer.unresolved_many", count = unresolved).to_string()
             };
             div()
                 .id("conflict_resolver_status")
                 .text_xs()
                 .text_color(theme.colors.status.warning.foreground)
-                .child(format!("⚠ {unresolved} {noun} unresolved"))
+                .child(unresolved_text)
                 .gitcomet_tooltip(
                     theme,
                     progress_label
                         .clone()
-                        .unwrap_or_else(|| "Resolution progress".into()),
+                        .unwrap_or_else(|| crate::i18n::tr("conflict.footer.resolution_progress")),
                 )
                 .into_any_element()
         } else {
@@ -529,12 +545,12 @@ impl MainPaneView {
                 .id("conflict_resolver_status")
                 .text_xs()
                 .text_color(theme.colors.status.success.foreground)
-                .child("✓ All conflicts resolved")
+                .child(crate::i18n::tr("conflict.footer.all_resolved"))
                 .gitcomet_tooltip(
                     theme,
                     progress_label
                         .clone()
-                        .unwrap_or_else(|| "Resolution complete".into()),
+                        .unwrap_or_else(|| crate::i18n::tr("conflict.footer.resolution_complete")),
                 )
                 .into_any_element()
         };
@@ -560,16 +576,24 @@ impl MainPaneView {
                     .when_some(
                         counts.whitespace_conflicts.filter(|count| *count > 0),
                         |d, whitespace| {
-                            let noun = if whitespace == 1 {
-                                "whitespace conflict"
+                            let whitespace_text = if whitespace == 1 {
+                                crate::i18n::t!(
+                                    "conflict.footer.whitespace_one",
+                                    count = whitespace
+                                )
+                                .to_string()
                             } else {
-                                "whitespace conflicts"
+                                crate::i18n::t!(
+                                    "conflict.footer.whitespace_many",
+                                    count = whitespace
+                                )
+                                .to_string()
                             };
                             d.child(
                                 div()
                                     .text_xs()
                                     .text_color(theme.colors.foreground.secondary)
-                                    .child(format!("{whitespace} {noun}")),
+                                    .child(whitespace_text),
                             )
                         },
                     )
@@ -578,17 +602,20 @@ impl MainPaneView {
                             div()
                                 .text_xs()
                                 .text_color(theme.colors.status.danger.foreground)
-                                .child("markers remain"),
+                                .child(crate::i18n::tr("conflict.footer.markers_remain")),
                         )
                     }),
             )
             .child(
-                components::Button::new("conflict_reset_markers", "Reset conflict markers")
-                    .style(components::ButtonStyle::Transparent)
-                    .disabled(!can_reset_from_markers)
-                    .on_click(theme, cx, |this, _e, _w, cx| {
-                        this.conflict_resolver_reset_output_from_markers(cx);
-                    }),
+                components::Button::new(
+                    "conflict_reset_markers",
+                    crate::i18n::tr_str("conflict.footer.reset_markers"),
+                )
+                .style(components::ButtonStyle::Transparent)
+                .disabled(!can_reset_from_markers)
+                .on_click(theme, cx, |this, _e, _w, cx| {
+                    this.conflict_resolver_reset_output_from_markers(cx);
+                }),
             )
     }
 
@@ -607,27 +634,40 @@ impl MainPaneView {
             crate::view::perf::span(crate::view::perf::ViewPerfSpan::RenderConflictResolverPane);
         let repo = self.active_repo();
         match (repo, conflict_target_path) {
-            (None, _) => {
-                components::empty_state(theme, "Resolve", "No repository.").into_any_element()
-            }
-            (_, None) => components::empty_state(theme, "Resolve", "No conflicted file selected.")
-                .into_any_element(),
+            (None, _) => components::empty_state(
+                theme,
+                crate::i18n::tr_str("conflict.tab"),
+                crate::i18n::tr("conflict.empty.no_repository"),
+            )
+            .into_any_element(),
+            (_, None) => components::empty_state(
+                theme,
+                crate::i18n::tr_str("conflict.tab"),
+                crate::i18n::tr("conflict.empty.no_conflicted_file"),
+            )
+            .into_any_element(),
             (Some(repo), Some(path)) => {
                 let title: SharedString =
-                    format!("Resolve conflict: {}", self.cached_path_display(&path)).into();
+                    crate::i18n::t!("conflict.title", path = self.cached_path_display(&path))
+                        .to_string()
+                        .into();
                 if let Some(repo_id) = repo_id {
                     match renderable_conflict_file(repo, &self.conflict_resolver, &path) {
-                            RenderableConflictFile::Loading => {
-                                components::empty_state(theme, title, "Loading conflict data…")
-                                    .into_any_element()
-                            }
+                            RenderableConflictFile::Loading => components::empty_state(
+                                theme,
+                                title,
+                                crate::i18n::tr("conflict.empty.loading"),
+                            )
+                            .into_any_element(),
                             RenderableConflictFile::Error(error) => {
                                 components::empty_state(theme, title, error).into_any_element()
                             }
-                            RenderableConflictFile::Missing => {
-                                components::empty_state(theme, title, "No conflict data.")
-                                    .into_any_element()
-                            }
+                            RenderableConflictFile::Missing => components::empty_state(
+                                theme,
+                                title,
+                                crate::i18n::tr("conflict.empty.no_data"),
+                            )
+                            .into_any_element(),
                             RenderableConflictFile::File(file)
                                 if self.conflict_resolver.is_binary_conflict
                                     || conflict_file_is_binary(&file) =>
@@ -741,9 +781,9 @@ impl MainPaneView {
                                         components::Button::new(
                                             "conflict_hide_resolved",
                                             if hide_resolved {
-                                                "Show resolved"
+                                                crate::i18n::tr_str("conflict.toggle.show_resolved")
                                             } else {
-                                                "Hide resolved"
+                                                crate::i18n::tr_str("conflict.toggle.hide_resolved")
                                             },
                                         )
                                         .style(if hide_resolved {
@@ -792,7 +832,10 @@ impl MainPaneView {
                                     .overflow_hidden()
                                     .p(px(1.0))
                                     .child(
-                                        components::Button::new("conflict_preview_text", "Text")
+                                        components::Button::new(
+                                            "conflict_preview_text",
+                                            crate::i18n::tr_str("conflict.toggle.text"),
+                                        )
                                             .borderless()
                                             .style(components::ButtonStyle::Subtle)
                                             .selected(preview_mode == ConflictResolverPreviewMode::Text)
@@ -814,7 +857,9 @@ impl MainPaneView {
                                             "conflict_preview_preview",
                                             preview_kind
                                                 .map(RenderedPreviewKind::rendered_label)
-                                                .unwrap_or("Preview"),
+                                                .unwrap_or(crate::i18n::tr_str(
+                                                    "conflict.toggle.preview",
+                                                )),
                                         )
                                         .borderless()
                                         .style(components::ButtonStyle::Subtle)
@@ -1123,7 +1168,9 @@ impl MainPaneView {
                                                         .flex_shrink_0(),
                                                 )
                                             })
-                                            .child("Base (A, index :1)"),
+                                            .child(crate::i18n::tr_str(
+                                                "conflict.columns.base_index",
+                                            )),
                                     )
                                     .child(conflict_hsplit_resize_handle(
                                         "conflict_hsplit_handle_first",
@@ -1149,7 +1196,9 @@ impl MainPaneView {
                                                         .flex_shrink_0(),
                                                 )
                                             })
-                                            .child("Local (B, index :2)"),
+                                            .child(crate::i18n::tr_str(
+                                                "conflict.columns.local_index",
+                                            )),
                                     )
                                     .child(conflict_hsplit_resize_handle(
                                         "conflict_hsplit_handle_second",
@@ -1176,7 +1225,9 @@ impl MainPaneView {
                                                         .flex_shrink_0(),
                                                 )
                                             })
-                                            .child("Remote (C, index :3)"),
+                                            .child(crate::i18n::tr_str(
+                                                "conflict.columns.remote_index",
+                                            )),
                                     )
                                 })
                                 .when(view_mode == ConflictResolverViewMode::TwoWayDiff, |d| {
@@ -1201,7 +1252,9 @@ impl MainPaneView {
                                                         .flex_shrink_0(),
                                                 )
                                             })
-                                            .child("Local (index :2)"),
+                                            .child(crate::i18n::tr_str(
+                                                "conflict.columns.local_only",
+                                            )),
                                     )
                                     .child(conflict_diff_split_resize_handle(
                                         "conflict_diff_split_header_handle",
@@ -1227,13 +1280,19 @@ impl MainPaneView {
                                                         .flex_shrink_0(),
                                                 )
                                             })
-                                            .child("Remote (index :3)"),
+                                            .child(crate::i18n::tr_str(
+                                                "conflict.columns.remote_only",
+                                            )),
                                     )
                                 });
 
                             let top_body: AnyElement = if diff_len == 0 {
-                                components::empty_state(theme, "Inputs", "Stage data not available.")
-                                    .into_any_element()
+                                components::empty_state(
+                                    theme,
+                                    crate::i18n::tr_str("conflict.empty.inputs"),
+                                    crate::i18n::tr("conflict.empty.stage_data_unavailable"),
+                                )
+                                .into_any_element()
                             } else if is_rendered_preview_active {
                                 match preview_kind {
                                     Some(RenderedPreviewKind::Svg) => self
@@ -1242,8 +1301,8 @@ impl MainPaneView {
                                         .render_conflict_resolver_markdown_preview(theme, cx),
                                     None => components::empty_state(
                                         theme,
-                                        "Preview",
-                                        "Preview is not available for this file.",
+                                        crate::i18n::tr_str("conflict.empty.preview"),
+                                        crate::i18n::tr("conflict.empty.preview_unavailable"),
                                     )
                                     .into_any_element(),
                                 }
@@ -1759,13 +1818,15 @@ impl MainPaneView {
                                         .gap_1()
                                         .text_xs()
                                         .text_color(theme.colors.foreground.secondary)
-                                        .child("Resolved output")
+                                        .child(crate::i18n::tr("conflict.output.heading"))
                                         .when(output_modified, |d| {
                                             d.child(
                                                 div()
                                                     .id("conflict_resolved_output_modified")
                                                     .text_color(theme.colors.status.warning.foreground)
-                                                    .child("[Modified]"),
+                                                    .child(crate::i18n::tr(
+                                                        "conflict.output.modified",
+                                                    )),
                                             )
                                         }),
                                 )
@@ -2250,8 +2311,12 @@ impl MainPaneView {
                         }
                 } else {
                     debug_assert!(false, "conflict resolver rendered without active repo id");
-                    components::empty_state(theme, title, "Repository context unavailable.")
-                        .into_any_element()
+                    components::empty_state(
+                        theme,
+                        title,
+                        crate::i18n::tr("conflict.empty.repository_unavailable"),
+                    )
+                    .into_any_element()
                 }
             }
         }
@@ -2327,7 +2392,7 @@ impl MainPaneView {
                             Loadable::NotLoaded | Loadable::Loading if has_source => div()
                                 .text_xs()
                                 .text_color(theme.colors.foreground.secondary)
-                                .child("Processing preview...")
+                                .child(crate::i18n::tr("conflict.preview.processing"))
                                 .into_any_element(),
                             Loadable::Error(error) => div()
                                 .text_xs()
@@ -2337,12 +2402,12 @@ impl MainPaneView {
                             Loadable::Ready(None) if has_source => div()
                                 .text_xs()
                                 .text_color(theme.colors.foreground.secondary)
-                                .child("Preview unavailable.")
+                                .child(crate::i18n::tr("conflict.preview.unavailable"))
                                 .into_any_element(),
                             _ => div()
                                 .text_xs()
                                 .text_color(theme.colors.foreground.secondary)
-                                .child("(empty)")
+                                .child(crate::i18n::tr("conflict.preview.empty"))
                                 .into_any_element(),
                         }),
                 )
@@ -2359,19 +2424,19 @@ impl MainPaneView {
             .bg(theme.colors.surface.canvas)
             .child(preview_cell(
                 "conflict_preview_base",
-                "Base (A)",
+                crate::i18n::tr_str("conflict.columns.base_a"),
                 base_img,
                 base_has_source,
             ))
             .child(preview_cell(
                 "conflict_preview_ours",
-                "Local (B)",
+                crate::i18n::tr_str("conflict.columns.local_b"),
                 ours_img,
                 ours_has_source,
             ))
             .child(preview_cell(
                 "conflict_preview_theirs",
-                "Remote (C)",
+                crate::i18n::tr_str("conflict.columns.remote_c"),
                 theirs_img,
                 theirs_has_source,
             ))
@@ -2481,7 +2546,7 @@ impl MainPaneView {
                 "conflict_preview_base_list",
                 "conflict_preview_base_scrollbar",
                 "conflict_preview_base_hscrollbar",
-                "Base (A)",
+                crate::i18n::tr_str("conflict.columns.base_a"),
                 self.conflict_resolver_diff_scroll.clone(),
             ),
             ThreeWayColumn::Ours => (
@@ -2489,7 +2554,7 @@ impl MainPaneView {
                 "conflict_preview_ours_list",
                 "conflict_preview_ours_scrollbar",
                 "conflict_preview_ours_hscrollbar",
-                "Local (B)",
+                crate::i18n::tr_str("conflict.columns.local_b"),
                 self.conflict_preview_ours_scroll.clone(),
             ),
             ThreeWayColumn::Theirs => (
@@ -2497,7 +2562,7 @@ impl MainPaneView {
                 "conflict_preview_theirs_list",
                 "conflict_preview_theirs_scrollbar",
                 "conflict_preview_theirs_hscrollbar",
-                "Remote (C)",
+                crate::i18n::tr_str("conflict.columns.remote_c"),
                 self.conflict_preview_theirs_scroll.clone(),
             ),
         };
@@ -2563,10 +2628,12 @@ impl MainPaneView {
         }
 
         let body = match (side, self.conflict_resolver.markdown_preview.document(side)) {
-            (_, Loadable::NotLoaded | Loadable::Loading) => status("Processing preview…".into()),
+            (_, Loadable::NotLoaded | Loadable::Loading) => {
+                status(crate::i18n::tr("conflict.preview.processing_ellipsis"))
+            }
             (_, Loadable::Error(error)) => status(error.clone().into()),
             (_, Loadable::Ready(document)) if document.rows.is_empty() => {
-                status("Empty file.".into())
+                status(crate::i18n::tr("conflict.preview.empty_file"))
             }
             (ThreeWayColumn::Base, Loadable::Ready(doc)) => {
                 mk_list!(doc, Self::render_conflict_markdown_base_rows)

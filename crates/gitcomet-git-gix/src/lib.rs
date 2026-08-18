@@ -5,6 +5,13 @@ mod util;
 
 pub use backend::GixBackend;
 
+// Embeds every `locales/*.en.yml` / `locales/*.zh-CN.yml` catalog into the
+// binary and generates the crate-root lookup functions that `t!` calls. Must
+// stay at the crate root: `t!` expands to `crate::_rust_i18n_try_translate`.
+// The locale is process-global (set by the UI crate); unset it falls back to
+// English, matching the historical strings tests assert.
+rust_i18n::i18n!("locales", fallback = ["en"]);
+
 #[doc(hidden)]
 pub fn install_test_git_command_environment(
     global_config: std::path::PathBuf,

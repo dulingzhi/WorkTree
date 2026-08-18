@@ -12,17 +12,19 @@ pub(crate) fn clone_progress_loading_color(theme: AppTheme) -> gpui::Rgba {
 
 pub(crate) fn clone_progress_title(op: &CloneOpState) -> &'static str {
     match op.status {
-        CloneOpStatus::Cancelling => "Aborting clone…",
-        _ => "Cloning repository…",
+        CloneOpStatus::Cancelling => crate::i18n::tr_str("ui.clone.title.aborting"),
+        _ => crate::i18n::tr_str("ui.clone.title.cloning"),
     }
 }
 
 pub(crate) fn clone_progress_phase_label(op: &CloneOpState) -> &'static str {
     match op.status {
-        CloneOpStatus::Cancelling => "Stopping clone",
+        CloneOpStatus::Cancelling => crate::i18n::tr_str("ui.clone.phase.stopping"),
         _ => match op.progress.stage {
-            CloneProgressStage::Loading => "Loading",
-            CloneProgressStage::RemoteObjects => "Remote objects",
+            CloneProgressStage::Loading => crate::i18n::tr_str("ui.common.loading"),
+            CloneProgressStage::RemoteObjects => {
+                crate::i18n::tr_str("ui.clone.phase.remote_objects")
+            }
         },
     }
 }

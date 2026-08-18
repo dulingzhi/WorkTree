@@ -44,8 +44,8 @@ impl ActionBarTerminalTarget {
 
     pub(in crate::view) fn label(self) -> &'static str {
         match self {
-            Self::Embedded => "Embedded terminal",
-            Self::External => "External terminal",
+            Self::Embedded => crate::i18n::tr_str("ui.label.terminal.embedded"),
+            Self::External => crate::i18n::tr_str("ui.label.terminal.external"),
         }
     }
 }
@@ -75,8 +75,8 @@ impl ExternalTerminalMode {
 
     pub(in crate::view) fn label(self) -> &'static str {
         match self {
-            Self::SystemDefault => "System default",
-            Self::CustomProgram => "Custom launcher",
+            Self::SystemDefault => crate::i18n::tr_str("ui.label.terminal.system_default"),
+            Self::CustomProgram => crate::i18n::tr_str("ui.label.terminal.custom_launcher"),
         }
     }
 }

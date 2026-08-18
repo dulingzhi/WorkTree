@@ -1408,7 +1408,11 @@ fn section_header_row(
                 )),
         );
     }
-    label_row = label_row.child(label.clone());
+    // The label is also the section's identity: collapse-state comparisons,
+    // element ids and the toggle callback all keep the English source, so only
+    // this display site localizes it (gettext-style lookup, pass-through when
+    // the active locale has no entry).
+    label_row = label_row.child(crate::i18n::tr_en(label.as_ref()));
     if collapsed && header.hidden_count > 0 {
         label_row = label_row.child(
             div()
