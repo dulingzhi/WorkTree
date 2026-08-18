@@ -42,9 +42,9 @@ impl MainPaneView {
             })
             .gitcomet_tooltip(
                 theme,
-                format!(
-                    "Open this worktree in a tab\n{}",
-                    inline.submodule_repo_path.display()
+                crate::i18n::t!(
+                    "layout.worktree.open_in_tab",
+                    path = inline.submodule_repo_path.display().to_string()
                 )
                 .into(),
             )
@@ -108,7 +108,7 @@ impl MainPaneView {
                         None => (
                             Some("icons/pencil.svg"),
                             theme.colors.foreground.secondary,
-                            "Full diff".into(),
+                            crate::i18n::tr("tail.diff.full_diff"),
                         ),
                     },
                     DiffTarget::CommitRange {
@@ -124,7 +124,7 @@ impl MainPaneView {
                         None => (
                             Some("icons/swap.svg"),
                             theme.colors.accent.foreground,
-                            "Commit range".into(),
+                            crate::i18n::tr("tail.diff.commit_range"),
                         ),
                     },
                 };
@@ -167,7 +167,7 @@ impl MainPaneView {
                 div()
                     .text_sm()
                     .font_weight(FontWeight::BOLD)
-                    .child("Select a file to view diff")
+                    .child(crate::i18n::tr("tail.diff.select_file"))
                     .into_any_element()
             })
     }
@@ -204,7 +204,9 @@ impl MainPaneView {
                         .into(),
                     path.clone(),
                 ),
-                DiffTarget::WorkingTree { path, .. } => ("Working tree".into(), path.clone()),
+                DiffTarget::WorkingTree { path, .. } => {
+                    (crate::i18n::tr("diff.split.working_tree"), path.clone())
+                }
                 // Range diffs and full-tree commits are not file content views.
                 _ => return None,
             };
@@ -246,7 +248,7 @@ impl MainPaneView {
                     cx,
                 );
             }))
-            .gitcomet_tooltip(theme, "Show file history".into());
+            .gitcomet_tooltip(theme, crate::i18n::tr("tail.diff.show_file_history"));
 
         let back_btn = components::Button::new("viewer_nav_back", "")
             .start_slot(svg_icon(
@@ -260,7 +262,7 @@ impl MainPaneView {
                 this.store.dispatch(Msg::ViewerNavBack { repo_id });
                 cx.notify();
             })
-            .gitcomet_tooltip(theme, "Back to previous file version".into());
+            .gitcomet_tooltip(theme, crate::i18n::tr("tail.diff.back_previous_version"));
 
         let forward_btn = components::Button::new("viewer_nav_forward", "")
             .start_slot(svg_icon(
@@ -274,7 +276,7 @@ impl MainPaneView {
                 this.store.dispatch(Msg::ViewerNavForward { repo_id });
                 cx.notify();
             })
-            .gitcomet_tooltip(theme, "Forward to next file version".into());
+            .gitcomet_tooltip(theme, crate::i18n::tr("tail.diff.forward_next_version"));
 
         // Badge first (immediately next to the path), then back/forward.
         Some(
@@ -421,7 +423,7 @@ impl MainPaneView {
                 button(
                     "diff_prev_file",
                     "icons/arrow_left.svg",
-                    "Previous file (F1)",
+                    crate::i18n::tr_str("tail.diff.prev_file"),
                     -1,
                     cx,
                 )
@@ -430,7 +432,7 @@ impl MainPaneView {
                 button(
                     "diff_next_file",
                     "icons/arrow_right.svg",
-                    "Next file (F4)",
+                    crate::i18n::tr_str("tail.diff.next_file"),
                     1,
                     cx,
                 )

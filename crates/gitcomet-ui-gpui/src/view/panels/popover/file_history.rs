@@ -134,7 +134,7 @@ pub(super) fn panel(
                     div()
                         .text_sm()
                         .font_weight(FontWeight::BOLD)
-                        .child("File history"),
+                        .child(crate::i18n::tr("prompts.file_history.title")),
                 )
                 .child(
                     div()
@@ -151,9 +151,12 @@ pub(super) fn panel(
                 ),
         )
         .child(
-            components::Button::new("file_history_close", "Close")
-                .style(components::ButtonStyle::Outlined)
-                .on_click(theme, cx, |this, _e, _w, cx| this.close_popover(cx)),
+            components::Button::new(
+                "file_history_close",
+                crate::i18n::tr("prompts.file_history.close"),
+            )
+            .style(components::ButtonStyle::Outlined)
+            .on_click(theme, cx, |this, _e, _w, cx| this.close_popover(cx)),
         );
 
     let body: AnyElement = match repo.map(|r| &r.history_state.file_history) {

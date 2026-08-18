@@ -49,7 +49,11 @@ fn checkout_toggle(
                 ))
             }),
     )
-    .child(div().text_sm().child("Checkout"))
+    .child(
+        div()
+            .text_sm()
+            .child(crate::i18n::tr("prompts.create_branch.checkout_toggle")),
+    )
 }
 
 pub(super) fn panel(
@@ -96,7 +100,7 @@ pub(super) fn panel(
                         .py_1()
                         .text_sm()
                         .text_color(theme.colors.foreground.secondary)
-                        .child("Source:"),
+                        .child(crate::i18n::tr("prompts.create_branch.source_label")),
                 )
                 .child(
                     div().px_2().pb_1().w_full().min_w(px(0.0)).child(
@@ -135,7 +139,7 @@ pub(super) fn panel(
                         .py_1()
                         .text_sm()
                         .text_color(theme.colors.foreground.secondary)
-                        .child("Source:"),
+                        .child(crate::i18n::tr("prompts.create_branch.source_label")),
                 )
                 .child(div().px_2().pb_1().w_full().min_w(px(0.0)).child(search))
         }
@@ -145,17 +149,25 @@ pub(super) fn panel(
             .py_1()
             .text_sm()
             .text_color(theme.colors.foreground.secondary)
-            .child(format!("Source branch: {target}"))
+            .child(
+                crate::i18n::t!("prompts.create_branch.source_branch_line", target = target)
+                    .into_owned(),
+            )
     };
 
     div()
         .flex()
         .flex_col()
         .w(scaled_px(540.0))
-        .child(popover_title("Create branch"))
+        .child(popover_title(crate::i18n::tr(
+            "prompts.create_branch.title",
+        )))
         .child(div().border_t_1().border_color(theme.colors.stroke.default))
         .child(source_row)
-        .child(input_label(theme, "New branch name"))
+        .child(input_label(
+            theme,
+            crate::i18n::tr_str("prompts.create_branch.name_label"),
+        ))
         .child(
             div()
                 .px_2()
@@ -196,18 +208,21 @@ pub(super) fn panel(
                     }),
                 )
                 .child(
-                    components::Button::new("create_branch_from_ref_go", "Create")
-                        .focus_handle(this.create_branch_from_ref_focus.submit.clone())
-                        .separated_end_slot(hotkey_hint(
-                            theme,
-                            "create_branch_from_ref_go_hint",
-                            "Enter",
-                        ))
-                        .style(components::ButtonStyle::Filled)
-                        .disabled(!can_create)
-                        .on_click(theme, cx, |this, _e, window, cx| {
-                            this.submit_create_branch(window, cx);
-                        }),
+                    components::Button::new(
+                        "create_branch_from_ref_go",
+                        crate::i18n::tr("prompts.create_branch.create"),
+                    )
+                    .focus_handle(this.create_branch_from_ref_focus.submit.clone())
+                    .separated_end_slot(hotkey_hint(
+                        theme,
+                        "create_branch_from_ref_go_hint",
+                        "Enter",
+                    ))
+                    .style(components::ButtonStyle::Filled)
+                    .disabled(!can_create)
+                    .on_click(theme, cx, |this, _e, window, cx| {
+                        this.submit_create_branch(window, cx);
+                    }),
                 ),
         )
 }

@@ -7,9 +7,9 @@ const MAX_LISTED_PATHS: usize = 8;
 
 fn scope_label(scope: GitignoreScope) -> &'static str {
     match scope {
-        GitignoreScope::File => "File",
-        GitignoreScope::Folder => "Folder",
-        GitignoreScope::Extension => "Extension",
+        GitignoreScope::File => crate::i18n::tr_str("prompts.gitignore.scope_file"),
+        GitignoreScope::Folder => crate::i18n::tr_str("prompts.gitignore.scope_folder"),
+        GitignoreScope::Extension => crate::i18n::tr_str("prompts.gitignore.scope_extension"),
     }
 }
 
@@ -68,7 +68,7 @@ fn scope_picker(
             div()
                 .text_xs()
                 .text_color(theme.colors.foreground.secondary)
-                .child("Ignore"),
+                .child(crate::i18n::tr("prompts.gitignore.ignore_label")),
         )
         .child(pill)
         .min_h(scaled_px(24.0))
@@ -104,11 +104,13 @@ pub(super) fn panel(
     );
 
     let heading = match paths.len() {
-        0 | 1 => "Ignore this file:".to_string(),
-        n => format!("Ignore these {n} files:"),
+        0 | 1 => crate::i18n::t!("prompts.gitignore.ignore_one").into_owned(),
+        n => crate::i18n::t!("prompts.gitignore.ignore_many", count = n).into_owned(),
     };
 
-    let mut dialog = ConfirmDialog::new("Add to .gitignore", DIALOG_440_WIDTH).text(theme, heading);
+    let mut dialog =
+        ConfirmDialog::new(crate::i18n::tr("prompts.gitignore.title"), DIALOG_440_WIDTH)
+            .text(theme, heading);
 
     // Naming what is about to be ignored is the point of the dialog: the status
     // row that triggered it is behind the popover by the time it opens.
@@ -119,7 +121,11 @@ pub(super) fn panel(
     if paths.len() > MAX_LISTED_PATHS {
         dialog = dialog.note(
             theme,
-            format!("…and {} more", paths.len() - MAX_LISTED_PATHS),
+            crate::i18n::t!(
+                "prompts.gitignore.more_note",
+                count = paths.len() - MAX_LISTED_PATHS
+            )
+            .into_owned(),
         );
     }
 
@@ -132,7 +138,10 @@ pub(super) fn panel(
     }
 
     dialog = dialog
-        .section(input_label(theme, "Pattern"))
+        .section(input_label(
+            theme,
+            crate::i18n::tr_str("prompts.gitignore.pattern_label"),
+        ))
         .section(
             div().px_2().pb_1().w_full().min_w(px(0.0)).child(
                 components::ScrollContainer::vertical(
@@ -146,10 +155,11 @@ pub(super) fn panel(
         )
         .note(
             theme,
-            format!(
-                "One pattern per line, appended to {} in the repository root.",
-                gitcomet_core::gitignore::FILE_NAME
-            ),
+            crate::i18n::t!(
+                "prompts.gitignore.pattern_note",
+                file = gitcomet_core::gitignore::FILE_NAME
+            )
+            .into_owned(),
         );
 
     if editor_holds_gitignore {
@@ -159,10 +169,13 @@ pub(super) fn panel(
                 .pb_1()
                 .text_xs()
                 .text_color(theme.colors.status.danger.foreground)
-                .child(format!(
-                    "{} has unsaved edits open in the editor. Saving them will overwrite this change.",
-                    gitcomet_core::gitignore::FILE_NAME
-                )),
+                .child(
+                    crate::i18n::t!(
+                        "prompts.gitignore.unsaved_note",
+                        file = gitcomet_core::gitignore::FILE_NAME
+                    )
+                    .into_owned(),
+                ),
         );
     }
 
@@ -174,12 +187,15 @@ pub(super) fn panel(
             theme,
             cx,
         ),
-        components::Button::new("add_to_gitignore_go", "Add")
-            .style(components::ButtonStyle::Filled)
-            .disabled(!can_submit)
-            .on_click(theme, cx, move |this, _e, _w, cx| {
-                this.submit_add_to_gitignore(repo_id, area, path.clone(), cx);
-            }),
+        components::Button::new(
+            "add_to_gitignore_go",
+            crate::i18n::tr("prompts.gitignore.add"),
+        )
+        .style(components::ButtonStyle::Filled)
+        .disabled(!can_submit)
+        .on_click(theme, cx, move |this, _e, _w, cx| {
+            this.submit_add_to_gitignore(repo_id, area, path.clone(), cx);
+        }),
         cx,
     )
 }

@@ -4488,7 +4488,7 @@ impl PopoverHost {
                             .py_1()
                             .text_sm()
                             .font_weight(FontWeight::BOLD)
-                            .child("Reword commit message"),
+                            .child(crate::i18n::tr("prompts.popover.reword.title")),
                     )
                     .child(div().border_t_1().border_color(theme.colors.stroke.default))
                     .child(
@@ -4503,7 +4503,9 @@ impl PopoverHost {
                                 div()
                                     .text_xs()
                                     .text_color(theme.colors.foreground.secondary)
-                                    .child("Commit message"),
+                                    .child(crate::i18n::tr(
+                                        "prompts.popover.reword.commit_message",
+                                    )),
                             )
                             .child(self.rebase_reword_input.clone()),
                     )
@@ -4519,7 +4521,7 @@ impl PopoverHost {
                                 div()
                                     .text_xs()
                                     .text_color(theme.colors.foreground.secondary)
-                                    .child("Description"),
+                                    .child(crate::i18n::tr("prompts.popover.reword.description")),
                             )
                             .child(
                                 components::ScrollContainer::vertical(
@@ -4538,9 +4540,7 @@ impl PopoverHost {
                             .pb_1()
                             .text_xs()
                             .text_color(theme.colors.foreground.secondary)
-                            .child(
-                                "Clear the message and save to keep the original commit message.",
-                            ),
+                            .child(crate::i18n::tr("prompts.popover.reword.keep_original_hint")),
                     )
                     .child(div().border_t_1().border_color(theme.colors.stroke.default))
                     .child(
@@ -4551,21 +4551,23 @@ impl PopoverHost {
                             .items_center()
                             .justify_between()
                             .child(
-                                components::Button::new("reword_cancel", "Cancel")
-                                    .separated_end_slot(hotkey_hint(
-                                        theme,
-                                        "reword_cancel_hint",
-                                        "Esc",
-                                    ))
-                                    .style(components::ButtonStyle::Outlined)
-                                    .render(theme, ui_scale_percent)
-                                    .on_click(cancel),
+                                components::Button::new(
+                                    "reword_cancel",
+                                    crate::i18n::tr("prompts.popover.reword.cancel"),
+                                )
+                                .separated_end_slot(hotkey_hint(theme, "reword_cancel_hint", "Esc"))
+                                .style(components::ButtonStyle::Outlined)
+                                .render(theme, ui_scale_percent)
+                                .on_click(cancel),
                             )
                             .child(
-                                components::Button::new(submit_button_id, "Save message")
-                                    .style(components::ButtonStyle::Filled)
-                                    .render(theme, ui_scale_percent)
-                                    .on_click(submit),
+                                components::Button::new(
+                                    submit_button_id,
+                                    crate::i18n::tr("prompts.popover.reword.save"),
+                                )
+                                .style(components::ButtonStyle::Filled)
+                                .render(theme, ui_scale_percent)
+                                .on_click(submit),
                             ),
                     )
             }

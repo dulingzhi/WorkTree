@@ -342,7 +342,7 @@ impl SidebarPaneView {
         let file_browser_search_input = cx.new(|cx| {
             TextInput::new_inert(
                 TextInputOptions {
-                    placeholder: "Search files...".into(),
+                    placeholder: crate::i18n::tr("chrome.sidebar.search_files_placeholder"),
                     chromeless: true,
                     multiline: true,
                     ..Default::default()
@@ -373,7 +373,7 @@ impl SidebarPaneView {
         let branch_filter_input = cx.new(|cx| {
             TextInput::new_inert(
                 TextInputOptions {
-                    placeholder: "Filter branches...".into(),
+                    placeholder: crate::i18n::tr("chrome.sidebar.filter_branches_placeholder"),
                     leading_icon: Some("icons/git_branch.svg"),
                     chromeless: true,
                     ..Default::default()
@@ -398,7 +398,7 @@ impl SidebarPaneView {
         let collapsed_popover_filter_input = cx.new(|cx| {
             TextInput::new_inert(
                 TextInputOptions {
-                    placeholder: "Filter branches...".into(),
+                    placeholder: crate::i18n::tr("chrome.sidebar.filter_branches_placeholder"),
                     leading_icon: Some("icons/zoom.svg"),
                     chromeless: true,
                     ..Default::default()
@@ -1022,9 +1022,9 @@ impl SidebarPaneView {
                         .gitcomet_tooltip(
                             theme,
                             if filter_open {
-                                "Hide filter".into()
+                                crate::i18n::tr("chrome.sidebar.hide_filter")
                             } else {
-                                "Filter branches".into()
+                                crate::i18n::tr("chrome.sidebar.filter_branches")
                             },
                         )
                         .debug_selector(|| "collapsed_popover_filter_toggle".to_string()),
@@ -1055,7 +1055,7 @@ impl SidebarPaneView {
                         })
                         .w(scaled_px(22.0))
                         .h(scaled_px(22.0))
-                        .gitcomet_tooltip(theme, "More actions".into())
+                        .gitcomet_tooltip(theme, crate::i18n::tr("chrome.sidebar.more_actions"))
                         .debug_selector(|| "collapsed_popover_section_menu".to_string()),
                 )
             });
@@ -1166,7 +1166,10 @@ impl SidebarPaneView {
                                 })
                                 .w(scaled_px(24.0))
                                 .h(scaled_px(24.0))
-                                .gitcomet_tooltip(theme, "Clear filter".into())
+                                .gitcomet_tooltip(
+                                    theme,
+                                    crate::i18n::tr("chrome.sidebar.clear_filter"),
+                                )
                                 .debug_selector(|| "collapsed_popover_filter_clear".to_string()),
                         )
                     }),
@@ -1224,15 +1227,22 @@ impl SidebarPaneView {
         let visible_rows = self.file_browser_visible_rows(cx);
         let body: AnyElement = if visible_rows.is_empty() {
             let message = match self.active_repo() {
-                None => "No repository selected.",
+                None => crate::i18n::tr_str("chrome.sidebar.empty.no_repository"),
                 Some(repo) => match &repo.file_browser.entries {
-                    Loadable::NotLoaded | Loadable::Loading => "Loading files...",
-                    Loadable::Ready(entries) if entries.is_empty() => "Empty repository.",
-                    Loadable::Ready(_) => "No files visible.",
-                    Loadable::Error(_) => "Error loading files.",
+                    Loadable::NotLoaded | Loadable::Loading => {
+                        crate::i18n::tr_str("chrome.sidebar.empty.loading_files")
+                    }
+                    Loadable::Ready(entries) if entries.is_empty() => {
+                        crate::i18n::tr_str("chrome.sidebar.empty.repository")
+                    }
+                    Loadable::Ready(_) => {
+                        crate::i18n::tr_str("chrome.sidebar.empty.no_files_visible")
+                    }
+                    Loadable::Error(_) => crate::i18n::tr_str("chrome.sidebar.empty.load_error"),
                 },
             };
-            components::empty_state(theme, "Files", message).into_any_element()
+            components::empty_state(theme, crate::i18n::tr("chrome.sidebar.files"), message)
+                .into_any_element()
         } else {
             let rows = Self::render_file_browser_rows(self, 0..visible_rows.len(), window, cx);
             // Match the branch-section popovers: intrinsic eager rows, with the
@@ -1265,17 +1275,21 @@ impl SidebarPaneView {
     ) -> AnyElement {
         let theme = self.theme;
         let Some(presentation) = self.build_collapsed_popover_presentation(section) else {
-            return components::empty_state(theme, section.title(), "No repository selected.")
-                .into_any_element();
+            return components::empty_state(
+                theme,
+                section.title(),
+                crate::i18n::tr("chrome.sidebar.empty.no_repository"),
+            )
+            .into_any_element();
         };
         let row_count = presentation.rows.len();
         if row_count == 0 {
             let filtering = self.collapsed_popover_filter_open
                 && !self.collapsed_popover_filter_query.trim().is_empty();
             let message = if filtering {
-                "No matching branches."
+                crate::i18n::tr_str("chrome.sidebar.empty.no_matching_branches")
             } else {
-                "Nothing here yet."
+                crate::i18n::tr_str("chrome.sidebar.empty.nothing_yet")
             };
             return components::empty_state(theme, section.title(), message).into_any_element();
         }
@@ -1499,7 +1513,7 @@ impl SidebarPaneView {
             })
             .cursor(CursorStyle::PointingHand)
             .text_size(scaled_px(12.0))
-            .child("Branches")
+            .child(crate::i18n::tr("chrome.sidebar.branches"))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |_this, _e, _window, _cx| {
@@ -1548,7 +1562,7 @@ impl SidebarPaneView {
             })
             .cursor(CursorStyle::PointingHand)
             .text_size(scaled_px(12.0))
-            .child("Files")
+            .child(crate::i18n::tr("chrome.sidebar.files"))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |_this, _e, _window, _cx| {
@@ -1604,13 +1618,14 @@ impl SidebarPaneView {
                         .gitcomet_tooltip(
                             theme,
                             if can_locate {
-                                format!(
-                                    "Show the open file in the explorer ({})",
-                                    crate::view::shortcut_labels::secondary_shortcut("Shift+L")
+                                crate::i18n::t!(
+                                    "chrome.sidebar.locate_open_file",
+                                    shortcut =
+                                        crate::view::shortcut_labels::secondary_shortcut("Shift+L")
                                 )
                                 .into()
                             } else {
-                                SharedString::from("No file is open")
+                                crate::i18n::tr("chrome.sidebar.no_file_open")
                             },
                         )
                         .debug_selector(|| "sidebar_locate_open_file".to_string()),
@@ -1778,7 +1793,10 @@ impl SidebarPaneView {
                                 })
                                 .w(scaled_px(24.0))
                                 .h(scaled_px(24.0))
-                                .gitcomet_tooltip(theme, "Clear filter".into())
+                                .gitcomet_tooltip(
+                                    theme,
+                                    crate::i18n::tr("chrome.sidebar.clear_filter"),
+                                )
                                 .debug_selector(|| "branch_filter_clear".to_string()),
                         )
                     }),
@@ -1811,8 +1829,8 @@ impl SidebarPaneView {
                 .child(filter_bar)
                 .child(components::empty_state(
                     theme,
-                    "Branches",
-                    "No repository selected.",
+                    crate::i18n::tr("chrome.sidebar.branches"),
+                    crate::i18n::tr("chrome.sidebar.empty.no_repository"),
                 ))
                 .into_any();
         };
@@ -1930,7 +1948,10 @@ impl SidebarPaneView {
                                     })
                                     .w(scaled_px(24.0))
                                     .h(scaled_px(24.0))
-                                    .gitcomet_tooltip(theme, "Match case".into())
+                                    .gitcomet_tooltip(
+                                        theme,
+                                        crate::i18n::tr("diff.search.match_case"),
+                                    )
                                     .debug_selector(|| "file_search_match_case".to_string()),
                             )
                             .child(
@@ -1947,7 +1968,10 @@ impl SidebarPaneView {
                                     })
                                     .w(scaled_px(24.0))
                                     .h(scaled_px(24.0))
-                                    .gitcomet_tooltip(theme, "Match whole word".into())
+                                    .gitcomet_tooltip(
+                                        theme,
+                                        crate::i18n::tr("diff.search.match_whole_word"),
+                                    )
                                     .debug_selector(|| "file_search_whole_word".to_string()),
                             )
                             .child(
@@ -1964,7 +1988,10 @@ impl SidebarPaneView {
                                     })
                                     .w(scaled_px(24.0))
                                     .h(scaled_px(24.0))
-                                    .gitcomet_tooltip(theme, "Use regular expression".into())
+                                    .gitcomet_tooltip(
+                                        theme,
+                                        crate::i18n::tr("diff.search.use_regex"),
+                                    )
                                     .debug_selector(|| "file_search_regex".to_string()),
                             ),
                     ),
@@ -1983,16 +2010,23 @@ impl SidebarPaneView {
         let body: AnyElement = if visible_rows.is_empty() {
             let repo = self.active_repo();
             let message = match repo {
-                None => "No repository selected.",
+                None => crate::i18n::tr_str("chrome.sidebar.empty.no_repository"),
                 Some(r) => match &r.file_browser.entries {
-                    Loadable::NotLoaded => "Loading files...",
-                    Loadable::Loading => "Loading files...",
-                    Loadable::Ready(entries) if entries.is_empty() => "Empty repository.",
-                    Loadable::Ready(_) => "No files visible.",
-                    Loadable::Error(_) => "Error loading files.",
+                    Loadable::NotLoaded => {
+                        crate::i18n::tr_str("chrome.sidebar.empty.loading_files")
+                    }
+                    Loadable::Loading => crate::i18n::tr_str("chrome.sidebar.empty.loading_files"),
+                    Loadable::Ready(entries) if entries.is_empty() => {
+                        crate::i18n::tr_str("chrome.sidebar.empty.repository")
+                    }
+                    Loadable::Ready(_) => {
+                        crate::i18n::tr_str("chrome.sidebar.empty.no_files_visible")
+                    }
+                    Loadable::Error(_) => crate::i18n::tr_str("chrome.sidebar.empty.load_error"),
                 },
             };
-            components::empty_state(theme, "Files", message).into_any_element()
+            components::empty_state(theme, crate::i18n::tr("chrome.sidebar.files"), message)
+                .into_any_element()
         } else {
             let row_count = visible_rows.len();
             let list = uniform_list(
@@ -2419,7 +2453,10 @@ impl SidebarPaneView {
                                         .min_w(px(0.0))
                                         .text_xs()
                                         .text_color(theme.colors.foreground.secondary)
-                                        .child(format!("Unsaved edits ({count})")),
+                                        .child(crate::i18n::t!(
+                                            "chrome.sidebar.unsaved_edits",
+                                            count = count
+                                        )),
                                 )
                                 .into_any_element(),
                         );
@@ -3027,7 +3064,7 @@ fn unsaved_file_row(
                 .debug_selector(move || format!("file_browser_unsaved_discard_{ix}"))
                 .gitcomet_tooltip(
                     theme,
-                    "Throw away the unsaved changes and reload this file from disk".into(),
+                    crate::i18n::tr("chrome.sidebar.unsaved_discard_tooltip"),
                 ),
         )
         .into_any_element()

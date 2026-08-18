@@ -140,21 +140,23 @@ pub(super) fn worktree_branch_badge_label(
 ) -> Option<SharedString> {
     if let Some(open_repo) = open_repo {
         if open_repo.detached_head_commit.is_some() {
-            return Some("(detached)".into());
+            return Some(crate::i18n::tr("chrome.worktree.detached"));
         }
 
         match &open_repo.head_branch {
             Loadable::Ready(head_branch) if head_branch != "HEAD" => {
                 return Some(SharedString::new(head_branch.as_str()));
             }
-            Loadable::Ready(_) if detached => return Some("(detached)".into()),
+            Loadable::Ready(_) if detached => {
+                return Some(crate::i18n::tr("chrome.worktree.detached"));
+            }
             _ => {}
         }
     }
 
     branch
         .cloned()
-        .or_else(|| detached.then(|| "(detached)".into()))
+        .or_else(|| detached.then(|| crate::i18n::tr("chrome.worktree.detached")))
 }
 
 /// `"{branch} · {folder}"` — the branch says what is checked out, the folder says
@@ -177,7 +179,7 @@ pub(in crate::view) fn worktree_origin_label(
         (Some(branch), Some(folder)) => SharedString::new(format!("{branch} · {folder}")),
         (Some(branch), None) => branch,
         (None, Some(folder)) => SharedString::new(folder),
-        (None, None) => "worktree".into(),
+        (None, None) => crate::i18n::tr("chrome.worktree.fallback_name"),
     }
 }
 
@@ -1335,11 +1337,21 @@ impl SidebarPaneView {
                     let (icon_color, badge_label, can_open, tooltip) =
                         if let Some((status, recorded_head, checked_out_head)) = submodule_info {
                             let badge_label = match status {
-                                SubmoduleStatus::NotInitialized => Some("Not loaded"),
-                                SubmoduleStatus::HeadMismatch => Some("Head mismatch"),
-                                SubmoduleStatus::MergeConflict => Some("Conflict"),
-                                SubmoduleStatus::MissingMapping => Some("Missing mapping"),
-                                SubmoduleStatus::Unknown(_) => Some("Unknown"),
+                                SubmoduleStatus::NotInitialized => {
+                                    Some(crate::i18n::tr_str("chrome.submodule.badge_not_loaded"))
+                                }
+                                SubmoduleStatus::HeadMismatch => {
+                                    Some(crate::i18n::tr_str("chrome.submodule.head_mismatch"))
+                                }
+                                SubmoduleStatus::MergeConflict => {
+                                    Some(crate::i18n::tr_str("chrome.submodule.conflict"))
+                                }
+                                SubmoduleStatus::MissingMapping => {
+                                    Some(crate::i18n::tr_str("chrome.submodule.missing_mapping"))
+                                }
+                                SubmoduleStatus::Unknown(_) => {
+                                    Some(crate::i18n::tr_str("chrome.submodule.unknown"))
+                                }
                                 SubmoduleStatus::UpToDate => None,
                             };
                             let icon_color = match status {
@@ -1367,12 +1379,12 @@ impl SidebarPaneView {
                             let checked_out = checked_out_head
                                 .as_ref()
                                 .map(|head| head.as_ref())
-                                .unwrap_or("not loaded");
-                            let tooltip: SharedString = format!(
-                                "{}\nRecorded: {}\nChecked out: {}",
-                                path.display(),
-                                recorded_head.as_ref(),
-                                checked_out,
+                                .unwrap_or(crate::i18n::tr_str("chrome.submodule.not_loaded"));
+                            let tooltip: SharedString = crate::i18n::t!(
+                                "chrome.submodule.tooltip",
+                                path = path.display(),
+                                recorded = recorded_head.as_ref(),
+                                checked = checked_out
                             )
                             .into();
                             (icon_color, badge_label, can_open, tooltip)
@@ -1779,7 +1791,7 @@ impl SidebarPaneView {
                             .bg(with_alpha(theme.colors.accent.foreground, 0.12))
                             .border_1()
                             .border_color(with_alpha(theme.colors.accent.foreground, 0.35))
-                            .child("Upstream");
+                            .child(crate::i18n::tr("chrome.branch.upstream"));
                         if let Some(debug_selector) = debug_selector {
                             badge = badge.debug_selector(move || debug_selector.clone());
                         }

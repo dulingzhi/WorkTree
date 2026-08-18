@@ -2005,7 +2005,7 @@ impl GitCometView {
             Err(err) => {
                 self.push_toast(
                     components::ToastKind::Error,
-                    format!("Failed to start embedded terminal: {err}"),
+                    crate::i18n::t!("chrome.terminal.spawn_failed", err = err).to_string(),
                     cx,
                 );
                 return None;
@@ -2089,7 +2089,9 @@ impl GitCometView {
                             TerminalBackendEvent::Bell => {}
                             TerminalBackendEvent::Exit => {
                                 instance.connected = false;
-                                instance.exit_status = Some("Shell exited.".to_string());
+                                instance.exit_status = Some(
+                                    crate::i18n::t!("chrome.terminal.shell_exited").to_string(),
+                                );
                                 instance.viewport.update(cx, |viewport, _cx| {
                                     viewport.pty_sender = None;
                                     viewport.term_lock = None;
@@ -2772,7 +2774,10 @@ impl GitCometView {
                             .px(px(8.0))
                             .py(px(4.0))
                             .text_color(theme.colors.foreground.secondary)
-                            .child(format!("Terminal — {status}")),
+                            .child(
+                                crate::i18n::t!("chrome.terminal.exit_status", status = status)
+                                    .to_string(),
+                            ),
                     )
                     .child(panel)
                     .into_any(),
@@ -2897,7 +2902,7 @@ impl GitCometView {
                 theme.colors.foreground.primary,
                 px(12.0),
             ))
-            .gitcomet_tooltip(theme, "New terminal".into())
+            .gitcomet_tooltip(theme, crate::i18n::tr("chrome.terminal.new_tab"))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, _e: &MouseDownEvent, window, cx| {
@@ -2943,13 +2948,11 @@ impl GitCometView {
                             div()
                                 .text_size(px(11.0))
                                 .text_color(theme.colors.foreground.primary)
-                                .child("Keyboard captured"),
+                                .child(crate::i18n::tr("chrome.terminal.keyboard_captured")),
                         )
                         .gitcomet_tooltip(
                             theme,
-                            "Terminal has keyboard focus — app shortcuts are sent to the \
-                             terminal. Click outside the terminal to release."
-                                .into(),
+                            crate::i18n::tr("chrome.terminal.keyboard_captured_tooltip"),
                         ),
                 )
             })
@@ -2964,7 +2967,7 @@ impl GitCometView {
                         icon_btn(
                             "terminal_open_external",
                             "icons/open_external.svg",
-                            "Open in external terminal",
+                            crate::i18n::tr_str("chrome.terminal.open_external"),
                         )
                         .on_mouse_down(
                             MouseButton::Left,
@@ -2977,7 +2980,7 @@ impl GitCometView {
                         icon_btn(
                             "terminal_clear",
                             "icons/broom.svg",
-                            "Clear terminal (Ctrl+L)",
+                            crate::i18n::tr_str("chrome.terminal.clear"),
                         )
                         .on_mouse_down(
                             MouseButton::Left,
@@ -2990,7 +2993,7 @@ impl GitCometView {
                         icon_btn(
                             "terminal_close",
                             "icons/generic_close.svg",
-                            "Close terminal",
+                            crate::i18n::tr_str("chrome.terminal.close"),
                         )
                         .on_mouse_down(
                             MouseButton::Left,
@@ -3147,7 +3150,7 @@ fn terminal_tab_default_title() -> String {
                 .and_then(|s| s.to_str())
                 .map(ToOwned::to_owned)
         })
-        .unwrap_or_else(|| "Terminal".to_string())
+        .unwrap_or_else(|| crate::i18n::t!("chrome.terminal.tab_default").to_string())
 }
 
 /// Console titles that are just the shell executable's path (conhost's

@@ -49,7 +49,11 @@ fn annotated_toggle(
                 ))
             }),
     )
-    .child(div().text_sm().child("Annotated tag"))
+    .child(
+        div()
+            .text_sm()
+            .child(crate::i18n::tr("prompts.create_tag.annotated_toggle")),
+    )
 }
 
 pub(super) fn panel(
@@ -68,7 +72,7 @@ pub(super) fn panel(
         .flex()
         .flex_col()
         .w(scaled_px(420.0))
-        .child(popover_title("Create tag"))
+        .child(popover_title(crate::i18n::tr("prompts.create_tag.title")))
         .child(div().border_t_1().border_color(theme.colors.stroke.default))
         .child(
             div()
@@ -76,7 +80,9 @@ pub(super) fn panel(
                 .py_1()
                 .text_xs()
                 .text_color(theme.colors.foreground.secondary)
-                .child(format!("Target: {target}")),
+                .child(
+                    crate::i18n::t!("prompts.create_tag.target_line", target = target).into_owned(),
+                ),
         )
         .child(
             div()
@@ -105,7 +111,7 @@ pub(super) fn panel(
                 .pb_1()
                 .text_xs()
                 .text_color(theme.colors.foreground.secondary)
-                .child("Annotated tags can be GPG signed and include a message"),
+                .child(crate::i18n::tr("prompts.create_tag.annotated_hint")),
         )
         .when(annotated, |panel| {
             panel
@@ -116,7 +122,7 @@ pub(super) fn panel(
                         .pt_1()
                         .text_xs()
                         .text_color(theme.colors.foreground.secondary)
-                        .child("Annotation message"),
+                        .child(crate::i18n::tr("prompts.create_tag.annotation_message")),
                 )
                 .child(
                     div().px_2().pb_1().w_full().min_w(px(0.0)).child(
@@ -146,18 +152,17 @@ pub(super) fn panel(
                         }),
                 )
                 .child(
-                    components::Button::new("create_tag_go", "Create")
-                        .focus_handle(this.create_tag_focus.submit.clone())
-                        .separated_end_slot(super::hotkey_hint(
-                            theme,
-                            "create_tag_go_hint",
-                            "Enter",
-                        ))
-                        .style(components::ButtonStyle::Filled)
-                        .disabled(!can_create)
-                        .on_click(theme, cx, |this, _e, _w, cx| {
-                            this.submit_create_tag(cx);
-                        }),
+                    components::Button::new(
+                        "create_tag_go",
+                        crate::i18n::tr("prompts.create_tag.create"),
+                    )
+                    .focus_handle(this.create_tag_focus.submit.clone())
+                    .separated_end_slot(super::hotkey_hint(theme, "create_tag_go_hint", "Enter"))
+                    .style(components::ButtonStyle::Filled)
+                    .disabled(!can_create)
+                    .on_click(theme, cx, |this, _e, _w, cx| {
+                        this.submit_create_tag(cx);
+                    }),
                 ),
         )
 }

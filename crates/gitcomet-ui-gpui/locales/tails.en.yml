@@ -1,0 +1,47 @@
+# Locale files are keyed by filename (`tails.en.yml` -> locale "en"), so the
+# content below is the key tree directly — no `en:` root. English is also the
+# fallback locale, so every value must stay byte-identical to the string it
+# replaces in the source (tests assert these exact texts). Namespaces cover
+# the interactive rebase editor, the history rows, the diff viewer helpers,
+# and the decision-only conflict resolver.
+tail:
+  rebase:
+    no_active_repo: "No active repo"
+    title_rebase: "Interactive Rebase"
+    onto: "onto %{base}"
+    commits_count: "%{count} commits"
+    no_setup: "No interactive commit setup"
+    preparing: "Preparing…"
+    loading: "Loading commits…"
+    error: "Error: %{error}"
+    no_commits_to_rebase: "No commits to rebase."
+    no_commits_to_cherry_pick: "No commits to cherry-pick."
+    squashed: "squashed %{shas}"
+    reset_all: "Reset All"
+    cancel: "Cancel"
+    start_rebase: "Start Rebase"
+    start_cherry_pick: "Start Cherry-pick"
+  history:
+    uncommitted_changes: "Uncommitted changes"
+    click_to_review: "Click to review"
+  diff:
+    full_diff: "Full diff"
+    commit_range: "Commit range"
+    select_file: "Select a file to view diff"
+    show_file_history: "Show file history"
+    back_previous_version: "Back to previous file version"
+    forward_next_version: "Forward to next file version"
+    prev_file: "Previous file (F1)"
+    next_file: "Next file (F4)"
+  decision:
+    accept_deletion: "Accept Deletion"
+    accept_deletion_close: "Accept Deletion & close"
+    restore_ours: "Restore Ours"
+    restore_ours_close: "Restore Ours & close"
+    restore_theirs: "Restore Theirs"
+    restore_theirs_close: "Restore Theirs & close"
+    restore_base: "Restore from Base"
+    restore_base_close: "Restore Base & close"
+    both_deleted: "Both sides deleted this file"
+    deleted_on_both: "This file was deleted on both the local and remote branches. Accept the deletion to resolve the conflict."
+    restore_sources: "Restore sources available: %{sources}."

@@ -4,3 +4,20 @@ store:
     branch_noun_one: 个分支
     branch_noun_other: 个分支
     elision_suffix: "…还有 %{rest} 个"
+
+# Gettext 风格条目：键是 `Effect::Persist*` 携带的英文动作短语原文
+# （`&'static str`，见 msg/effect.rs 与 store/reducer/repo_management.rs），
+# 由 `handle_session_persist_result` 在拼接 persist_failed 模板前动态查找。
+# 英文即键名，回退返回原文，因此无需 *.en.yml 对应文件。
+"opening a repository": 打开仓库
+"restoring repository session": 恢复仓库会话
+"closing a repository": 关闭仓库
+"closing repositories": 关闭多个仓库
+"switching active repository": 切换当前仓库
+"reordering repository tabs": 重新排序仓库标签页
+"updating recent repositories": 更新最近打开的仓库
+"updating history mode": 更新历史模式
+"updating fetch prune settings": 更新获取时的清理设置
+"updating history author filter": 更新历史作者筛选
+"removing an invalid repository from recent repositories": 从最近打开的仓库中移除无效仓库
+"removing an invalid repository from session": 从会话中移除无效仓库

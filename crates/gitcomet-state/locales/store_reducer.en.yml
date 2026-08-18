@@ -35,7 +35,9 @@ store:
     label_update_gitignore: "Update .gitignore"
     label_patch: Patch
     label_worktree: Worktree
+    label_working_tree: "Working tree"
     label_submodule: Submodule
+    label_submodule_trust_check: "Submodule trust check"
     label_hunk: Hunk
     label_discard: Discard
 
@@ -129,6 +131,18 @@ store:
 
     # Session persistence
     persist_failed: "Failed to persist session state while %{action}: %{error}"
+
+    # Repo watch degradation notices (live file watching disabled/partial)
+    repo_watch_too_many_folders: "This repository has %{dir_count} folders — live file watching is disabled to stay within system limits. Changes refresh when the window regains focus. Add build/output dirs to .gitignore or raise fs.inotify.max_user_watches to re-enable."
+    repo_watch_watch_limit_reached: "Live file watching is partial: %{unwatched_dirs} folders could not be watched (the system inotify limit was reached). Changes in them refresh when the window regains focus. Raise fs.inotify.max_user_watches to watch everything."
+
+    # Conflict autosolve telemetry (action-history entry; the pass1=/details=
+    # tokens and the `telemetry.conflict_autosolve.*` command stay machine-form)
+    autosolve_summary: "Conflict autosolve (%{mode}): resolved %{resolved}; unresolved %{before} -> %{after}; conflicts %{total_before} -> %{total_after}%{path} (%{details})"
+    autosolve_in_path: " in %{path}"
+    autosolve_mode_safe: safe
+    autosolve_mode_regex: regex
+    autosolve_mode_history: history
 
     # Auth prompt validation
     auth_secret_empty: "credential/passphrase/confirmation cannot be empty"

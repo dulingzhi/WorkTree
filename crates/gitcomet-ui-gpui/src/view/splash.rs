@@ -184,7 +184,9 @@ impl GitCometView {
         self.state
             .git_runtime
             .unavailable_detail()
-            .unwrap_or("GitComet could not find a usable Git executable.")
+            .unwrap_or(crate::i18n::tr_str(
+                "chrome.splash.git_unavailable_fallback",
+            ))
             .to_string()
     }
 
@@ -392,11 +394,11 @@ impl GitCometView {
         let primary_hover = gpui::rgba(0x72c7ffff);
         let primary_active = gpui::rgba(0x48b6eeff);
         let primary_text = gpui::rgba(0x04172bff);
-        let settings_tooltip: SharedString = "Open settings".into();
+        let settings_tooltip: SharedString = crate::i18n::tr("chrome.splash.open_settings_tooltip");
 
         Self::splash_cta_button(
             "git_unavailable_open_settings",
-            "Open Settings",
+            crate::i18n::tr_str("chrome.splash.open_settings"),
             "icons/cog.svg",
             SplashCtaButtonColors {
                 icon: primary_text,
@@ -451,7 +453,7 @@ impl GitCometView {
                     .text_lg()
                     .font_weight(FontWeight::BOLD)
                     .text_center()
-                    .child("Git executable unavailable"),
+                    .child(crate::i18n::tr("chrome.splash.git_unavailable_title")),
             )
             .child(
                 div()
@@ -460,9 +462,7 @@ impl GitCometView {
                     .text_sm()
                     .line_height(px(22.0))
                     .text_color(theme.colors.foreground.secondary)
-                    .child(
-                        "GitComet cannot open, refresh, or run repository actions until a Git executable is configured.",
-                    ),
+                    .child(crate::i18n::tr("chrome.splash.git_unavailable_body")),
             )
             .child(
                 div()
@@ -569,13 +569,13 @@ impl GitCometView {
                     div()
                         .text_lg()
                         .font_weight(FontWeight::BOLD)
-                        .child("Loading repository session"),
+                        .child(crate::i18n::tr("chrome.splash.loading_title")),
                 )
                 .child(
                     div()
                         .text_sm()
                         .text_color(theme.colors.foreground.secondary)
-                        .child("GitComet is opening your workspace."),
+                        .child(crate::i18n::tr("chrome.splash.loading_body")),
                 )
                 .child(
                     div()
@@ -590,7 +590,7 @@ impl GitCometView {
                             theme.colors.accent.foreground,
                             scaled_px(16.0),
                         ))
-                        .child("Please wait…"),
+                        .child(crate::i18n::tr("chrome.splash.please_wait")),
                 ),
             theme,
         )
@@ -647,12 +647,12 @@ impl GitCometView {
             },
         };
         let panel_shadow = gpui::rgba(0x00000059);
-        let open_tooltip: SharedString = "Open repository".into();
-        let clone_tooltip: SharedString = "Clone repository".into();
+        let open_tooltip: SharedString = crate::i18n::tr("chrome.splash.open_repo_tooltip");
+        let clone_tooltip: SharedString = crate::i18n::tr("chrome.splash.clone_repo_tooltip");
 
         let open_button = Self::splash_cta_button(
             "splash_open_repo",
-            "Open Repository",
+            crate::i18n::tr_str("chrome.splash.open_repo"),
             "icons/folder.svg",
             primary_button_colors,
             self.ui_scale_percent,
@@ -669,7 +669,7 @@ impl GitCometView {
 
             let button = Self::splash_cta_button(
                 "splash_clone_repo",
-                "Clone Repository",
+                crate::i18n::tr_str("chrome.splash.clone_repo"),
                 "icons/cloud.svg",
                 secondary_button_colors,
                 self.ui_scale_percent,
@@ -700,9 +700,7 @@ impl GitCometView {
                         .text_size(px(11.0))
                         .text_color(hero_muted)
                         .text_center()
-                        .child(
-                            "Native folder picker unavailable. Enter a repository path manually.",
-                        ),
+                        .child(crate::i18n::tr("chrome.splash.native_picker_unavailable")),
                 )
                 .child(self.open_repo_panel(cx))
                 .into_any_element()
@@ -773,8 +771,12 @@ impl GitCometView {
                                         .flex()
                                         .flex_col()
                                         .items_center()
-                                        .child(headline_line("Fastest Open"))
-                                        .child(headline_line("Source Git GUI")),
+                                        .child(headline_line(crate::i18n::tr_str(
+                                            "chrome.splash.hero_line_1",
+                                        )))
+                                        .child(headline_line(crate::i18n::tr_str(
+                                            "chrome.splash.hero_line_2",
+                                        ))),
                                 )
                                 .child(
                                     div()
@@ -784,9 +786,7 @@ impl GitCometView {
                                         .text_size(px(14.0))
                                         .line_height(px(22.0))
                                         .text_color(hero_muted)
-                                        .child(
-                                            "GitComet is built for teams that want fast Git operations with local-first privacy, familiar workflows, and open source freedom.",
-                                        ),
+                                        .child(crate::i18n::tr("chrome.splash.hero_body")),
                                 )
                                 .child(
                                     div()
@@ -823,7 +823,7 @@ impl GitCometView {
                                         .text_size(px(12.0))
                                         .text_color(hero_proof)
                                         .text_center()
-                                        .child("Available for Linux, Windows and macOS."),
+                                        .child(crate::i18n::tr("chrome.splash.platforms")),
                                 ),
                         )
                         .child(

@@ -34,7 +34,7 @@ pub(super) fn panel(
             .flex()
             .flex_col()
             .w(scaled_px(420.0))
-            .child(popover_title("Squash commits"))
+            .child(popover_title(crate::i18n::tr("prompts.squash.title_empty")))
             .child(div().border_t_1().border_color(theme.colors.stroke.default))
             .child(
                 div()
@@ -42,7 +42,7 @@ pub(super) fn panel(
                     .py_1()
                     .text_sm()
                     .text_color(theme.colors.foreground.secondary)
-                    .child("The selected commits are no longer squashable."),
+                    .child(crate::i18n::tr("prompts.squash.not_squashable")),
             )
             .child(div().border_t_1().border_color(theme.colors.stroke.default))
             .child(
@@ -61,21 +61,29 @@ pub(super) fn panel(
         .read_with(cx, |input, _| input.text().trim().is_empty());
 
     let summary = if plan.head == plan.actual_head {
-        format!(
-            "{}..{} → one commit on HEAD",
-            short_sha(&plan.oldest),
-            short_sha(&plan.head)
+        crate::i18n::t!(
+            "prompts.squash.summary_head",
+            oldest = short_sha(&plan.oldest),
+            head = short_sha(&plan.head)
         )
+        .into_owned()
     } else {
-        format!(
-            "{}..{} → one commit · rewriting commits above",
-            short_sha(&plan.oldest),
-            short_sha(&plan.head)
+        crate::i18n::t!(
+            "prompts.squash.summary_rewrite",
+            oldest = short_sha(&plan.oldest),
+            head = short_sha(&plan.head)
         )
+        .into_owned()
     };
     let message_hint: Option<SharedString> = match &preview {
-        Loadable::Loading | Loadable::NotLoaded => Some("Building combined message…".into()),
-        Loadable::Error(e) => Some(format!("Could not build the combined message: {e}").into()),
+        Loadable::Loading | Loadable::NotLoaded => {
+            Some(crate::i18n::tr("prompts.squash.building_message"))
+        }
+        Loadable::Error(e) => Some(
+            crate::i18n::t!("prompts.squash.build_error", error = e)
+                .into_owned()
+                .into(),
+        ),
         Loadable::Ready(_) => None,
     };
 
@@ -86,7 +94,9 @@ pub(super) fn panel(
         .flex()
         .flex_col()
         .w(scaled_px(420.0))
-        .child(popover_title(format!("Squash {count} commits")))
+        .child(popover_title(
+            crate::i18n::t!("prompts.squash.title_count", count = count).into_owned(),
+        ))
         .child(div().border_t_1().border_color(theme.colors.stroke.default))
         .child(
             div()
@@ -108,7 +118,7 @@ pub(super) fn panel(
                     div()
                         .text_xs()
                         .text_color(theme.colors.foreground.secondary)
-                        .child("Commit message"),
+                        .child(crate::i18n::tr("prompts.squash.commit_message")),
                 )
                 .child(
                     div()
@@ -129,7 +139,7 @@ pub(super) fn panel(
                     div()
                         .text_xs()
                         .text_color(theme.colors.foreground.secondary)
-                        .child("Description"),
+                        .child(crate::i18n::tr("prompts.squash.description")),
                 )
                 .child(
                     components::ScrollContainer::vertical(
@@ -161,7 +171,7 @@ pub(super) fn panel(
                 .justify_between()
                 .child(cancel_button(this, cx))
                 .child(
-                    components::Button::new("squash_go", "Squash")
+                    components::Button::new("squash_go", crate::i18n::tr("prompts.squash.submit"))
                         .focus_handle(this.squash_submit_focus_handle.clone())
                         .style(components::ButtonStyle::Filled)
                         .disabled(message_empty)

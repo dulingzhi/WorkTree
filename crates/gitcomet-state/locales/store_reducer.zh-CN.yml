@@ -35,7 +35,9 @@ store:
     label_update_gitignore: "更新 .gitignore"
     label_patch: 补丁
     label_worktree: 工作树
+    label_working_tree: 工作树
     label_submodule: 子模块
+    label_submodule_trust_check: 子模块信任检查
     label_hunk: 代码块
     label_discard: 放弃
 
@@ -129,6 +131,18 @@ store:
 
     # Session persistence
     persist_failed: "会话状态持久化失败（%{action}）：%{error}"
+
+    # Repo watch degradation notices (live file watching disabled/partial)
+    repo_watch_too_many_folders: "此仓库有 %{dir_count} 个文件夹——为保持在系统限制之内，实时文件监视已禁用。窗口重新获得焦点时更改会自动刷新。可将构建/输出目录加入 .gitignore，或提高 fs.inotify.max_user_watches 以重新启用。"
+    repo_watch_watch_limit_reached: "实时文件监视不完整：有 %{unwatched_dirs} 个文件夹无法监视（已达系统 inotify 限制）。这些文件夹中的更改会在窗口重新获得焦点时刷新。提高 fs.inotify.max_user_watches 可监视全部内容。"
+
+    # Conflict autosolve telemetry (action-history entry; the pass1=/details=
+    # tokens and the `telemetry.conflict_autosolve.*` command stay machine-form)
+    autosolve_summary: "冲突自动解决（%{mode}）：已解决 %{resolved}；未解决 %{before} -> %{after}；冲突 %{total_before} -> %{total_after}%{path}（%{details}）"
+    autosolve_in_path: "（文件：%{path}）"
+    autosolve_mode_safe: 安全
+    autosolve_mode_regex: 正则
+    autosolve_mode_history: 历史
 
     # Auth prompt validation
     auth_secret_empty: "凭据/密码短语/确认信息不能为空"

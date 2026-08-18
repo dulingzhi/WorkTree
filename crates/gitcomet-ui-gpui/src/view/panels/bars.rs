@@ -21,16 +21,19 @@ impl GitCometView {
                 div()
                     .text_sm()
                     .text_color(theme.colors.foreground.secondary)
-                    .child("Path"),
+                    .child(crate::i18n::tr("chrome.open_repo_panel.path_label")),
             )
             .child(div().flex_1().child(self.open_repo_input.clone()))
             .child(
-                components::Button::new("open_repo_go", "Open")
-                    .separated_end_slot(popover::hotkey_hint(theme, "open_repo_go_hint", "Enter"))
-                    .style(components::ButtonStyle::Filled)
-                    .on_click(theme, cx, |this, _e, _w, cx| {
-                        this.submit_open_repo_panel(cx);
-                    }),
+                components::Button::new(
+                    "open_repo_go",
+                    crate::i18n::tr("chrome.open_repo_panel.open"),
+                )
+                .separated_end_slot(popover::hotkey_hint(theme, "open_repo_go_hint", "Enter"))
+                .style(components::ButtonStyle::Filled)
+                .on_click(theme, cx, |this, _e, _w, cx| {
+                    this.submit_open_repo_panel(cx);
+                }),
             )
             .child(
                 popover::cancel_button("open_repo_cancel", "open_repo_cancel_hint", theme)

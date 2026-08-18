@@ -31,17 +31,21 @@ pub(super) fn panel(
     };
 
     let (title, confirm_label, cancel_label) = match &prompt.operation {
-        SubmoduleTrustPromptOperation::Add { .. } => {
-            ("Trust local submodule?", "Trust and add", "Back")
-        }
-        SubmoduleTrustPromptOperation::Update => (
-            "Trust local submodule sources?",
-            "Trust and update",
-            "Cancel",
+        SubmoduleTrustPromptOperation::Add { .. } => (
+            crate::i18n::tr_str("prompts.submodule_trust.title_add"),
+            crate::i18n::tr_str("prompts.submodule_trust.confirm_add"),
+            crate::i18n::tr_str("prompts.submodule_trust.back"),
         ),
-        SubmoduleTrustPromptOperation::Load { .. } => {
-            ("Trust local submodule sources?", "Trust and load", "Cancel")
-        }
+        SubmoduleTrustPromptOperation::Update => (
+            crate::i18n::tr_str("prompts.submodule_trust.title_update"),
+            crate::i18n::tr_str("prompts.submodule_trust.confirm_update"),
+            crate::i18n::tr_str("prompts.submodule_trust.cancel"),
+        ),
+        SubmoduleTrustPromptOperation::Load { .. } => (
+            crate::i18n::tr_str("prompts.submodule_trust.title_update"),
+            crate::i18n::tr_str("prompts.submodule_trust.confirm_load"),
+            crate::i18n::tr_str("prompts.submodule_trust.cancel"),
+        ),
     };
     let (add_branch, add_name, add_force) = match &prompt.operation {
         SubmoduleTrustPromptOperation::Add {
@@ -72,22 +76,25 @@ pub(super) fn panel(
                 .max_w(scaled_px(460.0))
                 .text_sm()
                 .text_color(theme.colors.foreground.secondary)
-                .child("Git blocks local file transport for submodules by default. Trusting these sources will allow GitComet to enable file transport only for this repo/source pair."),
+                .child(crate::i18n::tr("prompts.submodule_trust.body")),
         )
         .section(
             div().px_2().pb_1().child(
-                components::Button::new("submodule_trust_cve_link", "Read about CVE-2022-39253")
-                    .style(components::ButtonStyle::Filled)
-                    .borderless()
-                    .no_hover_border()
-                    .end_slot(svg_icon(
-                        "icons/open_external.svg",
-                        theme.colors.accent.foreground,
-                        px(14.0),
-                    ))
-                    .on_click(theme, cx, |_this, _e, _window, cx| {
-                        cx.open_url(SUBMODULE_TRUST_CVE_URL);
-                    }),
+                components::Button::new(
+                    "submodule_trust_cve_link",
+                    crate::i18n::tr("prompts.submodule_trust.read_cve"),
+                )
+                .style(components::ButtonStyle::Filled)
+                .borderless()
+                .no_hover_border()
+                .end_slot(svg_icon(
+                    "icons/open_external.svg",
+                    theme.colors.accent.foreground,
+                    px(14.0),
+                ))
+                .on_click(theme, cx, |_this, _e, _window, cx| {
+                    cx.open_url(SUBMODULE_TRUST_CVE_URL);
+                }),
             ),
         );
 
@@ -103,7 +110,13 @@ pub(super) fn panel(
                     div()
                         .text_xs()
                         .text_color(theme.colors.foreground.secondary)
-                        .child(format!("Submodule: {}", source.submodule_path.display())),
+                        .child(
+                            crate::i18n::t!(
+                                "prompts.submodule_trust.submodule_line",
+                                path = source.submodule_path.display()
+                            )
+                            .into_owned(),
+                        ),
                 )
                 .child(
                     div()
@@ -116,10 +129,13 @@ pub(super) fn panel(
                         .text_xs()
                         .font_family(crate::font_preferences::EDITOR_MONOSPACE_FONT_FAMILY)
                         .text_color(theme.colors.foreground.secondary)
-                        .child(format!(
-                            "Local path: {}",
-                            source.local_source_path.display()
-                        )),
+                        .child(
+                            crate::i18n::t!(
+                                "prompts.submodule_trust.local_path_line",
+                                path = source.local_source_path.display()
+                            )
+                            .into_owned(),
+                        ),
                 ),
         );
     }
@@ -138,7 +154,13 @@ pub(super) fn panel(
                             .text_xs()
                             .font_family(crate::font_preferences::EDITOR_MONOSPACE_FONT_FAMILY)
                             .text_color(theme.colors.foreground.secondary)
-                            .child(format!("Branch: {branch}")),
+                            .child(
+                                crate::i18n::t!(
+                                    "prompts.submodule_trust.branch_line",
+                                    branch = branch
+                                )
+                                .into_owned(),
+                            ),
                     )
                 })
                 .when_some(add_name.clone(), |details, name| {
@@ -147,7 +169,13 @@ pub(super) fn panel(
                             .text_xs()
                             .font_family(crate::font_preferences::EDITOR_MONOSPACE_FONT_FAMILY)
                             .text_color(theme.colors.foreground.secondary)
-                            .child(format!("Logical name: {name}")),
+                            .child(
+                                crate::i18n::t!(
+                                    "prompts.submodule_trust.logical_name_line",
+                                    name = name
+                                )
+                                .into_owned(),
+                            ),
                     )
                 })
                 .when(add_force, |details| {
@@ -155,7 +183,7 @@ pub(super) fn panel(
                         div()
                             .text_xs()
                             .text_color(theme.colors.foreground.secondary)
-                            .child("Force: enabled"),
+                            .child(crate::i18n::tr("prompts.submodule_trust.force_line")),
                     )
                 }),
         );
@@ -241,7 +269,9 @@ fn checking_panel(theme: AppTheme, cx: &mut gpui::Context<PopoverHost>) -> gpui:
         .flex()
         .flex_col()
         .min_w(scaled_px(460.0))
-        .child(popover_title("Checking submodule trust…"))
+        .child(popover_title(crate::i18n::tr(
+            "prompts.submodule_trust.checking_title",
+        )))
         .child(div().border_t_1().border_color(theme.colors.stroke.default))
         .child(
             div()
@@ -259,7 +289,7 @@ fn checking_panel(theme: AppTheme, cx: &mut gpui::Context<PopoverHost>) -> gpui:
                     div()
                         .text_sm()
                         .text_color(theme.colors.foreground.secondary)
-                        .child("Checking local submodule sources…"),
+                        .child(crate::i18n::tr("prompts.submodule_trust.checking_body")),
                 ),
         )
 }

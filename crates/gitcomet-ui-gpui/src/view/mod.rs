@@ -950,7 +950,7 @@ impl GitCometView {
                         files: true,
                         directories: false,
                         multiple: false,
-                        prompt: Some("Select patch file".into()),
+                        prompt: Some(crate::i18n::tr("chrome.patch.select_file")),
                     });
                     cx.spawn(async move |cx| {
                         let result = rx.await;
@@ -1774,7 +1774,7 @@ impl GitCometView {
         let auth_prompt_username_input = cx.new(|cx| {
             components::TextInput::new(
                 components::TextInputOptions {
-                    placeholder: "Username".into(),
+                    placeholder: crate::i18n::tr("chrome.auth.username_placeholder"),
                     ..Default::default()
                 },
                 window,
@@ -1785,7 +1785,7 @@ impl GitCometView {
         let auth_prompt_secret_input = cx.new(|cx| {
             let mut input = components::TextInput::new(
                 components::TextInputOptions {
-                    placeholder: "Password / passphrase / confirmation".into(),
+                    placeholder: crate::i18n::tr("chrome.auth.secret_placeholder"),
                     ..Default::default()
                 },
                 window,
@@ -3270,9 +3270,13 @@ impl GitCometView {
         };
         let requires_username = prompt.kind == AuthPromptKind::UsernamePassword;
         let secret_required_message = match prompt.kind {
-            AuthPromptKind::UsernamePassword => "Password is required.",
-            AuthPromptKind::Passphrase => "Passphrase is required.",
-            AuthPromptKind::HostVerification => "Confirmation is required (`yes` or fingerprint).",
+            AuthPromptKind::UsernamePassword => {
+                crate::i18n::tr_str("chrome.auth.password_required")
+            }
+            AuthPromptKind::Passphrase => crate::i18n::tr_str("chrome.auth.passphrase_required"),
+            AuthPromptKind::HostVerification => {
+                crate::i18n::tr_str("chrome.auth.confirmation_required")
+            }
         };
 
         let username = self
@@ -3286,7 +3290,7 @@ impl GitCometView {
         if requires_username && username.is_empty() {
             self.push_toast(
                 components::ToastKind::Error,
-                "Username is required.".to_string(),
+                crate::i18n::t!("chrome.auth.username_required").to_string(),
                 cx,
             );
             return;
@@ -3355,7 +3359,7 @@ impl GitCometView {
         let Some(workdir) = self.active_repo_workdir() else {
             self.push_toast(
                 components::ToastKind::Error,
-                "No active repository to open in code editor.".to_string(),
+                crate::i18n::t!("chrome.editor.no_active_repo").to_string(),
                 cx,
             );
             return;
@@ -3371,7 +3375,7 @@ impl GitCometView {
         if !path.exists() {
             self.push_toast(
                 components::ToastKind::Error,
-                format!("Path not found: {}", path.display()),
+                crate::i18n::t!("chrome.editor.path_not_found", path = path.display()).to_string(),
                 cx,
             );
             return;
@@ -3380,7 +3384,7 @@ impl GitCometView {
         if let Err(err) = crate::external_editor::launch_configured_editor(&path) {
             self.push_toast(
                 components::ToastKind::Error,
-                format!("Failed to open in code editor: {err}"),
+                crate::i18n::t!("chrome.editor.open_failed", err = err).to_string(),
                 cx,
             );
         }
@@ -3727,40 +3731,45 @@ impl Render for GitCometView {
         {
             let summary = report.summary.clone();
 
-            let report_button =
-                components::Button::new("startup_crash_report_open", "Report Issue")
-                    .style(components::ButtonStyle::Filled)
-                    .on_click(theme, cx, |this, _e, _w, cx| {
-                        match this.report_startup_crash_report() {
-                            Ok(()) => this.push_toast(
-                                components::ToastKind::Success,
-                                "Opened crash report page in your browser.".to_string(),
-                                cx,
-                            ),
-                            Err(err) => {
-                                this.push_toast(
-                                    components::ToastKind::Error,
-                                    format!("Failed to open browser: {err}"),
-                                    cx,
-                                );
-                            }
-                        }
-                        cx.notify();
-                    });
+            let report_button = components::Button::new(
+                "startup_crash_report_open",
+                crate::i18n::tr("chrome.crash.report_issue"),
+            )
+            .style(components::ButtonStyle::Filled)
+            .on_click(theme, cx, |this, _e, _w, cx| {
+                match this.report_startup_crash_report() {
+                    Ok(()) => this.push_toast(
+                        components::ToastKind::Success,
+                        crate::i18n::t!("chrome.crash.opened_in_browser").to_string(),
+                        cx,
+                    ),
+                    Err(err) => {
+                        this.push_toast(
+                            components::ToastKind::Error,
+                            crate::i18n::t!("chrome.crash.open_browser_failed", err = err)
+                                .to_string(),
+                            cx,
+                        );
+                    }
+                }
+                cx.notify();
+            });
 
-            let ignore_button =
-                components::Button::new("startup_crash_report_ignore", "Ignore Crash")
-                    .style(components::ButtonStyle::Outlined)
-                    .on_click(theme, cx, |this, _e, _w, cx| {
-                        if let Err(err) = this.ignore_startup_crash_report() {
-                            this.push_toast(
-                                components::ToastKind::Error,
-                                format!("Could not clear crash report: {err}"),
-                                cx,
-                            );
-                        }
-                        cx.notify();
-                    });
+            let ignore_button = components::Button::new(
+                "startup_crash_report_ignore",
+                crate::i18n::tr("chrome.crash.ignore_crash"),
+            )
+            .style(components::ButtonStyle::Outlined)
+            .on_click(theme, cx, |this, _e, _w, cx| {
+                if let Err(err) = this.ignore_startup_crash_report() {
+                    this.push_toast(
+                        components::ToastKind::Error,
+                        crate::i18n::t!("chrome.crash.clear_failed", err = err).to_string(),
+                        cx,
+                    );
+                }
+                cx.notify();
+            });
 
             body = body.child(
                 div()
@@ -3794,21 +3803,22 @@ impl Render for GitCometView {
                                 div()
                                     .text_sm()
                                     .font_weight(FontWeight::BOLD)
-                                    .child("GitComet recovered from program crash"),
+                                    .child(crate::i18n::tr("chrome.crash.recovered")),
                             )
                             .child(
                                 div()
                                     .text_sm()
                                     .text_color(theme.colors.foreground.secondary)
-                                    .child(
-                                        "Would you like to contribute by reporting issue to GitComet GitHub repository?",
-                                    ),
+                                    .child(crate::i18n::tr("chrome.crash.contribute_prompt")),
                             )
                             .child(
                                 div()
                                     .text_xs()
                                     .text_color(theme.colors.foreground.secondary)
-                                    .child(format!("Summary: {summary}")),
+                                    .child(crate::i18n::t!(
+                                        "chrome.crash.summary_label",
+                                        summary = summary
+                                    )),
                             )
                             .child(
                                 div()
@@ -3843,32 +3853,44 @@ impl Render for GitCometView {
 
             let requires_username = prompt.kind == AuthPromptKind::UsernamePassword;
             let title = match prompt.kind {
-                AuthPromptKind::UsernamePassword => "Repository authentication required",
-                AuthPromptKind::Passphrase => "Passphrase required",
-                AuthPromptKind::HostVerification => "Host authenticity confirmation required",
+                AuthPromptKind::UsernamePassword => {
+                    crate::i18n::tr_str("chrome.auth.title.username_password")
+                }
+                AuthPromptKind::Passphrase => crate::i18n::tr_str("chrome.auth.title.passphrase"),
+                AuthPromptKind::HostVerification => {
+                    crate::i18n::tr_str("chrome.auth.title.host_verification")
+                }
             };
             let subtitle = match prompt.kind {
                 AuthPromptKind::UsernamePassword => {
-                    "Enter username and password, then confirm to retry."
+                    crate::i18n::tr_str("chrome.auth.subtitle.username_password")
                 }
-                AuthPromptKind::Passphrase => "Enter your key passphrase, then confirm to retry.",
+                AuthPromptKind::Passphrase => {
+                    crate::i18n::tr_str("chrome.auth.subtitle.passphrase")
+                }
                 AuthPromptKind::HostVerification => {
-                    "Enter `yes` to trust this host key, or paste the shown fingerprint."
+                    crate::i18n::tr_str("chrome.auth.subtitle.host_verification")
                 }
             };
 
-            let confirm_button = components::Button::new("auth_prompt_confirm", "Confirm")
-                .style(components::ButtonStyle::Filled)
-                .on_click(theme, cx, move |this, _e, _w, cx| {
-                    this.try_auth_prompt_submit(cx);
-                });
+            let confirm_button = components::Button::new(
+                "auth_prompt_confirm",
+                crate::i18n::tr("chrome.auth.confirm"),
+            )
+            .style(components::ButtonStyle::Filled)
+            .on_click(theme, cx, move |this, _e, _w, cx| {
+                this.try_auth_prompt_submit(cx);
+            });
 
-            let cancel_button = components::Button::new("auth_prompt_cancel", "Cancel")
-                .style(components::ButtonStyle::Outlined)
-                .on_click(theme, cx, |this, _e, _w, cx| {
-                    this.store.dispatch(Msg::CancelAuthPrompt);
-                    cx.notify();
-                });
+            let cancel_button = components::Button::new(
+                "auth_prompt_cancel",
+                crate::i18n::tr("chrome.auth.cancel"),
+            )
+            .style(components::ButtonStyle::Outlined)
+            .on_click(theme, cx, |this, _e, _w, cx| {
+                this.store.dispatch(Msg::CancelAuthPrompt);
+                cx.notify();
+            });
 
             let prompt_form = div()
                 .flex()
@@ -3890,7 +3912,7 @@ impl Render for GitCometView {
                         div()
                             .text_xs()
                             .text_color(theme.colors.foreground.secondary)
-                            .child("Use Cancel if you do not trust this host."),
+                            .child(crate::i18n::tr("chrome.auth.untrusted_host_hint")),
                     )
                 })
                 .when(!prompt.reason.trim().is_empty(), |this| {
@@ -4022,7 +4044,7 @@ impl Render for GitCometView {
                                 .mt_1()
                                 .text_xs()
                                 .text_color(theme.colors.foreground.secondary)
-                                .child("Scroll for full output"),
+                                .child(crate::i18n::tr("chrome.error_banner.scroll_hint")),
                         )
                     })
                     .child(div().absolute().top(px(6.0)).right(px(6.0)).child(dismiss)),

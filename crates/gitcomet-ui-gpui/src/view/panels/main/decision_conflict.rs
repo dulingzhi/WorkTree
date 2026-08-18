@@ -32,10 +32,13 @@ fn decision_restore_sources_summary(availability: DecisionRestoreAvailability) -
     if sources.is_empty() {
         None
     } else {
-        Some(format!(
-            "Restore sources available: {}.",
-            sources.join(", ")
-        ))
+        Some(
+            crate::i18n::t!(
+                "tail.decision.restore_sources",
+                sources = sources.join(", ")
+            )
+            .into_owned(),
+        )
     }
 }
 
@@ -66,7 +69,7 @@ impl MainPaneView {
         let theirs_bytes = conflict_side_output_bytes(file, ThreeWayColumn::Theirs);
 
         let title: SharedString =
-            format!("Resolve conflict: {}", self.cached_path_display(&path)).into();
+            crate::i18n::t!("conflict.title", path = self.cached_path_display(&path)).into();
 
         let action_section = div()
             .flex()
@@ -76,9 +79,9 @@ impl MainPaneView {
                 components::Button::new(
                     "decision_accept_delete",
                     if focused_mergetool {
-                        "Accept Deletion & close"
+                        crate::i18n::tr("tail.decision.accept_deletion_close")
                     } else {
-                        "Accept Deletion"
+                        crate::i18n::tr("tail.decision.accept_deletion")
                     },
                 )
                 .style(components::ButtonStyle::Filled)
@@ -100,9 +103,9 @@ impl MainPaneView {
                     components::Button::new(
                         "decision_restore_ours",
                         if focused_mergetool {
-                            "Restore Ours & close"
+                            crate::i18n::tr("tail.decision.restore_ours_close")
                         } else {
-                            "Restore Ours"
+                            crate::i18n::tr("tail.decision.restore_ours")
                         },
                     )
                     .style(components::ButtonStyle::Outlined)
@@ -128,9 +131,9 @@ impl MainPaneView {
                     components::Button::new(
                         "decision_restore_theirs",
                         if focused_mergetool {
-                            "Restore Theirs & close"
+                            crate::i18n::tr("tail.decision.restore_theirs_close")
                         } else {
-                            "Restore Theirs"
+                            crate::i18n::tr("tail.decision.restore_theirs")
                         },
                     )
                     .style(components::ButtonStyle::Outlined)
@@ -156,9 +159,9 @@ impl MainPaneView {
                     components::Button::new(
                         "decision_restore_base",
                         if focused_mergetool {
-                            "Restore Base & close"
+                            crate::i18n::tr("tail.decision.restore_base_close")
                         } else {
-                            "Restore from Base"
+                            crate::i18n::tr("tail.decision.restore_base")
                         },
                     )
                     .style(components::ButtonStyle::Outlined)
@@ -179,14 +182,17 @@ impl MainPaneView {
             .when(show_external_mergetool_actions(self.view_mode), |d| {
                 d.child(div().w(px(1.0)).h(px(16.0)).bg(theme.colors.stroke.default))
                     .child(
-                        components::Button::new("decision_mergetool", "External Mergetool")
-                            .style(components::ButtonStyle::Outlined)
-                            .on_click(theme, cx, move |this, _e, _w, _cx| {
-                                this.store.dispatch(Msg::LaunchMergetool {
-                                    repo_id,
-                                    path: mergetool_path.clone(),
-                                });
-                            }),
+                        components::Button::new(
+                            "decision_mergetool",
+                            crate::i18n::tr_str("conflict.binary.external_mergetool"),
+                        )
+                        .style(components::ButtonStyle::Outlined)
+                        .on_click(theme, cx, move |this, _e, _w, _cx| {
+                            this.store.dispatch(Msg::LaunchMergetool {
+                                repo_id,
+                                path: mergetool_path.clone(),
+                            });
+                        }),
                     )
             });
 
@@ -231,17 +237,14 @@ impl MainPaneView {
                             .text_lg()
                             .font_weight(FontWeight::BOLD)
                             .text_color(theme.colors.status.warning.foreground)
-                            .child("Both sides deleted this file"),
+                            .child(crate::i18n::tr("tail.decision.both_deleted")),
                     )
                     .child(
                         div()
                             .text_sm()
                             .text_color(theme.colors.foreground.secondary)
                             .text_center()
-                            .child(
-                                "This file was deleted on both the local and remote branches. \
-                                 Accept the deletion to resolve the conflict.",
-                            ),
+                            .child(crate::i18n::tr("tail.decision.deleted_on_both")),
                     )
                     .when_some(restore_summary, |d, summary| {
                         d.child(

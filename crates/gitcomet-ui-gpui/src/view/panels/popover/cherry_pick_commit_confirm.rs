@@ -121,13 +121,15 @@ pub(super) fn panel(
                 div()
                     .text_xs()
                     .text_color(theme.colors.foreground.secondary)
-                    .child("Mainline parent"),
+                    .child(crate::i18n::tr(
+                        "prompts.cherry_pick_confirm.mainline_title",
+                    )),
             )
             .child(
                 div()
                     .text_xs()
                     .text_color(theme.colors.foreground.secondary)
-                    .child("Choose the parent Git should treat as the merge's mainline."),
+                    .child(crate::i18n::tr("prompts.cherry_pick_confirm.mainline_hint")),
             )
             .children(mainline_choices.into_iter().map(|choice| {
                 let number = choice.number;
@@ -144,7 +146,15 @@ pub(super) fn panel(
                     .flex()
                     .items_center()
                     .gap_2()
-                    .child(div().text_sm().child(format!("Parent {number}")))
+                    .child(
+                        div().text_sm().child(
+                            crate::i18n::t!(
+                                "prompts.cherry_pick_confirm.parent_row",
+                                number = number
+                            )
+                            .into_owned(),
+                        ),
+                    )
                     .child(
                         div()
                             .text_xs()
@@ -201,9 +211,18 @@ pub(super) fn panel(
             }))
     });
 
-    let mut dialog = ConfirmDialog::new("Commit cherry-picked commit?", DIALOG_380_WIDTH)
-        .text(theme, format!("Apply {short} to the current branch?"))
-        .note(theme, "Commit the cherry-picked change immediately?");
+    let mut dialog = ConfirmDialog::new(
+        crate::i18n::tr("prompts.cherry_pick_confirm.title"),
+        DIALOG_380_WIDTH,
+    )
+    .text(
+        theme,
+        crate::i18n::t!("prompts.cherry_pick_confirm.apply_line", short = short).into_owned(),
+    )
+    .note(
+        theme,
+        crate::i18n::tr("prompts.cherry_pick_confirm.commit_now_note"),
+    );
     if let Some(section) = mainline_section {
         dialog = dialog.section(section);
     }
@@ -221,19 +240,25 @@ pub(super) fn panel(
             .items_center()
             .gap_1()
             .child(
-                components::Button::new("cherry_pick_commit_no", "No")
-                    .style(components::ButtonStyle::Outlined)
-                    .disabled(mainline_missing)
-                    .on_click(theme, cx, {
-                        let dispatch = dispatch.clone();
-                        move |this, _e, _w, cx| dispatch(this, false, cx)
-                    }),
+                components::Button::new(
+                    "cherry_pick_commit_no",
+                    crate::i18n::tr("prompts.cherry_pick_confirm.answer_no"),
+                )
+                .style(components::ButtonStyle::Outlined)
+                .disabled(mainline_missing)
+                .on_click(theme, cx, {
+                    let dispatch = dispatch.clone();
+                    move |this, _e, _w, cx| dispatch(this, false, cx)
+                }),
             )
             .child(
-                components::Button::new("cherry_pick_commit_yes", "Yes")
-                    .style(components::ButtonStyle::Filled)
-                    .disabled(mainline_missing)
-                    .on_click(theme, cx, move |this, _e, _w, cx| dispatch(this, true, cx)),
+                components::Button::new(
+                    "cherry_pick_commit_yes",
+                    crate::i18n::tr("prompts.cherry_pick_confirm.answer_yes"),
+                )
+                .style(components::ButtonStyle::Filled)
+                .disabled(mainline_missing)
+                .on_click(theme, cx, move |this, _e, _w, cx| dispatch(this, true, cx)),
             ),
         cx,
     )

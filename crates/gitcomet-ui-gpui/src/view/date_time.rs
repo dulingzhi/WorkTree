@@ -472,14 +472,22 @@ pub(super) fn format_relative_time(unix_secs: i64, now: std::time::SystemTime) -
     // clamped-but-finite delta.
     let delta = now_secs.saturating_sub(unix_secs);
     if delta < 10 {
-        return "just now".to_string();
+        return crate::i18n::t!("ui.relative.just_now").into_owned();
     }
 
-    fn unit(value: i64, singular: &str, plural: &str) -> String {
+    // `unit` is a semantic key suffix ("sec", "hour", …) resolved against the
+    // `ui.relative.unit.*` catalog entries, whose en values byte-match the
+    // historical singular/plural words.
+    fn unit(value: i64, unit: &str) -> String {
+        let key = format!(
+            "ui.relative.unit.{unit}_{}",
+            if value == 1 { "one" } else { "many" }
+        );
+        let unit = crate::i18n::t!(&key).into_owned();
         if value == 1 {
-            format!("1 {singular} ago")
+            crate::i18n::t!("ui.relative.ago_one", unit = unit).into_owned()
         } else {
-            format!("{value} {plural} ago")
+            crate::i18n::t!("ui.relative.ago_many", value = value, unit = unit).into_owned()
         }
     }
 
@@ -488,19 +496,19 @@ pub(super) fn format_relative_time(unix_secs: i64, now: std::time::SystemTime) -
     let days = delta / 86_400;
 
     if delta < 60 {
-        unit(delta, "sec", "secs")
+        unit(delta, "sec")
     } else if mins < 60 {
-        unit(mins, "min", "mins")
+        unit(mins, "min")
     } else if hours < 24 {
-        unit(hours, "hour", "hours")
+        unit(hours, "hour")
     } else if days < 7 {
-        unit(days, "day", "days")
+        unit(days, "day")
     } else if days < 30 {
-        unit(days / 7, "week", "weeks")
+        unit(days / 7, "week")
     } else if days < 365 {
-        unit(days / 30, "month", "months")
+        unit(days / 30, "month")
     } else {
-        unit(days / 365, "year", "years")
+        unit(days / 365, "year")
     }
 }
 

@@ -99,3 +99,22 @@ ui:
     phase:
       stopping: Stopping clone
       remote_objects: Remote objects
+  relative:
+    just_now: just now
+    ago_one: "1 %{unit} ago"
+    ago_many: "%{value} %{unit} ago"
+    unit:
+      sec_one: sec
+      sec_many: secs
+      min_one: min
+      min_many: mins
+      hour_one: hour
+      hour_many: hours
+      day_one: day
+      day_many: days
+      week_one: week
+      week_many: weeks
+      month_one: month
+      month_many: months
+      year_one: year
+      year_many: years

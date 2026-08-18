@@ -962,7 +962,10 @@ impl MainPaneView {
                             with_alpha(theme.colors.accent.foreground, 0.7),
                             px(12.0),
                         ))
-                        .child(format!("squashed {}", folded_shas.join(", "))),
+                        .child(crate::i18n::t!(
+                            "tail.rebase.squashed",
+                            shas = folded_shas.join(", ")
+                        )),
                 )
             })
             .child(
@@ -1140,7 +1143,7 @@ impl MainPaneView {
         }
 
         let Some(repo) = self.active_repo() else {
-            return div().child("No active repo");
+            return div().child(crate::i18n::tr("tail.rebase.no_active_repo"));
         };
         let repo_id = repo.id;
         // Setups can outlive the state they were opened under (a merge or
@@ -1170,8 +1173,8 @@ impl MainPaneView {
                 (
                     ICommitEditorMode::Rebase,
                     Some(base),
-                    SharedString::from("Interactive Rebase"),
-                    SharedString::from(format!("onto {base_display}")),
+                    crate::i18n::tr("tail.rebase.title_rebase"),
+                    crate::i18n::t!("tail.rebase.onto", base = base_display).into_owned(),
                     setup.entries.clone(),
                 )
             } else if let Some(setup) = repo.interactive_cherry_pick_setup.as_ref() {
@@ -1185,12 +1188,12 @@ impl MainPaneView {
                 (
                     ICommitEditorMode::CherryPick,
                     None,
-                    SharedString::from("Cherry-pick"),
-                    SharedString::from(format!("{count} commits")),
+                    crate::i18n::tr_en("Cherry-pick"),
+                    crate::i18n::t!("tail.rebase.commits_count", count = count).into_owned(),
                     entries,
                 )
             } else {
-                return div().child("No interactive commit setup");
+                return div().child(crate::i18n::tr("tail.rebase.no_setup"));
             };
         let entry_content: gpui::AnyElement = match &loading_state {
             Loadable::NotLoaded => div()
@@ -1198,21 +1201,21 @@ impl MainPaneView {
                 .py_2()
                 .text_sm()
                 .text_color(theme.colors.foreground.secondary)
-                .child("Preparing…")
+                .child(crate::i18n::tr("tail.rebase.preparing"))
                 .into_any_element(),
             Loadable::Loading => div()
                 .px_2()
                 .py_2()
                 .text_sm()
                 .text_color(theme.colors.foreground.secondary)
-                .child("Loading commits…")
+                .child(crate::i18n::tr("tail.rebase.loading"))
                 .into_any_element(),
             Loadable::Error(e) => div()
                 .px_2()
                 .py_2()
                 .text_sm()
                 .text_color(theme.colors.foreground.secondary)
-                .child(format!("Error: {e}"))
+                .child(crate::i18n::t!("tail.rebase.error", error = e).into_owned())
                 .into_any_element(),
             // The map entry is populated by `apply_state` on the same state
             // application that made the entries Ready; guard anyway.
@@ -1235,8 +1238,12 @@ impl MainPaneView {
                     .text_sm()
                     .text_color(theme.colors.foreground.secondary)
                     .child(match editor_mode {
-                        ICommitEditorMode::Rebase => "No commits to rebase.".to_string(),
-                        ICommitEditorMode::CherryPick => "No commits to cherry-pick.".to_string(),
+                        ICommitEditorMode::Rebase => {
+                            crate::i18n::tr("tail.rebase.no_commits_to_rebase")
+                        }
+                        ICommitEditorMode::CherryPick => {
+                            crate::i18n::tr("tail.rebase.no_commits_to_cherry_pick")
+                        }
                     })
                     .into_any_element()
             }
@@ -1303,7 +1310,7 @@ impl MainPaneView {
                 .py_2()
                 .text_sm()
                 .text_color(theme.colors.foreground.secondary)
-                .child("Loading commits…")
+                .child(crate::i18n::tr("tail.rebase.loading"))
                 .into_any_element(),
         };
 
@@ -1376,12 +1383,12 @@ impl MainPaneView {
                                         div()
                                             .text_xs()
                                             .text_color(theme.colors.foreground.secondary)
-                                            .child("Auto Squash"),
+                                            .child(crate::i18n::tr_en("Auto Squash")),
                                     )
                                     .child(
                                         components::Button::new(
                                             "irebase_autosquash",
-                                            "Auto Squash",
+                                            crate::i18n::tr_en("Auto Squash"),
                                         )
                                         .style(components::ButtonStyle::Outlined)
                                         .end_slot(crate::view::icons::svg_icon(
@@ -1418,7 +1425,10 @@ impl MainPaneView {
                             .flex()
                             .gap_1()
                             .when(!entries_empty, |row| row.child(
-                                components::Button::new("irebase_reset", "Reset All")
+                                components::Button::new(
+                                    "irebase_reset",
+                                    crate::i18n::tr("tail.rebase.reset_all"),
+                                )
                                     .style(components::ButtonStyle::Outlined)
                                     .disabled(!is_modified)
                                     .render(theme, ui_scale_percent)
@@ -1437,7 +1447,10 @@ impl MainPaneView {
                                     )),
                             ))
                             .child(
-                                components::Button::new("irebase_cancel", "Cancel")
+                                components::Button::new(
+                                    "irebase_cancel",
+                                    crate::i18n::tr("tail.rebase.cancel"),
+                                )
                                     .style(components::ButtonStyle::Outlined)
                                     .render(theme, ui_scale_percent)
                                     .on_click(cx.listener(
@@ -1461,8 +1474,12 @@ impl MainPaneView {
                                 components::Button::new(
                                     "irebase_start",
                                     match editor_mode {
-                                        ICommitEditorMode::Rebase => "Start Rebase",
-                                        ICommitEditorMode::CherryPick => "Start Cherry-pick",
+                                        ICommitEditorMode::Rebase => crate::i18n::tr(
+                                            "tail.rebase.start_rebase",
+                                        ),
+                                        ICommitEditorMode::CherryPick => crate::i18n::tr(
+                                            "tail.rebase.start_cherry_pick",
+                                        ),
                                     },
                                 )
                                     .style(components::ButtonStyle::Filled)

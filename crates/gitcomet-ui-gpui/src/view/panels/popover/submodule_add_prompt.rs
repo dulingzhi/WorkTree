@@ -19,7 +19,7 @@ fn advanced_toggle(
         div()
             .debug_selector(|| "submodule_add_advanced_label".to_string())
             .text_sm()
-            .child("Advanced"),
+            .child(crate::i18n::tr("prompts.submodule_add.advanced")),
     )
     .child(svg_icon(
         if expanded {
@@ -49,7 +49,7 @@ fn force_toggle(
     .child(
         div()
             .text_sm()
-            .child("Force reuse / bypass collision checks"),
+            .child(crate::i18n::tr("prompts.submodule_add.force_toggle")),
     )
     .child(
         div()
@@ -59,7 +59,11 @@ fn force_toggle(
             } else {
                 theme.colors.foreground.secondary
             })
-            .child(if enabled { "On" } else { "Off" }),
+            .child(crate::i18n::tr(if enabled {
+                "prompts.submodule_add.state_on"
+            } else {
+                "prompts.submodule_add.state_off"
+            })),
     )
 }
 
@@ -78,9 +82,14 @@ pub(super) fn panel(
         .flex()
         .flex_col()
         .w(scaled_px(640.0))
-        .child(popover_title("Add submodule"))
+        .child(popover_title(crate::i18n::tr(
+            "prompts.submodule_add.title",
+        )))
         .child(div().border_t_1().border_color(theme.colors.stroke.default))
-        .child(input_label(theme, "URL"))
+        .child(input_label(
+            theme,
+            crate::i18n::tr_str("prompts.submodule_add.url_label"),
+        ))
         .child(
             div()
                 .px_2()
@@ -89,7 +98,10 @@ pub(super) fn panel(
                 .min_w(px(0.0))
                 .child(this.submodule_url_input.clone()),
         )
-        .child(input_label(theme, "Path (relative)"))
+        .child(input_label(
+            theme,
+            crate::i18n::tr_str("prompts.submodule_add.path_label"),
+        ))
         .child(
             div()
                 .px_2()
@@ -98,7 +110,10 @@ pub(super) fn panel(
                 .min_w(px(0.0))
                 .child(this.submodule_path_input.clone()),
         )
-        .child(input_label(theme, "Branch (optional)"))
+        .child(input_label(
+            theme,
+            crate::i18n::tr_str("prompts.submodule_add.branch_label"),
+        ))
         .child(
             div()
                 .px_2()
@@ -121,7 +136,10 @@ pub(super) fn panel(
         )
         .when(advanced_expanded, |this_panel| {
             this_panel
-                .child(input_label(theme, "Logical name (optional)"))
+                .child(input_label(
+                    theme,
+                    crate::i18n::tr_str("prompts.submodule_add.logical_name_label"),
+                ))
                 .child(
                     div()
                         .px_2()
@@ -131,16 +149,11 @@ pub(super) fn panel(
                         .child(this.submodule_name_input.clone()),
                 )
                 .child(
-                    force_toggle(
-                        theme,
-                        force_enabled,
-                        &this.submodule_force_focus_handle,
-                        cx,
-                    )
-                    .on_click(cx.listener(|this, _e: &ClickEvent, _w, cx| {
-                        this.submodule_force_enabled = !this.submodule_force_enabled;
-                        cx.notify();
-                    })),
+                    force_toggle(theme, force_enabled, &this.submodule_force_focus_handle, cx)
+                        .on_click(cx.listener(|this, _e: &ClickEvent, _w, cx| {
+                            this.submodule_force_enabled = !this.submodule_force_enabled;
+                            cx.notify();
+                        })),
                 )
                 .child(
                     div()
@@ -148,9 +161,7 @@ pub(super) fn panel(
                         .pb_1()
                         .text_xs()
                         .text_color(theme.colors.foreground.secondary)
-                        .child(
-                            "Force reuses an existing local submodule git dir or bypasses Git's normal collision refusal.",
-                        ),
+                        .child(crate::i18n::tr("prompts.submodule_add.force_hint")),
                 )
         })
         .child(div().border_t_1().border_color(theme.colors.stroke.default))
@@ -169,18 +180,17 @@ pub(super) fn panel(
                         }),
                 )
                 .child(
-                    components::Button::new("submodule_add_go", "Add")
-                        .focus_handle(this.submodule_focus.submit.clone())
-                        .disabled(!can_submit)
-                        .separated_end_slot(super::hotkey_hint(
-                            theme,
-                            "submodule_add_go_hint",
-                            "Enter",
-                        ))
-                        .style(components::ButtonStyle::Filled)
-                        .on_click(theme, cx, |this, _e, _w, cx| {
-                            this.submit_submodule_add(cx);
-                        }),
+                    components::Button::new(
+                        "submodule_add_go",
+                        crate::i18n::tr("prompts.submodule_add.add"),
+                    )
+                    .focus_handle(this.submodule_focus.submit.clone())
+                    .disabled(!can_submit)
+                    .separated_end_slot(super::hotkey_hint(theme, "submodule_add_go_hint", "Enter"))
+                    .style(components::ButtonStyle::Filled)
+                    .on_click(theme, cx, |this, _e, _w, cx| {
+                        this.submit_submodule_add(cx);
+                    }),
                 ),
         )
 }

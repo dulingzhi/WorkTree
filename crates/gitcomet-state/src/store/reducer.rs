@@ -896,18 +896,17 @@ fn reduce_inner(
         }
         Msg::RepoWatchDegraded { repo_id: _, reason } => {
             let message = match reason {
-                crate::msg::RepoWatchDegradedReason::TooManyFolders { dir_count } => format!(
-                    "This repository has {dir_count} folders — live file watching is disabled to \
-                     stay within system limits. Changes refresh when the window regains focus. Add \
-                     build/output dirs to .gitignore or raise fs.inotify.max_user_watches to \
-                     re-enable."
-                ),
+                crate::msg::RepoWatchDegradedReason::TooManyFolders { dir_count } => rust_i18n::t!(
+                    "store.reducer.repo_watch_too_many_folders",
+                    dir_count = dir_count
+                )
+                .to_string(),
                 crate::msg::RepoWatchDegradedReason::WatchLimitReached { unwatched_dirs } => {
-                    format!(
-                        "Live file watching is partial: {unwatched_dirs} folders could not be watched \
-                     (the system inotify limit was reached). Changes in them refresh when the window \
-                     regains focus. Raise fs.inotify.max_user_watches to watch everything."
+                    rust_i18n::t!(
+                        "store.reducer.repo_watch_watch_limit_reached",
+                        unwatched_dirs = unwatched_dirs
                     )
+                    .to_string()
                 }
             };
             util::push_notification(state, crate::model::AppNotificationKind::Warning, message);
@@ -968,7 +967,7 @@ fn reduce_inner(
             from,
             None,
             from_label,
-            "Working tree".to_string(),
+            rust_i18n::t!("store.reducer.label_working_tree").to_string(),
             effects::ComparisonSource::Explicit,
         ),
         Msg::ClearComparison { repo_id } => effects::clear_comparison(state, repo_id),
@@ -2037,7 +2036,10 @@ fn reduce_inner(
                 Err(error) => {
                     state.banner_error = Some(BannerErrorState {
                         repo_id: Some(repo_id),
-                        message: util::format_failure_summary("Submodule trust check", &error),
+                        message: util::format_failure_summary(
+                            &rust_i18n::t!("store.reducer.label_submodule_trust_check"),
+                            &error,
+                        ),
                     });
                     Vec::new()
                 }
@@ -2061,7 +2063,10 @@ fn reduce_inner(
                 Err(error) => {
                     state.banner_error = Some(BannerErrorState {
                         repo_id: Some(repo_id),
-                        message: util::format_failure_summary("Submodule trust check", &error),
+                        message: util::format_failure_summary(
+                            &rust_i18n::t!("store.reducer.label_submodule_trust_check"),
+                            &error,
+                        ),
                     });
                     Vec::new()
                 }
@@ -2089,7 +2094,10 @@ fn reduce_inner(
                 Err(error) => {
                     state.banner_error = Some(BannerErrorState {
                         repo_id: Some(repo_id),
-                        message: util::format_failure_summary("Submodule trust check", &error),
+                        message: util::format_failure_summary(
+                            &rust_i18n::t!("store.reducer.label_submodule_trust_check"),
+                            &error,
+                        ),
                     });
                     Vec::new()
                 }

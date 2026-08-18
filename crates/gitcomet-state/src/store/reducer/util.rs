@@ -937,6 +937,10 @@ pub(super) fn handle_session_persist_result(
     let Err(error) = result else {
         return;
     };
+    // The action phrase arrives as the historical English `&'static str`
+    // (gettext-style): look it up dynamically so zh-CN users see the
+    // translated phrase, while the en fallback returns the input verbatim.
+    let action = rust_i18n::t!(action).into_owned();
     let message = rust_i18n::t!(
         "store.reducer.persist_failed",
         action = action,
@@ -1043,13 +1047,19 @@ pub(super) fn conflict_autosolve_telemetry_summary(
 ) -> String {
     let resolved = stats.total_resolved();
     let mode_label = match mode {
-        ConflictAutosolveMode::Safe => "safe",
-        ConflictAutosolveMode::Regex => "regex",
-        ConflictAutosolveMode::History => "history",
+        ConflictAutosolveMode::Safe => {
+            rust_i18n::t!("store.reducer.autosolve_mode_safe").to_string()
+        }
+        ConflictAutosolveMode::Regex => {
+            rust_i18n::t!("store.reducer.autosolve_mode_regex").to_string()
+        }
+        ConflictAutosolveMode::History => {
+            rust_i18n::t!("store.reducer.autosolve_mode_history").to_string()
+        }
     };
 
     let path_label = path
-        .map(|p| format!(" in {}", p.display()))
+        .map(|p| rust_i18n::t!("store.reducer.autosolve_in_path", path = p.display()).to_string())
         .unwrap_or_default();
 
     let mut details = Vec::new();
@@ -1074,9 +1084,18 @@ pub(super) fn conflict_autosolve_telemetry_summary(
         details.join(", ")
     };
 
-    format!(
-        "Conflict autosolve ({mode_label}): resolved {resolved}; unresolved {unresolved_before} -> {unresolved_after}; conflicts {total_conflicts_before} -> {total_conflicts_after}{path_label} ({details})"
+    rust_i18n::t!(
+        "store.reducer.autosolve_summary",
+        mode = mode_label,
+        resolved = resolved,
+        before = unresolved_before,
+        after = unresolved_after,
+        total_before = total_conflicts_before,
+        total_after = total_conflicts_after,
+        path = path_label,
+        details = details
     )
+    .to_string()
 }
 
 /// A sequencer command (rebase / cherry-pick / continue) that reported Ok

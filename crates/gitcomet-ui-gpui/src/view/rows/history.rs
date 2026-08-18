@@ -3516,7 +3516,7 @@ fn worktree_uncommitted_history_row(
                     .text_color(label_color)
                     .line_clamp(1)
                     .whitespace_nowrap()
-                    .child("Worktree changes"),
+                    .child(crate::i18n::tr("layout.worktree.title")),
             );
             if !parts.is_empty() {
                 summary = summary.child(div().flex().items_center().gap_2().children(parts));
@@ -3719,7 +3719,7 @@ fn working_tree_summary_history_row(
                     .text_color(label_color)
                     .line_clamp(1)
                     .whitespace_nowrap()
-                    .child("Uncommitted changes"),
+                    .child(crate::i18n::tr("tail.history.uncommitted_changes")),
             );
             if !parts.is_empty() {
                 summary = summary.child(div().flex().items_center().gap_2().children(parts));
@@ -3738,7 +3738,7 @@ fn working_tree_summary_history_row(
                     .font_family(UI_MONOSPACE_FONT_FAMILY)
                     .text_color(theme.colors.foreground.secondary)
                     .whitespace_nowrap()
-                    .child("Click to review"),
+                    .child(crate::i18n::tr("tail.history.click_to_review")),
             )
         })
         .when(show_sha, |row| row.child(div().w(col_sha)))

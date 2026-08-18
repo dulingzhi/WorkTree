@@ -135,7 +135,7 @@ impl Render for BottomStatusBarView {
                 this.activate_context_menu_invoker(zoom_picker_invoker.clone(), cx);
                 this.open_popover_for_bounds(PopoverKind::UiScalePicker, bounds, window, cx);
             })
-            .gitcomet_tooltip(theme, "Adjust zoom".into())
+            .gitcomet_tooltip(theme, crate::i18n::tr("chrome.status_bar.adjust_zoom"))
             .debug_selector(|| "bottom_status_bar_zoom".to_string());
 
         // Pane collapse toggles live here (not floating inside the panes) so
@@ -168,9 +168,9 @@ impl Render for BottomStatusBarView {
             .gitcomet_tooltip(
                 theme,
                 if sidebar_collapsed {
-                    "Show sidebar".into()
+                    crate::i18n::tr("chrome.status_bar.show_sidebar")
                 } else {
-                    "Hide sidebar".into()
+                    crate::i18n::tr("chrome.status_bar.hide_sidebar")
                 },
             );
 
@@ -193,9 +193,9 @@ impl Render for BottomStatusBarView {
             .gitcomet_tooltip(
                 theme,
                 if details_collapsed {
-                    "Show details panel".into()
+                    crate::i18n::tr("chrome.status_bar.show_details")
                 } else {
-                    "Hide details panel".into()
+                    crate::i18n::tr("chrome.status_bar.hide_details")
                 },
             );
 
@@ -217,7 +217,7 @@ impl Render for BottomStatusBarView {
                 cx.stop_propagation();
                 cx.open_url(DISCORD_URL);
             }))
-            .gitcomet_tooltip(theme, "Join the GitComet Discord".into());
+            .gitcomet_tooltip(theme, crate::i18n::tr("chrome.status_bar.discord"));
 
         let free_badge = status_bar_chip("bottom_status_bar_free_badge", theme, ui_scale_percent)
             .text_size(scaled_px(11.0))
@@ -231,8 +231,8 @@ impl Render for BottomStatusBarView {
                 cx.stop_propagation();
                 cx.open_url(EDITIONS_URL);
             }))
-            .gitcomet_tooltip(theme, "See GitComet editions".into())
-            .child("FREE");
+            .gitcomet_tooltip(theme, crate::i18n::tr("chrome.status_bar.editions"))
+            .child(crate::i18n::tr("chrome.status_bar.free_badge"));
 
         // GPUI paints an SVG as a mask tinted by the text color, so the mark's
         // own brand blue never reaches the screen — an untinted mark renders
@@ -269,7 +269,7 @@ impl Render for BottomStatusBarView {
                 cx.stop_propagation();
                 cx.open_url(WEBSITE_URL);
             }))
-            .gitcomet_tooltip(theme, "Open gitcomet.dev".into());
+            .gitcomet_tooltip(theme, crate::i18n::tr("chrome.status_bar.website"));
 
         let version_label: SharedString = format!("v{}", env!("CARGO_PKG_VERSION")).into();
         let version_link = div()
@@ -287,7 +287,7 @@ impl Render for BottomStatusBarView {
                 cx.stop_propagation();
                 cx.open_url(RELEASES_URL);
             }))
-            .gitcomet_tooltip(theme, "View GitComet releases".into())
+            .gitcomet_tooltip(theme, crate::i18n::tr("chrome.status_bar.releases"))
             .child(version_label);
 
         div()
