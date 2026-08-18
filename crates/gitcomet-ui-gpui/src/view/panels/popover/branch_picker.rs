@@ -224,16 +224,16 @@ pub(super) fn rows(repo: &RepoState, query: &str, now: std::time::SystemTime) ->
         let base = head_branch.unwrap_or("HEAD");
         items.push(
             components::PickerPromptItem::from_parts([
-                components::PickerPromptItemPart::new("Create branch ")
+                components::PickerPromptItemPart::new(crate::i18n::tr("pick.branch.create_prefix"))
                     .flexible(false)
                     .searchable(false)
                     .tooltip(false),
                 components::PickerPromptItemPart::new(query.to_string()).flexible(false),
             ])
-            .secondary_parts([
-                components::PickerPromptItemPart::new(format!("Based off {base}"))
-                    .searchable(false),
-            ])
+            .secondary_parts([components::PickerPromptItemPart::new(
+                crate::i18n::t!("pick.create_row.based_off", base = base).into_owned(),
+            )
+            .searchable(false)])
             .icon("icons/plus.svg"),
         );
         rows.push(BranchPickerNavTarget::CreateBranch(query.to_string()));
@@ -506,12 +506,14 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
             purpose: BranchPickerPurpose::RebaseOnto
         })
     );
+    // Reuses the command-palette labels, which are byte-identical to the
+    // historical popover titles.
     let title = if is_delete {
-        "Delete Branch"
+        crate::i18n::tr("palette.cmd.delete-branch")
     } else if is_rebase_onto {
-        "Rebase Onto"
+        crate::i18n::tr("palette.cmd.rebase")
     } else {
-        "Checkout Branch"
+        crate::i18n::tr("palette.cmd.checkout-branch")
     };
 
     let mut menu = div()

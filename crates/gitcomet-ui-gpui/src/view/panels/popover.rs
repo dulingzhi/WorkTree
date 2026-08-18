@@ -576,7 +576,12 @@ pub(super) fn cancel_button(
     hint_debug_selector: &'static str,
     theme: AppTheme,
 ) -> components::Button {
-    cancel_button_labeled(id, hint_debug_selector, "Cancel", theme)
+    cancel_button_labeled(
+        id,
+        hint_debug_selector,
+        crate::i18n::tr("ui.common.cancel"),
+        theme,
+    )
 }
 
 /// Cancel button whose click simply closes the popover.
@@ -1206,7 +1211,7 @@ impl PopoverHost {
         let create_tag_message_input = cx.new(|cx| {
             let mut input = components::TextInput::new(
                 components::TextInputOptions {
-                    placeholder: "Annotation message (optional)".into(),
+                    placeholder: crate::i18n::tr("ui.placeholder.annotation_message").into(),
                     multiline: true,
                     soft_wrap: true,
                     min_lines: 3,
@@ -1239,7 +1244,7 @@ impl PopoverHost {
         let squash_message_input = cx.new(|cx| {
             components::TextInput::new(
                 components::TextInputOptions {
-                    placeholder: "Commit message".into(),
+                    placeholder: crate::i18n::tr("ui.placeholder.commit_message"),
                     ..Default::default()
                 },
                 window,
@@ -1251,7 +1256,7 @@ impl PopoverHost {
         let squash_description_input = cx.new(|cx| {
             let mut input = components::TextInput::new(
                 components::TextInputOptions {
-                    placeholder: "Description (optional)".into(),
+                    placeholder: crate::i18n::tr("ui.placeholder.description_optional"),
                     multiline: true,
                     soft_wrap: true,
                     min_lines: 4,
@@ -1311,7 +1316,7 @@ impl PopoverHost {
         let stash_message_input = cx.new(|cx| {
             components::TextInput::new(
                 components::TextInputOptions {
-                    placeholder: "Stash message".into(),
+                    placeholder: crate::i18n::tr("ui.placeholder.stash_message"),
                     ..Default::default()
                 },
                 window,
@@ -1353,7 +1358,7 @@ impl PopoverHost {
         let commit_prompt_message_input = cx.new(|cx| {
             let mut input = components::TextInput::new(
                 components::TextInputOptions {
-                    placeholder: "Commit message".into(),
+                    placeholder: crate::i18n::tr("ui.placeholder.commit_message"),
                     multiline: true,
                     soft_wrap: true,
                     ..Default::default()
@@ -1456,7 +1461,7 @@ impl PopoverHost {
         let rebase_reword_input = cx.new(|cx| {
             components::TextInput::new(
                 components::TextInputOptions {
-                    placeholder: "Commit subject".into(),
+                    placeholder: crate::i18n::tr("ui.placeholder.commit_subject"),
                     ..Default::default()
                 },
                 window,
@@ -1467,7 +1472,7 @@ impl PopoverHost {
         let rebase_reword_description_input = cx.new(|cx| {
             let mut input = components::TextInput::new(
                 components::TextInputOptions {
-                    placeholder: "Description (optional)".into(),
+                    placeholder: crate::i18n::tr("ui.placeholder.description_optional"),
                     multiline: true,
                     soft_wrap: true,
                     min_lines: 4,

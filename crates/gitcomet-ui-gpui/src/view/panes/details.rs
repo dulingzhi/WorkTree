@@ -281,7 +281,7 @@ impl DetailsPaneView {
         let commit_message_input = cx.new(|cx| {
             let mut input = components::TextInput::new(
                 components::TextInputOptions {
-                    placeholder: "Enter commit message".into(),
+                    placeholder: crate::i18n::tr("misc.details.commit_message_placeholder"),
                     multiline: true,
                     soft_wrap: true,
                     ..Default::default()

@@ -19,7 +19,9 @@ pub(super) fn panel(
         .flex()
         .flex_col()
         .w(scaled_px(640.0))
-        .child(popover_title(format!("Edit remote URL ({kind_label})")))
+        .child(popover_title(
+            crate::i18n::t!("input.remote_edit_url.title", kind = kind_label).into_owned(),
+        ))
         .child(div().border_t_1().border_color(theme.colors.stroke.default))
         .child(
             div()
@@ -27,7 +29,9 @@ pub(super) fn panel(
                 .py_1()
                 .text_xs()
                 .text_color(theme.colors.foreground.secondary)
-                .child(format!("Remote: {name}")),
+                .child(
+                    crate::i18n::t!("input.remote_edit_url.remote_line", name = name).into_owned(),
+                ),
         )
         .child(
             div()
@@ -57,18 +61,21 @@ pub(super) fn panel(
                     }),
                 )
                 .child(
-                    components::Button::new("edit_remote_url_go", "Save")
-                        .focus_handle(this.remote_edit_focus.submit.clone())
-                        .disabled(!can_submit)
-                        .separated_end_slot(super::hotkey_hint(
-                            theme,
-                            "edit_remote_url_go_hint",
-                            "Enter",
-                        ))
-                        .style(components::ButtonStyle::Filled)
-                        .on_click(theme, cx, |this, _e, _w, cx| {
-                            this.submit_remote_edit_url(cx);
-                        }),
+                    components::Button::new(
+                        "edit_remote_url_go",
+                        crate::i18n::tr("input.remote_edit_url.save"),
+                    )
+                    .focus_handle(this.remote_edit_focus.submit.clone())
+                    .disabled(!can_submit)
+                    .separated_end_slot(super::hotkey_hint(
+                        theme,
+                        "edit_remote_url_go_hint",
+                        "Enter",
+                    ))
+                    .style(components::ButtonStyle::Filled)
+                    .on_click(theme, cx, |this, _e, _w, cx| {
+                        this.submit_remote_edit_url(cx);
+                    }),
                 ),
         )
 }

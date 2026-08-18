@@ -2012,14 +2012,14 @@ impl MainPaneView {
                     .child(reveal_btn(
                         "conflict_fold_reveal_top",
                         "icons/arrow_down.svg",
-                        "Reveal 20 more lines from the top of this fold",
+                        crate::i18n::tr_str("misc.conflict_fold.reveal_top"),
                         true,
                         cx,
                     ))
                     .child(reveal_btn(
                         "conflict_fold_reveal_bottom",
                         "icons/arrow_up.svg",
-                        "Reveal 20 more lines from the bottom of this fold",
+                        crate::i18n::tr_str("misc.conflict_fold.reveal_bottom"),
                         false,
                         cx,
                     )),
@@ -2037,7 +2037,7 @@ impl MainPaneView {
                     }
                 }),
             )
-            .gitcomet_tooltip(theme, "Expand all hidden lines".into())
+            .gitcomet_tooltip(theme, crate::i18n::tr("misc.conflict_fold.expand_all"))
             .into_any_element()
     }
 

@@ -14,7 +14,9 @@ pub(super) fn panel(
         .flex()
         .flex_col()
         .w(scaled_px(420.0))
-        .child(popover_title("Change submodule pointer"))
+        .child(popover_title(crate::i18n::tr(
+            "input.submodule_change_pointer.title",
+        )))
         .child(div().border_t_1().border_color(theme.colors.stroke.default))
         .child(
             div()
@@ -22,9 +24,18 @@ pub(super) fn panel(
                 .py_1()
                 .text_sm()
                 .text_color(theme.colors.foreground.secondary)
-                .child(format!("Submodule: {}", path.display())),
+                .child(
+                    crate::i18n::t!(
+                        "prompts.submodule_trust.submodule_line",
+                        path = path.display()
+                    )
+                    .into_owned(),
+                ),
         )
-        .child(input_label(theme, "Target ref / branch / tag / commit"))
+        .child(input_label(
+            theme,
+            crate::i18n::tr_str("input.submodule_change_pointer.target_label"),
+        ))
         .child(
             div()
                 .px_2()
@@ -52,17 +63,20 @@ pub(super) fn panel(
                     }),
                 )
                 .child(
-                    components::Button::new("submodule_change_pointer_go", "Change")
-                        .separated_end_slot(super::hotkey_hint(
-                            theme,
-                            "submodule_change_pointer_go_hint",
-                            "Enter",
-                        ))
-                        .style(components::ButtonStyle::Filled)
-                        .disabled(!can_submit)
-                        .on_click(theme, cx, |this, _e, window, cx| {
-                            this.submit_submodule_change_pointer(window, cx);
-                        }),
+                    components::Button::new(
+                        "submodule_change_pointer_go",
+                        crate::i18n::tr("input.submodule_change_pointer.change"),
+                    )
+                    .separated_end_slot(super::hotkey_hint(
+                        theme,
+                        "submodule_change_pointer_go_hint",
+                        "Enter",
+                    ))
+                    .style(components::ButtonStyle::Filled)
+                    .disabled(!can_submit)
+                    .on_click(theme, cx, |this, _e, window, cx| {
+                        this.submit_submodule_change_pointer(window, cx);
+                    }),
                 ),
         )
 }

@@ -57,16 +57,16 @@ impl LinuxGuiEnvironment {
     pub(crate) fn launch_failure_message(&self) -> String {
         if self.is_wsl {
             if self.has_wayland && !self.has_xdg_runtime_dir && !self.has_x11 {
-                return "WAYLAND_DISPLAY is set in this WSL environment, but XDG_RUNTIME_DIR is missing. Start GitComet from a WSLg-enabled terminal or ensure the WSLg session variables are exported.".to_string();
+                return crate::i18n::t!("misc.linux_gui.wsl_wayland_missing_xdg").into_owned();
             }
-            return "No GUI session detected in this WSL environment. GitComet requires WSLg with WAYLAND_DISPLAY or DISPLAY set to open windows.".to_string();
+            return crate::i18n::t!("misc.linux_gui.wsl_no_gui").into_owned();
         }
 
         if self.has_wayland && !self.has_xdg_runtime_dir && !self.has_x11 {
-            return "WAYLAND_DISPLAY is set, but XDG_RUNTIME_DIR is missing. Launch GitComet from an active desktop session.".to_string();
+            return crate::i18n::t!("misc.linux_gui.wayland_missing_xdg").into_owned();
         }
 
-        "No GUI session detected. GitComet requires an X11 or Wayland session to open windows. Launch it from an active desktop session.".to_string()
+        crate::i18n::t!("misc.linux_gui.no_gui").into_owned()
     }
 }
 

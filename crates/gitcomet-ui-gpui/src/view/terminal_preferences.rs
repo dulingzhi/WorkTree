@@ -140,13 +140,16 @@ impl TerminalPreferences {
 
     pub(in crate::view) fn external_summary(&self) -> String {
         match self.external_terminal_mode {
-            ExternalTerminalMode::SystemDefault => "System default (best effort)".to_string(),
+            ExternalTerminalMode::SystemDefault => {
+                crate::i18n::tr_str("misc.terminal.system_default_best_effort").to_string()
+            }
             ExternalTerminalMode::CustomProgram => {
                 let program = self.external_terminal_program.trim();
                 if program.is_empty() {
-                    "Custom launcher (not set)".to_string()
+                    crate::i18n::tr_str("misc.terminal.custom_launcher_not_set").to_string()
                 } else {
-                    format!("Custom: {program}")
+                    crate::i18n::t!("ui.label.external_editor.custom_with_path", path = program)
+                        .into_owned()
                 }
             }
         }
@@ -213,7 +216,7 @@ pub(in crate::view) fn parse_terminal_args_multiline(raw: &str) -> Vec<String> {
 
 pub(in crate::view) fn resolve_embedded_shell_program() -> Result<PathBuf, String> {
     resolve_automatic_embedded_shell_program()
-        .ok_or_else(|| "No shell program was found for the embedded terminal.".to_string())
+        .ok_or_else(|| crate::i18n::tr_str("misc.terminal.no_shell_for_embedded").to_string())
 }
 
 pub(in crate::view) fn launch_external_terminal_from_preferences(
@@ -330,10 +333,7 @@ where
             });
         }
 
-        Err(
-            "No supported terminal launcher was found on PATH. Configure a custom launcher in Settings > Terminal."
-                .to_string(),
-        )
+        Err(crate::i18n::tr_str("misc.terminal.no_launcher_on_path").to_string())
     }
 
     #[cfg(not(any(
@@ -345,7 +345,7 @@ where
     {
         let _ = &mut find_executable;
         let _ = context;
-        Err("Terminal launching is not supported on this platform.".to_string())
+        Err(crate::i18n::tr_str("misc.terminal.unsupported_platform").to_string())
     }
 }
 
@@ -355,7 +355,7 @@ fn resolve_custom_external_terminal_launch_spec(
 ) -> Result<ExternalTerminalLaunchSpec, String> {
     let program = preferences.external_terminal_program.trim();
     if program.is_empty() {
-        return Err("Set a custom terminal launcher program in Settings > Terminal.".to_string());
+        return Err(crate::i18n::tr_str("misc.terminal.set_custom_launcher").to_string());
     }
 
     let substituted_args = preferences
@@ -456,9 +456,7 @@ where
         .or_else(|| find_executable("pwsh.exe"))
         .or_else(|| find_executable("powershell.exe"))
         .unwrap_or_else(|| {
-            eprintln!(
-                "PowerShell was not found for the embedded terminal; falling back to cmd.exe"
-            );
+            eprintln!("{}", crate::i18n::t!("misc.terminal.pwsh_fallback_cmd"));
             PathBuf::from("cmd.exe")
         })
 }

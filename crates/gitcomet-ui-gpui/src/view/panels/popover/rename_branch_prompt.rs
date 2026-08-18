@@ -17,9 +17,9 @@ pub(super) fn panel(
         .flex_col()
         .w(scaled_px(540.0))
         .child(popover_title(if is_current_branch {
-            "Rename current branch"
+            crate::i18n::tr("input.rename_branch.title_current")
         } else {
-            "Rename branch"
+            crate::i18n::tr("input.rename_branch.title")
         }))
         .child(div().border_t_1().border_color(theme.colors.stroke.default))
         .child(
@@ -28,9 +28,15 @@ pub(super) fn panel(
                 .py_1()
                 .text_sm()
                 .text_color(theme.colors.foreground.secondary)
-                .child(format!("Current name: {name}")),
+                .child(
+                    crate::i18n::t!("input.rename_branch.current_name_line", name = name)
+                        .into_owned(),
+                ),
         )
-        .child(input_label(theme, "New branch name"))
+        .child(input_label(
+            theme,
+            crate::i18n::tr_str("prompts.create_branch.name_label"),
+        ))
         .child(
             div()
                 .px_2()
@@ -55,14 +61,17 @@ pub(super) fn panel(
                         }),
                 )
                 .child(
-                    components::Button::new("rename_branch_go", "Rename")
-                        .focus_handle(this.create_branch_from_ref_focus.submit.clone())
-                        .separated_end_slot(hotkey_hint(theme, "rename_branch_go_hint", "Enter"))
-                        .style(components::ButtonStyle::Filled)
-                        .disabled(!can_rename)
-                        .on_click(theme, cx, |this, _e, window, cx| {
-                            this.submit_rename_branch(window, cx);
-                        }),
+                    components::Button::new(
+                        "rename_branch_go",
+                        crate::i18n::tr("input.rename_branch.rename"),
+                    )
+                    .focus_handle(this.create_branch_from_ref_focus.submit.clone())
+                    .separated_end_slot(hotkey_hint(theme, "rename_branch_go_hint", "Enter"))
+                    .style(components::ButtonStyle::Filled)
+                    .disabled(!can_rename)
+                    .on_click(theme, cx, |this, _e, window, cx| {
+                        this.submit_rename_branch(window, cx);
+                    }),
                 ),
         )
 }

@@ -956,10 +956,10 @@ fn install_blame_annotation_hover_handler(
 
             let tooltip = match area {
                 Some(AnnotArea::Message) => Some(body.clone().unwrap_or_else(|| summary.clone())),
-                Some(AnnotArea::PriorIcon) => {
-                    Some(SharedString::from("View file prior this change"))
+                Some(AnnotArea::PriorIcon) => Some(crate::i18n::tr("misc.diff_canvas.view_prior")),
+                Some(AnnotArea::BrowseIcon) => {
+                    Some(crate::i18n::tr("misc.diff_canvas.view_at_commit"))
                 }
-                Some(AnnotArea::BrowseIcon) => Some(SharedString::from("View file at this commit")),
                 None => None,
             };
 

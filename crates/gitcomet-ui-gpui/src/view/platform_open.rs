@@ -103,7 +103,7 @@ pub(super) fn open_file_location(path: &Path) -> Result<(), io::Error> {
         let _ = path;
         Err(io::Error::new(
             io::ErrorKind::Unsupported,
-            "Opening file locations is not supported on this platform",
+            crate::i18n::tr_str("misc.platform_open.locations_unsupported"),
         ))
     }
 }
@@ -147,7 +147,7 @@ fn open_with_default(arg: &str) -> Result<(), io::Error> {
         let _ = arg;
         Err(io::Error::new(
             io::ErrorKind::Unsupported,
-            "Opening external resources is not supported on this platform",
+            crate::i18n::tr_str("misc.platform_open.external_unsupported"),
         ))
     }
 }
@@ -186,7 +186,7 @@ fn open_with_default_os_str(arg: &std::ffi::OsStr) -> Result<(), io::Error> {
         let _ = arg;
         Err(io::Error::new(
             io::ErrorKind::Unsupported,
-            "Opening files is not supported on this platform",
+            crate::i18n::tr_str("misc.platform_open.files_unsupported"),
         ))
     }
 }
@@ -194,13 +194,16 @@ fn open_with_default_os_str(arg: &std::ffi::OsStr) -> Result<(), io::Error> {
 fn validate_external_url(url: &str) -> Result<&str, io::Error> {
     let trimmed = url.trim();
     if trimmed.is_empty() {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "URL is empty"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            crate::i18n::tr_str("misc.platform_open.url_empty"),
+        ));
     }
 
     if !trimmed.contains(':') {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "URL is missing a scheme",
+            crate::i18n::tr_str("misc.platform_open.url_missing_scheme"),
         ));
     }
 
@@ -209,7 +212,7 @@ fn validate_external_url(url: &str) -> Result<&str, io::Error> {
     } else {
         Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "URL scheme is not allowed",
+            crate::i18n::tr_str("misc.platform_open.url_scheme_denied"),
         ))
     }
 }
@@ -267,14 +270,17 @@ fn linux_open_helpers(is_wsl: bool) -> &'static [LinuxOpenHelper] {
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 fn linux_missing_opener_error(target: LinuxOpenTarget, is_wsl: bool) -> io::Error {
     let subject = match target {
-        LinuxOpenTarget::ExternalResource => "open external resources",
-        LinuxOpenTarget::FilePath => "open files or folders",
+        LinuxOpenTarget::ExternalResource => {
+            crate::i18n::tr_str("misc.platform_open.subject_open_external")
+        }
+        LinuxOpenTarget::FilePath => crate::i18n::tr_str("misc.platform_open.subject_open_files"),
     };
-    let mut message = format!(
-        "Unable to {subject}: no supported desktop opener was found. Install `xdg-utils` or make `gio open` available."
-    );
+    let mut message =
+        crate::i18n::t!("misc.platform_open.missing_opener", subject = subject).into_owned();
     if is_wsl {
-        message.push_str(" Under WSL, you can also install `wslu` to provide `wslview`.");
+        message.push_str(crate::i18n::tr_str(
+            "misc.platform_open.missing_opener_wsl_suffix",
+        ));
     }
     io::Error::new(io::ErrorKind::NotFound, message)
 }

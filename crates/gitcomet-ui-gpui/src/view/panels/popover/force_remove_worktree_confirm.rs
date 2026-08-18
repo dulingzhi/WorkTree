@@ -10,16 +10,18 @@ pub(super) fn panel(
     let theme = this.theme;
     let remove_branch = branch.clone();
     let header: SharedString = if branch.is_some() {
-        "Delete worktree and branch anyway?".into()
+        crate::i18n::tr("confirm.force_remove_worktree.title_with_branch")
     } else {
-        "Delete worktree anyway?".into()
+        crate::i18n::tr("confirm.force_remove_worktree.title")
     };
     let description: SharedString = match branch.as_ref() {
-        Some(branch) => format!(
-            "This worktree has modified or untracked files. GitComet will force-remove it, then delete the local branch '{branch}'."
+        Some(branch) => crate::i18n::t!(
+            "confirm.force_remove_worktree.body_with_branch",
+            branch = branch
         )
+        .into_owned()
         .into(),
-        None => "This worktree has modified or untracked files.".into(),
+        None => crate::i18n::tr("confirm.force_remove_worktree.body"),
     };
 
     ConfirmDialog::new(header, DIALOG_460_WIDTH)
@@ -37,25 +39,28 @@ pub(super) fn panel(
                 theme,
                 cx,
             ),
-            components::Button::new("force_remove_worktree_go", "Delete anyway")
-                .style(components::ButtonStyle::Danger)
-                .on_click(theme, cx, move |this, _e, _w, cx| {
-                    if let Some(branch) = remove_branch.clone() {
-                        let root_view = this.root_view.clone();
-                        let _ = root_view.update(cx, |root, _cx| {
-                            root.register_pending_worktree_branch_removal(
-                                repo_id,
-                                path.clone(),
-                                branch,
-                            );
-                        });
-                    }
-                    this.store.dispatch(Msg::ForceRemoveWorktree {
-                        repo_id,
-                        path: path.clone(),
+            components::Button::new(
+                "force_remove_worktree_go",
+                crate::i18n::tr("confirm.force_remove_worktree.delete_anyway"),
+            )
+            .style(components::ButtonStyle::Danger)
+            .on_click(theme, cx, move |this, _e, _w, cx| {
+                if let Some(branch) = remove_branch.clone() {
+                    let root_view = this.root_view.clone();
+                    let _ = root_view.update(cx, |root, _cx| {
+                        root.register_pending_worktree_branch_removal(
+                            repo_id,
+                            path.clone(),
+                            branch,
+                        );
                     });
-                    this.close_popover(cx);
-                }),
+                }
+                this.store.dispatch(Msg::ForceRemoveWorktree {
+                    repo_id,
+                    path: path.clone(),
+                });
+                this.close_popover(cx);
+            }),
             cx,
         )
 }

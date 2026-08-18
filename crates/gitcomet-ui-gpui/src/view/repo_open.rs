@@ -20,16 +20,18 @@ fn interpret_initialize_repository_output(
     let stdout = String::from_utf8_lossy(stdout).trim().to_string();
     let detail = if !stderr.is_empty() { stderr } else { stdout };
     if detail.is_empty() {
-        Err(format!("Git init failed with {status}."))
+        Err(crate::i18n::t!("misc.repo_open.init_failed_status", status = status).into_owned())
     } else {
-        Err(format!("Git init failed: {detail}"))
+        Err(crate::i18n::t!("misc.repo_open.init_failed_detail", detail = detail).into_owned())
     }
 }
 
 fn initialize_repository(path: &std::path::Path) -> Result<(), String> {
     let output = initialize_repository_command(path)
         .output()
-        .map_err(|err| format!("Could not start Git: {err}"))?;
+        .map_err(|err| {
+            crate::i18n::t!("misc.repo_open.could_not_start_git", err = err).into_owned()
+        })?;
 
     interpret_initialize_repository_output(
         output.status.success(),
@@ -138,7 +140,7 @@ impl GitCometView {
         if show_notice {
             self.push_toast(
                 components::ToastKind::Warning,
-                "Native folder picker unavailable. Enter a repository path manually.".to_string(),
+                crate::i18n::tr("chrome.splash.native_picker_unavailable").to_string(),
                 cx,
             );
         }
@@ -245,7 +247,7 @@ impl GitCometView {
             files: false,
             directories: true,
             multiple: false,
-            prompt: Some("Open Git Repository".into()),
+            prompt: Some(crate::i18n::tr("menu.prompt.open_repository")),
         });
 
         window
@@ -279,7 +281,7 @@ impl GitCometView {
             files: false,
             directories: true,
             multiple: false,
-            prompt: Some("Initialize Git Repository".into()),
+            prompt: Some(crate::i18n::tr("misc.repo_open.prompt_init")),
         });
 
         window
@@ -292,7 +294,8 @@ impl GitCometView {
                         let _ = view.update(cx, |this, cx| {
                             this.push_toast(
                                 components::ToastKind::Error,
-                                format!("Could not open the folder picker: {err}"),
+                                crate::i18n::t!("misc.repo_open.picker_failed", err = err)
+                                    .into_owned(),
                                 cx,
                             );
                         });
@@ -302,7 +305,8 @@ impl GitCometView {
                         let _ = view.update(cx, |this, cx| {
                             this.push_toast(
                                 components::ToastKind::Error,
-                                format!("Could not open the folder picker: {err}"),
+                                crate::i18n::t!("misc.repo_open.picker_failed", err = err)
+                                    .into_owned(),
                                 cx,
                             );
                         });
@@ -320,7 +324,11 @@ impl GitCometView {
                     Ok(()) => {
                         this.push_toast(
                             components::ToastKind::Success,
-                            format!("Initialized repository at {}", path.display()),
+                            crate::i18n::t!(
+                                "misc.repo_open.initialized_at",
+                                path = path.display().to_string()
+                            )
+                            .into_owned(),
                             cx,
                         );
                         this.open_repo_path(path, cx);

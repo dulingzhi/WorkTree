@@ -13,9 +13,12 @@ pub(super) fn panel(
         .flex()
         .flex_col()
         .w(scaled_px(640.0))
-        .child(popover_title("Add remote"))
+        .child(popover_title(crate::i18n::tr("input.remote_add.title")))
         .child(div().border_t_1().border_color(theme.colors.stroke.default))
-        .child(input_label(theme, "Name"))
+        .child(input_label(
+            theme,
+            crate::i18n::tr_str("input.remote_add.name_label"),
+        ))
         .child(
             div()
                 .px_2()
@@ -24,7 +27,10 @@ pub(super) fn panel(
                 .min_w(px(0.0))
                 .child(this.remote_name_input.clone()),
         )
-        .child(input_label(theme, "URL"))
+        .child(input_label(
+            theme,
+            crate::i18n::tr_str("prompts.submodule_add.url_label"),
+        ))
         .child(
             div()
                 .px_2()
@@ -49,18 +55,17 @@ pub(super) fn panel(
                         }),
                 )
                 .child(
-                    components::Button::new("add_remote_go", "Add")
-                        .focus_handle(this.remote_add_focus.submit.clone())
-                        .disabled(!can_submit)
-                        .separated_end_slot(super::hotkey_hint(
-                            theme,
-                            "add_remote_go_hint",
-                            "Enter",
-                        ))
-                        .style(components::ButtonStyle::Filled)
-                        .on_click(theme, cx, |this, _e, _w, cx| {
-                            this.submit_remote_add(cx);
-                        }),
+                    components::Button::new(
+                        "add_remote_go",
+                        crate::i18n::tr("prompts.submodule_add.add"),
+                    )
+                    .focus_handle(this.remote_add_focus.submit.clone())
+                    .disabled(!can_submit)
+                    .separated_end_slot(super::hotkey_hint(theme, "add_remote_go_hint", "Enter"))
+                    .style(components::ButtonStyle::Filled)
+                    .on_click(theme, cx, |this, _e, _w, cx| {
+                        this.submit_remote_add(cx);
+                    }),
                 ),
         )
 }

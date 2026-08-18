@@ -44,18 +44,30 @@ impl HistoryView {
 
         let body: AnyElement = if count == 0 {
             match repo.map(|r| &r.log) {
-                None => {
-                    components::empty_state(theme, "History", "No repository.").into_any_element()
-                }
-                Some(Loadable::Loading) => {
-                    components::empty_state(theme, "History", "Loading").into_any_element()
-                }
-                Some(Loadable::Error(e)) => {
-                    components::empty_state(theme, "History", e.clone()).into_any_element()
-                }
-                Some(Loadable::NotLoaded) | Some(Loadable::Ready(_)) => {
-                    components::empty_state(theme, "History", "No commits.").into_any_element()
-                }
+                None => components::empty_state(
+                    theme,
+                    crate::i18n::tr("misc.history_panel.title"),
+                    crate::i18n::tr("misc.history_panel.no_repository"),
+                )
+                .into_any_element(),
+                Some(Loadable::Loading) => components::empty_state(
+                    theme,
+                    crate::i18n::tr("misc.history_panel.title"),
+                    crate::i18n::tr("ui.common.loading"),
+                )
+                .into_any_element(),
+                Some(Loadable::Error(e)) => components::empty_state(
+                    theme,
+                    crate::i18n::tr("misc.history_panel.title"),
+                    e.clone(),
+                )
+                .into_any_element(),
+                Some(Loadable::NotLoaded) | Some(Loadable::Ready(_)) => components::empty_state(
+                    theme,
+                    crate::i18n::tr("misc.history_panel.title"),
+                    crate::i18n::tr("misc.history_panel.no_commits"),
+                )
+                .into_any_element(),
             }
         } else {
             let root_view_for_scroll = self.root_view.clone();
@@ -187,9 +199,9 @@ impl HistoryView {
                         .whitespace_nowrap()
                         .overflow_hidden()
                         .debug_selector(|| "history_scan_progress".to_string())
-                        .child(format!(
-                            "Scanning history… {} commits",
-                            separated_thousands(scanned)
+                        .child(crate::i18n::t!(
+                            "misc.history_panel.scanning",
+                            count = separated_thousands(scanned)
                         )),
                 )
             })
@@ -425,7 +437,7 @@ impl HistoryView {
         let author_label: SharedString = self
             .active_repo()
             .and_then(|r| r.history_state.history_author_filter.clone())
-            .unwrap_or_else(|| "Author".to_string())
+            .unwrap_or_else(|| crate::i18n::tr_str("settings.git_log.column_author").to_string())
             .into();
         let author_invoker: SharedString = "history_author_filter_header".into();
         let author_anchor_bounds: Rc<RefCell<Option<Bounds<Pixels>>>> = Rc::new(RefCell::new(None));
@@ -445,10 +457,11 @@ impl HistoryView {
         let author_tooltip: SharedString = self
             .active_repo()
             .and_then(|r| r.history_state.history_author_filter.clone())
-            .map(|name| format!("Author filter: {name} — suggestions from loaded history"))
-            .unwrap_or_else(|| {
-                "Filter history by author — suggestions from loaded history".to_string()
+            .map(|name| {
+                crate::i18n::t!("misc.history_panel.author_filter_tooltip", name = name)
+                    .into_owned()
             })
+            .unwrap_or_else(|| crate::i18n::tr_str("misc.history_panel.author_tooltip").to_string())
             .into();
 
         let ui_scale_percent = self.ui_scale_percent;
@@ -652,7 +665,7 @@ impl HistoryView {
                                     })
                                     .gitcomet_tooltip(
                                         theme,
-                                        crate::view::history_mode::HISTORY_MODE_TOOLTIP_TEXT.into(),
+                                        crate::i18n::tr("misc.history_panel.mode_tooltip"),
                                     ),
                             ),
                     ),
@@ -680,7 +693,7 @@ impl HistoryView {
                             .min_w(px(0.0))
                             .line_clamp(1)
                             .whitespace_nowrap()
-                            .child("MESSAGE"),
+                            .child(crate::i18n::tr("misc.history_panel.column_message")),
                     ),
             )
             .when(show_author, |header| {
@@ -801,7 +814,7 @@ impl HistoryView {
                     .px(cell_pad)
                     .whitespace_nowrap()
                     .overflow_hidden()
-                    .child("DATE"),
+                    .child(crate::i18n::tr("misc.history_panel.column_date")),
             );
         }
 
@@ -815,7 +828,7 @@ impl HistoryView {
                     .px(cell_pad)
                     .whitespace_nowrap()
                     .overflow_hidden()
-                    .child("SHA"),
+                    .child(crate::i18n::tr("misc.history_panel.column_sha")),
             );
         }
 

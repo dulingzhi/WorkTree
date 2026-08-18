@@ -9,9 +9,12 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
         .flex()
         .flex_col()
         .w(scaled_px(420.0))
-        .child(popover_title("Clone repository"))
+        .child(popover_title(crate::i18n::tr("input.clone_repo.title")))
         .child(div().border_t_1().border_color(theme.colors.stroke.default))
-        .child(input_label(theme, "Repository URL / Path"))
+        .child(input_label(
+            theme,
+            crate::i18n::tr_str("input.clone_repo.url_label"),
+        ))
         .child(
             div()
                 .px_2()
@@ -20,7 +23,10 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
                 .min_w(px(0.0))
                 .child(this.clone_repo_url_input.clone()),
         )
-        .child(input_label(theme, "Destination parent folder"))
+        .child(input_label(
+            theme,
+            crate::i18n::tr_str("input.clone_repo.destination_label"),
+        ))
         .child(
             div()
                 .px_2()
@@ -37,39 +43,42 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
                         .child(this.clone_repo_parent_dir_input.clone()),
                 )
                 .child(
-                    components::Button::new("clone_repo_browse", "Browse")
-                        .focus_handle(this.clone_repo_browse_focus_handle.clone())
-                        .style(components::ButtonStyle::Outlined)
-                        .on_click(theme, cx, |_this, _e, window, cx| {
-                            cx.stop_propagation();
-                            let view = cx.weak_entity();
-                            let rx = cx.prompt_for_paths(gpui::PathPromptOptions {
-                                files: false,
-                                directories: true,
-                                multiple: false,
-                                prompt: Some("Clone into folder".into()),
-                            });
+                    components::Button::new(
+                        "clone_repo_browse",
+                        crate::i18n::tr("prompts.worktree_add.browse"),
+                    )
+                    .focus_handle(this.clone_repo_browse_focus_handle.clone())
+                    .style(components::ButtonStyle::Outlined)
+                    .on_click(theme, cx, |_this, _e, window, cx| {
+                        cx.stop_propagation();
+                        let view = cx.weak_entity();
+                        let rx = cx.prompt_for_paths(gpui::PathPromptOptions {
+                            files: false,
+                            directories: true,
+                            multiple: false,
+                            prompt: Some(crate::i18n::tr("input.clone_repo.select_folder")),
+                        });
 
-                            window
-                                .spawn(cx, async move |cx| {
-                                    let result = rx.await;
-                                    let paths = match result {
-                                        Ok(Ok(Some(paths))) => paths,
-                                        Ok(Ok(None)) => return,
-                                        Ok(Err(_)) | Err(_) => return,
-                                    };
-                                    let Some(path) = paths.into_iter().next() else {
-                                        return;
-                                    };
-                                    let _ = view.update(cx, |this, cx| {
-                                        this.clone_repo_parent_dir_input.update(cx, |input, cx| {
-                                            input.set_text(path.display().to_string(), cx);
-                                        });
-                                        cx.notify();
+                        window
+                            .spawn(cx, async move |cx| {
+                                let result = rx.await;
+                                let paths = match result {
+                                    Ok(Ok(Some(paths))) => paths,
+                                    Ok(Ok(None)) => return,
+                                    Ok(Err(_)) | Err(_) => return,
+                                };
+                                let Some(path) = paths.into_iter().next() else {
+                                    return;
+                                };
+                                let _ = view.update(cx, |this, cx| {
+                                    this.clone_repo_parent_dir_input.update(cx, |input, cx| {
+                                        input.set_text(path.display().to_string(), cx);
                                     });
-                                })
-                                .detach();
-                        }),
+                                    cx.notify();
+                                });
+                            })
+                            .detach();
+                    }),
                 ),
         )
         .child(div().border_t_1().border_color(theme.colors.stroke.default))
@@ -88,18 +97,17 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
                         }),
                 )
                 .child(
-                    components::Button::new("clone_repo_go", "Clone")
-                        .focus_handle(this.clone_repo_focus.submit.clone())
-                        .separated_end_slot(super::hotkey_hint(
-                            theme,
-                            "clone_repo_go_hint",
-                            "Enter",
-                        ))
-                        .style(components::ButtonStyle::Filled)
-                        .disabled(!can_clone)
-                        .on_click(theme, cx, |this, _e, _w, cx| {
-                            this.submit_clone_repo(cx);
-                        }),
+                    components::Button::new(
+                        "clone_repo_go",
+                        crate::i18n::tr("input.clone_repo.clone"),
+                    )
+                    .focus_handle(this.clone_repo_focus.submit.clone())
+                    .separated_end_slot(super::hotkey_hint(theme, "clone_repo_go_hint", "Enter"))
+                    .style(components::ButtonStyle::Filled)
+                    .disabled(!can_clone)
+                    .on_click(theme, cx, |this, _e, _w, cx| {
+                        this.submit_clone_repo(cx);
+                    }),
                 ),
         )
 }

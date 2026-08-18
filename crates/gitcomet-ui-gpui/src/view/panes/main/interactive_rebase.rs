@@ -422,7 +422,10 @@ impl Render for IRebaseDragPreview {
                     .border_color(outlined_border)
                     .text_sm()
                     .text_color(theme.colors.foreground.primary)
-                    .child(self.action.to_todo_str())
+                    // The todo word doubles as the row's action label, so it
+                    // localizes through the gettext-style catalog like the
+                    // context-menu entries for the same actions.
+                    .child(crate::i18n::tr_en(self.action.to_todo_str()))
                     .child(crate::view::icons::svg_icon(
                         "icons/chevron_down.svg",
                         theme.colors.foreground.secondary,
@@ -775,47 +778,50 @@ impl MainPaneView {
             Rc::new(RefCell::new(None));
         let btn_bounds_prepaint = Rc::clone(&btn_bounds);
         let action_btn_w = px(ACTION_BTN_W * ui_scale_percent as f32 / 100.0);
-        let inner_btn = components::Button::new(format!("action_{ix}"), action.to_todo_str())
-            .style(components::ButtonStyle::Outlined)
-            .end_slot(crate::view::icons::svg_icon(
-                "icons/chevron_down.svg",
-                theme.colors.foreground.secondary,
-                px(12.0),
-            ))
-            .render(theme, ui_scale_percent)
-            .w(action_btn_w)
-            .flex_shrink_0()
-            .on_click(cx.listener(move |this, _e, window, cx| {
-                let bounds = (*btn_bounds.borrow()).unwrap_or(gpui::Bounds {
-                    origin: gpui::point(px(0.0), px(0.0)),
-                    size: gpui::size(px(0.0), px(0.0)),
-                });
-                let Some(st) = this.interactive_rebase_states.get(&repo_id) else {
-                    return;
-                };
-                let nd = non_drop_count(&st.entries);
-                let current_action = st.entries.get(ix).map(|e| e.action);
-                let can_drop = current_action == Some(InteractiveRebaseAction::Drop) || nd > 1;
-                let can_squash = squash_target(&st.entries, ix).is_some();
-                let wh = window.window_handle();
-                let root = this.root_view.clone();
-                cx.defer(move |cx| {
-                    let _ = wh.update(cx, |_, window, cx| {
-                        let _ = root.update(cx, |root, cx| {
-                            root.open_popover_for_bounds(
-                                PopoverKind::InteractiveRebaseActionMenu {
-                                    ix,
-                                    can_squash,
-                                    can_drop,
-                                },
-                                bounds,
-                                window,
-                                cx,
-                            );
-                        });
+        let inner_btn = components::Button::new(
+            format!("action_{ix}"),
+            crate::i18n::tr_en(action.to_todo_str()),
+        )
+        .style(components::ButtonStyle::Outlined)
+        .end_slot(crate::view::icons::svg_icon(
+            "icons/chevron_down.svg",
+            theme.colors.foreground.secondary,
+            px(12.0),
+        ))
+        .render(theme, ui_scale_percent)
+        .w(action_btn_w)
+        .flex_shrink_0()
+        .on_click(cx.listener(move |this, _e, window, cx| {
+            let bounds = (*btn_bounds.borrow()).unwrap_or(gpui::Bounds {
+                origin: gpui::point(px(0.0), px(0.0)),
+                size: gpui::size(px(0.0), px(0.0)),
+            });
+            let Some(st) = this.interactive_rebase_states.get(&repo_id) else {
+                return;
+            };
+            let nd = non_drop_count(&st.entries);
+            let current_action = st.entries.get(ix).map(|e| e.action);
+            let can_drop = current_action == Some(InteractiveRebaseAction::Drop) || nd > 1;
+            let can_squash = squash_target(&st.entries, ix).is_some();
+            let wh = window.window_handle();
+            let root = this.root_view.clone();
+            cx.defer(move |cx| {
+                let _ = wh.update(cx, |_, window, cx| {
+                    let _ = root.update(cx, |root, cx| {
+                        root.open_popover_for_bounds(
+                            PopoverKind::InteractiveRebaseActionMenu {
+                                ix,
+                                can_squash,
+                                can_drop,
+                            },
+                            bounds,
+                            window,
+                            cx,
+                        );
                     });
                 });
-            }));
+            });
+        }));
 
         let action_btn = div()
             .on_children_prepainted(move |children_bounds, _w, _cx| {

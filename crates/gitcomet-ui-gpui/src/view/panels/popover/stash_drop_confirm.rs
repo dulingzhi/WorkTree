@@ -15,27 +15,33 @@ pub(super) fn panel(
         format!("{reference} {message}")
     };
 
-    ConfirmDialog::new("Drop stash?", DIALOG_420_WIDTH)
-        .mono_value(theme, label)
-        .text(theme, "This permanently removes this stash entry.")
-        .command(theme, format!("git stash drop {reference}"))
-        .render(
+    ConfirmDialog::new(
+        crate::i18n::tr("confirm.stash_drop.title"),
+        DIALOG_420_WIDTH,
+    )
+    .mono_value(theme, label)
+    .text(theme, crate::i18n::tr("confirm.stash_drop.body"))
+    .command(theme, format!("git stash drop {reference}"))
+    .render(
+        theme,
+        cancel_button("stash_drop_confirm_cancel", "stash_drop_cancel_hint", theme).on_click(
             theme,
-            cancel_button("stash_drop_confirm_cancel", "stash_drop_cancel_hint", theme).on_click(
-                theme,
-                cx,
-                move |this, _e, _w, cx| {
-                    this.store.dispatch(Msg::LoadStashes { repo_id });
-                    this.close_popover(cx);
-                },
-            ),
-            components::Button::new("stash_drop_confirm_go", "Drop")
-                .style(components::ButtonStyle::Danger)
-                .on_click(theme, cx, move |this, _e, _w, cx| {
-                    this.store.dispatch(Msg::DropStash { repo_id, index });
-                    this.store.dispatch(Msg::LoadStashes { repo_id });
-                    this.close_popover(cx);
-                }),
             cx,
+            move |this, _e, _w, cx| {
+                this.store.dispatch(Msg::LoadStashes { repo_id });
+                this.close_popover(cx);
+            },
+        ),
+        components::Button::new(
+            "stash_drop_confirm_go",
+            crate::i18n::tr("confirm.stash_drop.drop"),
         )
+        .style(components::ButtonStyle::Danger)
+        .on_click(theme, cx, move |this, _e, _w, cx| {
+            this.store.dispatch(Msg::DropStash { repo_id, index });
+            this.store.dispatch(Msg::LoadStashes { repo_id });
+            this.close_popover(cx);
+        }),
+        cx,
+    )
 }

@@ -157,3 +157,11 @@
 "Submodules (Add / Update / Open / Remove)": "子模块（添加 / 更新 / 打开 / 移除）"
 "Worktrees": "工作树"
 "Worktrees (Add / Refresh / Open / Remove)": "工作树（添加 / 刷新 / 打开 / 移除）"
+
+# Interactive-rebase todo verbs: the row action word and the context-menu
+# entries share these gettext-style keys (rendered via `tr_en`).
+"pick": "拣选"
+"reword": "改写"
+"squash": "压缩"
+"fixup": "并入"
+"drop": "丢弃"

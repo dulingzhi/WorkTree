@@ -9,7 +9,7 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
         .flex()
         .flex_col()
         .w(scaled_px(420.0))
-        .child(popover_title("Create stash"))
+        .child(popover_title(crate::i18n::tr("input.stash.title")))
         .child(div().border_t_1().border_color(theme.colors.stroke.default))
         .child(
             div()
@@ -34,7 +34,7 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
                         }),
                 )
                 .child(
-                    components::Button::new("stash_go", "Stash")
+                    components::Button::new("stash_go", crate::i18n::tr("input.stash.stash"))
                         .focus_handle(this.stash_focus.submit.clone())
                         .separated_end_slot(super::hotkey_hint(theme, "stash_go_hint", "Enter"))
                         .style(components::ButtonStyle::Filled)

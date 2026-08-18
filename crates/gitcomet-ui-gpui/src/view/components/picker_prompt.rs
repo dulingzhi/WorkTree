@@ -483,7 +483,7 @@ impl PickerPrompt {
             scroll_handle,
             items: Rc::from(Vec::new()),
             layout: None,
-            empty_text: "No matches".into(),
+            empty_text: crate::i18n::tr("ui.common.no_matches"),
             max_height: px(360.0),
             tooltip_host: None,
             selected_index: None,

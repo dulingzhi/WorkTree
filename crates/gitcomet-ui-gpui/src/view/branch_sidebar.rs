@@ -930,7 +930,7 @@ pub(super) fn branch_sidebar_rows(
             Loadable::Ready(branches) if branches.is_empty() => {
                 rows.push(BranchSidebarRow::Placeholder {
                     section: BranchSection::Local,
-                    message: "No branches".into(),
+                    message: crate::i18n::tr("ui.picker.branch.no_branches"),
                 });
             }
             Loadable::Ready(branches) => {
@@ -979,11 +979,11 @@ pub(super) fn branch_sidebar_rows(
             }
             Loadable::Loading => rows.push(BranchSidebarRow::Placeholder {
                 section: BranchSection::Local,
-                message: "Loading".into(),
+                message: crate::i18n::tr("ui.common.loading"),
             }),
             Loadable::NotLoaded => rows.push(BranchSidebarRow::Placeholder {
                 section: BranchSection::Local,
-                message: "Not loaded".into(),
+                message: crate::i18n::tr("ui.common.not_loaded"),
             }),
             Loadable::Error(error) => rows.push(BranchSidebarRow::Placeholder {
                 section: BranchSection::Local,
@@ -1042,7 +1042,7 @@ pub(super) fn branch_sidebar_rows(
             Loadable::Loading => {
                 rows.push(BranchSidebarRow::Placeholder {
                     section: BranchSection::Remote,
-                    message: "Loading".into(),
+                    message: crate::i18n::tr("ui.common.loading"),
                 });
                 remote_section_is_loading_or_error = true;
             }
@@ -1080,7 +1080,7 @@ pub(super) fn branch_sidebar_rows(
                 if !filtering {
                     rows.push(BranchSidebarRow::Placeholder {
                         section: BranchSection::Remote,
-                        message: "No remotes".into(),
+                        message: crate::i18n::tr("misc.branch_sidebar.no_remotes"),
                     });
                 }
             } else {
@@ -1131,15 +1131,15 @@ pub(super) fn branch_sidebar_rows(
                 }
                 if !any {
                     rows.push(BranchSidebarRow::WorktreePlaceholder {
-                        message: "No worktrees".into(),
+                        message: crate::i18n::tr("ui.picker.worktree.empty"),
                     });
                 }
             }
             Loadable::Loading => rows.push(BranchSidebarRow::WorktreePlaceholder {
-                message: "Loading".into(),
+                message: crate::i18n::tr("ui.common.loading"),
             }),
             Loadable::NotLoaded => rows.push(BranchSidebarRow::WorktreePlaceholder {
-                message: "Loading".into(),
+                message: crate::i18n::tr("ui.common.loading"),
             }),
             Loadable::Error(error) => rows.push(BranchSidebarRow::WorktreePlaceholder {
                 message: error.clone().into(),
@@ -1159,7 +1159,7 @@ pub(super) fn branch_sidebar_rows(
         match &repo.submodules {
             Loadable::Ready(submodules) if submodules.is_empty() => {
                 rows.push(BranchSidebarRow::SubmodulePlaceholder {
-                    message: "No submodules".into(),
+                    message: crate::i18n::tr("ui.picker.submodule.empty"),
                     can_load: false,
                 });
             }
@@ -1171,11 +1171,11 @@ pub(super) fn branch_sidebar_rows(
                 }
             }
             Loadable::Loading => rows.push(BranchSidebarRow::SubmodulePlaceholder {
-                message: "Loading".into(),
+                message: crate::i18n::tr("ui.common.loading"),
                 can_load: false,
             }),
             Loadable::NotLoaded => rows.push(BranchSidebarRow::SubmodulePlaceholder {
-                message: "Not loaded".into(),
+                message: crate::i18n::tr("ui.common.not_loaded"),
                 can_load: true,
             }),
             Loadable::Error(error) => rows.push(BranchSidebarRow::SubmodulePlaceholder {
@@ -1197,14 +1197,14 @@ pub(super) fn branch_sidebar_rows(
         match &repo.stashes {
             Loadable::Ready(stashes) if stashes.is_empty() => {
                 rows.push(BranchSidebarRow::StashPlaceholder {
-                    message: "No stashes".into(),
+                    message: crate::i18n::tr("ui.picker.stash.empty"),
                 });
             }
             Loadable::Ready(stashes) => {
                 for stash in stashes.iter() {
                     let message: SharedString = stash.message.clone().into();
                     let tooltip: SharedString = if stash.message.is_empty() {
-                        "Stash".into()
+                        crate::i18n::tr("panels.action_bar.stash")
                     } else {
                         message.clone()
                     };
@@ -1217,10 +1217,10 @@ pub(super) fn branch_sidebar_rows(
                 }
             }
             Loadable::Loading => rows.push(BranchSidebarRow::StashPlaceholder {
-                message: "Loading".into(),
+                message: crate::i18n::tr("ui.common.loading"),
             }),
             Loadable::NotLoaded => rows.push(BranchSidebarRow::StashPlaceholder {
-                message: "Loading".into(),
+                message: crate::i18n::tr("ui.common.loading"),
             }),
             Loadable::Error(error) => rows.push(BranchSidebarRow::StashPlaceholder {
                 message: error.clone().into(),

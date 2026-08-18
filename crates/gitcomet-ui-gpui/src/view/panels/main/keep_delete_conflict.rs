@@ -13,6 +13,9 @@ struct KeepDeleteConflictSpec {
     surviving_side_label: &'static str,
 }
 
+// The table keeps English copy (its unit tests assert the raw fields); the
+// render fn localizes every field through `tr_en`, whose zh entries live in
+// `locales/misc.zh-CN.yml` keyed by these exact English strings.
 fn keep_delete_conflict_spec(conflict_kind: FileConflictKind) -> KeepDeleteConflictSpec {
     match conflict_kind {
         FileConflictKind::DeletedByUs => KeepDeleteConflictSpec {
@@ -110,8 +113,8 @@ impl MainPaneView {
                 .lines()
                 .map(|l| SharedString::from(l.to_string()))
                 .collect(),
-            _ if keep_available => vec!["(empty file)".into()],
-            _ => vec!["(not present in conflict stages)".into()],
+            _ if keep_available => vec![crate::i18n::tr("misc.keep_delete.empty_file")],
+            _ => vec![crate::i18n::tr("misc.keep_delete.not_present")],
         };
         let surviving_line_count = surviving_lines.len();
         let surviving_text: SharedString = surviving_lines.join("\n").into();
@@ -126,7 +129,7 @@ impl MainPaneView {
         };
 
         let title: SharedString =
-            format!("Resolve conflict: {}", self.cached_path_display(&path)).into();
+            crate::i18n::t!("conflict.title", path = self.cached_path_display(&path)).into();
 
         let action_section = div()
             .flex()
@@ -136,9 +139,13 @@ impl MainPaneView {
                 components::Button::new(
                     "keep_delete_keep",
                     if focused_mergetool {
-                        format!("{} & close", spec.keep_label)
+                        crate::i18n::t!(
+                            "misc.keep_delete.keep_and_close",
+                            label = crate::i18n::tr_en(spec.keep_label)
+                        )
+                        .into_owned()
                     } else {
-                        spec.keep_label.to_string()
+                        crate::i18n::tr_en(spec.keep_label).to_string()
                     },
                 )
                 .style(components::ButtonStyle::Filled)
@@ -163,9 +170,13 @@ impl MainPaneView {
                 components::Button::new(
                     "keep_delete_delete",
                     if focused_mergetool {
-                        format!("{} & close", spec.delete_label)
+                        crate::i18n::t!(
+                            "misc.keep_delete.keep_and_close",
+                            label = crate::i18n::tr_en(spec.delete_label)
+                        )
+                        .into_owned()
                     } else {
-                        spec.delete_label.to_string()
+                        crate::i18n::tr_en(spec.delete_label).to_string()
                     },
                 )
                 .style(components::ButtonStyle::Outlined)
@@ -183,14 +194,17 @@ impl MainPaneView {
             .when(show_external_mergetool_actions(self.view_mode), |d| {
                 d.child(div().w(px(1.0)).h(px(16.0)).bg(theme.colors.stroke.default))
                     .child(
-                        components::Button::new("keep_delete_mergetool", "External Mergetool")
-                            .style(components::ButtonStyle::Outlined)
-                            .on_click(theme, cx, move |this, _e, _w, _cx| {
-                                this.store.dispatch(Msg::LaunchMergetool {
-                                    repo_id,
-                                    path: mergetool_path.clone(),
-                                });
-                            }),
+                        components::Button::new(
+                            "keep_delete_mergetool",
+                            crate::i18n::tr("conflict.binary.external_mergetool"),
+                        )
+                        .style(components::ButtonStyle::Outlined)
+                        .on_click(theme, cx, move |this, _e, _w, _cx| {
+                            this.store.dispatch(Msg::LaunchMergetool {
+                                repo_id,
+                                path: mergetool_path.clone(),
+                            });
+                        }),
                     )
             });
 
@@ -249,13 +263,13 @@ impl MainPaneView {
                                             .text_sm()
                                             .font_weight(FontWeight::SEMIBOLD)
                                             .text_color(theme.colors.status.warning.foreground)
-                                            .child(spec.header_label),
+                                            .child(crate::i18n::tr_en(spec.header_label)),
                                     )
                                     .child(
                                         div()
                                             .text_sm()
                                             .text_color(theme.colors.foreground.secondary)
-                                            .child(spec.description),
+                                            .child(crate::i18n::tr_en(spec.description)),
                                     ),
                             ),
                     )
@@ -271,9 +285,9 @@ impl MainPaneView {
                                     div()
                                         .text_xs()
                                         .text_color(theme.colors.status.warning.foreground)
-                                        .child(
-                                            "The keep side is unavailable in conflict stages; only deletion can be applied.",
-                                        ),
+                                        .child(crate::i18n::tr(
+                                            "misc.keep_delete.keep_unavailable",
+                                        )),
                                 ),
                         )
                     })
@@ -286,9 +300,18 @@ impl MainPaneView {
                             .overflow_y_scroll()
                             .px_3()
                             .py_2()
-                            .child(div().text_sm().text_color(theme.colors.foreground.secondary).child(
-                                format!("Deleted side ({}):", spec.deleted_side_label),
-                            ))
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(theme.colors.foreground.secondary)
+                                    .child(
+                                        crate::i18n::t!(
+                                            "misc.keep_delete.deleted_side",
+                                            side = crate::i18n::tr_en(spec.deleted_side_label)
+                                        )
+                                        .into_owned(),
+                                    ),
+                            )
                             .child(
                                 div()
                                     .mt_1()
@@ -296,16 +319,29 @@ impl MainPaneView {
                                     .font_family(editor_font_family.clone())
                                     .text_color(theme.colors.foreground.secondary)
                                     .whitespace_nowrap()
-                                    .child("(file deleted)"),
+                                    .child(crate::i18n::tr("misc.keep_delete.file_deleted")),
                             )
-                            .child(div().mt_2().text_sm().text_color(theme.colors.foreground.secondary).child(
-                                format!(
-                                    "Surviving side ({}) ({} line{}):",
-                                    spec.surviving_side_label,
-                                    surviving_line_count,
-                                    if surviving_line_count == 1 { "" } else { "s" }
-                                ),
-                            ))
+                            .child(
+                                div()
+                                    .mt_2()
+                                    .text_sm()
+                                    .text_color(theme.colors.foreground.secondary)
+                                    .child(if surviving_line_count == 1 {
+                                        crate::i18n::t!(
+                                            "misc.keep_delete.surviving_side_one",
+                                            side = crate::i18n::tr_en(spec.surviving_side_label),
+                                            count = surviving_line_count
+                                        )
+                                        .into_owned()
+                                    } else {
+                                        crate::i18n::t!(
+                                            "misc.keep_delete.surviving_side_many",
+                                            side = crate::i18n::tr_en(spec.surviving_side_label),
+                                            count = surviving_line_count
+                                        )
+                                        .into_owned()
+                                    }),
+                            )
                             .child(
                                 div()
                                     .mt_1()

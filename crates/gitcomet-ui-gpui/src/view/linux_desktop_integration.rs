@@ -3,9 +3,11 @@ use super::*;
 #[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
 fn desktop_entry_exec_path_arg(exe: &std::path::Path) -> Result<String, String> {
     let Some(exe) = exe.to_str() else {
-        return Err(format!(
-            "Desktop install failed: executable path is not valid Unicode: {exe:?}"
-        ));
+        return Err(crate::i18n::t!(
+            "misc.desktop_install.failed_not_unicode",
+            path = exe.to_string_lossy()
+        )
+        .into_owned());
     };
     let mut escaped = String::with_capacity(exe.len() + 16);
     escaped.push('"');
@@ -118,7 +120,7 @@ impl GitCometView {
                         ];
 
                         let exe = std::env::current_exe().map_err(|_| {
-                            "Desktop install failed: could not resolve executable path".to_string()
+                            crate::i18n::tr_str("misc.desktop_install.failed_no_exe").to_string()
                         })?;
 
                         let home = std::env::var_os("HOME").map(PathBuf::from);
@@ -126,7 +128,7 @@ impl GitCometView {
                             .map(PathBuf::from)
                             .or_else(|| home.as_ref().map(|h| h.join(".local/share")));
                         let data_home = data_home.ok_or_else(|| {
-                            "Desktop install failed: HOME/XDG_DATA_HOME not set".to_string()
+                            crate::i18n::tr_str("misc.desktop_install.failed_no_home").to_string()
                         })?;
 
                         let applications_dir = data_home.join("applications");
@@ -134,8 +136,10 @@ impl GitCometView {
                         let desktop_path = applications_dir.join("gitcomet.desktop");
                         let icon_path = icons_root.join("512x512/apps/gitcomet.png");
 
-                        fs::create_dir_all(&applications_dir)
-                            .map_err(|e| format!("Desktop install failed: {e}"))?;
+                        fs::create_dir_all(&applications_dir).map_err(|e| {
+                            crate::i18n::t!("misc.desktop_install.failed_detail", err = e)
+                                .into_owned()
+                        })?;
 
                         use std::fmt::Write as _;
 
@@ -154,15 +158,20 @@ impl GitCometView {
                             }
                         }
 
-                        fs::write(&desktop_path, desktop_out.as_bytes())
-                            .map_err(|e| format!("Desktop install failed: {e}"))?;
+                        fs::write(&desktop_path, desktop_out.as_bytes()).map_err(|e| {
+                            crate::i18n::t!("misc.desktop_install.failed_detail", err = e)
+                                .into_owned()
+                        })?;
 
                         for (size, icon_bytes) in ICON_ASSETS {
                             let icon_dir = icons_root.join(format!("{size}x{size}/apps"));
                             let icon_file = icon_dir.join("gitcomet.png");
                             fs::create_dir_all(&icon_dir)
                                 .and_then(|_| fs::write(&icon_file, icon_bytes))
-                                .map_err(|e| format!("Desktop install failed: {e}"))?;
+                                .map_err(|e| {
+                                    crate::i18n::t!("misc.desktop_install.failed_detail", err = e)
+                                        .into_owned()
+                                })?;
                         }
 
                         let _ = Command::new("update-desktop-database")
@@ -180,11 +189,12 @@ impl GitCometView {
                     Ok((desktop_path, icon_path)) => {
                         this.push_toast(
                             components::ToastKind::Success,
-                            format!(
-                                "Installed desktop entry + icon to:\n{}\n{}\n\nIf GNOME still shows a generic icon, log out/in (or restart GNOME Shell).",
-                                desktop_path.display(),
-                                icon_path.display()
-                            ),
+                            crate::i18n::t!(
+                                "misc.desktop_install.installed_toast",
+                                desktop = desktop_path.display().to_string(),
+                                icon = icon_path.display().to_string()
+                            )
+                            .into_owned(),
                             cx,
                         );
                     }

@@ -10,3 +10,10 @@ toast:
   aborting: 正在中止…
   adding_submodule: 正在添加子模块…
   dismiss_notification: 关闭通知
+  context_menu:
+    repo_gone: "该仓库已不再打开。"
+    link_copied: "链接已复制到剪贴板"
+    patch_empty: "补丁为空"
+    patch_build_failed: "无法为此代码块构建补丁"
+    path_outside_repo: "拒绝打开仓库之外的路径"
+    repo_unavailable: "仓库不可用"

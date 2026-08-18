@@ -1949,7 +1949,10 @@ pub(in crate::view) fn markdown_preview_flow_image(
     });
     let Some(image) = picture else {
         return markdown_preview_image_placeholder_element(
-            markdown_preview_image_label(row, "Image unavailable"),
+            markdown_preview_image_label(
+                row,
+                crate::i18n::tr_str("misc.markdown.image_unavailable"),
+            ),
             font_size,
             label_color,
         )
@@ -1957,7 +1960,8 @@ pub(in crate::view) fn markdown_preview_flow_image(
     };
 
     let declared = row.image.as_ref().and_then(|image| image.width_px);
-    let failed_label = markdown_preview_image_label(row, "Failed to load");
+    let failed_label =
+        markdown_preview_image_label(row, crate::i18n::tr_str("misc.markdown.failed_to_load"));
     let skeleton = markdown_preview_picture_skeleton(row, ui_scale_percent, picture_sizes);
     let image = match declared {
         Some(width) => image.w(markdown_preview_scaled_px(width as f32, ui_scale_percent)),
@@ -2102,14 +2106,20 @@ pub(in crate::view) fn markdown_preview_inline_image(
     );
     let Some(image) = picture else {
         return markdown_preview_inline_image_placeholder(
-            markdown_preview_image_reason("Image unavailable", &described),
+            markdown_preview_image_reason(
+                crate::i18n::tr_str("misc.markdown.image_unavailable"),
+                &described,
+            ),
             source_byte,
             font_size,
             label_color,
         );
     };
 
-    let failed_label = markdown_preview_image_reason("Failed to load", &described);
+    let failed_label = markdown_preview_image_reason(
+        crate::i18n::tr_str("misc.markdown.failed_to_load"),
+        &described,
+    );
     let image =
         image.debug_selector(move || format!("markdown_preview_inline_image_{source_byte}"));
     let image = match inline.image.width_px {
@@ -2217,7 +2227,12 @@ fn markdown_preview_image_reason(reason: &str, described: &SharedString) -> Shar
     if described.is_empty() {
         SharedString::from(reason.to_owned())
     } else {
-        SharedString::from(format!("{reason}: {described}"))
+        crate::i18n::t!(
+            "misc.markdown.image_reason_with_target",
+            reason = reason,
+            target = described
+        )
+        .into()
     }
 }
 
@@ -2304,14 +2319,15 @@ fn markdown_preview_image_row(
             .child(markdown_preview_image_placeholder(
                 row,
                 context,
-                "Image unavailable",
+                crate::i18n::tr_str("misc.markdown.image_unavailable"),
             ))
             .into_any_element();
     };
 
     // `with_fallback` is called on demand, so the placeholder is rebuilt from
     // owned pieces rather than cloning a built element.
-    let failed_label = markdown_preview_image_label(row, "Failed to load");
+    let failed_label =
+        markdown_preview_image_label(row, crate::i18n::tr_str("misc.markdown.failed_to_load"));
     let failed_font_size =
         markdown_preview_scaled_px(MARKDOWN_PREVIEW_BASE_FONT_PX, ui_scale_percent);
     let failed_color = context.theme.colors.foreground.secondary;

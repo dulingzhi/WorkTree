@@ -14,7 +14,7 @@ pub(super) fn panel(
         .flex()
         .flex_col()
         .w(scaled_px(320.0))
-        .child(popover_title("Set upstream and push"))
+        .child(popover_title(crate::i18n::tr("input.push_upstream.title")))
         .child(div().border_t_1().border_color(theme.colors.stroke.default))
         .child(
             div()
@@ -22,7 +22,10 @@ pub(super) fn panel(
                 .py_1()
                 .text_sm()
                 .text_color(theme.colors.foreground.secondary)
-                .child(format!("Remote: {remote}")),
+                .child(
+                    crate::i18n::t!("input.push_upstream.remote_line", remote = remote)
+                        .into_owned(),
+                ),
         )
         .child(
             div()
@@ -47,18 +50,17 @@ pub(super) fn panel(
                         }),
                 )
                 .child(
-                    components::Button::new("push_upstream_go", "Push")
-                        .focus_handle(this.push_upstream_focus.submit.clone())
-                        .disabled(!can_submit)
-                        .separated_end_slot(super::hotkey_hint(
-                            theme,
-                            "push_upstream_go_hint",
-                            "Enter",
-                        ))
-                        .style(components::ButtonStyle::Filled)
-                        .on_click(theme, cx, |this, _e, _w, cx| {
-                            this.submit_push_set_upstream(cx);
-                        }),
+                    components::Button::new(
+                        "push_upstream_go",
+                        crate::i18n::tr("input.push_upstream.push"),
+                    )
+                    .focus_handle(this.push_upstream_focus.submit.clone())
+                    .disabled(!can_submit)
+                    .separated_end_slot(super::hotkey_hint(theme, "push_upstream_go_hint", "Enter"))
+                    .style(components::ButtonStyle::Filled)
+                    .on_click(theme, cx, |this, _e, _w, cx| {
+                        this.submit_push_set_upstream(cx);
+                    }),
                 ),
         )
 }

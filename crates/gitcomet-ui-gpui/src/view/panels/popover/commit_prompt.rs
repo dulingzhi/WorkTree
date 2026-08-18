@@ -13,7 +13,7 @@ pub(super) fn panel(
         .flex()
         .flex_col()
         .w(scaled_px(420.0))
-        .child(popover_title("Commit Changes"))
+        .child(popover_title(crate::i18n::tr("input.commit.title")))
         .child(div().border_t_1().border_color(theme.colors.stroke.default))
         .child(
             div().px_2().py_1().w_full().min_w(px(0.0)).child(
@@ -41,18 +41,21 @@ pub(super) fn panel(
                         }),
                 )
                 .child(
-                    components::Button::new("commit_prompt_submit", "Commit")
-                        .focus_handle(this.commit_prompt_focus.submit.clone())
-                        .separated_end_slot(super::hotkey_hint(
-                            theme,
-                            "commit_prompt_submit_hint",
-                            crate::view::shortcut_labels::secondary_shortcut("Enter"),
-                        ))
-                        .style(components::ButtonStyle::Filled)
-                        .disabled(!can_commit)
-                        .on_click(theme, cx, move |this, _e, window, cx| {
-                            this.submit_commit_prompt(window, cx);
-                        }),
+                    components::Button::new(
+                        "commit_prompt_submit",
+                        crate::i18n::tr("input.commit.commit"),
+                    )
+                    .focus_handle(this.commit_prompt_focus.submit.clone())
+                    .separated_end_slot(super::hotkey_hint(
+                        theme,
+                        "commit_prompt_submit_hint",
+                        crate::view::shortcut_labels::secondary_shortcut("Enter"),
+                    ))
+                    .style(components::ButtonStyle::Filled)
+                    .disabled(!can_commit)
+                    .on_click(theme, cx, move |this, _e, window, cx| {
+                        this.submit_commit_prompt(window, cx);
+                    }),
                 ),
         )
 }

@@ -29,7 +29,7 @@ pub(super) fn model() -> ContextMenuModel {
         &mut debug_selectors,
         "add_repo_menu_open",
         "icons/disk.svg",
-        crate::menu_labels::OPEN_REPOSITORY,
+        crate::i18n::tr_str("pick.add_repo.open"),
         AddRepoMenuAction::Open,
     );
     push_entry(
@@ -37,7 +37,7 @@ pub(super) fn model() -> ContextMenuModel {
         &mut debug_selectors,
         "add_repo_menu_clone",
         "icons/cloud.svg",
-        crate::menu_labels::CLONE_REPOSITORY,
+        crate::i18n::tr_str("pick.add_repo.clone"),
         AddRepoMenuAction::Clone,
     );
     push_entry(
@@ -45,7 +45,7 @@ pub(super) fn model() -> ContextMenuModel {
         &mut debug_selectors,
         "add_repo_menu_init",
         "icons/git_branch.svg",
-        crate::menu_labels::INITIALIZE_REPOSITORY,
+        crate::i18n::tr_str("pick.add_repo.initialize"),
         AddRepoMenuAction::Initialize,
     );
 

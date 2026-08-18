@@ -399,7 +399,7 @@ impl Render for FocusedDiffView {
                         ),
                     )
                     .child(
-                        components::Button::new("btn-close", "Close")
+                        components::Button::new("btn-close", crate::i18n::tr("menu.file.close"))
                             .style(components::ButtonStyle::Filled)
                             .on_click(theme, cx, |this, _e, _window, cx| this.close(cx)),
                     ),
@@ -531,7 +531,7 @@ pub fn run_focused_diff(config: FocusedDiffConfig) -> i32 {
                         window_bounds: Some(WindowBounds::Windowed(bounds)),
                         window_min_size: Some(focused_diff_min_size_for_percent(ui_scale_percent)),
                         titlebar: Some(TitlebarOptions {
-                            title: Some("GitComet — Diff".into()),
+                            title: Some(crate::i18n::tr("misc.focused_diff.title")),
                             appears_transparent: false,
                             traffic_light_position: Some(point(
                                 crate::ui_scale::design_px_from_percent(9.0, ui_scale_percent),

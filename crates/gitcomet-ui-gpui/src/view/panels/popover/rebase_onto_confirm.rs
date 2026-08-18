@@ -21,27 +21,30 @@ pub(super) fn panel(
     // open); git would refuse the rebase, so hold the button too.
     let history_rewrite_busy = repo.is_some_and(|r| r.history_rewrite_busy());
 
-    ConfirmDialog::new("Rebase", DIALOG_380_WIDTH)
-        .text(theme, format!("Rebase {current_branch} onto {onto}"))
-        .note(
-            theme,
-            "This rewrites commit history. Avoid rebasing commits already pushed to a shared branch.",
-        )
-        .render(
-            theme,
-            dialog_cancel_button("rebase_onto_cancel", "rebase_onto_cancel_hint", theme, cx),
-            components::Button::new("rebase_onto_go", "Rebase")
-                .disabled(history_rewrite_busy)
-                .focus_handle(this.rebase_onto_submit_focus_handle.clone())
-                .separated_end_slot(super::hotkey_hint(theme, "rebase_onto_go_hint", "Enter"))
-                .style(components::ButtonStyle::Filled)
-                .on_click(theme, cx, move |this, _e, _w, cx| {
-                    this.store.dispatch(Msg::Rebase {
-                        repo_id,
-                        onto: onto.clone(),
-                    });
-                    this.close_popover(cx);
-                }),
-            cx,
-        )
+    ConfirmDialog::new(
+        crate::i18n::tr("confirm.rebase_onto.title"),
+        DIALOG_380_WIDTH,
+    )
+    .text(
+        theme,
+        crate::i18n::t!("cm.rebase_onto", current = current_branch, target = onto).into_owned(),
+    )
+    .note(theme, crate::i18n::tr("confirm.rebase_onto.note"))
+    .render(
+        theme,
+        dialog_cancel_button("rebase_onto_cancel", "rebase_onto_cancel_hint", theme, cx),
+        components::Button::new("rebase_onto_go", crate::i18n::tr("confirm.rebase_onto.go"))
+            .disabled(history_rewrite_busy)
+            .focus_handle(this.rebase_onto_submit_focus_handle.clone())
+            .separated_end_slot(super::hotkey_hint(theme, "rebase_onto_go_hint", "Enter"))
+            .style(components::ButtonStyle::Filled)
+            .on_click(theme, cx, move |this, _e, _w, cx| {
+                this.store.dispatch(Msg::Rebase {
+                    repo_id,
+                    onto: onto.clone(),
+                });
+                this.close_popover(cx);
+            }),
+        cx,
+    )
 }

@@ -12,3 +12,11 @@ toast:
   aborting: Aborting…
   adding_submodule: Adding submodule…
   dismiss_notification: Dismiss notification
+  # Toasts raised by context-menu actions (context_menu.rs).
+  context_menu:
+    repo_gone: "That repository is no longer open."
+    link_copied: "Link copied to clipboard"
+    patch_empty: "Patch is empty"
+    patch_build_failed: "Couldn't build patch for this hunk"
+    path_outside_repo: "Refusing to open path outside repository"
+    repo_unavailable: "Repository is not available"

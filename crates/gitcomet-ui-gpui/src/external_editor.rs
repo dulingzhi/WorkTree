@@ -54,12 +54,28 @@ pub(crate) enum ExternalEditorError {
 impl fmt::Display for ExternalEditorError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::NotConfigured => write!(f, "External code editor is not configured"),
-            Self::EmptyCustomExecutable => write!(f, "Custom editor executable is empty"),
-            Self::InvalidCustomArguments(err) => {
-                write!(f, "Invalid custom editor arguments: {err}")
+            Self::NotConfigured => {
+                write!(
+                    f,
+                    "{}",
+                    crate::i18n::tr_str("misc.external_editor.not_configured")
+                )
             }
-            Self::NoTerminalLauncher => write!(f, "No supported terminal launcher was found"),
+            Self::EmptyCustomExecutable => write!(
+                f,
+                "{}",
+                crate::i18n::tr_str("misc.external_editor.empty_custom_executable")
+            ),
+            Self::InvalidCustomArguments(err) => write!(
+                f,
+                "{}",
+                crate::i18n::t!("misc.external_editor.invalid_custom_arguments", err = err)
+            ),
+            Self::NoTerminalLauncher => write!(
+                f,
+                "{}",
+                crate::i18n::tr_str("misc.external_editor.no_terminal_launcher")
+            ),
             Self::Spawn(err) => write!(f, "{err}"),
         }
     }
@@ -400,8 +416,8 @@ pub(crate) fn external_editor_options_from_detected(
 ) -> Vec<ExternalEditorOption> {
     let mut options = vec![ExternalEditorOption {
         id: "external_editor_none".to_string(),
-        label: "None".to_string(),
-        detail: Some("Do not show external editor actions".to_string()),
+        label: crate::i18n::tr_str("ui.label.external_editor.none").to_string(),
+        detail: Some(crate::i18n::tr_str("misc.external_editor.none_detail").to_string()),
         missing: false,
         kind: ExternalEditorOptionKind::None,
     }];
@@ -415,14 +431,26 @@ pub(crate) fn external_editor_options_from_detected(
             options.push(ExternalEditorOption {
                 id: format!("external_editor_saved_{id}"),
                 label: if missing {
-                    format!("{} (missing)", editor_label_for_id(id))
+                    crate::i18n::t!(
+                        "ui.label.external_editor.missing",
+                        name = editor_label_for_id(id)
+                    )
+                    .to_string()
                 } else {
                     editor_label_for_id(id).to_string()
                 },
                 detail: Some(if missing {
-                    format!("Missing: {}", path.display())
+                    crate::i18n::t!(
+                        "misc.external_editor.missing_detail",
+                        path = path.display().to_string()
+                    )
+                    .into_owned()
                 } else {
-                    format!("Saved: {}", path.display())
+                    crate::i18n::t!(
+                        "misc.external_editor.saved_detail",
+                        path = path.display().to_string()
+                    )
+                    .into_owned()
                 }),
                 missing,
                 kind: ExternalEditorOptionKind::Detected(ExternalCodeEditorSetting::Detected {
@@ -453,8 +481,8 @@ pub(crate) fn external_editor_options_from_detected(
 
     options.push(ExternalEditorOption {
         id: "external_editor_custom".to_string(),
-        label: "Custom...".to_string(),
-        detail: Some("Use a custom command or executable path".to_string()),
+        label: crate::i18n::tr_str("misc.external_editor.custom_label").to_string(),
+        detail: Some(crate::i18n::tr_str("misc.external_editor.custom_detail").to_string()),
         missing: false,
         kind: ExternalEditorOptionKind::Custom,
     });
@@ -1253,7 +1281,7 @@ fn editor_label_for_id(id: &str) -> &'static str {
             "visual-studio-buildtools" => Some("Visual Studio BuildTools"),
             _ => None,
         })
-        .unwrap_or("External editor")
+        .unwrap_or(crate::i18n::tr_str("misc.external_editor.fallback_label"))
 }
 
 fn sanitize_debug_id(raw: &str) -> String {

@@ -37,25 +37,25 @@ pub(super) fn panel(
 
     let (title, body, command, button_id, button_label) = match mode {
         AbortMode::Merge => (
-            "Abort merge?",
-            "This will abort the current merge and restore the pre-merge state. Any resolved conflicts will be lost.",
+            crate::i18n::tr("confirm.merge_abort.title_merge"),
+            crate::i18n::tr("confirm.merge_abort.body_merge"),
             "git merge --abort",
             "merge_abort_go",
-            "Abort merge",
+            crate::i18n::tr("panels.action_bar.abort_merge"),
         ),
         AbortMode::RebaseOrApply => (
-            "Abort apply/rebase?",
-            "This will abort the in-progress patch apply or rebase and restore the previous state. Any resolved conflicts will be lost.",
+            crate::i18n::tr("confirm.merge_abort.title_rebase_or_apply"),
+            crate::i18n::tr("confirm.merge_abort.body_rebase_or_apply"),
             "git rebase --abort / git am --abort",
             "rebase_or_apply_abort_go",
-            "Abort",
+            crate::i18n::tr("panels.action_bar.abort"),
         ),
         AbortMode::CherryPick => (
-            "Abort cherry-pick?",
-            "This will abort the current cherry-pick and restore the previous state. Any resolved conflicts will be lost.",
+            crate::i18n::tr("confirm.merge_abort.title_cherry_pick"),
+            crate::i18n::tr("confirm.merge_abort.body_cherry_pick"),
             "git cherry-pick --abort",
             "cherry_pick_abort_go",
-            "Abort cherry-pick",
+            crate::i18n::tr("confirm.merge_abort.go_cherry_pick"),
         ),
     };
 

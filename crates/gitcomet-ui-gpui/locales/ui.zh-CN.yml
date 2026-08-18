@@ -7,6 +7,7 @@ ui:
     no_repository: 未打开仓库
     search_input_not_initialized: 搜索输入未初始化
     no_matches: 无匹配项
+    cancel: 取消
   picker:
     filter:
       repositories: 筛选仓库
@@ -110,3 +111,12 @@ ui:
       month_many: 个月
       year_one: 年
       year_many: 年
+
+  placeholder:
+    annotation_message: "附注信息（可选）"
+    commit_message: "提交信息"
+    description_optional: "描述（可选）"
+    stash_message: "贮藏说明"
+    commit_subject: "提交主题"
+  prompt:
+    export_patch_folder: "导出补丁到文件夹"

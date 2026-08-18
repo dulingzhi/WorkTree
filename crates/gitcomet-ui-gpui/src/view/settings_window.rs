@@ -4843,8 +4843,10 @@ impl Render for SettingsWindowView {
                             mode_container = mode_container.child(
                                 self.option_row(
                                     spec.settings_row_id,
-                                    spec.label,
-                                    Some(spec.settings_description.into()),
+                                    // The spec table carries the English source;
+                                    // the settings row localizes it gettext-style.
+                                    crate::i18n::tr_en(spec.label),
+                                    Some(crate::i18n::tr_en(spec.settings_description)),
                                     self.default_history_mode == mode,
                                     theme,
                                 )

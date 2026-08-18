@@ -1,0 +1,45 @@
+# Locale files are keyed by filename (`inputs.en.yml` -> locale "en"), so
+# the content below is the key tree directly — no `en:` root. English is also
+# the fallback locale, so every value must stay byte-identical to the string
+# it replaces in the sources (tests assert these exact texts).
+#
+# This catalog covers the small text-input prompt popovers: remote URL edit,
+# add remote, rename branch, checkout remote branch, set-upstream push, clone
+# repository, create stash, commit prompt, and submodule pointer change.
+input:
+  remote_edit_url:
+    title: "Edit remote URL (%{kind})"
+    remote_line: "Remote: %{name}"
+    save: "Save"
+  remote_add:
+    title: "Add remote"
+    name_label: "Name"
+  rename_branch:
+    title: "Rename branch"
+    title_current: "Rename current branch"
+    current_name_line: "Current name: %{name}"
+    rename: "Rename"
+  checkout_remote_branch:
+    title: "Checkout remote branch"
+    remote_branch_line: "Remote branch: %{upstream}"
+    local_name_label: "Local branch name"
+  push_upstream:
+    title: "Set upstream and push"
+    remote_line: "Remote: %{remote}"
+    push: "Push"
+  clone_repo:
+    title: "Clone repository"
+    url_label: "Repository URL / Path"
+    destination_label: "Destination parent folder"
+    select_folder: "Clone into folder"
+    clone: "Clone"
+  stash:
+    title: "Create stash"
+    stash: "Stash"
+  commit:
+    title: "Commit Changes"
+    commit: "Commit"
+  submodule_change_pointer:
+    title: "Change submodule pointer"
+    target_label: "Target ref / branch / tag / commit"
+    change: "Change"

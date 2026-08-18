@@ -754,9 +754,9 @@ const MAX_PREVIEW_WRAPPED_ROWS: usize = MAX_PREVIEW_ROWS * 8;
 /// unavailable for a source of `source_len` bytes.
 pub(super) fn single_preview_unavailable_reason(source_len: usize) -> &'static str {
     if source_len > MAX_PREVIEW_SOURCE_BYTES {
-        "Markdown preview unavailable: file exceeds the 1 MiB preview limit."
+        crate::i18n::tr_str("misc.markdown.preview_source_limit")
     } else {
-        "Markdown preview unavailable: rendered row limit exceeded."
+        crate::i18n::tr_str("misc.markdown.preview_row_limit")
     }
 }
 
@@ -787,7 +787,9 @@ impl MarkdownPreviewRefusal {
     pub(super) fn into_message(self) -> String {
         match self {
             Self::Unavailable(reason) => reason,
-            Self::TooManyRowsToRender => TOO_MANY_ROWS_TO_RENDER_MESSAGE.to_owned(),
+            Self::TooManyRowsToRender => {
+                crate::i18n::tr_en(TOO_MANY_ROWS_TO_RENDER_MESSAGE).to_string()
+            }
         }
     }
 
@@ -801,9 +803,9 @@ impl MarkdownPreviewRefusal {
 /// unavailable for sources of `combined_len` bytes.
 pub(super) fn diff_preview_unavailable_reason(combined_len: usize) -> &'static str {
     if combined_len > MAX_DIFF_PREVIEW_SOURCE_BYTES {
-        "Markdown preview unavailable: diff exceeds the 2 MiB preview limit."
+        crate::i18n::tr_str("misc.markdown.preview_diff_limit")
     } else {
-        "Markdown preview unavailable: rendered row limit exceeded."
+        crate::i18n::tr_str("misc.markdown.preview_row_limit")
     }
 }
 

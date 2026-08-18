@@ -511,7 +511,7 @@ impl MainPaneView {
 
         let Some(absolute) = self.absolute_worktree_path(&path) else {
             self.file_editor_loading = false;
-            self.file_editor_error = Some("Repository working directory is unavailable.".into());
+            self.file_editor_error = Some(crate::i18n::tr("misc.file_editor.workdir_unavailable"));
             return;
         };
 
@@ -1442,10 +1442,16 @@ impl MainPaneView {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         if let Some(message) = self.file_editor_error.clone() {
-            return components::empty_state(theme, "Edit", message).into_any_element();
+            return components::empty_state(theme, crate::i18n::tr("diff.toolbar.edit"), message)
+                .into_any_element();
         }
         if self.file_editor_loading {
-            return components::empty_state(theme, "Edit", "Loading").into_any_element();
+            return components::empty_state(
+                theme,
+                crate::i18n::tr("diff.toolbar.edit"),
+                crate::i18n::tr("ui.common.loading"),
+            )
+            .into_any_element();
         }
 
         // The halves of a search reveal that need a `cx`. The scan and the match

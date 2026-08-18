@@ -1,0 +1,36 @@
+# Locale files are keyed by filename (`pickers.en.yml` -> locale "en"), so
+# the content below is the key tree directly — no `en:` root. English is also
+# the fallback locale, so every value must stay byte-identical to the string
+# it replaces in the sources (tests assert these exact texts).
+#
+# This catalog covers the popover pickers that build their own rows rather
+# than going through a shared prompt: the branch checkout picker's create row,
+# the workspace (badge) worktree picker, and the "+" add-repository menu.
+# Titles and empty-state strings that already have keys elsewhere reuse them
+# (palette.cmd.*, ui.common.*); section headers stay English identity keys
+# localized at render time through `tr_en`.
+pick:
+  # Detail line under a picker's create row: the ref the new branch/worktree
+  # would start from.
+  create_row:
+    based_off: "Based off %{base}"
+  branch:
+    # Leading part of the checkout picker's create row. The typed name follows
+    # as its own (searchable) part, so the trailing space is load-bearing.
+    create_prefix: "Create branch "
+  worktree:
+    # Search-input placeholder of the workspace picker.
+    placeholder: "Select or type to create a worktree"
+    # Create row with an empty query.
+    create_new: "Create new worktree"
+    # Leading part of the create row with a typed query; trailing space is
+    # load-bearing (the query follows as its own searchable part).
+    create_prefix: "Create worktree "
+    # Connector between a worktree row's folder and the branch checked out in
+    # it; rendered dim like the picker's other separators.
+    on_separator: "  on  "
+  add_repo:
+    # Menu behind the "+" button after the repository tabs.
+    open: "Open repository"
+    clone: "Clone repository"
+    initialize: "Initialize repository"

@@ -12,21 +12,28 @@ pub(super) fn panel(
 ) -> gpui::Div {
     let theme = this.theme;
     let (title, discard_label) = match prompt.action {
-        UnsavedFileEditsAction::CloseWindow(_) => ("Close window?", "Discard and close"),
-        UnsavedFileEditsAction::QuitApp => ("Quit GitComet?", "Discard and quit"),
+        UnsavedFileEditsAction::CloseWindow(_) => (
+            crate::i18n::tr("confirm.common.close_window_title"),
+            crate::i18n::tr("confirm.unsaved_file_edits.discard_and_close"),
+        ),
+        UnsavedFileEditsAction::QuitApp => (
+            crate::i18n::tr("confirm.common.quit_title"),
+            crate::i18n::tr("confirm.unsaved_file_edits.discard_and_quit"),
+        ),
     };
     let detail = if prompt.files.len() == 1 {
-        "1 edited file has not been saved.".to_string()
+        crate::i18n::t!("confirm.unsaved_file_edits.text_one").into_owned()
     } else {
-        format!("{} edited files have not been saved.", prompt.files.len())
+        crate::i18n::t!(
+            "confirm.unsaved_file_edits.text_many",
+            count = prompt.files.len()
+        )
+        .into_owned()
     };
 
     let action = prompt.action;
     let dialog = ConfirmDialog::new(title, DIALOG_440_WIDTH)
-        .text(
-            theme,
-            format!("{detail} Save them, or discard the changes."),
-        )
+        .text(theme, detail)
         .section(
             div()
                 .px_2()
@@ -47,9 +54,13 @@ pub(super) fn panel(
                         }))
                         .when(prompt.files.len() > 8, |d| {
                             d.child(
-                                div()
-                                    .ml_2()
-                                    .child(format!("…and {} more", prompt.files.len() - 8)),
+                                div().ml_2().child(
+                                    crate::i18n::t!(
+                                        "prompts.gitignore.more_note",
+                                        count = prompt.files.len() - 8
+                                    )
+                                    .into_owned(),
+                                ),
                             )
                         }),
                 ),
@@ -85,15 +96,18 @@ pub(super) fn panel(
                     }),
             )
             .child(
-                components::Button::new("unsaved_file_edits_save", "Save all")
-                    .style(components::ButtonStyle::Filled)
-                    .on_click(theme, cx, move |this, _e, _window, cx| {
-                        let root_view = this.root_view.clone();
-                        let _ = root_view.update(cx, |root, cx| {
-                            root.resolve_unsaved_file_edits(action, true, cx);
-                        });
-                        this.close_popover(cx);
-                    }),
+                components::Button::new(
+                    "unsaved_file_edits_save",
+                    crate::i18n::tr("confirm.unsaved_file_edits.save_all"),
+                )
+                .style(components::ButtonStyle::Filled)
+                .on_click(theme, cx, move |this, _e, _window, cx| {
+                    let root_view = this.root_view.clone();
+                    let _ = root_view.update(cx, |root, cx| {
+                        root.resolve_unsaved_file_edits(action, true, cx);
+                    });
+                    this.close_popover(cx);
+                }),
             ),
         cx,
     )

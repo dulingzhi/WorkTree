@@ -7,31 +7,45 @@ pub(super) fn panel(
 ) -> gpui::Div {
     let theme = this.theme;
     let terminal_label = if prompt.summary.terminal_count == 1 {
-        "terminal".to_string()
+        crate::i18n::t!("confirm.terminal_shutdown.terminal_one").into_owned()
     } else {
-        format!("{} terminals", prompt.summary.terminal_count)
+        crate::i18n::t!(
+            "confirm.terminal_shutdown.terminal_many",
+            count = prompt.summary.terminal_count
+        )
+        .into_owned()
     };
     let title = match prompt.action {
-        TerminalShutdownAction::QuitApp => "Quit GitComet?",
-        TerminalShutdownAction::CloseWindow => "Close window?",
+        TerminalShutdownAction::QuitApp => crate::i18n::tr("confirm.common.quit_title"),
+        TerminalShutdownAction::CloseWindow => crate::i18n::tr("confirm.common.close_window_title"),
         TerminalShutdownAction::CloseRepo { .. }
         | TerminalShutdownAction::CloseTerminalForRepo { .. }
-        | TerminalShutdownAction::CloseTerminalTab { .. } => "Close terminal?",
+        | TerminalShutdownAction::CloseTerminalTab { .. } => {
+            crate::i18n::tr("confirm.terminal_shutdown.title")
+        }
     };
     let confirm_label = match prompt.action {
-        TerminalShutdownAction::QuitApp => "Terminate and quit",
-        TerminalShutdownAction::CloseWindow => "Terminate and close",
+        TerminalShutdownAction::QuitApp => {
+            crate::i18n::tr("confirm.terminal_shutdown.terminate_and_quit")
+        }
+        TerminalShutdownAction::CloseWindow => {
+            crate::i18n::tr("confirm.terminal_shutdown.terminate_and_close")
+        }
         TerminalShutdownAction::CloseRepo { .. }
         | TerminalShutdownAction::CloseTerminalForRepo { .. }
-        | TerminalShutdownAction::CloseTerminalTab { .. } => "Terminate and close",
+        | TerminalShutdownAction::CloseTerminalTab { .. } => {
+            crate::i18n::tr("confirm.terminal_shutdown.terminate_and_close")
+        }
     };
     let detail = if prompt.summary.running_command_count == 1 {
-        format!("1 running command is still active in {terminal_label}.")
+        crate::i18n::t!("confirm.terminal_shutdown.text_one", label = terminal_label).into_owned()
     } else {
-        format!(
-            "{} running commands are still active in {terminal_label}.",
-            prompt.summary.running_command_count
+        crate::i18n::t!(
+            "confirm.terminal_shutdown.text_many",
+            count = prompt.summary.running_command_count,
+            label = terminal_label
         )
+        .into_owned()
     };
 
     let repo_names = &prompt.summary.repo_names;
@@ -41,10 +55,7 @@ pub(super) fn panel(
             TerminalShutdownAction::CloseWindow | TerminalShutdownAction::QuitApp
         );
 
-    let mut dialog = ConfirmDialog::new(title, DIALOG_440_WIDTH).text(
-        theme,
-        format!("{detail} Cancel to keep the terminal open, or terminate it to continue."),
-    );
+    let mut dialog = ConfirmDialog::new(title, DIALOG_440_WIDTH).text(theme, detail);
     if show_repo_list {
         dialog = dialog.section(
             div()

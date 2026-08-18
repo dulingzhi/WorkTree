@@ -240,12 +240,12 @@ impl PopoverHost {
                 )
             })
         {
-            return Err("Refusing to open path outside repository".to_string());
+            return Err(crate::i18n::t!("toast.context_menu.path_outside_repo").into_owned());
         }
 
         let workdir = self
             .workdir_for_repo(repo_id)
-            .ok_or_else(|| "Repository is not available".to_string())?;
+            .ok_or_else(|| crate::i18n::t!("toast.context_menu.repo_unavailable").into_owned())?;
         Ok(normalize_platform_path(workdir.join(path)))
     }
 
@@ -356,7 +356,7 @@ impl PopoverHost {
     fn warn_repository_gone(&mut self, cx: &mut gpui::Context<Self>) {
         self.push_toast(
             components::ToastKind::Warning,
-            "That repository is no longer open.".to_owned(),
+            crate::i18n::t!("toast.context_menu.repo_gone").into_owned(),
             cx,
         );
     }
@@ -881,7 +881,7 @@ impl PopoverHost {
                     files: false,
                     directories: true,
                     multiple: false,
-                    prompt: Some("Export patch to folder".into()),
+                    prompt: Some(crate::i18n::tr("ui.prompt.export_patch_folder")),
                 });
                 window
                     .spawn(cx, async move |cx| {
@@ -1461,7 +1461,7 @@ impl PopoverHost {
                 crate::clipboard::write_text(cx, url, crate::clipboard::CopySource::ContextMenu);
                 self.push_toast(
                     components::ToastKind::Success,
-                    "Link copied to clipboard".to_string(),
+                    crate::i18n::t!("toast.context_menu.link_copied").into_owned(),
                     cx,
                 );
             }
@@ -1522,7 +1522,7 @@ impl PopoverHost {
                 if patch.trim().is_empty() {
                     self.push_toast(
                         components::ToastKind::Error,
-                        "Patch is empty".to_string(),
+                        crate::i18n::t!("toast.context_menu.patch_empty").into_owned(),
                         cx,
                     );
                 } else if reverse {
@@ -1539,7 +1539,7 @@ impl PopoverHost {
                 if patch.trim().is_empty() {
                     self.push_toast(
                         components::ToastKind::Error,
-                        "Patch is empty".to_string(),
+                        crate::i18n::t!("toast.context_menu.patch_empty").into_owned(),
                         cx,
                     );
                 } else {
@@ -1556,7 +1556,7 @@ impl PopoverHost {
                 } else {
                     self.push_toast(
                         components::ToastKind::Error,
-                        "Couldn't build patch for this hunk".to_string(),
+                        crate::i18n::t!("toast.context_menu.patch_build_failed").into_owned(),
                         cx,
                     );
                 }
@@ -1567,7 +1567,7 @@ impl PopoverHost {
                 } else {
                     self.push_toast(
                         components::ToastKind::Error,
-                        "Couldn't build patch for this hunk".to_string(),
+                        crate::i18n::t!("toast.context_menu.patch_build_failed").into_owned(),
                         cx,
                     );
                 }

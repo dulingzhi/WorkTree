@@ -1,0 +1,38 @@
+# 简体中文目录，键结构与 inputs.en.yml 一一对应；`%{name}` 占位符保留。
+input:
+  remote_edit_url:
+    title: "编辑远程仓库 URL（%{kind}）"
+    remote_line: "远程仓库：%{name}"
+    save: "保存"
+  remote_add:
+    title: "添加远程仓库"
+    name_label: "名称"
+  rename_branch:
+    title: "重命名分支"
+    title_current: "重命名当前分支"
+    current_name_line: "当前名称：%{name}"
+    rename: "重命名"
+  checkout_remote_branch:
+    title: "检出远程分支"
+    remote_branch_line: "远程分支：%{upstream}"
+    local_name_label: "本地分支名称"
+  push_upstream:
+    title: "设置上游并推送"
+    remote_line: "远程仓库：%{remote}"
+    push: "推送"
+  clone_repo:
+    title: "克隆仓库"
+    url_label: "仓库 URL / 路径"
+    destination_label: "目标父文件夹"
+    select_folder: "选择克隆文件夹"
+    clone: "克隆"
+  stash:
+    title: "创建贮藏"
+    stash: "贮藏"
+  commit:
+    title: "提交更改"
+    commit: "提交"
+  submodule_change_pointer:
+    title: "更改子模块指针"
+    target_label: "目标引用 / 分支 / 标签 / 提交"
+    change: "更改"

@@ -120,7 +120,7 @@ pub(in crate::view) fn render_markdown_document(
             .w_full()
             .p(scaled(MARKDOWN_PREVIEW_CONTENT_PAD_X_PX, context))
             .text_color(context.theme.colors.foreground.secondary)
-            .child(TOO_MANY_ROWS_TO_RENDER_MESSAGE)
+            .child(crate::i18n::tr_en(TOO_MANY_ROWS_TO_RENDER_MESSAGE))
             .into_any_element();
     }
 
