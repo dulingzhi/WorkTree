@@ -131,9 +131,9 @@ pub fn author_avatar(theme: AppTheme, scale: impl Into<UiScale>, name: &str) -> 
 /// active source yields a URL for `email`. The initials remain the loading
 /// and missing-picture (`d=404`) stand-in, so the slot never goes blank.
 ///
-/// The history table does not use this — its rows paint the initials on
-/// canvas and overlay a bare [`gpui::img`] when a URL exists, so the painted
-/// initials are the loading/fallback layer there.
+/// The history table does not use this — its rows overlay an absolutely
+/// positioned img on the row canvas (see `history_table_row`), with the same
+/// loading/fallback initials.
 pub fn author_avatar_image(
     theme: AppTheme,
     scale: impl Into<UiScale>,
@@ -151,21 +151,20 @@ pub fn author_avatar_image(
         move || author_avatar(theme, scale, fallback_name.as_ref()).into_any_element();
     let initials_loading =
         move || author_avatar(theme, scale, loading_name.as_ref()).into_any_element();
-    div()
-        .flex_none()
+    // The img rounds its own painted quad from its style's corner radii (see
+    // `Img::paint`), so the rounding belongs on the img itself — a rounded,
+    // overflow-hidden wrapper does not clip children to a circle.
+    div().flex_none().w(diameter).h(diameter).child(
+        gpui::img(gpui::ImageSource::Resource(gpui::Resource::Uri(
+            gpui::SharedUri::from(url.to_string()),
+        )))
+        .id(gpui::ElementId::Name(url))
+        .with_fallback(initials_fallback)
+        .with_loading(initials_loading)
         .w(diameter)
         .h(diameter)
-        .rounded(diameter * 0.5)
-        .overflow_hidden()
-        .child(
-            gpui::img(gpui::ImageSource::Resource(gpui::Resource::Uri(
-                gpui::SharedUri::from(url.to_string()),
-            )))
-            .id(gpui::ElementId::Name(url))
-            .with_fallback(initials_fallback)
-            .with_loading(initials_loading)
-            .size_full(),
-        )
+        .rounded(diameter * 0.5),
+    )
 }
 
 #[cfg(test)]

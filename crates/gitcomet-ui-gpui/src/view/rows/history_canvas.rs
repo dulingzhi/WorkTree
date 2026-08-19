@@ -413,6 +413,10 @@ pub(super) fn history_commit_row_canvas(
     summary: HistoryTextVm,
     when: HistoryTextVm,
     short_sha: HistoryTextVm,
+    // Email behind `author`, from the repo's author→email map. When the active
+    // avatar source turns it into a URL the canvas leaves the avatar slot to
+    // the row builder's overlay img (see `history_table_row`).
+    author_email: Option<SharedString>,
     // The background the row's own `div` carries (selection, HEAD, open context
     // menu), and the one it swaps in while hovered. Mirrored rather than painted
     // again: the graph's icon nodes knock their glyphs out in the row background,
@@ -921,7 +925,6 @@ pub(super) fn history_commit_row_canvas(
                 // Matches the header's extra left inset that clears the
                 // column resize handle.
                 let avatar_left = author_bounds.left() + cell_pad_x * 2.0;
-                let identity_color = components::author_color(theme, author.as_ref());
                 // Shared with the row builder's remote-avatar overlay so the
                 // painted initials and the overlaid image land on the same
                 // spot; `None` also reproduces the too-narrow-column check.
@@ -940,54 +943,64 @@ pub(super) fn history_commit_row_canvas(
                         bounds.right() - avatar_metrics.inset_from_right,
                         avatar_left
                     );
-                    let avatar_top = author_bounds.top() + avatar_metrics.inset_from_top;
-                    window.paint_quad(
-                        fill(
-                            Bounds::new(point(avatar_left, avatar_top), size(avatar_d, avatar_d)),
-                            with_alpha(identity_color, 0.22),
-                        )
-                        .corner_radii(avatar_d * 0.5),
-                    );
+                    // With a remote avatar the overlay img owns the slot — its
+                    // loading and 404 stand-ins are this same initials circle —
+                    // so nothing may be painted underneath: a transparent PNG
+                    // would otherwise show the initials through the image.
+                    if crate::avatar_source::avatar_url(author_email.as_deref()).is_none() {
+                        let identity_color = components::author_color(theme, author.as_ref());
+                        let avatar_top = author_bounds.top() + avatar_metrics.inset_from_top;
+                        window.paint_quad(
+                            fill(
+                                Bounds::new(
+                                    point(avatar_left, avatar_top),
+                                    size(avatar_d, avatar_d),
+                                ),
+                                with_alpha(identity_color, 0.22),
+                            )
+                            .corner_radii(avatar_d * 0.5),
+                        );
 
-                    let initials: SharedString =
-                        components::author_initials(author.as_ref()).into();
-                    let initials_font = scaled_px(components::AVATAR_FONT_PX);
-                    let initials_line_height = initials_style
-                        .line_height
-                        .to_pixels(initials_font.into(), window.rem_size());
-                    let initials_shaped = shape_truncated_line_cached(
-                        window,
-                        &initials_style,
-                        initials_font,
-                        &initials,
-                        fx_hash_str(initials.as_ref()),
-                        avatar_d,
-                        identity_color,
-                        None,
-                    );
-                    let initials_cap_height = initials_shaped
-                        .runs
-                        .first()
-                        .map(|run| window.text_system().cap_height(run.font_id, initials_font))
-                        .unwrap_or(initials_font * 0.7);
-                    let _ = initials_shaped.paint(
-                        point(
-                            avatar_left + (avatar_d - initials_shaped.width).max(px(0.0)) * 0.5,
-                            components::initials_paint_origin_y(
-                                avatar_top,
-                                avatar_d,
-                                initials_line_height,
-                                initials_shaped.ascent,
-                                initials_shaped.descent,
-                                initials_cap_height,
+                        let initials: SharedString =
+                            components::author_initials(author.as_ref()).into();
+                        let initials_font = scaled_px(components::AVATAR_FONT_PX);
+                        let initials_line_height = initials_style
+                            .line_height
+                            .to_pixels(initials_font.into(), window.rem_size());
+                        let initials_shaped = shape_truncated_line_cached(
+                            window,
+                            &initials_style,
+                            initials_font,
+                            &initials,
+                            fx_hash_str(initials.as_ref()),
+                            avatar_d,
+                            identity_color,
+                            None,
+                        );
+                        let initials_cap_height = initials_shaped
+                            .runs
+                            .first()
+                            .map(|run| window.text_system().cap_height(run.font_id, initials_font))
+                            .unwrap_or(initials_font * 0.7);
+                        let _ = initials_shaped.paint(
+                            point(
+                                avatar_left + (avatar_d - initials_shaped.width).max(px(0.0)) * 0.5,
+                                components::initials_paint_origin_y(
+                                    avatar_top,
+                                    avatar_d,
+                                    initials_line_height,
+                                    initials_shaped.ascent,
+                                    initials_shaped.descent,
+                                    initials_cap_height,
+                                ),
                             ),
-                        ),
-                        initials_line_height,
-                        gpui::TextAlign::Left,
-                        None,
-                        window,
-                        cx,
-                    );
+                            initials_line_height,
+                            gpui::TextAlign::Left,
+                            None,
+                            window,
+                            cx,
+                        );
+                    }
                 }
 
                 let author_text_bounds = Bounds::new(
@@ -1247,6 +1260,70 @@ pub(super) fn history_commit_row_canvas(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn avatar_metrics_measure_to_the_slot_left_edge() {
+        // Author column 60 wide ending 8px (row pad) before a row right edge
+        // at x=200, with a 40px sha and 30px date column to its right, a 16px
+        // circle clearing a 6px cell pad on each side, 28px row.
+        let metrics = history_avatar_metrics(
+            true,
+            true,
+            px(40.0),
+            px(30.0),
+            px(60.0),
+            px(8.0),
+            px(6.0),
+            px(16.0),
+            px(28.0),
+        )
+        .expect("wide enough author column");
+        // The circle's left edge sits where the canvas paints it: 200 - (8 +
+        // 40 + 30 + 60 - 2*6) = 74. This is the field's contract — an overlay
+        // positioned with `.right()` must take its own diameter off first,
+        // landing its right edge on the circle's right edge at 74+16=90,
+        // i.e. `.right(126 - 16 = 110)`.
+        assert_eq!(px(200.0) - metrics.inset_from_right, px(74.0));
+        assert_eq!(metrics.inset_from_right - metrics.diameter, px(110.0));
+        assert_eq!(
+            px(200.0) - (metrics.inset_from_right - metrics.diameter),
+            px(90.0)
+        );
+        assert_eq!(metrics.inset_from_top, px(6.0));
+    }
+
+    #[test]
+    fn avatar_metrics_hide_when_author_column_too_narrow() {
+        // 16px circle + 2 * 6px cell pads needs at least 28px; 27 hides.
+        assert!(
+            history_avatar_metrics(
+                false,
+                false,
+                px(0.0),
+                px(0.0),
+                px(28.0),
+                px(8.0),
+                px(6.0),
+                px(16.0),
+                px(28.0)
+            )
+            .is_some()
+        );
+        assert!(
+            history_avatar_metrics(
+                false,
+                false,
+                px(0.0),
+                px(0.0),
+                px(27.0),
+                px(8.0),
+                px(6.0),
+                px(16.0),
+                px(28.0)
+            )
+            .is_none()
+        );
+    }
 
     fn selected(section: BranchSection, name: &str) -> SelectedHistoryBranch {
         SelectedHistoryBranch {
