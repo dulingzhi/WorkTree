@@ -2,6 +2,7 @@
 # the content below is the key tree directly — no `zh-CN:` root.
 menu:
   app:
+    command_palette: 命令面板
     settings: 设置…
     hide_gitcomet: 隐藏 GitComet
     hide_others: 隐藏其他
@@ -10,10 +11,13 @@ menu:
   file:
     title: 文件
     new_window: 新建窗口
-    open: 打开…
+    open: 打开仓库
+    clone_repository: 克隆仓库
+    initialize_repository: 初始化仓库
     switch_repository: 切换仓库…
     recent_repositories: 最近打开的仓库
     open_in_code_editor: 在代码编辑器中打开
+    open_in_explorer: 在文件管理器中打开
     apply_patch: 应用补丁…
     close: 关闭
     close_window: 关闭窗口

@@ -47,7 +47,7 @@ palette:
     toggle-whitespace-chars: Toggle Whitespace Characters
     previous-repo-tab: Previous Repository Tab
     next-repo-tab: Next Repository Tab
-    locate-file-in-explorer: Show File in Explorer
+    locate-file-in-explorer: Open in file explorer
     open-active-view-search: Search in Current View
     create-tag: Create Tag
     new-window: New Window
