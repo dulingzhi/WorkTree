@@ -1,5 +1,6 @@
 mod app;
 mod assets;
+mod avatar_source;
 mod bundled_fonts;
 mod clipboard;
 mod external_editor;

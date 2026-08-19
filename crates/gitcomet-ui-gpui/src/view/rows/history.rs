@@ -3077,6 +3077,9 @@ impl HistoryView {
                     selected_lane,
                     lane_branch_name,
                     base_row_vm.author.clone(),
+                    repo.author_emails
+                        .get(commit.author.as_ref())
+                        .map(|email| email.as_str()),
                     base_row_vm.summary.clone(),
                     when,
                     short_sha,
@@ -3170,6 +3173,10 @@ fn history_table_row(
     // hovered. Inherited down the lane, so unlabelled commits have one too.
     lane_branch_name: Option<SharedString>,
     author: HistoryTextVm,
+    // Email behind `commit.author`, resolved from the repo's author→email map
+    // by the caller; drives the remote-avatar overlay when a source other than
+    // initials is active.
+    author_email: Option<&str>,
     summary: HistoryTextVm,
     when: HistoryTextVm,
     short_sha: HistoryTextVm,
@@ -3280,6 +3287,46 @@ fn history_table_row(
                 cx.notify();
             }),
         );
+
+    // Remote avatar overlay: with Gravatar/Cravatar active and a known email,
+    // the fetched image sits exactly on top of the initials the canvas paints,
+    // which keep showing underneath while it loads and when the service 404s
+    // (`d=404`) — so no fallback/loading element is needed here. The metrics
+    // helper is the one the canvas paints from, pinning overlay to initials.
+    if show_author
+        && let Some(url) = crate::avatar_source::avatar_url(author_email)
+        && let Some(metrics) = history_canvas::history_avatar_metrics(
+            show_sha,
+            show_date,
+            col_sha,
+            col_date,
+            col_author,
+            // The canvas layout pads the row by half a rem; `rem = 16 design
+            // px * scale`, so the pad is 8 scaled design px.
+            ui_scale.px(8.0),
+            ui_scale.px(HISTORY_COL_HANDLE_PX / 2.0),
+            ui_scale.px(components::AVATAR_DIAMETER_PX),
+            row_height,
+        )
+    {
+        row = row.child(
+            div()
+                .absolute()
+                .top(metrics.inset_from_top)
+                .right(metrics.inset_from_right)
+                .w(metrics.diameter)
+                .h(metrics.diameter)
+                .rounded(metrics.diameter * 0.5)
+                .overflow_hidden()
+                .child(
+                    gpui::img(gpui::ImageSource::Resource(gpui::Resource::Uri(
+                        gpui::SharedUri::from(url.to_string()),
+                    )))
+                    .id(gpui::ElementId::Name(url))
+                    .size_full(),
+                ),
+        );
+    }
 
     if let Some(overlay) = row_bg_overlay {
         row = row.bg(overlay);

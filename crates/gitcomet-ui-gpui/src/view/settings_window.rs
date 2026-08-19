@@ -177,6 +177,7 @@ const DIFF_VIEW_MODE_OPTIONS: &[(&str, DiffViewMode, &str)] = &[
 enum SettingsSection {
     Theme,
     Language,
+    AvatarSource,
     UiScale,
     UiFont,
     EditorFont,
@@ -202,6 +203,7 @@ impl SettingsSection {
         match self {
             Self::Theme
             | Self::Language
+            | Self::AvatarSource
             | Self::UiScale
             | Self::UiFont
             | Self::EditorFont
@@ -398,6 +400,7 @@ pub(crate) struct SettingsWindowView {
     theme_mode: ThemeMode,
     theme: AppTheme,
     language: crate::i18n::Language,
+    avatar_source: crate::avatar_source::AvatarSource,
     ui_scale_percent: u32,
     ui_font_family: String,
     editor_font_family: String,
@@ -408,6 +411,7 @@ pub(crate) struct SettingsWindowView {
     settings_window_scroll: ScrollHandle,
     theme_scroll: UniformListScrollHandle,
     language_scroll: UniformListScrollHandle,
+    avatar_source_scroll: UniformListScrollHandle,
     ui_font_scroll: UniformListScrollHandle,
     editor_font_scroll: UniformListScrollHandle,
     external_editor_scroll: UniformListScrollHandle,
@@ -814,6 +818,12 @@ impl SettingsWindowView {
             .as_deref()
             .and_then(crate::i18n::Language::from_key)
             .unwrap_or_default();
+        crate::avatar_source::init_from_session(&ui_session);
+        let avatar_source = ui_session
+            .avatar_source
+            .as_deref()
+            .and_then(crate::avatar_source::AvatarSource::from_key)
+            .unwrap_or_default();
         // Set after the i18n global is seeded so the native title follows the
         // active language.
         window.set_window_title(tr_str("settings.window.title"));
@@ -1060,6 +1070,7 @@ impl SettingsWindowView {
             theme_mode,
             theme,
             language,
+            avatar_source,
             ui_scale_percent: ui_scale.percent,
             ui_font_family: font_preferences.ui_font_family,
             editor_font_family: font_preferences.editor_font_family,
@@ -1070,6 +1081,7 @@ impl SettingsWindowView {
             settings_window_scroll: ScrollHandle::default(),
             theme_scroll: UniformListScrollHandle::default(),
             language_scroll: UniformListScrollHandle::default(),
+            avatar_source_scroll: UniformListScrollHandle::default(),
             ui_font_scroll: UniformListScrollHandle::default(),
             editor_font_scroll: UniformListScrollHandle::default(),
             external_editor_scroll: UniformListScrollHandle::default(),
@@ -1181,6 +1193,7 @@ impl SettingsWindowView {
             repo_sidebar_pinned_branches: None,
             theme_mode: Some(self.theme_mode.key().to_string()),
             language: Some(self.language.key().to_string()),
+            avatar_source: Some(crate::avatar_source::current().key().to_string()),
             ui_scale_percent: Some(self.ui_scale_percent),
             ui_font_family: Some(self.ui_font_family.clone()),
             editor_font_family: Some(self.editor_font_family.clone()),
@@ -1727,6 +1740,27 @@ impl SettingsWindowView {
         #[cfg(target_os = "macos")]
         crate::app::refresh_macos_app_menus(cx);
         self.persist_preferences(cx);
+        self.update_main_windows(cx, move |_view, _window, cx| {
+            cx.notify();
+        });
+        cx.notify();
+    }
+
+    fn set_avatar_source(
+        &mut self,
+        source: crate::avatar_source::AvatarSource,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self.avatar_source == source {
+            return;
+        }
+
+        self.avatar_source = source;
+        self.expanded_section = None;
+        crate::avatar_source::set_current(source);
+        self.persist_preferences(cx);
+        // History rows, hover cards and the details pane all key off the
+        // process-global source; one notify re-render swaps every URL.
         self.update_main_windows(cx, move |_view, _window, cx| {
             cx.notify();
         });
@@ -2992,6 +3026,31 @@ impl SettingsWindowView {
             .collect()
     }
 
+    fn render_avatar_source_option_rows(
+        this: &mut Self,
+        range: Range<usize>,
+        _window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> Vec<AnyElement> {
+        let theme = this.theme;
+        range
+            .filter_map(|ix| crate::avatar_source::AvatarSource::ALL.get(ix).copied())
+            .map(|source| {
+                this.option_row(
+                    format!("settings_window_avatar_source_{}", source.key()),
+                    source.label(),
+                    None,
+                    this.avatar_source == source,
+                    theme,
+                )
+                .on_click(cx.listener(move |this, _e: &ClickEvent, _window, cx| {
+                    this.set_avatar_source(source, cx);
+                }))
+                .into_any_element()
+            })
+            .collect()
+    }
+
     fn render_editor_font_option_rows(
         this: &mut Self,
         range: Range<usize>,
@@ -3626,6 +3685,18 @@ impl Render for SettingsWindowView {
                             this.toggle_section(SettingsSection::Language, cx);
                         }));
 
+                    let avatar_source_row = self
+                        .summary_row(
+                            "settings_window_avatar_source",
+                            tr_str("settings.row.avatar_source"),
+                            self.avatar_source.label(),
+                            self.expanded_section == Some(SettingsSection::AvatarSource),
+                            theme,
+                        )
+                        .on_click(cx.listener(|this, _e: &ClickEvent, _window, cx| {
+                            this.toggle_section(SettingsSection::AvatarSource, cx);
+                        }));
+
                     let date_format_row = self
                         .summary_row(
                             "settings_window_date_format",
@@ -4040,6 +4111,32 @@ impl Render for SettingsWindowView {
                             "settings_window_language_scrollbar",
                             self.language_scroll.clone(),
                             language_count,
+                            SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
+                            SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
+                            list,
+                            theme,
+                        ));
+                    }
+
+                    general_card = general_card.child(avatar_source_row);
+                    if self.expanded_section == Some(SettingsSection::AvatarSource) {
+                        let source_count = crate::avatar_source::AvatarSource::ALL.len();
+                        let list = uniform_list(
+                            "settings_window_avatar_source_list",
+                            source_count,
+                            cx.processor(Self::render_avatar_source_option_rows),
+                        )
+                        .w_full()
+                        .min_w(px(0.0))
+                        .h_full()
+                        .min_h(px(0.0))
+                        .track_scroll(&self.avatar_source_scroll);
+                        let list = restrict_scroll_to_vertical_axis(list).into_any_element();
+                        general_card = general_card.child(self.dropdown_list_container(
+                            "settings_window_avatar_source_list_container",
+                            "settings_window_avatar_source_scrollbar",
+                            self.avatar_source_scroll.clone(),
+                            source_count,
                             SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
                             SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
                             list,
@@ -8423,10 +8520,11 @@ mod tests {
 
         let mut settings_cx = gpui::VisualTestContext::from_window(*settings_window.deref(), cx);
         settings_cx.run_until_parked();
-        // The General page grew by the Language row, which pushed the UI-font
-        // dropdown's hit area below the old 460px window; 520px keeps it in
-        // view while the page still overflows (outer scroll stays active).
-        settings_cx.simulate_resize(size(px(SETTINGS_WINDOW_DEFAULT_WIDTH_PX), px(520.0)));
+        // The General page grew by the Language and Avatar rows, which pushed
+        // the UI-font dropdown's hit area below the old 460px window; 560px
+        // keeps it in view while the page still overflows (outer scroll stays
+        // active).
+        settings_cx.simulate_resize(size(px(SETTINGS_WINDOW_DEFAULT_WIDTH_PX), px(560.0)));
         settings_cx.run_until_parked();
         settings_cx.update(|window, app| {
             let _ = window.draw(app);

@@ -48,7 +48,12 @@ fn commit_details_author_row(
             .gap_2()
             .w_full()
             .min_w(px(0.0))
-            .child(components::author_avatar(theme, ui_scale, &display_name))
+            .child(components::author_avatar_image(
+                theme,
+                ui_scale,
+                &display_name,
+                (!details.author_email.is_empty()).then(|| details.author_email.as_str()),
+            ))
             .child(
                 div()
                     .flex_1()
@@ -934,6 +939,10 @@ impl DetailsPaneView {
         &self,
         ix: usize,
         commit: &Commit,
+        // Email behind `commit.author`, resolved from the repo's author→email
+        // map by the caller; drives the card's remote avatar when a source
+        // other than initials is active.
+        author_email: Option<&str>,
         now: std::time::SystemTime,
         show_border: bool,
     ) -> AnyElement {
@@ -977,7 +986,12 @@ impl DetailsPaneView {
             .when(show_border, |row| {
                 row.border_b_1().border_color(theme.colors.stroke.default)
             })
-            .child(components::author_avatar(theme, ui_scale, &author))
+            .child(components::author_avatar_image(
+                theme,
+                ui_scale,
+                &author,
+                author_email,
+            ))
             .child(
                 div()
                     .flex_1()
@@ -1024,7 +1038,13 @@ impl DetailsPaneView {
         let now = std::time::SystemTime::now();
         range
             .filter_map(|ix| commits.get(ix).map(|commit| (ix, commit.clone())))
-            .map(|(ix, commit)| this.commit_card_element(ix, &commit, now, ix != last_ix))
+            .map(|(ix, commit)| {
+                let author_email = repo
+                    .author_emails
+                    .get(commit.author.as_ref())
+                    .map(|email| email.as_str());
+                this.commit_card_element(ix, &commit, author_email, now, ix != last_ix)
+            })
             .collect()
     }
 

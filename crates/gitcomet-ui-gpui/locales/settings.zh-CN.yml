@@ -50,6 +50,11 @@ settings:
     auto_save: 自动保存编辑
     open_theme_folder: 打开自定义主题文件夹
     theme_guide: 主题指南
+    avatar_source: 提交作者头像
+  avatar_source:
+    option_initials: 当前头像（首字母，离线）
+    option_gravatar: "Gravatar（gravatar.com）"
+    option_cravatar: "Cravatar（cravatar.cn）"
   ui_scale:
     detail_default: 默认缩放
     detail_fit_more: 在屏幕上显示更多内容

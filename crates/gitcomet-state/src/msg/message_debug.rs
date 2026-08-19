@@ -196,6 +196,11 @@ impl std::fmt::Debug for InternalMsg {
                 .field("path", path)
                 .field("result", result)
                 .finish(),
+            InternalMsg::AuthorEmailsLoaded { repo_id, result } => f
+                .debug_struct("AuthorEmailsLoaded")
+                .field("repo_id", repo_id)
+                .field("result", result)
+                .finish(),
             InternalMsg::BlameLoaded {
                 repo_id,
                 path,

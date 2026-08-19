@@ -720,6 +720,9 @@ pub(super) fn append_refresh_primary_effects(
         effects.push_effect(Effect::LoadUpstreamDivergence { repo_id });
         push_rebase_and_merge_refresh_effect(effects, repo_id);
         effects.push_effect(Effect::LoadStatus { repo_id });
+        // One cheap format-only walk; powers author avatars wherever only the
+        // author name is available (history rows, hover cards).
+        effects.push_effect(Effect::LoadAuthorEmails { repo_id });
         effects.push_effect(Effect::LoadLog {
             repo_id,
             seq,

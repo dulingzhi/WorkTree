@@ -152,6 +152,7 @@ pub(super) fn effect_name(effect: &Effect) -> &'static str {
         Effect::LoadHeadBranch { .. } => "LoadHeadBranch",
         Effect::LoadUpstreamDivergence { .. } => "LoadUpstreamDivergence",
         Effect::LoadLog { .. } => "LoadLog",
+        Effect::LoadAuthorEmails { .. } => "LoadAuthorEmails",
         Effect::LoadTags { .. } => "LoadTags",
         Effect::LoadRemoteTags { .. } => "LoadRemoteTags",
         Effect::LoadStashes { .. } => "LoadStashes",
@@ -181,6 +182,7 @@ pub(super) fn effect_repo_id(effect: &Effect) -> Option<RepoId> {
         | Effect::LoadHeadBranch { repo_id }
         | Effect::LoadUpstreamDivergence { repo_id }
         | Effect::LoadLog { repo_id, .. }
+        | Effect::LoadAuthorEmails { repo_id }
         | Effect::LoadTags { repo_id }
         | Effect::LoadRemoteTags { repo_id }
         | Effect::LoadStashes { repo_id, .. }

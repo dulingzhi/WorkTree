@@ -104,6 +104,12 @@ pub enum Effect {
         path: PathBuf,
         limit: usize,
     },
+    /// Author name → email map for per-email author avatars. Best-effort:
+    /// failures land as `AuthorEmailsLoaded` with `Err` and the UI keeps
+    /// the initials fallback.
+    LoadAuthorEmails {
+        repo_id: RepoId,
+    },
     LoadBlame {
         repo_id: RepoId,
         path: PathBuf,

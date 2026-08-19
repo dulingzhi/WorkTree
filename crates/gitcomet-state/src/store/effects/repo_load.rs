@@ -867,6 +867,23 @@ pub(super) fn schedule_load_file_history(
     });
 }
 
+pub(super) fn schedule_load_author_emails(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+) {
+    spawn_with_repo(executor, repos, repo_id, msg_tx, move |repo, msg_tx| {
+        send_or_log(
+            &msg_tx,
+            Msg::Internal(crate::msg::InternalMsg::AuthorEmailsLoaded {
+                repo_id,
+                result: repo.author_email_map(),
+            }),
+        );
+    });
+}
+
 pub(super) fn schedule_load_blame(
     executor: &TaskExecutor,
     repos: &RepoMap,

@@ -55,6 +55,8 @@ jiff = "0.2"
 log = "0.4.33"
 lru = "0.18"
 memchr = "2.8.3"
+# MD5 digests for Gravatar/Cravatar author-avatar URLs.
+md-5 = "0.10"
 mimalloc = "0.1.52"
 pulldown-cmark = { version = "0.13", default-features = false, features = ["simd"] }
 notify = "9.0.0-rc.4"

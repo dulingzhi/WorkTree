@@ -45,6 +45,22 @@ pub(super) fn file_history_loaded(
     Vec::new()
 }
 
+/// Stores the best-effort author name → email map. Cosmetic data (author
+/// avatars), so failures are dropped silently rather than surfaced — the
+/// initials fallback is the pre-existing behavior anyway.
+pub(super) fn author_emails_loaded(
+    state: &mut AppState,
+    repo_id: RepoId,
+    result: std::result::Result<FxHashMap<String, String>, Error>,
+) -> Vec<Effect> {
+    if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id)
+        && let Ok(emails) = result
+    {
+        repo_state.author_emails = emails;
+    }
+    Vec::new()
+}
+
 pub(super) fn blame_loaded(
     state: &mut AppState,
     repo_id: RepoId,
@@ -2923,6 +2939,52 @@ mod tests {
                 Ok(Vec::new())
             )
             .is_empty()
+        );
+    }
+
+    #[test]
+    fn author_emails_loaded_stores_map_and_ignores_failures() {
+        let repo_id = RepoId(1);
+        let mut state = new_state_with_repo(repo_id);
+
+        // Unknown repo and failures are dropped silently — avatars are
+        // cosmetic and the initials fallback is the pre-existing behavior.
+        assert!(author_emails_loaded(&mut state, RepoId(2), Ok(FxHashMap::new())).is_empty());
+        assert!(
+            author_emails_loaded(&mut state, repo_id, Err(Error::new(ErrorKind::Cancelled)))
+                .is_empty()
+        );
+        assert!(repo_mut(&mut state, repo_id).author_emails.is_empty());
+
+        assert!(
+            author_emails_loaded(
+                &mut state,
+                repo_id,
+                Ok(FxHashMap::from([(
+                    "Jai".to_string(),
+                    "814683@qq.com".to_string()
+                )]))
+            )
+            .is_empty()
+        );
+        assert_eq!(
+            repo_mut(&mut state, repo_id)
+                .author_emails
+                .get("Jai")
+                .map(String::as_str),
+            Some("814683@qq.com")
+        );
+        // A later failure does not wipe a previously loaded map.
+        assert!(
+            author_emails_loaded(&mut state, repo_id, Err(Error::new(ErrorKind::Cancelled)))
+                .is_empty()
+        );
+        assert_eq!(
+            repo_mut(&mut state, repo_id)
+                .author_emails
+                .get("Jai")
+                .map(String::as_str),
+            Some("814683@qq.com")
         );
     }
 

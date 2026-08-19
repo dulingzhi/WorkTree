@@ -35,6 +35,9 @@ pub struct UiSession {
     /// UI language key (`i18n::Language::key`); `None` follows the system
     /// locale.
     pub language: Option<String>,
+    /// Commit-author avatar source key; `None` means the built-in initials
+    /// circles (no network).
+    pub avatar_source: Option<String>,
     pub ui_scale_percent: Option<u32>,
     pub ui_font_family: Option<String>,
     pub editor_font_family: Option<String>,
@@ -177,6 +180,7 @@ struct UiSessionFile {
     sidebar_collapsed: Option<bool>,
     theme_mode: Option<String>,
     language: Option<String>,
+    avatar_source: Option<String>,
     ui_scale_percent: Option<u32>,
     ui_font_family: Option<String>,
     editor_font_family: Option<String>,
@@ -300,6 +304,7 @@ pub fn load_from_path(path: &Path) -> UiSession {
         sidebar_collapsed: file.sidebar_collapsed,
         theme_mode: file.theme_mode,
         language: file.language,
+        avatar_source: file.avatar_source,
         ui_scale_percent: file.ui_scale_percent,
         ui_font_family: file.ui_font_family,
         editor_font_family: file.editor_font_family,
@@ -744,6 +749,7 @@ pub struct UiSettings {
     pub repo_sidebar_pinned_branches: Option<BTreeMap<PathBuf, BTreeSet<String>>>,
     pub theme_mode: Option<String>,
     pub language: Option<String>,
+    pub avatar_source: Option<String>,
     pub ui_scale_percent: Option<u32>,
     pub ui_font_family: Option<String>,
     pub editor_font_family: Option<String>,
@@ -828,6 +834,9 @@ pub fn persist_ui_settings_to_path(settings: UiSettings, path: &Path) -> io::Res
         }
         if let Some(language) = settings.language {
             file.language = Some(language);
+        }
+        if let Some(avatar_source) = settings.avatar_source {
+            file.avatar_source = Some(avatar_source);
         }
         if let Some(percent) = settings.ui_scale_percent {
             file.ui_scale_percent = Some(percent);
@@ -2070,6 +2079,52 @@ mod tests {
                 .get(&path_storage_key(&repo_fetch)),
             Some(&true)
         );
+    }
+
+    #[test]
+    fn persist_ui_settings_round_trips_avatar_source() {
+        let dir = env::temp_dir().join(format!(
+            "gitcomet-session-avatar-source-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        let _ = fs::create_dir_all(&dir);
+        let session_file = dir.join("session.json");
+
+        // Default (unset) leaves the field absent — initials, no network.
+        assert_eq!(load_from_path(&session_file).avatar_source, None);
+
+        persist_ui_settings_to_path(
+            UiSettings {
+                avatar_source: Some("cravatar".to_string()),
+                ..UiSettings::default()
+            },
+            &session_file,
+        )
+        .expect("persist avatar source");
+        assert_eq!(
+            load_from_path(&session_file).avatar_source,
+            Some("cravatar".to_string())
+        );
+
+        // A later settings write that doesn't touch the field preserves it.
+        persist_ui_settings_to_path(
+            UiSettings {
+                theme_mode: Some("dark".to_string()),
+                ..UiSettings::default()
+            },
+            &session_file,
+        )
+        .expect("persist theme");
+        assert_eq!(
+            load_from_path(&session_file).avatar_source,
+            Some("cravatar".to_string())
+        );
+
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

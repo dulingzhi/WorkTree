@@ -126,6 +126,48 @@ pub fn author_avatar(theme: AppTheme, scale: impl Into<UiScale>, name: &str) -> 
         )
 }
 
+/// Author avatar for retained-mode UIs (details pane, hover card, comparison
+/// rows): the initials circle, or the remote Gravatar/Cravatar image when the
+/// active source yields a URL for `email`. The initials remain the loading
+/// and missing-picture (`d=404`) stand-in, so the slot never goes blank.
+///
+/// The history table does not use this — its rows paint the initials on
+/// canvas and overlay a bare [`gpui::img`] when a URL exists, so the painted
+/// initials are the loading/fallback layer there.
+pub fn author_avatar_image(
+    theme: AppTheme,
+    scale: impl Into<UiScale>,
+    name: &str,
+    email: Option<&str>,
+) -> Div {
+    let scale = scale.into();
+    let Some(url) = crate::avatar_source::avatar_url(email) else {
+        return author_avatar(theme, scale, name);
+    };
+    let diameter = scale.px(AVATAR_DIAMETER_PX);
+    let fallback_name: gpui::SharedString = name.into();
+    let loading_name = fallback_name.clone();
+    let initials_fallback =
+        move || author_avatar(theme, scale, fallback_name.as_ref()).into_any_element();
+    let initials_loading =
+        move || author_avatar(theme, scale, loading_name.as_ref()).into_any_element();
+    div()
+        .flex_none()
+        .w(diameter)
+        .h(diameter)
+        .rounded(diameter * 0.5)
+        .overflow_hidden()
+        .child(
+            gpui::img(gpui::ImageSource::Resource(gpui::Resource::Uri(
+                gpui::SharedUri::from(url.to_string()),
+            )))
+            .id(gpui::ElementId::Name(url))
+            .with_fallback(initials_fallback)
+            .with_loading(initials_loading)
+            .size_full(),
+        )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

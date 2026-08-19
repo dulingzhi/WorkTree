@@ -1,6 +1,7 @@
 use crate::conflict_session::ConflictSession;
 use crate::domain::*;
 use crate::error::{Error, ErrorKind};
+use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -415,6 +416,19 @@ pub trait GitRepository: Send + Sync {
         Err(Error::new(ErrorKind::Unsupported(
             "file history is not implemented for this backend",
         )))
+    }
+    /// Author name → email for recent commits across all refs, gathered in
+    /// one pass so UI surfaces that only carry the author name (history
+    /// rows, hover cards) can still address per-email avatars
+    /// (Gravatar-style hashing).
+    ///
+    /// The map covers a bounded, most-recent slice of history; names absent
+    /// from it simply keep their initials avatar. First identity seen per
+    /// name wins — history is walked newest-first, so that is the identity
+    /// the user is looking at. The default reports no emails; backends that
+    /// can gather them override this.
+    fn author_email_map(&self) -> Result<HashMap<String, String>> {
+        Ok(HashMap::new())
     }
     fn commit_details(&self, id: &CommitId) -> Result<CommitDetails>;
     /// Files that differ between two points (`from` → `to`), for the

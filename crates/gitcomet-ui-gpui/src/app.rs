@@ -1,4 +1,5 @@
 use crate::assets::GitCometAssets;
+use crate::avatar_source;
 use crate::i18n::{self, t, tr};
 use crate::launch_guard::{UiLaunchError, run_with_panic_guard};
 use crate::ui_scale;
@@ -537,6 +538,7 @@ fn open_gitcomet_window(
     let ui_session = session::load();
     let ui_scale = ui_scale::current_or_initialize_from_session(&ui_session, cx);
     i18n::current_or_initialize_from_session(&ui_session, cx);
+    avatar_source::init_from_session(&ui_session);
     let min_size = main_window_min_size_for_percent(ui_scale.percent);
     let default_size = main_window_default_size_for_percent(ui_scale.percent);
     let restored_w = ui_session
@@ -953,7 +955,10 @@ fn macos_app_menus_with_external_editor(external_editor_configured: bool) -> Vec
         MenuItem::separator(),
         MenuItem::action(tr_str("menu.file.open"), OpenRepository),
         MenuItem::action(tr_str("menu.file.clone_repository"), CloneRepository),
-        MenuItem::action(tr_str("menu.file.initialize_repository"), InitializeRepository),
+        MenuItem::action(
+            tr_str("menu.file.initialize_repository"),
+            InitializeRepository,
+        ),
         MenuItem::action(tr_str("menu.file.switch_repository"), SwitchRepository),
     ];
 
@@ -967,7 +972,10 @@ fn macos_app_menus_with_external_editor(external_editor_configured: bool) -> Vec
     }
     file_items.push(MenuItem::separator());
     if external_editor_configured {
-        file_items.push(MenuItem::action(tr_str("menu.file.open_in_code_editor"), OpenInCodeEditor));
+        file_items.push(MenuItem::action(
+            tr_str("menu.file.open_in_code_editor"),
+            OpenInCodeEditor,
+        ));
     }
 
     file_items.extend([

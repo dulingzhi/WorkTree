@@ -337,6 +337,53 @@ fn hit_test_index(bounds: &[Bounds<Pixels>], p: gpui::Point<Pixels>) -> Option<u
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Shared geometry for the author avatar in a history row: the row canvas
+/// paints the initials circle from it, and the row builder overlays the
+/// remote Gravatar/Cravatar image at the same spot. Insets are measured from
+/// the row box's right and top edges, which both callers know without the
+/// row width.
+pub(super) struct HistoryAvatarMetrics {
+    /// Distance from the row's right edge to the avatar circle's LEFT edge.
+    pub(super) inset_from_right: Pixels,
+    /// Distance from the row's top edge to the circle's top edge.
+    pub(super) inset_from_top: Pixels,
+    pub(super) diameter: Pixels,
+}
+
+/// Avatar placement for a history row. `None` when the author column is too
+/// narrow for the circle — callers must hide the initials and the overlay
+/// together, so one never shows without the other.
+pub(super) fn history_avatar_metrics(
+    show_sha: bool,
+    show_date: bool,
+    col_sha: Pixels,
+    col_date: Pixels,
+    col_author: Pixels,
+    // Horizontal pad between the row box's edges and the columns (the canvas
+    // layout's rem-based `pad`).
+    row_pad_x: Pixels,
+    cell_pad_x: Pixels,
+    diameter: Pixels,
+    row_height: Pixels,
+) -> Option<HistoryAvatarMetrics> {
+    let col_author = col_author.max(px(0.0));
+    // Mirrors the paint layout: the right-side columns peel their widths off
+    // the inner right edge in sha, date, author order, and the circle clears
+    // the column's resize-handle inset on its left.
+    let author_left_inset = row_pad_x
+        + if show_sha { col_sha } else { px(0.0) }
+        + if show_date { col_date } else { px(0.0) }
+        + col_author;
+    if col_author < diameter + cell_pad_x * 2.0 {
+        return None;
+    }
+    Some(HistoryAvatarMetrics {
+        inset_from_right: author_left_inset - cell_pad_x * 2.0,
+        inset_from_top: (row_height - diameter).max(px(0.0)) * 0.5,
+        diameter,
+    })
+}
+
 pub(super) fn history_commit_row_canvas(
     theme: AppTheme,
     view: Entity<HistoryView>,
@@ -387,7 +434,7 @@ pub(super) fn history_commit_row_canvas(
             let hitbox = window.insert_hitbox(bounds, HitboxBehavior::Normal);
             (inner, pad, hitbox)
         },
-        move |bounds, (inner, _pad, hitbox), window, cx| {
+        move |bounds, (inner, pad, hitbox), window, cx| {
             let Some(graph_row) = graph_rows.get(graph_row_ix) else {
                 return;
             };
@@ -875,9 +922,25 @@ pub(super) fn history_commit_row_canvas(
                 // column resize handle.
                 let avatar_left = author_bounds.left() + cell_pad_x * 2.0;
                 let identity_color = components::author_color(theme, author.as_ref());
-                if author_bounds.size.width >= avatar_d + cell_pad_x * 2.0 {
-                    let avatar_top = author_bounds.top()
-                        + (author_bounds.size.height - avatar_d).max(px(0.0)) * 0.5;
+                // Shared with the row builder's remote-avatar overlay so the
+                // painted initials and the overlaid image land on the same
+                // spot; `None` also reproduces the too-narrow-column check.
+                if let Some(avatar_metrics) = history_avatar_metrics(
+                    show_sha,
+                    show_date,
+                    col_sha,
+                    col_date,
+                    col_author,
+                    pad,
+                    cell_pad_x,
+                    avatar_d,
+                    bounds.size.height,
+                ) {
+                    debug_assert_eq!(
+                        bounds.right() - avatar_metrics.inset_from_right,
+                        avatar_left
+                    );
+                    let avatar_top = author_bounds.top() + avatar_metrics.inset_from_top;
                     window.paint_quad(
                         fill(
                             Bounds::new(point(avatar_left, avatar_top), size(avatar_d, avatar_d)),
@@ -1041,11 +1104,25 @@ pub(super) fn history_commit_row_canvas(
             // row-level hit test below and differ only in which cell they watch,
             // and a second closure per row would re-box its whole capture set on
             // every frame.
+            // The hover card's avatar may come from Gravatar/Cravatar: resolve
+            // this author's email once per paint — the row canvas already
+            // reads the view here — rather than on every mouse move.
+            let hover_author_email: Option<SharedString> = view
+                .read(cx)
+                .active_repo()
+                .filter(|repo| repo.id == repo_id)
+                .and_then(|repo| {
+                    repo.author_emails
+                        .get(author.as_ref())
+                        .map(|email| SharedString::from(email.as_str()))
+                });
+
             window.on_mouse_event({
                 let view = view.clone();
                 let commit_id = commit_id.clone();
                 let summary = summary.shared().clone();
                 let hover_author = author.shared().clone();
+                let hover_author_email = hover_author_email;
                 let hover_when = when.shared().clone();
                 let ref_items = Arc::clone(&ref_items);
                 let hitbox = hitbox.clone();
@@ -1092,6 +1169,7 @@ pub(super) fn history_commit_row_canvas(
                         commit_id: commit_id.clone(),
                         summary: summary.clone(),
                         author: hover_author.clone(),
+                        author_email: hover_author_email.clone(),
                         when: hover_when.clone(),
                         source_bounds: summary_bounds,
                         source_pointer_x: event.position.x,

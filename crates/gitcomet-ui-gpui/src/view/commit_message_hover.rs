@@ -42,6 +42,10 @@ pub(in crate::view) struct CommitMessageHoverState {
     /// hidden, and the author column narrow, so this is often the only place
     /// they are legible.
     pub(in crate::view) author: SharedString,
+    /// Email behind the author name, from the repo's author→email map. Set
+    /// when the avatar source is Gravatar/Cravatar, so the footer avatar can
+    /// fetch it; `None` keeps the painted initials.
+    pub(in crate::view) author_email: Option<SharedString>,
     pub(in crate::view) when: SharedString,
     pub(in crate::view) source_bounds: Bounds<Pixels>,
     pub(in crate::view) source_pointer_x: Pixels,
@@ -448,10 +452,11 @@ impl Render for CommitMessageHoverHost {
             .text_color(theme.colors.foreground.secondary);
         if !state.author.is_empty() {
             footer = footer
-                .child(components::author_avatar(
+                .child(components::author_avatar_image(
                     theme,
                     ui_scale,
                     state.author.as_ref(),
+                    state.author_email.as_deref(),
                 ))
                 .child(
                     div()
@@ -524,6 +529,7 @@ mod tests {
             commit_id: CommitId(commit.into()),
             summary: summary.to_string().into(),
             author: "Ada Lovelace".into(),
+            author_email: None,
             when: "2 days ago".into(),
             source_bounds: Bounds::new(point(px(0.0), px(100.0)), size(px(400.0), px(28.0))),
             source_pointer_x: px(120.0),

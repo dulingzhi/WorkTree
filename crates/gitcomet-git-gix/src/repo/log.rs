@@ -19,6 +19,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 const RECENT_COMMIT_MESSAGES_MAX_LIMIT: usize = 100;
+/// How much history [`GixRepo::author_email_map_impl`] walks — enough that
+/// every author the history list can show has an entry, while staying one
+/// cheap format-only git invocation.
+const AUTHOR_EMAIL_HISTORY_LIMIT: usize = 5000;
 
 /// Upper bound on how much of a caller-supplied reflog limit we pre-reserve.
 ///
@@ -1361,6 +1365,32 @@ impl GixRepo {
         run_git_parsed_stdout(cmd, "git log --follow", false, |stdout| {
             parse_git_log_pretty_records_from_reader(stdout).map(|page| page.commits)
         })
+    }
+
+    /// Author name → email across recent history, powering per-email author
+    /// avatars. See
+    /// [`gitcomet_core::services::GitRepository::author_email_map`] for the
+    /// first-seen-wins semantics.
+    pub(super) fn author_email_map_impl(&self) -> Result<HashMap<String, String>> {
+        let mut cmd = self.git_workdir_cmd();
+        cmd.arg("log")
+            .arg("--all")
+            .arg(format!("-n{AUTHOR_EMAIL_HISTORY_LIMIT}"))
+            .arg("--pretty=format:%an%x1f%ae%x1e");
+        let output = run_git_capture(cmd, "git log author emails")?;
+        let mut emails = HashMap::new();
+        for record in output.split('\x1e') {
+            let record = record.trim_matches(|c| c == '\n' || c == '\r');
+            let Some((name, email)) = record.split_once('\x1f') else {
+                continue;
+            };
+            if !name.is_empty() && !email.is_empty() {
+                emails
+                    .entry(name.to_string())
+                    .or_insert_with(|| email.to_string());
+            }
+        }
+        Ok(emails)
     }
 
     pub(super) fn log_head_page_impl(

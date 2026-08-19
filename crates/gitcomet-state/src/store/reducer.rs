@@ -1966,6 +1966,9 @@ fn reduce_inner(
             path,
             result,
         }) => effects::file_history_loaded(state, repo_id, path, result),
+        Msg::Internal(crate::msg::InternalMsg::AuthorEmailsLoaded { repo_id, result }) => {
+            effects::author_emails_loaded(state, repo_id, result)
+        }
         Msg::Internal(crate::msg::InternalMsg::BlameLoaded {
             repo_id,
             path,

@@ -1144,6 +1144,9 @@ pub struct RepoState {
 
     pub open: Loadable<()>,
     pub history_state: HistoryState,
+    /// Author name → email for recent commits, for per-email author avatars
+    /// (Gravatar-style). Populated best-effort; empty means initials.
+    pub author_emails: HashMap<String, String>,
     pub fetch_prune_deleted_remote_tracking_branches: bool,
     pub head_branch: Loadable<String>,
     pub detached_head_commit: Option<CommitId>,
@@ -1266,6 +1269,7 @@ impl RepoState {
             commit_in_flight: 0,
             open: Loadable::Loading,
             history_state: HistoryState::default(),
+            author_emails: HashMap::new(),
             fetch_prune_deleted_remote_tracking_branches: true,
             head_branch: Loadable::NotLoaded,
             detached_head_commit: None,

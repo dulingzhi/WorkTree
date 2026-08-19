@@ -52,6 +52,11 @@ settings:
     auto_save: Auto-save edits
     open_theme_folder: Open custom theme folder
     theme_guide: Theme guide
+    avatar_source: Commit author avatars
+  avatar_source:
+    option_initials: "Initials (current, offline)"
+    option_gravatar: "Gravatar (gravatar.com)"
+    option_cravatar: "Cravatar (cravatar.cn)"
   ui_scale:
     detail_default: Default scale
     detail_fit_more: Fit more on screen
