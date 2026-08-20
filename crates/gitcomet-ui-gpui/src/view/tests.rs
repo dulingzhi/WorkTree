@@ -1142,7 +1142,7 @@ fn branch_sidebar_sorts_unsorted_remote_branches() {
 }
 
 #[test]
-fn remote_section_includes_tracked_upstream_without_remote_tracking_ref() {
+fn remote_section_omits_local_only_branch_with_unpushed_upstream() {
     let mut repo = RepoState::new_opening(
         RepoId(1),
         RepoSpec {
@@ -1151,36 +1151,56 @@ fn remote_section_includes_tracked_upstream_without_remote_tracking_ref() {
     );
 
     repo.head_branch = Loadable::Ready("feature".to_string());
-    repo.branches = Loadable::Ready(Arc::new(vec![Branch {
-        name: "feature".to_string(),
-        target: CommitId("deadbeef".into()),
-        upstream: Some(Upstream {
-            remote: "origin".to_string(),
-            branch: "feature".to_string(),
-        }),
-        divergence: None,
-    }]));
+    repo.branches = Loadable::Ready(Arc::new(vec![
+        Branch {
+            name: "feature".to_string(),
+            target: CommitId("deadbeef".into()),
+            // Tracking config exists (e.g. push.autoSetupRemote or a pruned
+            // upstream) but refs/remotes/origin/feature does not: the branch
+            // was never pushed. It must not appear under Remote Branches.
+            upstream: Some(Upstream {
+                remote: "origin".to_string(),
+                branch: "feature".to_string(),
+            }),
+            divergence: None,
+        },
+        Branch {
+            name: "published".to_string(),
+            target: CommitId("feedface".into()),
+            upstream: Some(Upstream {
+                remote: "origin".to_string(),
+                branch: "published".to_string(),
+            }),
+            divergence: None,
+        },
+    ]));
     repo.remotes = Loadable::Ready(Arc::new(vec![Remote {
         name: "origin".to_string(),
         url: Some("https://example.com/origin.git".to_string()),
     }]));
-    repo.remote_branches = Loadable::Ready(Arc::new(Vec::new()));
+    repo.remote_branches = Loadable::Ready(Arc::new(vec![RemoteBranch {
+        remote: "origin".to_string(),
+        name: "published".to_string(),
+        target: CommitId("feedface".into()),
+    }]));
 
     let rows = GitCometView::branch_sidebar_rows(&repo);
-    let tracked_row = rows.iter().find(|r| {
-        matches!(
-            r,
+    let remote_names = rows
+        .iter()
+        .filter_map(|row| match row {
             BranchSidebarRow::Branch {
                 section: BranchSection::Remote,
                 name,
-                is_upstream: true,
                 ..
-            } if name.as_ref() == "origin/feature"
-        )
-    });
-    assert!(
-        tracked_row.is_some(),
-        "expected tracked upstream branch to be listed under Remote section"
+            } => Some(name.as_ref().to_string()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        remote_names,
+        vec!["origin/published"],
+        "Remote section must list only refs/remotes entries, not unpushed local upstreams"
     );
 }
 
