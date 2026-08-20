@@ -13,10 +13,13 @@
 //! fallback to the initials instead of a placeholder image.
 
 use gitcomet_state::session;
+use gpui::App;
 use gpui::SharedString;
 use md5::{Digest, Md5};
+use std::collections::HashSet;
 use std::fmt::Write as _;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::{LazyLock, Mutex};
 
 /// Requested pixel size. Avatars render at 16–32 px, so one generous size
 /// serves every site at 2x sharpness while staying a tiny download.
@@ -148,6 +151,42 @@ fn md5_hex(input: &str) -> String {
     hex
 }
 
+/// Avatar URLs a load-watcher has been attached to, settled or in flight.
+static WATCHED_AVATAR_URLS: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+
+/// Claim `url` for watching; `false` when a watcher already exists.
+fn claim_watch(url: &str) -> bool {
+    WATCHED_AVATAR_URLS.lock().unwrap().insert(url.to_string())
+}
+
+/// Make sure `url`'s arrival repaints every surface that shows it.
+///
+/// gpui redraws only the single view whose prepaint first requested a given
+/// remote image once its fetch completes — `Window::use_asset` captures that
+/// one view and `cx.notify`s it when the task lands. Every other view showing
+/// the same URL keeps its stale frame, which is why the history list stayed on
+/// the loading initials after the avatar downloaded. Watching each URL once
+/// here and refreshing all windows when the fetch settles repaints every
+/// surface; the claimed set keeps it to one watcher per URL for the process.
+pub(crate) fn ensure_avatar_loaded(url: &SharedString, cx: &mut App) {
+    if !claim_watch(url) {
+        return;
+    }
+    // Routed through gpui's asset cache, so the img elements' own `use_asset`
+    // calls join this exact task instead of starting parallel fetches.
+    let (load, _is_first) = cx.fetch_asset::<gpui::ImgResourceLoader>(&gpui::Resource::Uri(
+        gpui::SharedUri::from(url.to_string()),
+    ));
+    cx.spawn(async move |cx: &mut gpui::AsyncApp| {
+        // Success and 404 alike: either way the surfaces have their final
+        // state, and this URL never needs a watcher again.
+        let _ = load.await;
+        let _ = cx.update(|cx| cx.refresh_windows());
+    })
+    .detach();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -218,5 +257,22 @@ mod tests {
             avatar_url(Some("a@b.c")).as_deref(),
             Some(format!("https://cravatar.cn/avatar/{expected_hash}?s=128&d=404").as_str())
         );
+    }
+
+    #[test]
+    fn a_url_is_claimed_for_watching_only_once() {
+        // Unique per test: the claimed set is process-global and tests in
+        // this module run in parallel.
+        let first = format!(
+            "https://www.gravatar.com/avatar/watched-once-{}.md5",
+            line!()
+        );
+        assert!(claim_watch(&first));
+        assert!(!claim_watch(&first));
+        let second = format!(
+            "https://www.gravatar.com/avatar/watched-once-{}.md5",
+            line!()
+        );
+        assert!(claim_watch(&second));
     }
 }

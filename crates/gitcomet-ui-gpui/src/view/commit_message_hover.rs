@@ -451,6 +451,13 @@ impl Render for CommitMessageHoverHost {
             .pt_1()
             .text_color(theme.colors.foreground.secondary);
         if !state.author.is_empty() {
+            // Attach the load-watcher for the remote avatar, if any — gpui
+            // notifies only whichever single view first requested a given
+            // image URL, so a card that lost that race would keep its initials
+            // stand-in until an unrelated repaint.
+            if let Some(url) = crate::avatar_source::avatar_url(state.author_email.as_deref()) {
+                crate::avatar_source::ensure_avatar_loaded(&url, cx);
+            }
             footer = footer
                 .child(components::author_avatar_image(
                     theme,

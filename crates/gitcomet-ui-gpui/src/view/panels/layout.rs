@@ -25,6 +25,7 @@ fn commit_details_author_row(
     theme: AppTheme,
     ui_scale: crate::ui_scale::UiScale,
     details: &gitcomet_core::domain::CommitDetails,
+    cx: &mut gpui::App,
 ) -> Option<Div> {
     if details.author_name.is_empty() && details.author_email.is_empty() {
         return None;
@@ -34,6 +35,14 @@ fn commit_details_author_row(
     } else {
         details.author_name.clone()
     };
+    let author_email = (!details.author_email.is_empty()).then(|| details.author_email.as_str());
+    // Attach the load-watcher for the remote avatar, if any — gpui only
+    // notifies whichever single view first requested a remote image, so a
+    // surface that lost that race would keep its initials stand-in until an
+    // unrelated repaint.
+    if let Some(url) = crate::avatar_source::avatar_url(author_email) {
+        crate::avatar_source::ensure_avatar_loaded(&url, cx);
+    }
     let authored_relative = (details.authored_at_unix != 0).then(|| {
         crate::view::date_time::format_relative_time(
             details.authored_at_unix,
@@ -52,7 +61,7 @@ fn commit_details_author_row(
                 theme,
                 ui_scale,
                 &display_name,
-                (!details.author_email.is_empty()).then(|| details.author_email.as_str()),
+                author_email,
             ))
             .child(
                 div()
@@ -1029,7 +1038,6 @@ impl DetailsPaneView {
         _window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) -> Vec<AnyElement> {
-        let _ = cx;
         let Some(repo) = this.active_repo() else {
             return Vec::new();
         };
@@ -1043,6 +1051,12 @@ impl DetailsPaneView {
                     .author_emails
                     .get(commit.author.as_ref())
                     .map(|email| email.as_str());
+                // Attach the load-watcher so these cards repaint when the
+                // remote avatar lands (gpui notifies only the first view
+                // that requested a given image URL).
+                if let Some(url) = crate::avatar_source::avatar_url(author_email) {
+                    crate::avatar_source::ensure_avatar_loaded(&url, cx);
+                }
                 this.commit_card_element(ix, &commit, author_email, now, ix != last_ix)
             })
             .collect()
@@ -1813,7 +1827,7 @@ impl DetailsPaneView {
                                         .min_w(px(0.0))
                                         .child(message)
                                         .children(commit_details_author_row(
-                                            theme, ui_scale, details,
+                                            theme, ui_scale, details, cx,
                                         ))
                                         .child(commit_details_selectable_row(
                                             theme,
@@ -1938,7 +1952,9 @@ impl DetailsPaneView {
                                     .w_full()
                                     .min_w(px(0.0))
                                     .child(message)
-                                    .children(commit_details_author_row(theme, ui_scale, details))
+                                    .children(commit_details_author_row(
+                                        theme, ui_scale, details, cx,
+                                    ))
                                     .child(commit_details_selectable_row(
                                         theme,
                                         tr_str("layout.commit_details.commit_sha"),

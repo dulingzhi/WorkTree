@@ -3316,6 +3316,11 @@ fn history_table_row(
             row_height,
         )
     {
+        // The list is the surface that keeps a URL on screen the longest, so
+        // it attaches the load-watcher: gpui only notifies whichever single
+        // view first requested a remote image, leaving the others on their
+        // loading stand-ins until an unrelated repaint.
+        crate::avatar_source::ensure_avatar_loaded(&url, cx);
         let fallback_name = overlay_author_name.clone();
         let loading_name = overlay_author_name.clone();
         let initials_fallback = move || {
