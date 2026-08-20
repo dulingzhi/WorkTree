@@ -11,7 +11,7 @@ use gitcomet_core::services::{
     PullMode, RemoteUrlKind, ResetMode, SafePushAfterCommitContext, SafePushAfterCommitDecision,
     SafePushAfterCommitTarget, SequencerState, SubmoduleTrustDecision, SubmoduleTrustTarget,
 };
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -1106,7 +1106,7 @@ pub enum InternalMsg {
     },
     AuthorEmailsLoaded {
         repo_id: RepoId,
-        result: Result<HashMap<String, String>, Error>,
+        result: Result<FxHashMap<String, String>, Error>,
     },
     BlameLoaded {
         repo_id: RepoId,

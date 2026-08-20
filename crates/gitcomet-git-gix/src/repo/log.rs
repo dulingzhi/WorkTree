@@ -1371,14 +1371,14 @@ impl GixRepo {
     /// avatars. See
     /// [`gitcomet_core::services::GitRepository::author_email_map`] for the
     /// first-seen-wins semantics.
-    pub(super) fn author_email_map_impl(&self) -> Result<HashMap<String, String>> {
+    pub(super) fn author_email_map_impl(&self) -> Result<FxHashMap<String, String>> {
         let mut cmd = self.git_workdir_cmd();
         cmd.arg("log")
             .arg("--all")
             .arg(format!("-n{AUTHOR_EMAIL_HISTORY_LIMIT}"))
             .arg("--pretty=format:%an%x1f%ae%x1e");
         let output = run_git_capture(cmd, "git log author emails")?;
-        let mut emails = HashMap::new();
+        let mut emails = FxHashMap::default();
         for record in output.split('\x1e') {
             let record = record.trim_matches(|c| c == '\n' || c == '\r');
             let Some((name, email)) = record.split_once('\x1f') else {

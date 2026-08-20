@@ -1,7 +1,7 @@
 use crate::conflict_session::ConflictSession;
 use crate::domain::*;
 use crate::error::{Error, ErrorKind};
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -427,8 +427,8 @@ pub trait GitRepository: Send + Sync {
     /// name wins — history is walked newest-first, so that is the identity
     /// the user is looking at. The default reports no emails; backends that
     /// can gather them override this.
-    fn author_email_map(&self) -> Result<HashMap<String, String>> {
-        Ok(HashMap::new())
+    fn author_email_map(&self) -> Result<FxHashMap<String, String>> {
+        Ok(FxHashMap::default())
     }
     fn commit_details(&self, id: &CommitId) -> Result<CommitDetails>;
     /// Files that differ between two points (`from` → `to`), for the

@@ -14,7 +14,7 @@ use gitcomet_core::services::{
     RemoteUrlKind, ResetMode, Result, SafePushAfterCommitContext, SafePushAfterCommitDecision,
     SafePushAfterCommitTarget, SequencerState, SubmoduleTrustDecision, SubmoduleTrustTarget,
 };
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
@@ -343,7 +343,7 @@ impl GitRepository for GixRepo {
         self.log_file_page_impl(path, limit, cursor)
     }
 
-    fn author_email_map(&self) -> Result<HashMap<String, String>> {
+    fn author_email_map(&self) -> Result<FxHashMap<String, String>> {
         let _scope = git_ops_trace::scope(GitOpTraceKind::LogWalk);
         self.author_email_map_impl()
     }
