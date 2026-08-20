@@ -1,7 +1,7 @@
 use super::*;
 use gitcomet_core::domain::{
     Branch, CommitId, FileEntry, FileEntryKind, Remote, RemoteBranch, RepoSpec, StashEntry,
-    Submodule, SubmoduleStatus, Upstream, Worktree,
+    Submodule, SubmoduleStatus, Tag, Upstream, Worktree,
 };
 use gitcomet_core::error::{Error, ErrorKind};
 use gitcomet_core::process::{GitExecutableAvailability, GitExecutablePreference, GitRuntimeState};
@@ -1255,6 +1255,11 @@ fn branch_sidebar_defaults_secondary_sections_to_collapsed() {
         message: "stash message".into(),
         created_at: None,
     }]));
+    repo.tags = Loadable::Ready(Arc::new(vec![Tag {
+        name: "v1.0.0".to_string(),
+        target: CommitId("deadbeef".into()),
+        created_at: Some(1_750_000_000),
+    }]));
 
     let rows = GitCometView::branch_sidebar_rows(&repo);
 
@@ -1289,6 +1294,16 @@ fn branch_sidebar_defaults_secondary_sections_to_collapsed() {
         "expected Stash to start collapsed"
     );
     assert!(
+        rows.iter().any(|row| matches!(
+            row,
+            BranchSidebarRow::TagsHeader {
+                collapsed: true,
+                ..
+            }
+        )),
+        "expected Tags to start collapsed"
+    );
+    assert!(
         !rows
             .iter()
             .any(|row| matches!(row, BranchSidebarRow::WorktreeItem { .. })),
@@ -1305,6 +1320,82 @@ fn branch_sidebar_defaults_secondary_sections_to_collapsed() {
             .iter()
             .any(|row| matches!(row, BranchSidebarRow::StashItem { .. })),
         "expected Stash rows to stay hidden until expanded"
+    );
+    assert!(
+        !rows
+            .iter()
+            .any(|row| matches!(row, BranchSidebarRow::TagItem { .. })),
+        "expected Tag rows to stay hidden until expanded"
+    );
+}
+
+#[test]
+fn branch_sidebar_lists_tags_below_stash_newest_first() {
+    let mut repo = RepoState::new_opening(
+        RepoId(1),
+        RepoSpec {
+            workdir: PathBuf::from("repo"),
+        },
+    );
+    repo.stashes = Loadable::Ready(Arc::new(vec![StashEntry {
+        index: 0,
+        id: CommitId("c0ffee".into()),
+        message: "stash message".into(),
+        created_at: None,
+    }]));
+    repo.tags = Loadable::Ready(Arc::new(vec![
+        Tag {
+            name: "v0.1.0".to_string(),
+            target: CommitId("aaaa0000".into()),
+            created_at: Some(1_000_000_000),
+        },
+        Tag {
+            name: "v2.0.0".to_string(),
+            target: CommitId("bbbb1111".into()),
+            created_at: Some(1_750_000_000),
+        },
+        Tag {
+            name: "v1.0.0".to_string(),
+            target: CommitId("cccc2222".into()),
+            created_at: Some(1_500_000_000),
+        },
+        Tag {
+            name: "undated".to_string(),
+            target: CommitId("dddd3333".into()),
+            created_at: None,
+        },
+    ]));
+
+    let expanded = branch_sidebar::expanded_default_section_storage_key(
+        branch_sidebar::tags_section_storage_key(),
+    )
+    .expect("tags should support explicit expansion");
+    let rows = GitCometView::branch_sidebar_rows_with_collapsed(&repo, &[expanded.as_str()]);
+
+    let stash_pos = rows
+        .iter()
+        .position(|row| matches!(row, BranchSidebarRow::StashHeader { .. }))
+        .expect("stash header");
+    let tags_pos = rows
+        .iter()
+        .position(|row| matches!(row, BranchSidebarRow::TagsHeader { .. }))
+        .expect("tags header");
+    assert!(
+        tags_pos > stash_pos,
+        "expected Tags section to render below the Stash section"
+    );
+
+    let tag_names: Vec<&str> = rows
+        .iter()
+        .filter_map(|row| match row {
+            BranchSidebarRow::TagItem { name, .. } => Some(name.as_ref()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        tag_names,
+        vec!["v2.0.0", "v1.0.0", "v0.1.0", "undated"],
+        "expected tags newest-first, undated tags sorting last"
     );
 }
 

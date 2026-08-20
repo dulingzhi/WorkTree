@@ -67,6 +67,12 @@ fn has_stash_load_effect(effects: &[Effect], repo_id: RepoId) -> bool {
     })
 }
 
+fn has_tag_load_effect(effects: &[Effect], repo_id: RepoId) -> bool {
+    effects.iter().any(
+        |effect| matches!(effect, Effect::LoadTags { repo_id: candidate } if *candidate == repo_id),
+    )
+}
+
 #[test]
 fn worker_command_prioritizes_close_repo_over_queued_background_result() {
     let repo_id = RepoId(7);
@@ -3032,6 +3038,7 @@ fn ensure_sidebar_data_retries_requested_sections_after_repo_opened() {
         worktrees: true,
         submodules: true,
         stashes: true,
+        tags: true,
     };
     let effects = reduce(
         &mut repos,
@@ -3044,6 +3051,7 @@ fn ensure_sidebar_data_retries_requested_sections_after_repo_opened() {
     assert!(matches!(state.repos[0].worktrees, Loadable::NotLoaded));
     assert!(matches!(state.repos[0].submodules, Loadable::NotLoaded));
     assert!(matches!(state.repos[0].stashes, Loadable::NotLoaded));
+    assert!(matches!(state.repos[0].tags, Loadable::NotLoaded));
 
     let effects = reduce(
         &mut repos,
@@ -3061,9 +3069,11 @@ fn ensure_sidebar_data_retries_requested_sections_after_repo_opened() {
     assert!(has_worktree_refresh_effect(&effects, repo_id));
     assert!(has_submodule_load_effect(&effects, repo_id));
     assert!(has_stash_load_effect(&effects, repo_id));
+    assert!(has_tag_load_effect(&effects, repo_id));
     assert!(state.repos[0].worktrees.is_loading());
     assert!(state.repos[0].submodules.is_loading());
     assert!(state.repos[0].stashes.is_loading());
+    assert!(state.repos[0].tags.is_loading());
 }
 
 #[test]
@@ -3083,6 +3093,7 @@ fn set_active_repo_replays_stored_sidebar_data_request() {
         worktrees: true,
         submodules: true,
         stashes: true,
+        tags: true,
     };
     let repo1_state = state
         .repos
@@ -3093,6 +3104,7 @@ fn set_active_repo_replays_stored_sidebar_data_request() {
     repo1_state.set_worktrees(Loadable::NotLoaded);
     repo1_state.set_submodules(Loadable::NotLoaded);
     repo1_state.set_stashes(Loadable::NotLoaded);
+    repo1_state.set_tags(Loadable::NotLoaded);
 
     let effects = reduce(
         &mut repos,
@@ -3105,6 +3117,7 @@ fn set_active_repo_replays_stored_sidebar_data_request() {
     assert!(has_worktree_refresh_effect(&effects, repo1));
     assert!(has_submodule_load_effect(&effects, repo1));
     assert!(has_stash_load_effect(&effects, repo1));
+    assert!(has_tag_load_effect(&effects, repo1));
     let repo1_state = state
         .repos
         .iter()
@@ -3113,6 +3126,7 @@ fn set_active_repo_replays_stored_sidebar_data_request() {
     assert!(repo1_state.worktrees.is_loading());
     assert!(repo1_state.submodules.is_loading());
     assert!(repo1_state.stashes.is_loading());
+    assert!(repo1_state.tags.is_loading());
 }
 
 #[test]
@@ -3132,6 +3146,7 @@ fn set_active_repo_full_refresh_with_sidebar_request_and_selected_diff_does_not_
         worktrees: true,
         submodules: true,
         stashes: true,
+        tags: true,
     };
     let repo1_state = state
         .repos
@@ -4301,6 +4316,7 @@ fn repo_action_finished_reissues_inflight_sidebar_data_loads() {
         worktrees: true,
         submodules: true,
         stashes: true,
+        tags: true,
     });
 
     state.repos[0]

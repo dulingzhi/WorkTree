@@ -156,6 +156,11 @@ pub struct RefMetadata {
 pub struct Tag {
     pub name: String,
     pub target: CommitId,
+    /// Creation time as a Unix timestamp in seconds — the tagger date for
+    /// annotated tags, the target commit's committer date for lightweight
+    /// ones (git's own `creatordate` convention). `None` when the backend
+    /// could not date the ref.
+    pub created_at: Option<i64>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

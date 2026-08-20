@@ -1,6 +1,7 @@
 use gpui::{Animation, AnimationExt, ElementId, IntoElement, Pixels, Styled, Transformation};
 
 pub(in crate::view) const STASH_ICON_PATH: &str = "icons/stash.svg";
+pub(in crate::view) const TAG_ICON_PATH: &str = "icons/tag.svg";
 pub(in crate::view) const GIT_MERGE_ICON_PATH: &str = "icons/git_merge.svg";
 /// Graph-node variant of [`STASH_ICON_PATH`]: same artwork with a heavier stroke
 /// so it survives being knocked out of a 16px node. The retained-mode icon keeps

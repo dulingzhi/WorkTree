@@ -36,6 +36,8 @@ ui:
       empty: 没有子模块
     stash:
       empty: 没有贮藏
+    tag:
+      empty: 没有标签
     file_history:
       no_commits: 没有提交
   label:

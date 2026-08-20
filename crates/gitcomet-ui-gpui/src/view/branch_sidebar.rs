@@ -18,6 +18,7 @@ const PIN_REMOTE_PREFIX: &str = "remote:";
 const WORKTREES_SECTION_KEY: &str = "section:worktrees";
 const SUBMODULES_SECTION_KEY: &str = "section:submodules";
 const STASH_SECTION_KEY: &str = "section:stash";
+const TAGS_SECTION_KEY: &str = "section:tags";
 const EXPANDED_DEFAULT_SECTION_PREFIX: &str = "expanded:";
 const TRAILING_BOTTOM_SPACERS: usize = 3;
 const REMOTE_HEADER_GROUP_PREFIX: &str = "group:remote-header:";
@@ -120,6 +121,10 @@ pub(super) const fn submodules_section_storage_key() -> &'static str {
 
 pub(super) const fn stash_section_storage_key() -> &'static str {
     STASH_SECTION_KEY
+}
+
+pub(super) const fn tags_section_storage_key() -> &'static str {
+    TAGS_SECTION_KEY
 }
 
 pub(super) fn remote_header_storage_key(name: &str) -> String {
@@ -239,6 +244,21 @@ pub(super) enum BranchSidebarRow {
         message: SharedString,
         tooltip: SharedString,
         created_at: Option<std::time::SystemTime>,
+    },
+    TagsHeader {
+        top_border: bool,
+        collapsed: bool,
+        collapse_key: SharedString,
+    },
+    TagPlaceholder {
+        message: SharedString,
+    },
+    TagItem {
+        name: SharedString,
+        target: CommitId,
+        /// Creation time as a Unix timestamp in seconds, for the row's date
+        /// and the list's newest-first order.
+        created_at: Option<i64>,
     },
 }
 
@@ -372,6 +392,9 @@ pub(in crate::view) struct BranchSidebarSourceFingerprintParts {
     stash_rev: u64,
     stash_hash: u64,
     stash_reuse_identity: fingerprint::LoadableArcIdentity,
+    tags_rev: u64,
+    tags_hash: u64,
+    tags_reuse_identity: fingerprint::LoadableArcIdentity,
 }
 
 impl BranchSidebarSourceFingerprintParts {
@@ -391,6 +414,8 @@ impl BranchSidebarSourceFingerprintParts {
         let submodule_reuse_identity = fingerprint::loadable_arc_identity(&repo.submodules);
         let stash_rev = repo.stashes_rev;
         let stash_reuse_identity = fingerprint::loadable_arc_identity(&repo.stashes);
+        let tags_rev = repo.tags_rev;
+        let tags_reuse_identity = fingerprint::loadable_arc_identity(&repo.tags);
 
         Self {
             local_revs,
@@ -446,6 +471,16 @@ impl BranchSidebarSourceFingerprintParts {
                     || branch_sidebar_stash_source_hash(repo),
                     |parts| parts.stash_hash,
                 ),
+            tags_rev,
+            tags_reuse_identity,
+            tags_hash: reuse
+                .filter(|parts| {
+                    parts.tags_rev == tags_rev || parts.tags_reuse_identity == tags_reuse_identity
+                })
+                .map_or_else(
+                    || branch_sidebar_tags_source_hash(repo),
+                    |parts| parts.tags_hash,
+                ),
         }
     }
 
@@ -461,6 +496,8 @@ impl BranchSidebarSourceFingerprintParts {
         self.submodule_hash.hash(&mut hasher);
         4u8.hash(&mut hasher);
         self.stash_hash.hash(&mut hasher);
+        5u8.hash(&mut hasher);
+        self.tags_hash.hash(&mut hasher);
         BranchSidebarSourceFingerprint(hasher.finish())
     }
 }
@@ -517,6 +554,13 @@ pub(in crate::view) fn branch_sidebar_source_matches_cached(
     let stash_rev = repo.stashes_rev;
     if cached.stash_rev != stash_rev
         && cached.stash_reuse_identity != fingerprint::loadable_arc_identity(&repo.stashes)
+    {
+        return false;
+    }
+
+    let tags_rev = repo.tags_rev;
+    if cached.tags_rev != tags_rev
+        && cached.tags_reuse_identity != fingerprint::loadable_arc_identity(&repo.tags)
     {
         return false;
     }
@@ -679,6 +723,23 @@ fn hash_branch_sidebar_stash_source<H: Hasher>(repo: &RepoState, hasher: &mut H)
     }
 }
 
+fn hash_branch_sidebar_tags_source<H: Hasher>(repo: &RepoState, hasher: &mut H) {
+    fingerprint::hash_loadable_kind(&repo.tags, hasher);
+    if let Loadable::Ready(tags) = &repo.tags {
+        for tag in tags.iter() {
+            tag.name.hash(hasher);
+            tag.created_at.hash(hasher);
+            tag.target.as_ref().hash(hasher);
+        }
+    }
+}
+
+fn branch_sidebar_tags_source_hash(repo: &RepoState) -> u64 {
+    let mut hasher = FxHasher::default();
+    hash_branch_sidebar_tags_source(repo, &mut hasher);
+    hasher.finish()
+}
+
 fn branch_sidebar_stash_source_hash(repo: &RepoState) -> u64 {
     let mut hasher = FxHasher::default();
     hash_branch_sidebar_stash_source(repo, &mut hasher);
@@ -723,7 +784,7 @@ fn branch_sidebar_divergence_count(count: usize) -> Option<NonZeroU32> {
 fn defaults_to_collapsed(collapse_key: &str) -> bool {
     matches!(
         collapse_key,
-        WORKTREES_SECTION_KEY | SUBMODULES_SECTION_KEY | STASH_SECTION_KEY
+        WORKTREES_SECTION_KEY | SUBMODULES_SECTION_KEY | STASH_SECTION_KEY | TAGS_SECTION_KEY
     )
 }
 
@@ -835,6 +896,7 @@ pub(super) fn branch_sidebar_rows(
     let worktrees_collapsed = is_collapsed(collapsed_items, worktrees_section_storage_key());
     let submodules_collapsed = is_collapsed(collapsed_items, submodules_section_storage_key());
     let stash_collapsed = is_collapsed(collapsed_items, stash_section_storage_key());
+    let tags_collapsed = is_collapsed(collapsed_items, tags_section_storage_key());
     let visible_rows = if local_collapsed {
         0
     } else {
@@ -868,6 +930,13 @@ pub(super) fn branch_sidebar_rows(
     } else {
         match &repo.stashes {
             Loadable::Ready(stashes) => stashes.len(),
+            _ => 0,
+        }
+    } + if tags_collapsed {
+        0
+    } else {
+        match &repo.tags {
+            Loadable::Ready(tags) => tags.len(),
             _ => 0,
         }
     };
@@ -1223,6 +1292,53 @@ pub(super) fn branch_sidebar_rows(
                 message: crate::i18n::tr("ui.common.loading"),
             }),
             Loadable::Error(error) => rows.push(BranchSidebarRow::StashPlaceholder {
+                message: error.clone().into(),
+            }),
+        }
+    }
+
+    rows.push(BranchSidebarRow::SectionSpacer);
+
+    rows.push(BranchSidebarRow::TagsHeader {
+        top_border: true,
+        collapsed: tags_collapsed,
+        collapse_key: tags_section_storage_key().into(),
+    });
+
+    if !tags_collapsed {
+        match &repo.tags {
+            Loadable::Ready(tags) if tags.is_empty() => {
+                rows.push(BranchSidebarRow::TagPlaceholder {
+                    message: crate::i18n::tr("ui.picker.tag.empty"),
+                });
+            }
+            Loadable::Ready(tags) => {
+                // Newest first, per the section's contract; undated tags sort
+                // as oldest, name ascending as the tiebreak.
+                let mut ordered: Vec<_> = tags.iter().collect();
+                ordered.sort_by(|left, right| {
+                    right
+                        .created_at
+                        .cmp(&left.created_at)
+                        .then_with(|| left.name.cmp(&right.name))
+                });
+                for tag in ordered {
+                    rows.push(BranchSidebarRow::TagItem {
+                        name: tag.name.clone().into(),
+                        target: tag.target.clone(),
+                        created_at: tag.created_at,
+                    });
+                }
+            }
+            // Loading and NotLoaded look the same here on purpose — the load
+            // is requested the moment the section expands (`SidebarDataRequest`).
+            Loadable::Loading => rows.push(BranchSidebarRow::TagPlaceholder {
+                message: crate::i18n::tr("ui.common.loading"),
+            }),
+            Loadable::NotLoaded => rows.push(BranchSidebarRow::TagPlaceholder {
+                message: crate::i18n::tr("ui.common.loading"),
+            }),
+            Loadable::Error(error) => rows.push(BranchSidebarRow::TagPlaceholder {
                 message: error.clone().into(),
             }),
         }

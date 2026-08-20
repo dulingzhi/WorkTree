@@ -5192,10 +5192,12 @@ mod tests {
             gitcomet_core::domain::Tag {
                 name: "release".to_string(),
                 target: commit_id.clone(),
+                created_at: None,
             },
             gitcomet_core::domain::Tag {
                 name: "old-release".to_string(),
                 target: base_commit_id.clone(),
+                created_at: None,
             },
         ]));
         repo.tags_rev = 1;

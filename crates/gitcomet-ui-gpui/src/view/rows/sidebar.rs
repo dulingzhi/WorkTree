@@ -8,6 +8,7 @@ use std::num::NonZeroU32;
 
 pub(in crate::view) const WORKTREE_ICON_PATH: &str = "icons/git_worktree.svg";
 const STASH_ICON_PATH: &str = crate::view::icons::STASH_ICON_PATH;
+const TAG_ICON_PATH: &str = crate::view::icons::TAG_ICON_PATH;
 
 pub(in crate::view) fn listed_workspace_paths_by_branch(
     repo: &RepoState,
@@ -895,6 +896,174 @@ impl SidebarPaneView {
                             }),
                         )
                         .gitcomet_tooltip(theme, tooltip.clone())
+                        .into_any_element()
+                }
+                BranchSidebarRow::TagsHeader {
+                    top_border,
+                    collapsed,
+                    collapse_key,
+                } => {
+                    let show_tags_spinner = this.active_repo().is_some_and(|r| {
+                        matches!(r.tags, Loadable::Loading)
+                            || (!collapsed && matches!(r.tags, Loadable::NotLoaded))
+                    });
+
+                    div()
+                        .id(("tags_section", ix))
+                        .debug_selector(move || format!("tags_section_{ix}"))
+                        .relative()
+                        .h(scaled_px(24.0))
+                        .w_full()
+                        .pl(indent_px(0))
+                        .pr(scaled_px(BRANCH_ROW_TRAILING_PAD_PX))
+                        .flex()
+                        .items_center()
+                        .gap(scaled_px(BRANCH_TREE_GAP_PX))
+                        .interactive_row(row_style, components::InteractiveRowState::default())
+                        .when(top_border, |d| {
+                            d.child(top_divider(theme.colors.stroke.subtle))
+                        })
+                        .child(tree_toggle_slot(Some(collapsed)))
+                        .child(tree_icon_slot(TAG_ICON_PATH, icon_primary, 14.0))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w(px(0.0))
+                                .text_sm()
+                                .line_clamp(1)
+                                .whitespace_nowrap()
+                                .font_weight(FontWeight::BOLD)
+                                .text_color(theme.colors.foreground.primary)
+                                .child(crate::i18n::tr_en("Tags")),
+                        )
+                        .when(show_tags_spinner, |d| {
+                            d.child(
+                                div()
+                                    .debug_selector(move || format!("tags_spinner_{}", repo_id.0))
+                                    .child(svg_spinner(
+                                        ("tags_spinner", repo_id.0),
+                                        icon_muted,
+                                        12.0,
+                                    )),
+                            )
+                        })
+                        .gitcomet_tooltip(
+                            theme,
+                            crate::i18n::tr_en("Tags (Click a tag to reveal its commit)"),
+                        )
+                        .on_click(cx.listener(move |this, e: &ClickEvent, _w, cx| {
+                            if !e.standard_click() || e.click_count() != 1 {
+                                return;
+                            }
+                            this.toggle_active_repo_collapse_key(collapse_key.clone(), cx);
+                        }))
+                        .into_any_element()
+                }
+                BranchSidebarRow::TagPlaceholder { message } => div()
+                    .id(("tag_placeholder", ix))
+                    .h(scaled_px(22.0))
+                    .w_full()
+                    .px_2()
+                    .text_sm()
+                    .text_color(theme.colors.foreground.secondary)
+                    .child(message)
+                    .into_any_element(),
+                BranchSidebarRow::TagItem {
+                    name,
+                    target,
+                    created_at,
+                } => {
+                    let context_menu_invoker: SharedString =
+                        format!("tag_menu_{}_{}", repo_id.0, name).into();
+                    let context_menu_active =
+                        this.active_context_menu_invoker.as_ref() == Some(&context_menu_invoker);
+                    let context_menu_invoker_for_right_click = context_menu_invoker.clone();
+                    let name_for_right_click = name.to_string();
+                    let target_for_click = target.clone();
+                    let row_group: SharedString = format!("tag_row_{}_{}", repo_id.0, name).into();
+                    let row_state =
+                        components::InteractiveRowState::default().open(context_menu_active);
+                    // The row leads with the relative date on the right, so the
+                    // ordering the section promises (newest first) is visible.
+                    let created: SharedString = created_at
+                        .map(|unix| {
+                            crate::view::date_time::format_relative_time(
+                                unix,
+                                std::time::SystemTime::now(),
+                            )
+                        })
+                        .unwrap_or_default()
+                        .into();
+
+                    div()
+                        .id(("tag_sidebar_row", ix))
+                        .relative()
+                        .group(row_group.clone())
+                        .flex()
+                        .items_center()
+                        .gap(scaled_px(BRANCH_TREE_GAP_PX))
+                        .pl(indent_px(0))
+                        .pr(scaled_px(BRANCH_ROW_TRAILING_PAD_PX))
+                        .h(scaled_px(24.0))
+                        .w_full()
+                        .interactive_row(row_style, row_state)
+                        .child(tree_toggle_slot(None))
+                        .child(tree_icon_slot(TAG_ICON_PATH, icon_primary, 12.0))
+                        .child(
+                            components::FadingText::new(
+                                div().text_sm().child(name.clone()),
+                                row_style.resolved_background(row_state),
+                            )
+                            .hover_bg(
+                                row_group.clone(),
+                                row_style.resolved_hover_background(row_state),
+                            )
+                            .render(ui_scale_percent)
+                            .flex_1(),
+                        )
+                        .when(!created.is_empty(), |d| {
+                            d.child(
+                                div()
+                                    .flex_none()
+                                    .text_sm()
+                                    .text_color(theme.colors.foreground.secondary)
+                                    .child(created),
+                            )
+                        })
+                        // Reveal (rather than checkout) keeps the row a pure
+                        // navigation: the tagged commit opens in the history
+                        // list without touching the working tree.
+                        .on_click(cx.listener(move |this, e: &ClickEvent, _w, cx| {
+                            if !e.standard_click() || e.click_count() != 1 {
+                                return;
+                            }
+                            this.store.dispatch(Msg::RevealCommit {
+                                repo_id,
+                                reference: target_for_click.clone(),
+                            });
+                            cx.notify();
+                        }))
+                        .on_mouse_down(
+                            MouseButton::Right,
+                            cx.listener(move |this, e: &MouseDownEvent, window, cx| {
+                                cx.stop_propagation();
+                                this.activate_context_menu_invoker(
+                                    context_menu_invoker_for_right_click.clone(),
+                                    cx,
+                                );
+                                this.open_popover_at(
+                                    PopoverKind::TagRefMenu {
+                                        repo_id,
+                                        commit_id: target.clone(),
+                                        name: name_for_right_click.clone(),
+                                    },
+                                    e.position,
+                                    window,
+                                    cx,
+                                );
+                            }),
+                        )
+                        .gitcomet_tooltip(theme, name.clone())
                         .into_any_element()
                 }
                 BranchSidebarRow::Placeholder {

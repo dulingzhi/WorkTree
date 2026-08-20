@@ -40,6 +40,30 @@ fn parse_ls_remote_tags(output: &str, remote_name: &str) -> Vec<RemoteTag> {
         .collect()
 }
 
+/// Parse `git for-each-ref refs/tags --format='%(refname:short)\0<target>\0
+/// %(creatordate:unix)'` output. `<target>` is already the peeled commit for
+/// annotated tags (the `%(if)%(*objectname)` dance in the format string).
+fn parse_for_each_ref_tags(output: &str) -> Vec<Tag> {
+    output
+        .lines()
+        .filter(|line| !line.is_empty())
+        .filter_map(|line| {
+            let mut fields = line.split('\0');
+            let name = fields.next()?.to_string();
+            let target = fields.next()?.to_string();
+            if name.is_empty() || target.is_empty() {
+                return None;
+            }
+            let created_at = fields.next().and_then(|raw| raw.trim().parse::<i64>().ok());
+            Some(Tag {
+                name,
+                target: CommitId(target.into()),
+                created_at,
+            })
+        })
+        .collect()
+}
+
 fn local_tags_to_prune(local_tags_output: &str, remote_tags: &FxHashSet<String>) -> Vec<String> {
     local_tags_output
         .lines()
@@ -69,29 +93,23 @@ impl GixRepo {
         cancellation: &CancellationToken,
     ) -> Result<Vec<Tag>> {
         cancellation.check_cancelled()?;
-        let repo = self._repo.to_thread_local();
-
-        let refs = repo
-            .references()
-            .map_err(|e| Error::new(ErrorKind::Backend(format!("gix references: {e}"))))?;
-
-        let iter = refs
-            .tags()
-            .map_err(|e| Error::new(ErrorKind::Backend(format!("gix tags: {e}"))))?
-            .peeled()
-            .map_err(|e| Error::new(ErrorKind::Backend(format!("gix peel refs: {e}"))))?;
-
-        let mut tags = Vec::new();
-        for reference in iter {
-            cancellation.check_cancelled()?;
-            let reference = reference
-                .map_err(|e| Error::new(ErrorKind::Backend(format!("gix ref iter: {e}"))))?;
-            let name = reference.name().shorten().to_str_lossy().into_owned();
-            let target = CommitId(reference.id().detach().to_string().into());
-            tags.push(Tag { name, target });
-        }
-
-        cancellation.check_cancelled()?;
+        // One `for-each-ref` walk yields everything a tag row needs: the name,
+        // the peeled target (the commit, like gix's `.peeled()` iteration
+        // before it), and git's `creatordate` — tagger date for annotated
+        // tags, committer date of the target for lightweight ones. `%00` is
+        // the separator git expands to a NUL in the OUTPUT — a literal NUL
+        // cannot ride in a process argument.
+        let mut cmd = self.git_workdir_cmd();
+        cmd.arg("for-each-ref").arg("refs/tags").arg(
+            "--format=%(refname:short)%00%(if)%(*objectname)%(then)%(*objectname)%(else)\
+             %(objectname)%(end)%00%(creatordate:unix)",
+        );
+        let output = run_git_capture_cancellable(
+            cmd,
+            "git for-each-ref refs/tags (name, target, creatordate)",
+            cancellation,
+        )?;
+        let mut tags = parse_for_each_ref_tags(&output);
         tags.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(tags)
     }
@@ -319,7 +337,10 @@ impl GixRepo {
 
 #[cfg(test)]
 mod tests {
-    use super::{GixRepo, local_tags_to_prune, parse_ls_remote_tag_names, parse_ls_remote_tags};
+    use super::{
+        GixRepo, local_tags_to_prune, parse_for_each_ref_tags, parse_ls_remote_tag_names,
+        parse_ls_remote_tags,
+    };
     use gitcomet_core::error::ErrorKind;
     use gitcomet_core::services::CancellationToken;
     use rustc_hash::FxHashSet;
@@ -398,6 +419,69 @@ bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\trefs/tags/hotfix\n";
             .list_tags_cancellable_impl(&cancellation)
             .expect_err("cancelled tag listing should fail");
         assert!(matches!(error.kind(), ErrorKind::Cancelled));
+    }
+
+    #[test]
+    fn for_each_ref_parsing_takes_dates_and_peeled_targets() {
+        // An annotated tag carries the peeled commit in field 2; a lightweight
+        // tag repeats its own (commit) object id. A missing date stays `None`
+        // rather than inventing one.
+        let output = "v2.0.0\0cccccccccccccccccccccccccccccccccccccccc\01750123456\n\
+                      v1.0.0\0dddddddddddddddddddddddddddddddddddddddd\0\n";
+        let tags = parse_for_each_ref_tags(output);
+        assert_eq!(tags.len(), 2);
+        assert_eq!(tags[0].name, "v2.0.0");
+        assert_eq!(
+            tags[0].target.as_ref(),
+            "cccccccccccccccccccccccccccccccccccccccc"
+        );
+        assert_eq!(tags[0].created_at, Some(1_750_123_456));
+        assert_eq!(tags[1].name, "v1.0.0");
+        assert_eq!(tags[1].created_at, None);
+    }
+
+    #[test]
+    fn for_each_ref_parsing_skips_malformed_lines() {
+        let output = "\nno-fields\nv9\0\n";
+        assert!(parse_for_each_ref_tags(output).is_empty());
+    }
+
+    #[test]
+    fn listing_real_tags_reports_their_creation_dates() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let workdir = tmp.path();
+        run_git(workdir, &["init"]);
+        run_git(workdir, &["config", "user.email", "test@example.com"]);
+        run_git(workdir, &["config", "user.name", "Test"]);
+        std::fs::write(workdir.join("payload.txt"), "x").expect("write");
+        run_git(workdir, &["add", "."]);
+        run_git(workdir, &["commit", "-m", "init"]);
+
+        // Lightweight: creatordate = the commit's committer date.
+        run_git(workdir, &["tag", "light"]);
+        // Annotated: creatordate = the tagger date, target peeled to the commit.
+        run_git(workdir, &["tag", "-a", "annotated", "-m", "release"]);
+
+        let repo = GixRepo::new(
+            workdir.to_path_buf(),
+            gix::open(workdir).expect("open repo").into_sync(),
+        );
+        let mut tags = repo.list_tags_impl().expect("list tags");
+        tags.sort_by(|a, b| a.name.cmp(&b.name));
+        assert_eq!(
+            tags.iter().map(|tag| tag.name.as_str()).collect::<Vec<_>>(),
+            ["annotated", "light"]
+        );
+        for tag in &tags {
+            assert!(
+                tag.created_at.is_some(),
+                "{} should carry a creation date",
+                tag.name
+            );
+            // Both flavors peel to the same commit.
+            assert_eq!(tag.target.as_ref().len(), 40);
+        }
+        assert_eq!(tags[0].target, tags[1].target);
     }
 
     #[test]

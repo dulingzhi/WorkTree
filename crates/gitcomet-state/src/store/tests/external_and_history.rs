@@ -2583,6 +2583,7 @@ fn external_tags_change_reloads_tags() {
     state.repos[0].set_tags(Loadable::Ready(vec![gitcomet_core::domain::Tag {
         name: "v1.0.0".to_string(),
         target: CommitId("abc123".into()),
+        created_at: None,
     }]));
 
     let effects = reduce(
@@ -2627,6 +2628,7 @@ fn external_git_state_change_without_tags_flag_does_not_reload_tags() {
     state.repos[0].set_tags(Loadable::Ready(vec![gitcomet_core::domain::Tag {
         name: "v1.0.0".to_string(),
         target: CommitId("abc123".into()),
+        created_at: None,
     }]));
 
     let effects = reduce(
@@ -2665,6 +2667,7 @@ fn external_tags_change_without_git_state_flag_reloads_tags() {
     state.repos[0].set_tags(Loadable::Ready(vec![gitcomet_core::domain::Tag {
         name: "v1.0.0".to_string(),
         target: CommitId("abc123".into()),
+        created_at: None,
     }]));
 
     // The `tags` flag must drive a tag reload independently of `git_state`, so a

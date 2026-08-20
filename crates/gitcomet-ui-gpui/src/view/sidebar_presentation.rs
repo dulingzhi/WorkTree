@@ -78,6 +78,10 @@ pub(in crate::view) fn active_sidebar_data_request(
                 collapsed_items,
                 branch_sidebar::stash_section_storage_key(),
             ),
+            tags: !branch_sidebar::is_collapsed(
+                collapsed_items,
+                branch_sidebar::tags_section_storage_key(),
+            ),
         },
     ))
 }

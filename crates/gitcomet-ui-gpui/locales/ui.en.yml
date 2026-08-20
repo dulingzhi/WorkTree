@@ -44,6 +44,8 @@ ui:
       empty: No submodules
     stash:
       empty: No stashes
+    tag:
+      empty: No tags
     file_history:
       no_commits: No commits
   label:

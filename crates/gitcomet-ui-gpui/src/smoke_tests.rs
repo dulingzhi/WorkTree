@@ -2982,6 +2982,7 @@ fn workspace_badge_reappears_after_sidebar_data_request_cycle(cx: &mut gpui::Tes
             worktrees: false,
             submodules: false,
             stashes: false,
+            tags: false,
         },
     });
 
@@ -3008,6 +3009,7 @@ fn workspace_badge_reappears_after_sidebar_data_request_cycle(cx: &mut gpui::Tes
             worktrees: true,
             submodules: true,
             stashes: true,
+            tags: true,
         },
     });
 

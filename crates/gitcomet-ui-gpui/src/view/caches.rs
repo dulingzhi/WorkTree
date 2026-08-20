@@ -1644,14 +1644,17 @@ mod tests {
             Tag {
                 name: "v2.0.0".to_string(),
                 target: commit_a.clone(),
+                created_at: None,
             },
             Tag {
                 name: "v1.0.0".to_string(),
                 target: commit_a.clone(),
+                created_at: None,
             },
             Tag {
                 name: "v1.0.0".to_string(),
                 target: commit_a.clone(),
+                created_at: None,
             },
         ];
 
@@ -1699,10 +1702,12 @@ mod tests {
             Tag {
                 name: "v2.0.0".to_string(),
                 target: commit.clone(),
+                created_at: None,
             },
             Tag {
                 name: "v1.0.0".to_string(),
                 target: commit.clone(),
+                created_at: None,
             },
         ];
 

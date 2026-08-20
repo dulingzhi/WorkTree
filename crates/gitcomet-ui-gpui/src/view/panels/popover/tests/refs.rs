@@ -49,14 +49,17 @@ fn tag_menu_lists_delete_entries_for_commit_tags(cx: &mut gpui::TestAppContext) 
                 gitcomet_core::domain::Tag {
                     name: "release".to_string(),
                     target: commit_id.clone(),
+                    created_at: None,
                 },
                 gitcomet_core::domain::Tag {
                     name: "v1.0.0".to_string(),
                     target: commit_id.clone(),
+                    created_at: None,
                 },
                 gitcomet_core::domain::Tag {
                     name: "other".to_string(),
                     target: other_commit,
+                    created_at: None,
                 },
             ]));
 
@@ -144,6 +147,7 @@ fn tag_menu_lists_remote_push_and_delete_entries(cx: &mut gpui::TestAppContext) 
             repo.tags = Loadable::Ready(Arc::new(vec![gitcomet_core::domain::Tag {
                 name: "v2.0.0".to_string(),
                 target: commit_id.clone(),
+                created_at: None,
             }]));
             repo.remotes = Loadable::Ready(Arc::new(vec![
                 gitcomet_core::domain::Remote {
@@ -270,10 +274,12 @@ fn tag_ref_menu_scopes_actions_to_clicked_tag(cx: &mut gpui::TestAppContext) {
                 gitcomet_core::domain::Tag {
                     name: "release".to_string(),
                     target: commit_id.clone(),
+                    created_at: None,
                 },
                 gitcomet_core::domain::Tag {
                     name: "v1.0.0".to_string(),
                     target: commit_id.clone(),
+                    created_at: None,
                 },
             ]));
             repo.remotes = Loadable::Ready(Arc::new(vec![
@@ -360,6 +366,7 @@ fn tag_ref_menu_requests_remote_tags_when_not_loaded(cx: &mut gpui::TestAppConte
     repo.tags = Loadable::Ready(Arc::new(vec![gitcomet_core::domain::Tag {
         name: "release".to_string(),
         target: commit_id.clone(),
+        created_at: None,
     }]));
     repo.remote_tags = Loadable::NotLoaded;
 

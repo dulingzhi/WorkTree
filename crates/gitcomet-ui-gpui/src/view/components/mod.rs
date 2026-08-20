@@ -20,8 +20,8 @@ mod tokens;
 mod truncated_text;
 
 pub use avatar::{
-    AVATAR_DIAMETER_PX, AVATAR_FONT_PX, author_avatar, author_avatar_image, author_color, author_initials,
-    initials_paint_origin_y,
+    AVATAR_DIAMETER_PX, AVATAR_FONT_PX, author_avatar, author_avatar_image, author_color,
+    author_initials, initials_paint_origin_y,
 };
 pub use button::{Button, ButtonStyle};
 pub use commit_link_menu::{CommitLinkMenu, LinkTarget, MessageLink};

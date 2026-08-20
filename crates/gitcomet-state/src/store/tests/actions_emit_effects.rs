@@ -4126,6 +4126,7 @@ fn repo_state_with_tags_loaded(repo_id: RepoId) -> RepoState {
     repo_state.set_tags(Loadable::Ready(vec![gitcomet_core::domain::Tag {
         name: "v1.0.0".to_string(),
         target: CommitId("abc123".into()),
+        created_at: None,
     }]));
     repo_state
 }

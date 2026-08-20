@@ -24,6 +24,7 @@ pub struct SidebarDataRequest {
     pub worktrees: bool,
     pub submodules: bool,
     pub stashes: bool,
+    pub tags: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

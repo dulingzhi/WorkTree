@@ -1351,6 +1351,13 @@ pub(super) fn append_ensure_sidebar_data_effects(
             effects.push_effect(Effect::LoadStashes { repo_id, limit: 50 });
         }
     }
+
+    if request.tags && matches!(repo_state.tags, Loadable::NotLoaded) {
+        repo_state.set_tags(Loadable::Loading);
+        if repo_state.loads_in_flight.request(RepoLoadsInFlight::TAGS) {
+            effects.push_effect(Effect::LoadTags { repo_id });
+        }
+    }
 }
 
 pub(super) fn ensure_sidebar_data(
@@ -2949,24 +2956,17 @@ mod tests {
 
         // Unknown repo and failures are dropped silently — avatars are
         // cosmetic and the initials fallback is the pre-existing behavior.
-        assert!(author_emails_loaded(&mut state, RepoId(2), Ok(FxHashMap::new())).is_empty());
+        assert!(author_emails_loaded(&mut state, RepoId(2), Ok(FxHashMap::default())).is_empty());
         assert!(
             author_emails_loaded(&mut state, repo_id, Err(Error::new(ErrorKind::Cancelled)))
                 .is_empty()
         );
         assert!(repo_mut(&mut state, repo_id).author_emails.is_empty());
 
-        assert!(
-            author_emails_loaded(
-                &mut state,
-                repo_id,
-                Ok(FxHashMap::from([(
-                    "Jai".to_string(),
-                    "814683@qq.com".to_string()
-                )]))
-            )
-            .is_empty()
-        );
+        let emails: FxHashMap<String, String> = [("Jai".to_string(), "814683@qq.com".to_string())]
+            .into_iter()
+            .collect();
+        assert!(author_emails_loaded(&mut state, repo_id, Ok(emails)).is_empty());
         assert_eq!(
             repo_mut(&mut state, repo_id)
                 .author_emails
@@ -3427,6 +3427,7 @@ mod tests {
             worktrees: true,
             submodules: true,
             stashes: true,
+            tags: true,
         };
 
         assert!(ensure_sidebar_data(&mut state, repo_id, request).is_empty());
@@ -3449,6 +3450,7 @@ mod tests {
             worktrees: true,
             submodules: false,
             stashes: true,
+            tags: true,
         };
         let effects = ensure_sidebar_data(&mut state, repo_id, request);
 
