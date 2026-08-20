@@ -3205,11 +3205,16 @@ fn history_table_row(
     } else {
         None
     };
-    // Captured before `author` moves into the canvas: the overlay's loading
-    // and 404 stand-ins are the same initials circle the canvas paints.
-    let overlay_author_name: SharedString = author.shared().clone();
-    let canvas_author_email: Option<SharedString> =
-        author_email.map(|email| SharedString::from(email));
+    // One decision per row build, shared with the canvas: when the remote
+    // avatar has resolved to pixels the overlay img owns the avatar slot and
+    // the canvas skips its initials; while it is pending (or failed — `d=404`)
+    // the canvas paints the initials and the resolver stays armed.
+    let remote_avatar = crate::avatar_source::remote_avatar(author_email);
+    if remote_avatar.is_none()
+        && let Some(url) = crate::avatar_source::avatar_url(author_email)
+    {
+        crate::avatar_source::ensure_avatar_loaded(&url, cx);
+    }
     let commit_row = history_canvas::history_commit_row_canvas(
         theme,
         cx.entity(),
@@ -3239,7 +3244,7 @@ fn history_table_row(
         summary,
         when,
         short_sha,
-        canvas_author_email,
+        remote_avatar.is_some(),
         row_bg_overlay,
         if context_menu_active {
             theme.colors.interaction.pressed_background
@@ -3294,14 +3299,13 @@ fn history_table_row(
             }),
         );
 
-    // Remote avatar overlay: with Gravatar/Cravatar active and a known email,
-    // the img owns the avatar slot — the canvas paints nothing beneath it (a
-    // transparent image would show both layers at once) and the loading and
-    // 404 (`d=404`) stand-ins are the same initials circle. The metrics helper
-    // is the one the canvas paints from, pinning the overlay to the column
-    // layout.
-    if show_author
-        && let Some(url) = crate::avatar_source::avatar_url(author_email)
+    // Remote avatar overlay: when the image has resolved, the img owns the
+    // avatar slot — the canvas paints nothing beneath it (a transparent image
+    // would show both layers at once); pending and failed loads leave the
+    // slot to the canvas's initials circle. The metrics helper is the one the
+    // canvas paints from, pinning the overlay to the column layout.
+    if let Some((_url, image)) = remote_avatar
+        && show_author
         && let Some(metrics) = history_canvas::history_avatar_metrics(
             show_sha,
             show_date,
@@ -3316,19 +3320,6 @@ fn history_table_row(
             row_height,
         )
     {
-        // The list is the surface that keeps a URL on screen the longest, so
-        // it attaches the load-watcher: gpui only notifies whichever single
-        // view first requested a remote image, leaving the others on their
-        // loading stand-ins until an unrelated repaint.
-        crate::avatar_source::ensure_avatar_loaded(&url, cx);
-        let fallback_name = overlay_author_name.clone();
-        let loading_name = overlay_author_name.clone();
-        let initials_fallback = move || {
-            components::author_avatar(theme, ui_scale, fallback_name.as_ref()).into_any_element()
-        };
-        let initials_loading = move || {
-            components::author_avatar(theme, ui_scale, loading_name.as_ref()).into_any_element()
-        };
         row = row.child(
             div()
                 .absolute()
@@ -3338,18 +3329,13 @@ fn history_table_row(
                 // element's right edge, so the diameter comes off first.
                 .right(metrics.inset_from_right - metrics.diameter)
                 .child(
-                    gpui::img(gpui::ImageSource::Resource(gpui::Resource::Uri(
-                        gpui::SharedUri::from(url.to_string()),
-                    )))
-                    .id(gpui::ElementId::Name(url))
-                    .with_fallback(initials_fallback)
-                    .with_loading(initials_loading)
                     // The img rounds its own painted quad from its style's
                     // corner radii (see `Img::paint`); a rounded wrapper div
                     // would not clip it to a circle.
-                    .w(metrics.diameter)
-                    .h(metrics.diameter)
-                    .rounded(metrics.diameter * 0.5),
+                    gpui::img(image)
+                        .w(metrics.diameter)
+                        .h(metrics.diameter)
+                        .rounded(metrics.diameter * 0.5),
                 ),
         );
     }

@@ -127,13 +127,13 @@ pub fn author_avatar(theme: AppTheme, scale: impl Into<UiScale>, name: &str) -> 
 }
 
 /// Author avatar for retained-mode UIs (details pane, hover card, comparison
-/// rows): the initials circle, or the remote Gravatar/Cravatar image when the
-/// active source yields a URL for `email`. The initials remain the loading
-/// and missing-picture (`d=404`) stand-in, so the slot never goes blank.
+/// rows): the remote Gravatar/Cravatar image once it has resolved to pixels,
+/// otherwise the initials circle — which doubles as the loading and
+/// missing-picture (`d=404`) stand-in, so the slot never goes blank. Callers
+/// with a `cx` arm the resolver first (`avatar_source::ensure_avatar_loaded`).
 ///
 /// The history table does not use this — its rows overlay an absolutely
-/// positioned img on the row canvas (see `history_table_row`), with the same
-/// loading/fallback initials.
+/// positioned img on the row canvas (see `history_table_row`).
 pub fn author_avatar_image(
     theme: AppTheme,
     scale: impl Into<UiScale>,
@@ -141,29 +141,18 @@ pub fn author_avatar_image(
     email: Option<&str>,
 ) -> Div {
     let scale = scale.into();
-    let Some(url) = crate::avatar_source::avatar_url(email) else {
+    let Some((_url, image)) = crate::avatar_source::remote_avatar(email) else {
         return author_avatar(theme, scale, name);
     };
     let diameter = scale.px(AVATAR_DIAMETER_PX);
-    let fallback_name: gpui::SharedString = name.into();
-    let loading_name = fallback_name.clone();
-    let initials_fallback =
-        move || author_avatar(theme, scale, fallback_name.as_ref()).into_any_element();
-    let initials_loading =
-        move || author_avatar(theme, scale, loading_name.as_ref()).into_any_element();
     // The img rounds its own painted quad from its style's corner radii (see
     // `Img::paint`), so the rounding belongs on the img itself — a rounded,
     // overflow-hidden wrapper does not clip children to a circle.
     div().flex_none().w(diameter).h(diameter).child(
-        gpui::img(gpui::ImageSource::Resource(gpui::Resource::Uri(
-            gpui::SharedUri::from(url.to_string()),
-        )))
-        .id(gpui::ElementId::Name(url))
-        .with_fallback(initials_fallback)
-        .with_loading(initials_loading)
-        .w(diameter)
-        .h(diameter)
-        .rounded(diameter * 0.5),
+        gpui::img(image)
+            .w(diameter)
+            .h(diameter)
+            .rounded(diameter * 0.5),
     )
 }
 

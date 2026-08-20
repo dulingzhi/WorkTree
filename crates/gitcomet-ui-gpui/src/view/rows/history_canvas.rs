@@ -413,10 +413,10 @@ pub(super) fn history_commit_row_canvas(
     summary: HistoryTextVm,
     when: HistoryTextVm,
     short_sha: HistoryTextVm,
-    // Email behind `author`, from the repo's author→email map. When the active
-    // avatar source turns it into a URL the canvas leaves the avatar slot to
-    // the row builder's overlay img (see `history_table_row`).
-    author_email: Option<SharedString>,
+    // Whether the row builder's remote-avatar overlay owns the avatar slot
+    // (the image has resolved — see `history_table_row`). Decided once per
+    // row build and passed in so prepaint and paint never disagree.
+    remote_avatar_ready: bool,
     // The background the row's own `div` carries (selection, HEAD, open context
     // menu), and the one it swaps in while hovered. Mirrored rather than painted
     // again: the graph's icon nodes knock their glyphs out in the row background,
@@ -943,11 +943,12 @@ pub(super) fn history_commit_row_canvas(
                         bounds.right() - avatar_metrics.inset_from_right,
                         avatar_left
                     );
-                    // With a remote avatar the overlay img owns the slot — its
-                    // loading and 404 stand-ins are this same initials circle —
-                    // so nothing may be painted underneath: a transparent PNG
-                    // would otherwise show the initials through the image.
-                    if crate::avatar_source::avatar_url(author_email.as_deref()).is_none() {
+                    // With a resolved remote avatar the overlay img owns the
+                    // slot — pending and failed loads fall back to this same
+                    // initials circle — so nothing may be painted underneath:
+                    // a transparent PNG would otherwise show the initials
+                    // through the image.
+                    if !remote_avatar_ready {
                         let identity_color = components::author_color(theme, author.as_ref());
                         let avatar_top = author_bounds.top() + avatar_metrics.inset_from_top;
                         window.paint_quad(
