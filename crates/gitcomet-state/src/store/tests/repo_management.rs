@@ -3907,6 +3907,18 @@ fn repo_opened_ok_sets_loading_and_emits_refresh_effects() {
     ));
     assert!(has_worktree_refresh_effect(&effects, RepoId(1)));
     assert!(has_submodule_load_effect(&effects, RepoId(1)));
+    assert!(has_effect_for_repo(
+        &effects,
+        RepoId(1),
+        |effect, repo_id| {
+            matches!(
+                effect,
+                Effect::LoadAuthorEmails {
+                    repo_id: candidate
+                } if *candidate == repo_id
+            )
+        }
+    ));
 }
 
 #[test]

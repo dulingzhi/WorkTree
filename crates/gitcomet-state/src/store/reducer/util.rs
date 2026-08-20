@@ -20,8 +20,8 @@ use std::time::SystemTime;
 pub(super) const DEFAULT_LOG_PAGE_SIZE: usize = 200;
 const CONFLICT_RELOAD_EFFECT_COUNT: usize = 1;
 const DIFF_RELOAD_MAX_EFFECTS: usize = 3;
-const PRIMARY_REFRESH_MAX_EFFECTS: usize = 5;
-const FULL_REFRESH_MAX_EFFECTS: usize = 8;
+const PRIMARY_REFRESH_MAX_EFFECTS: usize = 6;
+const FULL_REFRESH_MAX_EFFECTS: usize = 9;
 const BACKGROUND_METADATA_MAX_EFFECTS: usize = 3;
 
 pub(super) trait EffectAccumulator {
@@ -819,6 +819,11 @@ pub(super) fn append_refresh_full_effects(
         effects.push_effect(Effect::LoadRemoteBranches { repo_id });
     }
     append_requested_rebase_and_merge_refresh_effects(repo_state, effects);
+    // Same cheap format-only walk the primary refresh path queues: without it
+    // the map only ever loaded on the rare primary refresh, so freshly opened
+    // repositories had no author emails (and no remote avatars) until some
+    // unrelated action happened to trigger that path.
+    effects.push_effect(Effect::LoadAuthorEmails { repo_id });
 }
 
 pub(super) fn append_auto_background_metadata_effects(
@@ -2098,7 +2103,7 @@ mod tests {
         let mut primary = repo_state(1);
         primary.set_log_loading_more(true);
         let primary_effects = refresh_primary_effects(&mut primary);
-        assert_eq!(primary_effects.len(), 5);
+        assert_eq!(primary_effects.len(), 6);
         assert!(!primary.log_loading_more);
         assert!(matches!(primary_effects[0], Effect::LoadHeadBranch { .. }));
         assert!(
@@ -2106,8 +2111,14 @@ mod tests {
                 .iter()
                 .any(|effect| matches!(effect, Effect::LoadStatus { .. }))
         );
+        assert!(
+            primary_effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::LoadAuthorEmails { .. })),
+            "primary refresh loads author emails for the surfaces that only know names"
+        );
         assert!(matches!(
-            primary_effects[4],
+            primary_effects[5],
             Effect::LoadLog {
                 limit: DEFAULT_LOG_PAGE_SIZE,
                 ..
@@ -2131,8 +2142,16 @@ mod tests {
         let mut full = repo_state(2);
         full.set_log_loading_more(true);
         let full_effects = refresh_full_effects(&mut full, GitLogSettings::default());
-        assert_eq!(full_effects.len(), 8);
+        assert_eq!(full_effects.len(), 9);
         assert!(!full.log_loading_more);
+        assert!(
+            full_effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::LoadAuthorEmails { .. })),
+            "full refresh loads author emails — the repo-open path relies on it, and \
+             without it the history list has no remote avatars until an unrelated \
+             action happens to request them"
+        );
         assert!(
             full_effects
                 .iter()
