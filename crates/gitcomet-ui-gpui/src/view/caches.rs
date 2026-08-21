@@ -30,6 +30,13 @@ pub(super) struct HistoryBaseCache {
     /// and the selected lane's colour -- each need a handful of lookups but are
     /// called during layout, where a scan of a 50k-commit page is a scan too many.
     pub(super) visible_ix_by_commit: Arc<FxHashMap<CommitId, usize>>,
+    /// For each visible row, the visible rows of that commit's parents that are
+    /// themselves visible. The selection highlight walks these to decide which
+    /// rows belong to the selected branch -- reachability through *every*
+    /// parent, the way `git log <branch>` does, not just the first-parent lane
+    /// the graph draws. Built with the rest of the cache so the walk itself
+    /// never has to touch the commit list during layout.
+    pub(super) parent_visible_ixs: Arc<[SmallVec<[usize; 2]>]>,
     pub(super) graph_rows: Arc<[history_graph::GraphRow]>,
     pub(super) max_lanes: usize,
     pub(super) row_vms: Vec<HistoryBaseRowVm>,

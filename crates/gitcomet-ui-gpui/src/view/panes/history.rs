@@ -638,6 +638,85 @@ struct HistorySelectedLaneColorCache {
     anchor: HistoryLaneAnchor,
     /// `None` when the anchor is not on screen — then no lane is highlighted.
     lane: Option<crate::view::rows::history_graph_paint::SelectedLane>,
+    /// One flag per visible row: whether that row's commit is reachable from
+    /// the anchor through the page's parent links. `None` exactly when `lane`
+    /// is — the two halves of one highlight.
+    related_rows: Option<Arc<[bool]>>,
+}
+
+/// The selection highlight: which lane stays at full colour, and which rows
+/// belong to the selection. Both are `None` when nothing is highlighted (no
+/// selection, a multi-selection, or the anchor scrolled off the page).
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct HistorySelectionHighlight {
+    lane: Option<crate::view::rows::history_graph_paint::SelectedLane>,
+    related_rows: Option<Arc<[bool]>>,
+}
+
+/// Marks every row reachable from `anchor_row` through `parent_visible_ixs` —
+/// the page-local equivalent of `git log <anchor commit>`, following *all*
+/// parents so commits that arrived through a merge count as belonging to the
+/// branch. A plain DFS over indices; the page is already in memory and the
+/// result is memoised by the caller.
+fn rows_reachable_from(
+    parent_visible_ixs: &[SmallVec<[usize; 2]>],
+    anchor_row: usize,
+) -> Arc<[bool]> {
+    let mut related = vec![false; parent_visible_ixs.len()];
+    if anchor_row >= parent_visible_ixs.len() {
+        return related.into();
+    }
+    related[anchor_row] = true;
+    let mut pending = vec![anchor_row];
+    while let Some(row_ix) = pending.pop() {
+        for parent_ix in parent_visible_ixs[row_ix].iter().copied() {
+            if parent_ix < related.len() && !related[parent_ix] {
+                related[parent_ix] = true;
+                pending.push(parent_ix);
+            }
+        }
+    }
+    related.into()
+}
+
+/// Resolves the anchor against one cache page: the lane its row draws on, and
+/// the set of rows reachable from it through the page's parent links.
+fn build_selection_highlight(
+    cache: &HistoryCache,
+    anchor: HistoryLaneAnchor,
+) -> HistorySelectionHighlight {
+    let (head, on_branch) = match &anchor {
+        HistoryLaneAnchor::Commit(head) => (head, None),
+        HistoryLaneAnchor::Worktree { head, on_branch } => (head, Some(*on_branch)),
+    };
+    let Some(anchor_row) = cache.base.visible_ix_by_commit.get(head).copied() else {
+        return HistorySelectionHighlight::default();
+    };
+
+    let lane = cache.base.graph_rows.get(anchor_row).and_then(|row| {
+        let color_ix = match on_branch {
+            Some(on_branch) => {
+                crate::view::rows::history_graph_paint::band_node_for(row, on_branch).color_ix
+            }
+            None => row.node_color_ix,
+        };
+        // The colour alone would also match unrelated lanes elsewhere on
+        // the page that recycled the index; this resolves it to the one
+        // lane's row span.
+        crate::view::rows::history_graph_paint::selected_lane_at(
+            &cache.base.graph_rows,
+            anchor_row,
+            color_ix,
+        )
+    });
+
+    HistorySelectionHighlight {
+        lane,
+        related_rows: Some(rows_reachable_from(
+            &cache.base.parent_visible_ixs,
+            anchor_row,
+        )),
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -2000,94 +2079,103 @@ impl HistoryView {
         &mut self,
         show_worktree_summary_row: bool,
     ) -> Option<crate::view::rows::history_graph_paint::SelectedLane> {
-        if !self.history_highlight_commit_chain {
-            return None;
-        }
+        self.history_selection_highlight(show_worktree_summary_row)
+            .lane
+    }
 
-        let (repo_id, anchor) = {
-            let repo = self.active_repo()?;
-            if repo.history_state.multi_selection.is_multi() {
-                return None;
-            }
-            // A selected worktree row highlights that worktree's branch, not the
-            // commit underneath it -- the two differ whenever the branch is
-            // behind and has been given a lane of its own.
-            let worktree_anchor = repo
-                .history_state
-                .worktree_selection
-                .as_ref()
-                .and_then(|path| match &repo.worktree_dirty {
-                    Loadable::Ready(dirty) => dirty.iter().find(|summary| &summary.path == path),
-                    _ => None,
-                })
-                .and_then(|summary| {
-                    Some(HistoryLaneAnchor::Worktree {
-                        head: summary.head.clone()?,
-                        on_branch: summary.branch.is_some() && !summary.detached,
-                    })
-                });
-            let anchor = worktree_anchor.or_else(|| {
-                repo.history_state
-                    .selected_commit
-                    .clone()
-                    .or_else(|| {
-                        show_worktree_summary_row
-                            .then(|| repo.head_commit_id())
-                            .flatten()
-                    })
-                    .map(HistoryLaneAnchor::Commit)
-            })?;
-            (repo.id, anchor)
+    /// The selection highlight's row-membership half: whether each visible row
+    /// belongs to the branch/commit the selection is anchored to. Shares the
+    /// lane memo, so both halves stay keyed on the same anchor.
+    pub(in super::super) fn history_related_rows(
+        &mut self,
+        show_worktree_summary_row: bool,
+    ) -> Option<Arc<[bool]>> {
+        self.history_selection_highlight(show_worktree_summary_row)
+            .related_rows
+    }
+
+    /// Both halves of the selection highlight, through the shared memo.
+    fn history_selection_highlight(
+        &mut self,
+        show_worktree_summary_row: bool,
+    ) -> HistorySelectionHighlight {
+        let Some((repo_id, anchor)) = self.selection_highlight_anchor(show_worktree_summary_row)
+        else {
+            return HistorySelectionHighlight::default();
         };
 
-        let cache = self
+        let Some(cache) = self
             .history_cache
             .as_ref()
-            .filter(|cache| cache.base.request.repo_id == repo_id)?;
+            .filter(|cache| cache.base.request.repo_id == repo_id)
+        else {
+            return HistorySelectionHighlight::default();
+        };
         let base_request = &cache.base.request;
 
         if let Some(memo) = &self.history_selected_lane_color_cache
             && memo.base_request == *base_request
             && memo.anchor == anchor
         {
-            return memo.lane;
+            return HistorySelectionHighlight {
+                lane: memo.lane,
+                related_rows: memo.related_rows.clone(),
+            };
         }
 
-        let (head, on_branch) = match &anchor {
-            HistoryLaneAnchor::Commit(head) => (head, None),
-            HistoryLaneAnchor::Worktree { head, on_branch } => (head, Some(*on_branch)),
-        };
-        let lane = cache
-            .base
-            .visible_ix_by_commit
-            .get(head)
-            .copied()
-            .and_then(|anchor_row| {
-                let row = cache.base.graph_rows.get(anchor_row)?;
-                let color_ix = match on_branch {
-                    Some(on_branch) => {
-                        crate::view::rows::history_graph_paint::band_node_for(row, on_branch)
-                            .color_ix
-                    }
-                    None => row.node_color_ix,
-                };
-                // The colour alone would also match unrelated lanes elsewhere on
-                // the page that recycled the index; this resolves it to the one
-                // lane's row span.
-                crate::view::rows::history_graph_paint::selected_lane_at(
-                    &cache.base.graph_rows,
-                    anchor_row,
-                    color_ix,
-                )
-            });
-
-        let base_request = base_request.clone();
+        let highlight = build_selection_highlight(cache, anchor.clone());
         self.history_selected_lane_color_cache = Some(HistorySelectedLaneColorCache {
-            base_request,
+            base_request: base_request.clone(),
             anchor,
-            lane,
+            lane: highlight.lane,
+            related_rows: highlight.related_rows.clone(),
         });
-        lane
+        highlight
+    }
+
+    /// What the selection highlight is anchored to, or `None` when nothing is
+    /// highlighted: the feature is off, a multi-selection is active, no repo
+    /// is open, or no single row carries the selection.
+    fn selection_highlight_anchor(
+        &self,
+        show_worktree_summary_row: bool,
+    ) -> Option<(RepoId, HistoryLaneAnchor)> {
+        if !self.history_highlight_commit_chain {
+            return None;
+        }
+        let repo = self.active_repo()?;
+        if repo.history_state.multi_selection.is_multi() {
+            return None;
+        }
+        // A selected worktree row highlights that worktree's branch, not the
+        // commit underneath it -- the two differ whenever the branch is
+        // behind and has been given a lane of its own.
+        let worktree_anchor = repo
+            .history_state
+            .worktree_selection
+            .as_ref()
+            .and_then(|path| match &repo.worktree_dirty {
+                Loadable::Ready(dirty) => dirty.iter().find(|summary| &summary.path == path),
+                _ => None,
+            })
+            .and_then(|summary| {
+                Some(HistoryLaneAnchor::Worktree {
+                    head: summary.head.clone()?,
+                    on_branch: summary.branch.is_some() && !summary.detached,
+                })
+            });
+        let anchor = worktree_anchor.or_else(|| {
+            repo.history_state
+                .selected_commit
+                .clone()
+                .or_else(|| {
+                    show_worktree_summary_row
+                        .then(|| repo.head_commit_id())
+                        .flatten()
+                })
+                .map(HistoryLaneAnchor::Commit)
+        })?;
+        Some((repo.id, anchor))
     }
 
     /// Builds (or reuses) the mapping from list indices to rows.
@@ -2647,10 +2735,30 @@ fn build_history_base_cache(
         }
     }
 
+    // The same page as parent links between visible rows, for the selection
+    // highlight's reachability walk. Parents scrolled past the page bottom have
+    // no row and simply drop out -- there is nothing on screen to mark.
+    let parent_visible_ixs: Vec<SmallVec<[usize; 2]>> = visible_indices
+        .iter()
+        .map(|commit_ix| {
+            page.commits
+                .get(commit_ix)
+                .map(|commit| {
+                    commit
+                        .parent_ids
+                        .iter()
+                        .filter_map(|parent| visible_ix_by_commit.get(parent).copied())
+                        .collect()
+                })
+                .unwrap_or_default()
+        })
+        .collect();
+
     HistoryBaseCache {
         request,
         visible_indices,
         visible_ix_by_commit: Arc::new(visible_ix_by_commit),
+        parent_visible_ixs: parent_visible_ixs.into(),
         graph_rows,
         max_lanes,
         row_vms,
@@ -3259,6 +3367,150 @@ mod tests {
             base.visible_ix_by_commit.get(&CommitId("absent".into())),
             None
         );
+    }
+
+    /// A merge topology the selection tests share: `m` merged `feature` in.
+    ///
+    /// ```text
+    /// m0 (merge m1 + f2)      row 0
+    /// m1                      row 1
+    /// f2 (feature tip)        row 2
+    /// m2                      row 3
+    /// f1                      row 4
+    /// base                    row 5
+    /// ```
+    fn merge_topology_commits() -> Vec<Commit> {
+        vec![
+            commit("m0", &["m1", "f2"], "merge feature into main"),
+            commit("m1", &["m2"], "main one"),
+            commit("f2", &["f1"], "feature two"),
+            commit("m2", &["base"], "main two"),
+            commit("f1", &["base"], "feature one"),
+            commit("base", &[], "base"),
+        ]
+    }
+
+    /// The merge topology as a built cache, for tests that inspect the graph.
+    fn merge_topology_cache() -> HistoryCache {
+        let page = log_page(merge_topology_commits(), None);
+        let base_request = HistoryBaseCacheRequest {
+            repo_id: RepoId(1),
+            history_scope: LogScope::AllBranches,
+            log_fingerprint: 0,
+            head_branch_rev: 0,
+            detached_head_commit: None,
+            head_branch_target: None,
+            branches_rev: 0,
+            remote_branches_rev: 0,
+            stashes_rev: 0,
+        };
+        let base = build_history_base_cache(
+            base_request.clone(),
+            &page,
+            AppTheme::gitcomet_dark(),
+            None,
+            &[],
+            &[],
+            &[],
+        );
+        let decorations = build_history_decoration_cache(
+            HistoryDecorationCacheRequest {
+                base_request,
+                head_branch_rev: 0,
+                detached_head_commit: None,
+                branches_rev: 0,
+                remote_branches_rev: 0,
+                tags_rev: 0,
+            },
+            &page,
+            &base,
+            None,
+            &[],
+            &[],
+            &[],
+        );
+        HistoryCache { base, decorations }
+    }
+
+    /// The whole point of the reachability walk: commits that arrived through
+    /// a merge belong to the branch even though they sit on a lane of their
+    /// own, and the lane-following highlight used to wash them out.
+    #[test]
+    fn merged_in_commits_belong_to_the_selected_branch() {
+        let cache = merge_topology_cache();
+        let highlight =
+            build_selection_highlight(&cache, HistoryLaneAnchor::Commit(CommitId("m0".into())));
+        let related = highlight.related_rows.expect("the anchor is on screen");
+
+        // Every row is reachable from the merge, feature side included.
+        assert!(
+            related.iter().all(|lit| *lit),
+            "the merge reaches every commit on the page: {related:?}"
+        );
+
+        // Sanity, from the graph itself: the feature rows really do sit on a
+        // lane the selected lane does not cover, so this fixture genuinely
+        // exercises the gap the walk closes.
+        let theme = AppTheme::gitcomet_dark();
+        let lane = highlight.lane.expect("the anchor's lane resolves");
+        for row_ix in [2usize, 4usize] {
+            let node_color_ix = cache.base.graph_rows[row_ix].node_color_ix;
+            assert!(
+                !lane.covers(theme, row_ix, node_color_ix),
+                "row {row_ix} must be off the selected lane for this test to mean anything"
+            );
+        }
+    }
+
+    /// Anchoring on the branch tip keeps the other side's commits out: the
+    /// highlight is membership in one branch, not the whole page.
+    #[test]
+    fn selecting_the_feature_side_leaves_main_side_out() {
+        let cache = merge_topology_cache();
+        let highlight =
+            build_selection_highlight(&cache, HistoryLaneAnchor::Commit(CommitId("f2".into())));
+        let related = highlight.related_rows.expect("the anchor is on screen");
+
+        // feature: f2, f1, base
+        assert!(related[2] && related[4] && related[5]);
+        // main's own commits and the merge are not on the feature branch
+        assert!(!related[0] && !related[1] && !related[3]);
+    }
+
+    /// The walk itself: diamond parents, parents past the page, an anchor off
+    /// the end of the page.
+    #[test]
+    fn rows_reachable_from_follows_every_parent_link() {
+        use smallvec::smallvec;
+        // 0 → 1 → {3, 4} → 5, and 2 → 4: a diamond through 4 plus an
+        // independent chain 0 → 1.
+        let adjacency = vec![
+            smallvec![1usize],
+            smallvec![3usize, 4usize],
+            smallvec![4usize],
+            smallvec![5usize],
+            smallvec![5usize],
+            smallvec![],
+        ];
+
+        let related = rows_reachable_from(&adjacency, 0);
+        assert_eq!(
+            related.as_ref(),
+            &[true, true, false, true, true, true],
+            "the diamond is reachable, the unrelated chain is not"
+        );
+
+        // From the side entry, only its own chain lights.
+        let related = rows_reachable_from(&adjacency, 2);
+        assert_eq!(related.as_ref(), &[false, false, true, false, true, true]);
+
+        // A parent index past the page (defensive: the adjacency is built from
+        // the page, so this cannot happen, but the walk must not panic).
+        let dangling = vec![smallvec![9usize]];
+        assert_eq!(rows_reachable_from(&dangling, 0).as_ref(), &[true]);
+
+        // An anchor off the page marks nothing.
+        assert_eq!(rows_reachable_from(&adjacency, 42).as_ref(), &[false; 6]);
     }
 
     /// Branch attributed to each visible row, in row order.

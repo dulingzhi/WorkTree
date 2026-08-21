@@ -207,13 +207,15 @@ const UNRELATED_LANE_COLOR_MIX: f32 = 0.75;
 ///
 /// `related_to_selection` is `None` when no single commit is selected, and only
 /// then does the row render as ordinary body text. While a commit *is* selected
-/// the column splits in two: every row the selected commit's own graph lane runs
-/// through goes to the theme's emphasis foreground, and everything else drops to
-/// muted -- so that lane reads as a continuous run down the list.
+/// the column splits in two: every row whose commit the selection can reach
+/// goes to the theme's emphasis foreground, and everything else drops to
+/// muted -- so the branch's commits read as one membership down the list.
 ///
-/// A lane, not an ancestry walk: a merge's second parent lives on a lane of its
-/// own and washes out with the rest, even though the commit is genuinely an
-/// ancestor. That is what the graph draws, so it is what the highlight follows.
+/// Reachability, not a lane: a merge's second parent chain sits on a lane of
+/// its own, but those commits are as much part of the branch as the
+/// first-parent line, so the highlight follows the parent links instead of the
+/// drawing. (The lane strokes still follow the drawing -- one lane keeps its
+/// colour; the rest wash out -- so the emphasis stays anchored to the graph.)
 ///
 /// A row background tint was tried first and was far too intrusive: it washed
 /// most of the list and fought with the table's own shading for selection, HEAD
@@ -408,6 +410,11 @@ pub(super) fn history_commit_row_canvas(
     ref_items: Arc<[HistoryRefListItem]>,
     selected_branch: Option<SelectedHistoryBranch>,
     selected_lane: Option<super::history_graph_paint::SelectedLane>,
+    // Whether this row's commit is reachable from the selection — the row's
+    // half of the highlight. Resolved once per row build against the
+    // reachability set, not derived from the lane here: membership and lane
+    // coverage answer different questions once merges are involved.
+    related_to_selection: Option<bool>,
     lane_branch_name: Option<SharedString>,
     author: HistoryTextVm,
     summary: HistoryTextVm,
@@ -561,15 +568,19 @@ pub(super) fn history_commit_row_canvas(
             // Everything coloured from this row's lane -- the node, the
             // message border, the fade wash and the hover badge -- washes with
             // that lane, so a row never shows two different strengths of the
-            // same colour.
-            let related_to_selection = selected_lane
-                .map(|selected| selected.covers(theme, graph_row_ix, graph_row.node_color_ix));
-            let node_color = super::history_graph_paint::lane_wash_color(
-                theme,
-                graph_row.node_color_ix,
-                graph_row_ix,
-                selected_lane,
-            );
+            // same colour. A row the selection *reaches* stays at full colour
+            // even off the selected lane: a commit merged into the branch is
+            // no less part of it for sitting on a side lane.
+            let node_color = if related_to_selection == Some(true) {
+                history_graph::lane_color(theme, graph_row.node_color_ix)
+            } else {
+                super::history_graph_paint::lane_wash_color(
+                    theme,
+                    graph_row.node_color_ix,
+                    graph_row_ix,
+                    selected_lane,
+                )
+            };
 
             // A lane-coloured wash across the right of the graph column, fading
             // into the border on the message cell so a commit's dot and its
