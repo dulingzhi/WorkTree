@@ -354,6 +354,10 @@ pub(in crate::view) enum ContextMenuAction {
         repo_id: RepoId,
         branch: String,
     },
+    FastForwardBranch {
+        repo_id: RepoId,
+        branch: String,
+    },
     OpenPopover {
         kind: PopoverKind,
     },

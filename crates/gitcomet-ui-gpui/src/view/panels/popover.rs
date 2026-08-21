@@ -48,6 +48,7 @@ mod submodule_remove_confirm;
 mod submodule_trust_confirm;
 mod terminal_shutdown_confirm;
 mod unsaved_file_edits_confirm;
+mod upstream_picker;
 mod workspace_picker;
 mod worktree_add_prompt;
 mod worktree_picker;
@@ -165,6 +166,7 @@ pub(in super::super) struct PopoverHost {
     _branch_picker_search_input_subscription: Option<gpui::Subscription>,
     _worktree_picker_search_input_subscription: Option<gpui::Subscription>,
     _workspace_picker_search_input_subscription: Option<gpui::Subscription>,
+    _upstream_picker_search_input_subscription: Option<gpui::Subscription>,
     _submodule_picker_search_input_subscription: Option<gpui::Subscription>,
     _file_history_search_input_subscription: Option<gpui::Subscription>,
     _history_author_filter_search_input_subscription: Option<gpui::Subscription>,
@@ -232,6 +234,7 @@ pub(in super::super) struct PopoverHost {
     branch_picker_selected_index: Option<usize>,
     worktree_picker_selected_index: Option<usize>,
     workspace_picker_selected_index: Option<usize>,
+    upstream_picker_selected_index: Option<usize>,
     /// Path/reference the workspace badge's create row hands to the Add-worktree
     /// dialog. Consumed (and cleared) when that dialog opens, so a later
     /// open from elsewhere still starts blank.
@@ -251,6 +254,7 @@ pub(in super::super) struct PopoverHost {
     /// this whole view.
     branch_picker_rows_cache: rows_cache::RowsCache<branch_picker::BranchPickerNavTarget>,
     workspace_picker_rows_cache: rows_cache::RowsCache<workspace_picker::WorkspaceRow>,
+    upstream_picker_rows_cache: rows_cache::RowsCache<upstream_picker::UpstreamRow>,
     repo_picker_rows_cache: rows_cache::RowsCache<repo_picker::RepoPickerEntry>,
     stash_picker_rows_cache: rows_cache::RowsCache<stash_picker_prompt::StashRow>,
     file_history_rows_cache: rows_cache::RowsCache<CommitId>,
@@ -265,6 +269,7 @@ pub(in super::super) struct PopoverHost {
     history_author_filter_search_input: Option<Entity<components::TextInput>>,
     worktree_picker_search_input: Option<Entity<components::TextInput>>,
     workspace_picker_search_input: Option<Entity<components::TextInput>>,
+    upstream_picker_search_input: Option<Entity<components::TextInput>>,
     submodule_picker_search_input: Option<Entity<components::TextInput>>,
     picker_prompt_scroll: ScrollHandle,
 
@@ -829,7 +834,8 @@ pub(in super::super) fn popover_width_spec(kind: &PopoverKind) -> Option<Popover
         PopoverKind::RepoPicker
         | PopoverKind::BranchPicker {
             purpose: BranchPickerPurpose::Delete | BranchPickerPurpose::RebaseOnto,
-        } => Some(PICKER_WIDTH),
+        }
+        | PopoverKind::UpstreamPicker { .. } => Some(PICKER_WIDTH),
         PopoverKind::BranchPicker {
             purpose: BranchPickerPurpose::Checkout,
         } => Some(LARGE_PICKER_WIDTH),
@@ -1687,6 +1693,7 @@ impl PopoverHost {
             _branch_picker_search_input_subscription: None,
             _worktree_picker_search_input_subscription: None,
             _workspace_picker_search_input_subscription: None,
+            _upstream_picker_search_input_subscription: None,
             _submodule_picker_search_input_subscription: None,
             _file_history_search_input_subscription: None,
             _history_author_filter_search_input_subscription: None,
@@ -1724,6 +1731,7 @@ impl PopoverHost {
             branch_picker_selected_index: None,
             worktree_picker_selected_index: None,
             workspace_picker_selected_index: None,
+            upstream_picker_selected_index: None,
             pending_worktree_add_prefill: None,
             submodule_picker_selected_index: None,
             file_history_selected_index: None,
@@ -1731,6 +1739,7 @@ impl PopoverHost {
             history_author_suggestions: None,
             branch_picker_rows_cache: rows_cache::RowsCache::default(),
             workspace_picker_rows_cache: rows_cache::RowsCache::default(),
+            upstream_picker_rows_cache: rows_cache::RowsCache::default(),
             repo_picker_rows_cache: rows_cache::RowsCache::default(),
             stash_picker_rows_cache: rows_cache::RowsCache::default(),
             file_history_rows_cache: rows_cache::RowsCache::default(),
@@ -1744,6 +1753,7 @@ impl PopoverHost {
             history_author_filter_search_input: None,
             worktree_picker_search_input: None,
             workspace_picker_search_input: None,
+            upstream_picker_search_input: None,
             submodule_picker_search_input: None,
             picker_prompt_scroll: ScrollHandle::new(),
             clone_repo_url_input,
@@ -1852,6 +1862,7 @@ impl PopoverHost {
                 &self.history_author_filter_search_input,
                 &self.worktree_picker_search_input,
                 &self.workspace_picker_search_input,
+                &self.upstream_picker_search_input,
                 &self.submodule_picker_search_input,
                 &self.stash_picker_search_input,
             ]
@@ -3049,6 +3060,7 @@ impl PopoverHost {
         self.branch_picker_selected_index = None;
         self.worktree_picker_selected_index = None;
         self.workspace_picker_selected_index = None;
+        self.upstream_picker_selected_index = None;
         self.submodule_picker_selected_index = None;
         self.file_history_selected_index = None;
         self.history_author_filter_selected_index = None;
@@ -3057,6 +3069,7 @@ impl PopoverHost {
         // keeps the memory from outliving the picker that needed it.
         self.branch_picker_rows_cache.clear();
         self.workspace_picker_rows_cache.clear();
+        self.upstream_picker_rows_cache.clear();
         self.repo_picker_rows_cache.clear();
         self.stash_picker_rows_cache.clear();
         self.file_history_rows_cache.clear();
@@ -3085,6 +3098,9 @@ impl PopoverHost {
                 }
                 PopoverKind::BranchPicker { .. } => {
                     let _ = self.ensure_branch_picker_search_input(window, cx);
+                }
+                PopoverKind::UpstreamPicker { .. } => {
+                    let _ = self.ensure_upstream_picker_search_input(window, cx);
                 }
                 PopoverKind::CreateBranchFromRefPrompt {
                     source_selectable,
@@ -4109,6 +4125,9 @@ impl PopoverHost {
                 path,
                 is_dir,
             } => file_history::panel(self, repo_id, path, is_dir, cx),
+            PopoverKind::UpstreamPicker { repo_id, branch } => {
+                upstream_picker::panel(self, repo_id, branch, cx)
+            }
             PopoverKind::PushSetUpstreamPrompt { repo_id, remote } => {
                 push_set_upstream_prompt::panel(self, repo_id, remote, cx)
             }

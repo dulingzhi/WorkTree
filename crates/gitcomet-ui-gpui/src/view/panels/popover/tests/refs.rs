@@ -1799,3 +1799,133 @@ fn local_branch_menu_excludes_pull_merge_and_squash_for_current_branch(
         assert!(delete_disabled, "expected delete entry to be disabled");
     });
 }
+
+#[gpui::test]
+fn local_branch_menu_offers_fast_forward_only_with_upstream(cx: &mut gpui::TestAppContext) {
+    let (store, events) = AppStore::new(Arc::new(TestBackend));
+    let (view, cx) =
+        cx.add_window_view(|window, cx| GitCometView::new(store, events, None, window, cx));
+
+    let repo_id = RepoId(232);
+    let branch_name = "feature/awesome".to_string();
+    let workdir = std::env::temp_dir().join(format!(
+        "gitcomet_ui_test_{}_local_branch_menu_fast_forward",
+        std::process::id()
+    ));
+
+    let open_menu = |cx: &mut gpui::VisualTestContext,
+                     upstream: Option<gitcomet_core::domain::Upstream>| {
+        let mut repo = RepoState::new_opening(
+            repo_id,
+            gitcomet_core::domain::RepoSpec {
+                workdir: workdir.clone(),
+            },
+        );
+        repo.head_branch = Loadable::Ready("main".to_string());
+        repo.branches = Loadable::Ready(Arc::new(vec![gitcomet_core::domain::Branch {
+            name: branch_name.clone(),
+            target: CommitId("deadbeef".into()),
+            upstream,
+            divergence: None,
+        }]));
+        let state = Arc::new(AppState {
+            repos: vec![repo],
+            active_repo: Some(repo_id),
+            ..Default::default()
+        });
+        cx.update(|_window, app| {
+            view.update(app, |this, cx| {
+                this.state = Arc::clone(&state);
+                this._ui_model
+                    .update(cx, |model, cx| model.set_state(state, cx));
+                cx.notify();
+            });
+        });
+        cx.update(|_window, app| {
+            view.update(app, |this, cx| {
+                this.popover_host.update(cx, |host, cx| {
+                    host.context_menu_model(
+                        &PopoverKind::BranchMenu {
+                            repo_id,
+                            section: BranchSection::Local,
+                            name: branch_name.clone(),
+                        },
+                        cx,
+                    )
+                })
+            })
+        })
+        .expect("expected branch context menu model")
+    };
+
+    // With an upstream: the entry names it and targets the clicked branch.
+    let model = open_menu(
+        cx,
+        Some(gitcomet_core::domain::Upstream {
+            remote: "origin".to_string(),
+            branch: "main".to_string(),
+        }),
+    );
+    let fast_forward = model.items.iter().find_map(|item| match item {
+        ContextMenuItem::Entry {
+            label,
+            action,
+            disabled,
+            ..
+        } if matches!(**action, ContextMenuAction::FastForwardBranch { .. }) => {
+            Some((label.to_string(), (**action).clone(), *disabled))
+        }
+        _ => None,
+    });
+    match fast_forward {
+        Some((
+            label,
+            ContextMenuAction::FastForwardBranch {
+                repo_id: rid,
+                branch,
+            },
+            disabled,
+        )) => {
+            assert_eq!(label, "Fast-forward to origin/main");
+            assert_eq!(rid, repo_id);
+            assert_eq!(branch, branch_name);
+            assert!(!disabled);
+        }
+        _ => panic!("expected enabled FastForwardBranch entry for a tracked branch"),
+    }
+
+    // Without an upstream there is nothing to fast-forward to, so no entry.
+    let model = open_menu(cx, None);
+    assert!(
+        !model.items.iter().any(|item| matches!(
+            item,
+            ContextMenuItem::Entry { action, .. }
+                if matches!(**action, ContextMenuAction::FastForwardBranch { .. })
+        )),
+        "untracked branch must not offer a fast-forward"
+    );
+
+    // "Change tracking upstream…" is offered either way — it also creates the
+    // pairing — and opens the picker on the clicked branch.
+    let change_entry = model.items.iter().find_map(|item| match item {
+        ContextMenuItem::Entry { label, action, .. }
+            if label.as_ref() == "Change tracking upstream…" =>
+        {
+            Some((**action).clone())
+        }
+        _ => None,
+    });
+    match change_entry {
+        Some(ContextMenuAction::OpenPopover {
+            kind:
+                PopoverKind::UpstreamPicker {
+                    repo_id: rid,
+                    branch,
+                },
+        }) => {
+            assert_eq!(rid, repo_id);
+            assert_eq!(branch, branch_name);
+        }
+        _ => panic!("expected Change tracking upstream… entry opening the picker"),
+    }
+}

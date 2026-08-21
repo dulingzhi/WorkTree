@@ -1175,6 +1175,9 @@ fn summarize_command(
             RepoCommandKind::UnsetUpstreamBranch { .. } => {
                 rust_i18n::t!("store.reducer.label_unlink_upstream").to_string()
             }
+            RepoCommandKind::FastForwardBranch { .. } => {
+                rust_i18n::t!("store.reducer.label_fast_forward_branch").to_string()
+            }
             RepoCommandKind::DeleteRemoteBranch { .. } => {
                 rust_i18n::t!("store.reducer.label_delete_remote_branch").to_string()
             }
@@ -1444,6 +1447,19 @@ fn summarize_command(
         .to_string(),
         RepoCommandKind::UnsetUpstreamBranch { branch } => {
             rust_i18n::t!("store.reducer.upstream_unlinked", branch = branch).to_string()
+        }
+        RepoCommandKind::FastForwardBranch { branch } => {
+            // `git merge --ff-only` says this when the branch already sits on
+            // the upstream tip; the fetch path is silent when nothing moved.
+            if output.stdout.contains("Already up to date") {
+                rust_i18n::t!(
+                    "store.reducer.branch_fast_forward_up_to_date",
+                    branch = branch
+                )
+                .to_string()
+            } else {
+                rust_i18n::t!("store.reducer.branch_fast_forwarded", branch = branch).to_string()
+            }
         }
         RepoCommandKind::DeleteRemoteBranch { remote, branch } => rust_i18n::t!(
             "store.reducer.remote_branch_deleted",
@@ -2375,6 +2391,12 @@ mod tests {
                 "Unlink upstream branch",
             ),
             (
+                RepoCommandKind::FastForwardBranch {
+                    branch: "main".into(),
+                },
+                "Fast-forward branch",
+            ),
+            (
                 RepoCommandKind::DeleteRemoteBranch {
                     remote: "origin".into(),
                     branch: "old".into(),
@@ -2649,6 +2671,32 @@ mod tests {
             None,
         );
         assert_eq!(unset_upstream_summary, "Branch feature: Upstream unlinked");
+
+        let (_, fast_forwarded) = summarize_command(
+            &RepoCommandKind::FastForwardBranch {
+                branch: "feature".into(),
+            },
+            &command_output("git fetch . origin/feature:feature", "", ""),
+            true,
+            None,
+        );
+        assert_eq!(
+            fast_forwarded,
+            "Branch feature: Fast-forwarded to its upstream"
+        );
+
+        let (_, fast_forward_up_to_date) = summarize_command(
+            &RepoCommandKind::FastForwardBranch {
+                branch: "feature".into(),
+            },
+            &command_output("git merge --ff-only", "Already up to date.", ""),
+            true,
+            None,
+        );
+        assert_eq!(
+            fast_forward_up_to_date,
+            "Branch feature: Already up to date with its upstream"
+        );
 
         let (_, push_tag_uptodate) = summarize_command(
             &RepoCommandKind::PushTag {

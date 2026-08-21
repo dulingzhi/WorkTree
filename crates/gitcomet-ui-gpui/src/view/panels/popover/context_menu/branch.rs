@@ -194,6 +194,44 @@ pub(super) fn model(
         }),
     });
     if section == BranchSection::Local {
+        // Upstream pairing, read from the right-clicked branch (not the
+        // checked-out one, which the remote section's entries act on).
+        let branch_upstream_full = repo.and_then(|r| match &r.branches {
+            Loadable::Ready(branches) => branches
+                .iter()
+                .find(|b| b.name == *name)
+                .and_then(|b| b.upstream.as_ref())
+                .map(|upstream| format!("{}/{}", upstream.remote, upstream.branch)),
+            _ => None,
+        });
+        if let Some(upstream) = branch_upstream_full {
+            items.push(ContextMenuItem::Entry {
+                label: crate::i18n::t!("cm.branch.fast_forward_to", upstream = upstream.as_str())
+                    .to_string()
+                    .into(),
+                icon: Some("icons/arrow_down.svg".into()),
+                shortcut: None,
+                // On the checked-out branch this is a `git merge --ff-only`,
+                // which git refuses mid-rebase; elsewhere it only moves a ref.
+                disabled: is_current_branch && history_rewrite_disabled,
+                action: Box::new(ContextMenuAction::FastForwardBranch {
+                    repo_id,
+                    branch: name.clone(),
+                }),
+            });
+        }
+        items.push(ContextMenuItem::Entry {
+            label: "Change tracking upstream…".into(),
+            icon: Some("icons/link.svg".into()),
+            shortcut: None,
+            disabled: false,
+            action: Box::new(ContextMenuAction::OpenPopover {
+                kind: PopoverKind::UpstreamPicker {
+                    repo_id,
+                    branch: name.clone(),
+                },
+            }),
+        });
         items.push(ContextMenuItem::Separator);
         if !is_current_branch {
             items.push(ContextMenuItem::Entry {

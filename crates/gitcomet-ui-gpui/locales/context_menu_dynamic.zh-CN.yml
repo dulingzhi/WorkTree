@@ -3,6 +3,7 @@ cm:
   branch:
     mark_for_comparison: "标记 %{name} 以比较"
     compare_with: "与 %{name} 比较"
+    fast_forward_to: "快进到 %{upstream}"
   rebase_onto: "将 %{current} 变基到 %{target}"
   interactive_rebase_onto: "交互式变基：将 %{current} 变基到 %{target}"
   tag:

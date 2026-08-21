@@ -999,6 +999,39 @@ impl GixRepo {
         run_git_with_output(cmd, &label)
     }
 
+    /// Move `branch` to wherever its upstream branch points, and nowhere else.
+    ///
+    /// The checked-out branch takes `git merge --ff-only`, which merges
+    /// `@{upstream}` and refuses anything but a fast-forward. Any other branch
+    /// takes a fetch refspec into itself — without a leading `+` git refuses a
+    /// non-fast-forward update, and it always refuses to fetch into the
+    /// checked-out branch, so both paths stay honest to the promise.
+    pub(super) fn fast_forward_branch_to_upstream_with_output_impl(
+        &self,
+        branch: &str,
+    ) -> Result<CommandOutput> {
+        validate_ref_like_arg(branch, "branch name")?;
+        let Some(upstream) = self.branch_upstream(branch)? else {
+            return Err(Error::new(ErrorKind::Backend(format!(
+                "branch {branch} has no upstream branch configured"
+            ))));
+        };
+        let upstream_short = format!("{}/{}", upstream.remote, upstream.branch);
+
+        if self.current_branch_name()?.as_deref() == Some(branch) {
+            let label = format!("git merge --ff-only ({upstream_short} -> {branch})");
+            let mut cmd = self.git_workdir_cmd();
+            cmd.arg("merge").arg("--ff-only");
+            run_git_with_output(cmd, &label)
+        } else {
+            let refspec = format!("{upstream_short}:{branch}");
+            let label = format!("git fetch . {refspec}");
+            let mut cmd = self.git_workdir_cmd();
+            cmd.arg("fetch").arg(".").arg(refspec);
+            run_git_with_output(cmd, &label)
+        }
+    }
+
     pub(super) fn delete_remote_branch_with_output_impl(
         &self,
         remote: &str,

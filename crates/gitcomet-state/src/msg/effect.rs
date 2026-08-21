@@ -500,6 +500,10 @@ pub enum Effect {
         repo_id: RepoId,
         branch: String,
     },
+    FastForwardBranch {
+        repo_id: RepoId,
+        branch: String,
+    },
     DeleteRemoteBranch {
         repo_id: RepoId,
         remote: String,

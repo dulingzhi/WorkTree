@@ -34,3 +34,9 @@ pick:
     open: "Open repository"
     clone: "Clone repository"
     initialize: "Initialize repository"
+  upstream:
+    # Header of the local branch menu's tracking-upstream picker.
+    title: "Tracking upstream"
+    # Row that clears the branch's tracking config; the tracked ref follows
+    # after it on the same line.
+    unlink: "Stop tracking"

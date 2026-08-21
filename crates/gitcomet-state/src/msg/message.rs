@@ -722,6 +722,12 @@ pub enum Msg {
         repo_id: RepoId,
         branch: String,
     },
+    /// Fast-forward a branch to its configured upstream, refusing anything
+    /// that is not a fast-forward.
+    FastForwardBranch {
+        repo_id: RepoId,
+        branch: String,
+    },
     DeleteRemoteBranch {
         repo_id: RepoId,
         remote: String,

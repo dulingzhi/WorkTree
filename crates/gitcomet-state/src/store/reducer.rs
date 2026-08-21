@@ -180,6 +180,7 @@ pub(crate) fn msg_requires_available_git(msg: &Msg) -> bool {
             | Msg::PushSetUpstream { .. }
             | Msg::SetUpstreamBranch { .. }
             | Msg::UnsetUpstreamBranch { .. }
+            | Msg::FastForwardBranch { .. }
             | Msg::DeleteRemoteBranch { .. }
             | Msg::DeleteRemoteBranches { .. }
             | Msg::Reset { .. }
@@ -382,6 +383,7 @@ fn retry_msg_for_repo_command(repo_id: RepoId, command: RepoCommandKind) -> Opti
         RepoCommandKind::UnsetUpstreamBranch { branch } => {
             Msg::UnsetUpstreamBranch { repo_id, branch }
         }
+        RepoCommandKind::FastForwardBranch { branch } => Msg::FastForwardBranch { repo_id, branch },
         RepoCommandKind::DeleteRemoteBranch { remote, branch } => Msg::DeleteRemoteBranch {
             repo_id,
             remote,
@@ -1518,6 +1520,10 @@ fn reduce_inner(
         Msg::UnsetUpstreamBranch { repo_id, branch } => {
             begin_local_action(state, repo_id);
             actions_emit_effects::unset_upstream_branch(repo_id, branch)
+        }
+        Msg::FastForwardBranch { repo_id, branch } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::fast_forward_branch(repo_id, branch)
         }
         Msg::DeleteRemoteBranch {
             repo_id,

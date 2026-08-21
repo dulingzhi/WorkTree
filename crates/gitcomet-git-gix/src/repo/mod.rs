@@ -869,6 +869,10 @@ impl GitRepository for GixRepo {
         self.unset_upstream_branch_with_output_impl(branch)
     }
 
+    fn fast_forward_branch_to_upstream_with_output(&self, branch: &str) -> Result<CommandOutput> {
+        self.fast_forward_branch_to_upstream_with_output_impl(branch)
+    }
+
     fn delete_remote_branch_with_output(
         &self,
         remote: &str,

@@ -960,6 +960,14 @@ pub trait GitRepository: Send + Sync {
         )))
     }
 
+    /// Fast-forward a branch to its configured upstream, refusing to move it
+    /// when the update is not a fast-forward.
+    fn fast_forward_branch_to_upstream_with_output(&self, _branch: &str) -> Result<CommandOutput> {
+        Err(Error::new(ErrorKind::Unsupported(
+            "fast-forwarding to the upstream branch is not implemented for this backend",
+        )))
+    }
+
     fn delete_remote_branch_with_output(
         &self,
         _remote: &str,

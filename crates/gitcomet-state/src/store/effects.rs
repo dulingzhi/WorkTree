@@ -1094,6 +1094,13 @@ fn send_unavailable_git_effect_result(
                 result: Err(git_unavailable_error(runtime)),
             },
         )),
+        Effect::FastForwardBranch { repo_id, branch } => send(Msg::Internal(
+            crate::msg::InternalMsg::RepoCommandFinished {
+                repo_id,
+                command: RepoCommandKind::FastForwardBranch { branch },
+                result: Err(git_unavailable_error(runtime)),
+            },
+        )),
         Effect::DeleteRemoteBranch {
             repo_id,
             remote,
@@ -2421,6 +2428,9 @@ pub(super) fn schedule_effect(
         ),
         Effect::UnsetUpstreamBranch { repo_id, branch } => {
             repo_commands::schedule_unset_upstream_branch(executor, repos, msg_tx, repo_id, branch)
+        }
+        Effect::FastForwardBranch { repo_id, branch } => {
+            repo_commands::schedule_fast_forward_branch(executor, repos, msg_tx, repo_id, branch)
         }
         Effect::DeleteRemoteBranch {
             repo_id,

@@ -533,6 +533,65 @@ impl PopoverHost {
         input
     }
 
+    pub(super) fn ensure_upstream_picker_search_input(
+        &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> Entity<components::TextInput> {
+        let input = Self::ensure_search_input_entity(
+            &mut self.upstream_picker_search_input,
+            crate::i18n::tr_str("ui.picker.filter.remote_branches"),
+            window,
+            cx,
+        );
+        if self._upstream_picker_search_input_subscription.is_none() {
+            self._upstream_picker_search_input_subscription =
+                Some(Self::picker_search_subscription(
+                    &input,
+                    window,
+                    cx,
+                    |this| upstream_picker_state(this).is_some(),
+                    |this| &mut this.upstream_picker_selected_index,
+                    |this, query, _cx| {
+                        let Some((repo_id, branch)) = upstream_picker_state(this) else {
+                            return None;
+                        };
+                        Some(upstream_picker::nav_targets(this, repo_id, &branch, query))
+                    },
+                    |this, cx| this.close_popover(cx),
+                    |this, sel, cx| {
+                        let Some((repo_id, branch)) = upstream_picker_state(this) else {
+                            return;
+                        };
+                        let query = this
+                            .upstream_picker_search_input
+                            .as_ref()
+                            .map(|input| input.read(cx).text().trim().to_string())
+                            .unwrap_or_default();
+                        let rows = upstream_picker::cached(this, repo_id, &branch, &query);
+                        this.scroll_picker_prompt_to_row(
+                            &rows.items,
+                            &rows.layout,
+                            sel,
+                            components::PICKER_LIST_MAX_HEIGHT_PX,
+                            cx,
+                        );
+                    },
+                    |this, payload, _query, _window, cx| {
+                        let Some((repo_id, branch)) = upstream_picker_state(this) else {
+                            return;
+                        };
+                        let Some(row) = payload else {
+                            return;
+                        };
+                        upstream_picker::activate(this, repo_id, branch, row, cx);
+                    },
+                ));
+        }
+        self.reset_picker_search_input(&input, window, cx);
+        input
+    }
+
     pub(super) fn ensure_submodule_picker_search_input(
         &mut self,
         window: &mut Window,
@@ -801,6 +860,14 @@ fn workspace_picker_state(this: &PopoverHost) -> Option<RepoId> {
             repo_id,
             kind: RepoPopoverKind::Worktree(WorktreePopoverKind::BadgePicker),
         }) => Some(*repo_id),
+        _ => None,
+    }
+}
+
+/// The repository and branch whose tracking the upstream picker changes.
+fn upstream_picker_state(this: &PopoverHost) -> Option<(RepoId, String)> {
+    match &this.popover {
+        Some(PopoverKind::UpstreamPicker { repo_id, branch }) => Some((*repo_id, branch.clone())),
         _ => None,
     }
 }

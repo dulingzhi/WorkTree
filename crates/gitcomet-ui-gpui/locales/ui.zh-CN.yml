@@ -17,6 +17,7 @@ ui:
       stashes: 筛选贮藏
       commits: 筛选提交
       authors: 筛选作者
+      remote_branches: 筛选远程分支
     repo:
       sort:
         newest: 最新
@@ -40,6 +41,8 @@ ui:
       empty: 没有标签
     file_history:
       no_commits: 没有提交
+    upstream:
+      no_remote_branches: 没有远程分支
   label:
     autosquash:
       to_top_commit: 并入顶部提交

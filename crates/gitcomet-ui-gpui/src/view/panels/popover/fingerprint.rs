@@ -166,6 +166,7 @@ fn repo_for_popover<'a>(state: &'a AppState, popover: &PopoverKind) -> Option<&'
         | PopoverKind::CreateTagPrompt { repo_id, .. }
         | PopoverKind::Repo { repo_id, .. }
         | PopoverKind::FileHistory { repo_id, .. }
+        | PopoverKind::UpstreamPicker { repo_id, .. }
         | PopoverKind::PushSetUpstreamPrompt { repo_id, .. }
         | PopoverKind::ForcePushConfirm { repo_id }
         | PopoverKind::CherryPickCommitConfirm { repo_id, .. }
@@ -280,6 +281,13 @@ fn hash_repo_for_popover<H: Hasher>(repo: &RepoState, popover: &PopoverKind, has
         PopoverKind::FileHistory { .. } => {
             repo.history_state.file_history_path.hash(hasher);
             view_fingerprint::hash_loadable_arc(&repo.history_state.file_history, hasher);
+        }
+
+        // Rows are the remote branches; the unlink row and the marked row come
+        // from the branch's tracking config, which rides the branch list.
+        PopoverKind::UpstreamPicker { .. } => {
+            repo.branches_rev.hash(hasher);
+            repo.remote_branches_rev.hash(hasher);
         }
 
         PopoverKind::DiffHunkMenu { .. }
@@ -555,6 +563,11 @@ fn hash_popover_kind<H: Hasher>(kind: &PopoverKind, hasher: &mut H) {
             30u8.hash(hasher);
             repo_id.hash(hasher);
             remote.hash(hasher);
+        }
+        PopoverKind::UpstreamPicker { repo_id, branch } => {
+            103u8.hash(hasher);
+            repo_id.hash(hasher);
+            branch.hash(hasher);
         }
         PopoverKind::ForcePushConfirm { repo_id } => {
             31u8.hash(hasher);

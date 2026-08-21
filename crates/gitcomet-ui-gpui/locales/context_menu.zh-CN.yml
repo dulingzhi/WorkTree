@@ -94,6 +94,7 @@
 "Pull (default)": "拉取（默认）"
 "Pull (fast-forward if possible)": "拉取（尽可能快进）"
 "Pull (fast-forward only)": "拉取（仅快进）"
+"Change tracking upstream…": "切换跟踪的上游分支…"
 "Pull (rebase)": "拉取（变基）"
 "Pull into current": "拉取到当前分支"
 "Push": "推送"

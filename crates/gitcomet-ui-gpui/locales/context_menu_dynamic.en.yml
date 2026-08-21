@@ -7,6 +7,7 @@ cm:
   branch:
     mark_for_comparison: "Mark %{name} for comparison"
     compare_with: "Compare with %{name}"
+    fast_forward_to: "Fast-forward to %{upstream}"
   rebase_onto: "Rebase %{current} onto %{target}"
   interactive_rebase_onto: "Interactive rebase %{current} onto %{target}"
   tag:

@@ -44,6 +44,7 @@ pub(super) enum RowsCacheOwner {
     FileHistory,
     Submodule,
     Worktree,
+    UpstreamPicker,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

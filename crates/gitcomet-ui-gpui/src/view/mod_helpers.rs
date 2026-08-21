@@ -4427,6 +4427,12 @@ pub(super) enum PopoverKind {
     BranchPicker {
         purpose: BranchPickerPurpose,
     },
+    /// Pick (or clear) the remote-tracking branch a local branch follows.
+    /// Opened from the local branch menu's "Change tracking upstream…".
+    UpstreamPicker {
+        repo_id: RepoId,
+        branch: String,
+    },
     CreateBranchFromRefPrompt {
         repo_id: RepoId,
         target: String,

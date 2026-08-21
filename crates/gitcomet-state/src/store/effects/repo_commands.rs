@@ -894,6 +894,26 @@ pub(super) fn schedule_unset_upstream_branch(
     );
 }
 
+pub(super) fn schedule_fast_forward_branch(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    branch: String,
+) {
+    let command_branch = branch.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::FastForwardBranch {
+            branch: command_branch,
+        },
+        move |repo| repo.fast_forward_branch_to_upstream_with_output(&branch),
+    );
+}
+
 pub(super) fn schedule_delete_remote_branch(
     executor: &TaskExecutor,
     repos: &RepoMap,

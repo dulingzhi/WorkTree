@@ -25,6 +25,7 @@ ui:
       stashes: Filter stashes
       commits: Filter commits
       authors: Filter authors
+      remote_branches: Filter remote branches
     repo:
       sort:
         newest: Newest
@@ -48,6 +49,8 @@ ui:
       empty: No tags
     file_history:
       no_commits: No commits
+    upstream:
+      no_remote_branches: No remote branches
   label:
     autosquash:
       to_top_commit: To Top Commit

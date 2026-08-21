@@ -1294,6 +1294,10 @@ impl PopoverHost {
                 self.store
                     .dispatch(Msg::UnsetUpstreamBranch { repo_id, branch });
             }
+            ContextMenuAction::FastForwardBranch { repo_id, branch } => {
+                self.store
+                    .dispatch(Msg::FastForwardBranch { repo_id, branch });
+            }
             ContextMenuAction::SetUiScale { percent } => {
                 cx.defer(move |cx| {
                     crate::app::set_app_ui_scale_percent(cx, percent);

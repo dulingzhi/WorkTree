@@ -719,3 +719,136 @@ fn list_ref_metadata_reports_author_date_and_subject_for_local_and_remote_refs()
     let remote_main = lookup("origin/main").expect("origin/main present");
     assert_eq!(remote_main.summary, "base commit");
 }
+
+#[test]
+fn fast_forward_branch_to_upstream_moves_only_fast_forwardable_branches() {
+    if !require_git_shell_for_refs_integration_tests() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+
+    let remote_repo = root.join("remote.git");
+    let work_repo = root.join("work");
+    fs::create_dir_all(&remote_repo).unwrap();
+    fs::create_dir_all(&work_repo).unwrap();
+
+    run_git(&remote_repo, &["init", "--bare", "-b", "main"]);
+
+    run_git(&work_repo, &["init", "-b", "main"]);
+    run_git(&work_repo, &["config", "user.email", "you@example.com"]);
+    run_git(&work_repo, &["config", "user.name", "You"]);
+    run_git(&work_repo, &["config", "commit.gpgsign", "false"]);
+    let origin_url = git_remote_url(&remote_repo);
+    run_git(
+        &work_repo,
+        &["remote", "add", "origin", origin_url.as_str()],
+    );
+
+    fs::write(work_repo.join("file.txt"), "base\n").unwrap();
+    run_git(&work_repo, &["add", "file.txt"]);
+    run_git(
+        &work_repo,
+        &["-c", "commit.gpgsign=false", "commit", "-m", "base"],
+    );
+    run_git(&work_repo, &["push", "origin", "main"]);
+
+    run_git(&work_repo, &["checkout", "-b", "feature"]);
+    fs::write(work_repo.join("feature.txt"), "one\n").unwrap();
+    run_git(&work_repo, &["add", "feature.txt"]);
+    run_git(
+        &work_repo,
+        &["-c", "commit.gpgsign=false", "commit", "-m", "feature one"],
+    );
+    fs::write(work_repo.join("feature.txt"), "one\ntwo\n").unwrap();
+    run_git(
+        &work_repo,
+        &["-c", "commit.gpgsign=false", "commit", "-am", "feature two"],
+    );
+    // A plain push with a refspec does not create tracking config, so wire the
+    // upstream explicitly — that config is what the command under test reads.
+    run_git(&work_repo, &["push", "origin", "feature"]);
+    run_git(
+        &work_repo,
+        &["branch", "--set-upstream-to=origin/feature", "feature"],
+    );
+
+    let backend = GixBackend;
+    let opened = backend.open(&work_repo).unwrap();
+
+    let rev = |name: &str| {
+        run_git_capture(&work_repo, &["rev-parse", name])
+            .trim()
+            .to_string()
+    };
+
+    // A branch without tracking config refuses rather than guessing a source.
+    let error = opened
+        .fast_forward_branch_to_upstream_with_output("main")
+        .err()
+        .expect("main tracks nothing, so the command must refuse");
+    assert!(
+        error.to_string().contains("no upstream"),
+        "unexpected error: {error}"
+    );
+
+    // Non-current branch: leave `feature` one commit behind, then fast-forward
+    // it in place from the main checkout.
+    run_git(&work_repo, &["checkout", "main"]);
+    run_git(&work_repo, &["branch", "-f", "feature", "feature~1"]);
+    let behind = rev("feature");
+    assert_ne!(behind, rev("origin/feature"));
+    let output = opened
+        .fast_forward_branch_to_upstream_with_output("feature")
+        .expect("behind branch fast-forwards");
+    assert_eq!(output.exit_code, Some(0));
+    assert_eq!(rev("feature"), rev("origin/feature"));
+
+    // Non-fast-forward: the branch moves past its upstream *without* pushing,
+    // so the update would be a rewind and both git paths must refuse it.
+    run_git(&work_repo, &["checkout", "feature"]);
+    fs::write(work_repo.join("feature.txt"), "one\ntwo\nthree\n").unwrap();
+    run_git(
+        &work_repo,
+        &[
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-am",
+            "feature three",
+        ],
+    );
+    run_git(&work_repo, &["checkout", "main"]);
+    let ahead = rev("feature");
+    let refused = opened
+        .fast_forward_branch_to_upstream_with_output("feature")
+        .err()
+        .expect("a rewind is not a fast-forward, so git must refuse");
+    assert!(
+        refused.to_string().to_lowercase().contains("fetch"),
+        "unexpected error: {refused}"
+    );
+    assert_eq!(rev("feature"), ahead, "the refused branch must not move");
+
+    // Current branch: `git merge --ff-only` takes it to the upstream tip.
+    run_git(&work_repo, &["checkout", "feature"]);
+    fs::write(work_repo.join("feature.txt"), "one\ntwo\nthree\nfour\n").unwrap();
+    run_git(
+        &work_repo,
+        &[
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-am",
+            "feature four",
+        ],
+    );
+    run_git(&work_repo, &["push", "origin", "feature"]);
+    run_git(&work_repo, &["reset", "--hard", "HEAD~1"]);
+    assert_ne!(rev("feature"), rev("origin/feature"));
+    let output = opened
+        .fast_forward_branch_to_upstream_with_output("feature")
+        .expect("current branch fast-forwards");
+    assert_eq!(output.exit_code, Some(0));
+    assert_eq!(rev("feature"), rev("origin/feature"));
+}
