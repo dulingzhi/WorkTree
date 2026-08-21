@@ -3404,7 +3404,7 @@ impl PopoverHost {
                     self.store
                         .dispatch(Msg::LoadSubmodules { repo_id: *repo_id });
                 }
-                PopoverKind::FileHistory { repo_id, path } => {
+                PopoverKind::FileHistory { repo_id, path, .. } => {
                     self.ensure_file_history_search_input(window, cx);
                     self.store.dispatch(Msg::LoadFileHistory {
                         repo_id: *repo_id,
@@ -4104,9 +4104,11 @@ impl PopoverHost {
                     }
                 },
             },
-            PopoverKind::FileHistory { repo_id, path } => {
-                file_history::panel(self, repo_id, path, cx)
-            }
+            PopoverKind::FileHistory {
+                repo_id,
+                path,
+                is_dir,
+            } => file_history::panel(self, repo_id, path, is_dir, cx),
             PopoverKind::PushSetUpstreamPrompt { repo_id, remote } => {
                 push_set_upstream_prompt::panel(self, repo_id, remote, cx)
             }

@@ -107,6 +107,7 @@ pub(super) fn panel(
     this: &mut PopoverHost,
     repo_id: RepoId,
     path: std::path::PathBuf,
+    is_dir: bool,
     cx: &mut gpui::Context<PopoverHost>,
 ) -> gpui::Div {
     let theme = this.theme;
@@ -134,7 +135,11 @@ pub(super) fn panel(
                     div()
                         .text_sm()
                         .font_weight(FontWeight::BOLD)
-                        .child(crate::i18n::tr("prompts.file_history.title")),
+                        .child(if is_dir {
+                            crate::i18n::tr("prompts.file_history.folder_title")
+                        } else {
+                            crate::i18n::tr("prompts.file_history.title")
+                        }),
                 )
                 .child(
                     div()
@@ -210,16 +215,35 @@ pub(super) fn panel(
                         let Some(commit_id) = commit_ids.get(ix).cloned() else {
                             return;
                         };
-                        // Open the file's *content* at the chosen commit (which
-                        // also records the view in the back/forward history),
-                        // rather than showing that commit's diff. Routed through
-                        // `OpenFileAtCommit` so the path is resolved to the name
-                        // the file had at that commit, following renames.
-                        this.store.dispatch(Msg::OpenFileAtCommit {
-                            repo_id,
-                            commit_id,
-                            path: path.clone(),
-                        });
+                        if is_dir {
+                            // A folder has no single content to open, so a row
+                            // shows the commit instead: selected in the history
+                            // list with its changes *under* the folder in the
+                            // diff view — the same thing the Enter key does.
+                            this.store.dispatch(Msg::SelectCommit {
+                                repo_id,
+                                commit_id: commit_id.clone(),
+                            });
+                            this.store.dispatch(Msg::SelectDiff {
+                                repo_id,
+                                target: DiffTarget::Commit {
+                                    commit_id,
+                                    path: Some(path.clone()),
+                                },
+                            });
+                        } else {
+                            // Open the file's *content* at the chosen commit
+                            // (which also records the view in the back/forward
+                            // history), rather than showing that commit's diff.
+                            // Routed through `OpenFileAtCommit` so the path is
+                            // resolved to the name the file had at that commit,
+                            // following renames.
+                            this.store.dispatch(Msg::OpenFileAtCommit {
+                                repo_id,
+                                commit_id,
+                                path: path.clone(),
+                            });
+                        }
                         this.close_popover(cx);
                     })
                     .into_any_element()

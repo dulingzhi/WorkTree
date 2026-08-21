@@ -59,6 +59,7 @@ fn open_file_history(
                     PopoverKind::FileHistory {
                         repo_id,
                         path: path.clone(),
+                        is_dir: false,
                     },
                     gpui::point(gpui::px(120.0), gpui::px(72.0)),
                     window,

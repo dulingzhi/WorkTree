@@ -754,6 +754,7 @@ impl MainPaneView {
                         PopoverKind::FileHistory {
                             repo_id,
                             path: path.clone(),
+                            is_dir: false,
                         },
                         anchor,
                         window,

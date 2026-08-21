@@ -1266,6 +1266,25 @@ fn file_browser_folder_menu_hides_os_actions_for_a_commit_source(cx: &mut gpui::
     assert!(context_menu_has_entry(&model, "Copy relative path"));
 }
 
+/// The folder menu offers the folder's history — the file menu's "File
+/// history" counterpart — and the popover it opens must carry `is_dir` so its
+/// rows reveal the commit instead of opening a file version.
+#[gpui::test]
+fn file_browser_folder_menu_offers_folder_history(cx: &mut gpui::TestAppContext) {
+    let model = file_browser_folder_menu_model(cx, |_repo| {});
+
+    assert!(context_menu_has_entry(&model, "Folder history"));
+    match context_menu_action_for(&model, "Folder history") {
+        ContextMenuAction::OpenPopover {
+            kind: PopoverKind::FileHistory { path, is_dir, .. },
+        } => {
+            assert_eq!(path, std::path::PathBuf::from("src"));
+            assert!(is_dir, "folder history must mark the path as a directory");
+        }
+        _ => panic!("expected a FileHistory popover action"),
+    }
+}
+
 #[gpui::test]
 fn file_browser_folder_menu_copy_entries_carry_different_paths(cx: &mut gpui::TestAppContext) {
     let model = file_browser_folder_menu_model(cx, |_repo| {});

@@ -4487,6 +4487,10 @@ pub(super) enum PopoverKind {
     FileHistory {
         repo_id: RepoId,
         path: std::path::PathBuf,
+        /// The path is a directory: the popover lists the folder's history and
+        /// rows open the commit's changes *under* the folder instead of a file
+        /// version.
+        is_dir: bool,
     },
     /// Right-click menu on a reflog panel row: the same reset actions the
     /// history log's commit context menu offers, targeting the commit the

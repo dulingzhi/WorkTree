@@ -87,6 +87,23 @@ pub(super) fn model(
         }),
     });
 
+    // The folder counterpart of the file menu's "File history": lists the
+    // commits with changes under the folder. The backend drops `--follow`
+    // (a single-file notion) for directory pathspecs.
+    items.push(ContextMenuItem::Entry {
+        label: "Folder history".into(),
+        icon: Some("icons/refresh.svg".into()),
+        shortcut: None,
+        disabled: false,
+        action: Box::new(ContextMenuAction::OpenPopover {
+            kind: PopoverKind::FileHistory {
+                repo_id,
+                path: path.to_path_buf(),
+                is_dir: true,
+            },
+        }),
+    });
+
     // A folder listed from a commit or a branch has no guaranteed counterpart
     // on disk, so the OS actions are working-tree only — the same line the file
     // menu draws.

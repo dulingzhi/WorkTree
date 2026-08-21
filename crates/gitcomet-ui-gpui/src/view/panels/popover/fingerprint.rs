@@ -538,10 +538,18 @@ fn hash_popover_kind<H: Hasher>(kind: &PopoverKind, hasher: &mut H) {
             hash_repo_popover_kind(*repo_id, kind, hasher);
         }
 
-        PopoverKind::FileHistory { repo_id, path } => {
+        PopoverKind::FileHistory {
+            repo_id,
+            path,
+            is_dir,
+        } => {
             28u8.hash(hasher);
             repo_id.hash(hasher);
             path.hash(hasher);
+            // A path is either a file or a directory, so this is derivable
+            // from the path — but hashing it keeps the fingerprint honest for
+            // free if that ever stops being true.
+            is_dir.hash(hasher);
         }
         PopoverKind::PushSetUpstreamPrompt { repo_id, remote } => {
             30u8.hash(hasher);

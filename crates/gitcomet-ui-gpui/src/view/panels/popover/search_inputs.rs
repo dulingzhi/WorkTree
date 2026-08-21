@@ -683,7 +683,7 @@ impl PopoverHost {
                     let Some(commit_id) = payload else {
                         return;
                     };
-                    let Some(PopoverKind::FileHistory { repo_id, path }) = this.popover.clone()
+                    let Some(PopoverKind::FileHistory { repo_id, path, .. }) = this.popover.clone()
                     else {
                         return;
                     };

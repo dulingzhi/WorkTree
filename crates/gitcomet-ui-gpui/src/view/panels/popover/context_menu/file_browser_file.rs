@@ -120,6 +120,7 @@ pub(super) fn model(
             kind: PopoverKind::FileHistory {
                 repo_id,
                 path: path.to_path_buf(),
+                is_dir: false,
             },
         }),
     });

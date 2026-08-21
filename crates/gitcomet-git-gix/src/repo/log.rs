@@ -1354,9 +1354,17 @@ impl GixRepo {
     fn log_follow_commits(&self, path: &Path, max_count: Option<usize>) -> Result<Vec<Commit>> {
         let mut cmd = self.git_workdir_cmd();
         cmd.arg("log")
-            .arg("--follow")
             .arg("--date=unix")
             .arg("--pretty=format:%H%x1f%P%x1f%an%x1f%ct%x1f%s%x1e");
+        // Rename following is a single-file notion; the folder-history
+        // popover reuses this walk with a directory pathspec, where `--follow`
+        // is at best ignored and would only pay for rename detection that can
+        // never match. An absolute `path` joins to itself, so the check holds
+        // for both shapes callers pass.
+        let follow_applies = !self.spec.workdir.join(path).is_dir();
+        if follow_applies {
+            cmd.arg("--follow");
+        }
         if let Some(max_count) = max_count {
             cmd.arg(format!("-n{max_count}"));
         }
@@ -2519,6 +2527,33 @@ mod tests {
             Arc::ptr_eq(&cached_commits, &cache[0].commits),
             "third page should use the cached full follow result"
         );
+    }
+
+    #[test]
+    fn log_file_page_for_directory_lists_only_commits_touching_it() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let workdir = tmp.path();
+        init_test_repo(workdir);
+
+        commit_file(workdir, "outside.txt", "one\n", "outside only");
+        commit_file(workdir, "src/inside.txt", "one\n", "inside first");
+        commit_file(workdir, "outside.txt", "two\n", "outside again");
+        commit_file(workdir, "src/nested/deep.txt", "deep\n", "nested inside");
+
+        let repo = open_repo(workdir);
+        let page = repo
+            .log_file_page_impl(Path::new("src"), 10, None)
+            .expect("directory log page");
+
+        let summaries: Vec<&str> = page
+            .commits
+            .iter()
+            .map(|commit| commit.summary.as_ref())
+            .collect();
+        // Newest first, and only the commits with changes under `src` — the
+        // walk for a directory pathspec must not fall over the dropped
+        // `--follow` flag.
+        assert_eq!(summaries, vec!["nested inside", "inside first"]);
     }
 
     #[test]

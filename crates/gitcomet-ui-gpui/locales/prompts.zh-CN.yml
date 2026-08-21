@@ -80,6 +80,7 @@ prompts:
     add: "添加"
   file_history:
     title: "文件历史"
+    folder_title: "文件夹历史"
     close: "关闭"
   gitignore:
     title: "添加到 .gitignore"

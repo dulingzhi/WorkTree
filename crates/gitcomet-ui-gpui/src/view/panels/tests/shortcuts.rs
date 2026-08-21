@@ -1723,7 +1723,7 @@ fn file_and_diff_context_menu_shortcuts_match_expected_actions(cx: &mut gpui::Te
         commit_file_model,
         "H",
         ContextMenuAction::OpenPopover {
-            kind: PopoverKind::FileHistory { repo_id: rid, path }
+            kind: PopoverKind::FileHistory { repo_id: rid, path, .. }
         } if *rid == repo_id && path == &commit_file_path
     );
     assert_shortcut_action!(
@@ -1759,7 +1759,7 @@ fn file_and_diff_context_menu_shortcuts_match_expected_actions(cx: &mut gpui::Te
         unstaged_status_model,
         &sec("H"),
         ContextMenuAction::OpenPopover {
-            kind: PopoverKind::FileHistory { repo_id: rid, path }
+            kind: PopoverKind::FileHistory { repo_id: rid, path, .. }
         } if *rid == repo_id && path == &unstaged_path
     );
     assert_shortcut_action!(
@@ -1813,7 +1813,7 @@ fn file_and_diff_context_menu_shortcuts_match_expected_actions(cx: &mut gpui::Te
         staged_status_model,
         &sec("H"),
         ContextMenuAction::OpenPopover {
-            kind: PopoverKind::FileHistory { repo_id: rid, path }
+            kind: PopoverKind::FileHistory { repo_id: rid, path, .. }
         } if *rid == repo_id && path == &staged_path
     );
     assert_shortcut_action!(
@@ -1874,7 +1874,7 @@ fn file_and_diff_context_menu_shortcuts_match_expected_actions(cx: &mut gpui::Te
         conflicted_status_model,
         &sec("H"),
         ContextMenuAction::OpenPopover {
-            kind: PopoverKind::FileHistory { repo_id: rid, path }
+            kind: PopoverKind::FileHistory { repo_id: rid, path, .. }
         } if *rid == repo_id && path == &conflicted_path
     );
     assert_shortcut_action!(

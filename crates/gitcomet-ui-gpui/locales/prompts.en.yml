@@ -87,6 +87,7 @@ prompts:
     add: "Add"
   file_history:
     title: "File history"
+    folder_title: "Folder history"
     close: "Close"
   gitignore:
     title: "Add to .gitignore"
