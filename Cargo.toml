@@ -39,9 +39,12 @@ gitcomet-ui-gpui = { path = "crates/gitcomet-ui-gpui", default-features = false 
 # External crates
 alacritty_terminal = "0.26"
 anyhow = "1"
+# Web charset detection + decoding for viewing non-UTF-8 (e.g. GBK) text files.
+chardetng = "0.1"
 clap = { version = "4.6.6", features = ["derive"] }
 criterion = "0.8.2"
 # Groovy grammar: the `tree-sitter-groovy` crate name is taken by amaanq's fork,
+encoding_rs = "0.8"
 # which ships no highlights query. This one does.
 dekobon-tree-sitter-groovy = "0.2.2"
 fontdb = "0.24.0"

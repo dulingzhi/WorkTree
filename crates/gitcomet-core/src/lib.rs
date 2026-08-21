@@ -4,6 +4,7 @@ pub mod conflict_output;
 pub mod conflict_session;
 pub mod diff;
 pub mod domain;
+pub mod encoding;
 pub mod error;
 pub mod file_diff;
 pub mod git_ops_trace;

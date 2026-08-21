@@ -20,7 +20,7 @@ use gitcomet_core::path_utils::strip_windows_verbatim_prefix;
 use gitcomet_core::services::{CancellationToken, ConflictFileStages, Result};
 use rustc_hash::FxHasher;
 use std::hash::{Hash, Hasher};
-use std::io::{BufReader, Read, Write};
+use std::io::{BufReader, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
@@ -228,17 +228,34 @@ impl GixRepo {
         let mut tmp_file =
             tempfile::NamedTempFile::new_in(std::env::temp_dir()).map_err(io_err_to_error)?;
         let mut content_hasher = FxHasher::default();
+        // The identity hashes the raw normalized bytes; UTF-8 validity only
+        // decides whether the cached copy needs a display transcode.
+        let mut utf8_check = StreamingUtf8Check::default();
         match normalized {
             gix::filter::plumbing::pipeline::convert::ToGitOutcome::Unchanged(mut file) => {
-                copy_and_hash(&mut file, &mut tmp_file, &mut content_hasher)?;
+                copy_hash_and_check_utf8(
+                    &mut file,
+                    &mut tmp_file,
+                    &mut content_hasher,
+                    &mut utf8_check,
+                )?;
             }
             gix::filter::plumbing::pipeline::convert::ToGitOutcome::Process(mut file) => {
-                copy_and_hash(&mut file, &mut tmp_file, &mut content_hasher)?;
+                copy_hash_and_check_utf8(
+                    &mut file,
+                    &mut tmp_file,
+                    &mut content_hasher,
+                    &mut utf8_check,
+                )?;
             }
             gix::filter::plumbing::pipeline::convert::ToGitOutcome::Buffer(bytes) => {
                 bytes.hash(&mut content_hasher);
+                utf8_check.push(bytes.as_ref());
                 tmp_file.write_all(bytes).map_err(io_err_to_error)?;
             }
+        }
+        if !utf8_check.finish() {
+            rewrite_temp_file_as_utf8(&mut tmp_file)?;
         }
         tmp_file.flush().map_err(io_err_to_error)?;
 
@@ -499,11 +516,29 @@ impl GixRepo {
                 "git cat-file did not expose stdout".to_string(),
             ))
         })?;
-        std::io::copy(&mut stdout, &mut tmp_file).map_err(io_err_to_error)?;
+        // Diff sides must be valid UTF-8 for the viewer; a blob saved in a
+        // legacy encoding (GBK and friends) is transcode-detected in place
+        // while it streams through.
+        let mut utf8_check = StreamingUtf8Check::default();
+        let mut buffer = [0u8; 64 * 1024];
+        loop {
+            let read = stdout.read(&mut buffer).map_err(io_err_to_error)?;
+            if read == 0 {
+                break;
+            }
+            utf8_check.push(&buffer[..read]);
+            tmp_file
+                .write_all(&buffer[..read])
+                .map_err(io_err_to_error)?;
+        }
+        let blob_is_utf8 = utf8_check.finish();
 
         let output = child.wait_with_output().map_err(io_err_to_error)?;
         if !output.status.success() {
             return Err(git_command_failed_error("git cat-file", output));
+        }
+        if !blob_is_utf8 {
+            rewrite_temp_file_as_utf8(&mut tmp_file)?;
         }
         tmp_file.flush().map_err(io_err_to_error)?;
 
@@ -941,8 +976,9 @@ enum UnifiedBlobPrefix {
 }
 
 fn decode_utf8_bytes(bytes: Vec<u8>) -> Result<String> {
-    String::from_utf8(bytes)
-        .map_err(|_| Error::new(ErrorKind::Unsupported("file is not valid UTF-8")))
+    // Legacy-encoded blobs (GBK and friends) are transcoded instead of
+    // rejected; the result is always valid UTF-8.
+    Ok(gitcomet_core::encoding::text_bytes_to_utf8_string(bytes))
 }
 
 fn gix_blob_bytes_from_object_id_optional(
@@ -1172,10 +1208,11 @@ fn worktree_file_path_optional(workdir: &Path, path: &Path) -> Option<std::path:
         .map(|_| full)
 }
 
-fn copy_and_hash(
+fn copy_hash_and_check_utf8(
     reader: &mut impl Read,
     writer: &mut impl Write,
     hasher: &mut FxHasher,
+    utf8_check: &mut StreamingUtf8Check,
 ) -> Result<()> {
     let mut buffer = [0u8; 64 * 1024];
     loop {
@@ -1183,9 +1220,90 @@ fn copy_and_hash(
         if read == 0 {
             return Ok(());
         }
+        utf8_check.push(&buffer[..read]);
         buffer[..read].hash(hasher);
         writer.write_all(&buffer[..read]).map_err(io_err_to_error)?;
     }
+}
+
+/// Incremental UTF-8 validity check over a byte stream. Multi-byte sequences
+/// split across chunks are carried in a small tail so a split surrogate pair
+/// is not misjudged. Once a stream is known invalid it stays invalid — the
+/// caller only needs a verdict, not the error position.
+#[derive(Default)]
+struct StreamingUtf8Check {
+    valid: bool,
+    tail: Vec<u8>,
+}
+
+impl StreamingUtf8Check {
+    fn push(&mut self, chunk: &[u8]) {
+        if !self.valid {
+            return;
+        }
+        if !self.tail.is_empty() {
+            let mut combined = Vec::with_capacity(self.tail.len() + chunk.len());
+            combined.extend_from_slice(&self.tail);
+            combined.extend_from_slice(chunk);
+            match std::str::from_utf8(&combined) {
+                Ok(_) => {
+                    self.tail.clear();
+                    return;
+                }
+                Err(error) => {
+                    if error.error_len().is_some() {
+                        self.valid = false;
+                        self.tail.clear();
+                        return;
+                    }
+                    let valid_up_to = error.valid_up_to();
+                    self.tail.clear();
+                    self.tail.extend_from_slice(&combined[valid_up_to..]);
+                    return;
+                }
+            }
+        }
+        match std::str::from_utf8(chunk) {
+            Ok(_) => {}
+            Err(error) => {
+                if error.error_len().is_some() {
+                    self.valid = false;
+                } else {
+                    let valid_up_to = error.valid_up_to();
+                    self.tail.extend_from_slice(&chunk[valid_up_to..]);
+                }
+            }
+        }
+    }
+
+    fn finish(&mut self) -> bool {
+        if self.valid && !self.tail.is_empty() {
+            // An incomplete sequence dangling at EOF is invalid UTF-8.
+            self.valid = false;
+        }
+        self.valid
+    }
+}
+
+/// Rewrites a materialized diff side in place as UTF-8 when it was saved in a
+/// legacy encoding (GBK/GB18030, UTF-16, …). Only called after a streaming
+/// check rejected the raw bytes, so the extra full read is paid by non-UTF-8
+/// files alone.
+fn rewrite_temp_file_as_utf8(tmp_file: &mut tempfile::NamedTempFile) -> Result<()> {
+    let raw = std::fs::read(tmp_file.path()).map_err(io_err_to_error)?;
+    let converted = gitcomet_core::encoding::text_bytes_to_utf8(raw.as_slice());
+    if matches!(converted, std::borrow::Cow::Borrowed(_)) {
+        return Ok(());
+    }
+    tmp_file.as_file_mut().set_len(0).map_err(io_err_to_error)?;
+    tmp_file
+        .as_file_mut()
+        .seek(std::io::SeekFrom::Start(0))
+        .map_err(io_err_to_error)?;
+    tmp_file
+        .write_all(converted.as_ref())
+        .map_err(io_err_to_error)?;
+    Ok(())
 }
 
 fn persist_worktree_git_cache_file(
@@ -1256,7 +1374,10 @@ fn preview_blob_cache_path(
         .filter(|ext| !ext.is_empty())
         .map(|ext| format!(".{ext}"))
         .unwrap_or_default();
-    std::env::temp_dir().join(format!("gitcomet-diff-preview-{hash:016x}{suffix}"))
+    // The "2" version-segments the prefix: caches materialized before
+    // non-UTF-8 blobs were transcoded hold raw legacy bytes and must not be
+    // served by the early-return above.
+    std::env::temp_dir().join(format!("gitcomet-diff-preview2-{hash:016x}{suffix}"))
 }
 
 fn io_err_to_error(error: std::io::Error) -> Error {
@@ -1516,5 +1637,42 @@ mod tests {
         assert_eq!(diff.path, Path::new("vendor/sub"));
         assert!(diff.old_source.is_none());
         assert!(diff.new_source.is_none());
+    }
+
+    #[test]
+    fn diff_file_text_transcodes_gbk_sides_to_utf8() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        init_test_repo(tmp.path());
+
+        // `int main() { return 0; } // 中文` with the comment in GBK — the
+        // shape of a legacy Windows source file.
+        let gbk_committed: &[u8] = b"int main() { return 0; } // \xD6\xD0\xCE\xC4\n";
+        std::fs::write(tmp.path().join("legacy.cpp"), gbk_committed).expect("write GBK file");
+        run_git(tmp.path(), &["add", "legacy.cpp"]);
+        run_git(tmp.path(), &["commit", "-m", "add GBK source"]);
+
+        let repo = open_repo(tmp.path());
+
+        // Worktree side alone: modify the file with different GBK content.
+        let gbk_modified: &[u8] = b"int main() { return 1; } // \xD6\xD0\xCE\xC4\xD7\xA2\xCA\xCD\n";
+        std::fs::write(tmp.path().join("legacy.cpp"), gbk_modified).expect("write modified GBK");
+
+        let diff = repo
+            .diff_file_text_impl(&DiffTarget::WorkingTree {
+                path: "legacy.cpp".into(),
+                area: DiffArea::Unstaged,
+            })
+            .expect("GBK text diff should not error")
+            .expect("file diff text object");
+
+        for (label, source) in [("old", diff.old_source), ("new", diff.new_source)] {
+            let source = source.expect("{label} source exists");
+            let raw = std::fs::read(&source.path).expect("read materialized side");
+            let text = String::from_utf8(raw).expect("{label} side must be valid UTF-8");
+            assert!(
+                text.contains("中文"),
+                "{label} side should decode the GBK comment"
+            );
+        }
     }
 }

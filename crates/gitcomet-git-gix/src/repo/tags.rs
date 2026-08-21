@@ -6,7 +6,6 @@ use crate::util::{
 use gitcomet_core::domain::{CommitId, RemoteTag, Tag};
 use gitcomet_core::error::{Error, ErrorKind};
 use gitcomet_core::services::{CancellationToken, CommandOutput, Result};
-use gix::bstr::ByteSlice as _;
 use rustc_hash::FxHashSet;
 use std::str;
 use std::thread;
