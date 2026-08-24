@@ -1276,26 +1276,37 @@ fn detect_visual_studio(
     editors: &mut Vec<DetectedExternalEditor>,
     seen: &mut BTreeSet<(String, PathBuf)>,
 ) {
-    const YEARS: &[&str] = &["2022", "2019", "2017"];
+    // Install folders carry the marketing year, newest first so several
+    // installed versions list newest-first. VS 2026 (internal version 18)
+    // has shipped under both folder spellings, so both are probed.
+    const YEARS: &[&[&str]] = &[&["2026", "18"], &["2022"], &["2019"]];
     const EDITIONS: &[&str] = &["Professional", "Community", "Enterprise", "BuildTools"];
 
     for root in &env.visual_studio_roots {
         let base_candidates = [root.join("Microsoft Visual Studio"), root.clone()];
         for base in base_candidates {
-            for year in YEARS {
+            for year_folders in YEARS {
+                let year = year_folders[0];
                 for edition in EDITIONS {
-                    let path = base.join(year).join(edition).join("Common7/IDE/devenv.exe");
-                    if !path.is_file() {
+                    let path = year_folders
+                        .iter()
+                        .map(|folder| {
+                            base.join(folder)
+                                .join(edition)
+                                .join("Common7/IDE/devenv.exe")
+                        })
+                        .find(|path| path.is_file());
+                    let Some(path) = path else {
                         continue;
-                    }
-                    let id = format!("visual-studio-{}", edition.to_ascii_lowercase());
+                    };
+                    let id = format!("visual-studio-{year}-{}", edition.to_ascii_lowercase());
                     let key = (id.clone(), path.clone());
                     if !seen.insert(key) {
                         continue;
                     }
                     editors.push(DetectedExternalEditor {
                         id,
-                        label: format!("Visual Studio {edition}"),
+                        label: format!("Visual Studio {year} {edition}"),
                         path,
                         terminal: false,
                     });
@@ -1305,26 +1316,38 @@ fn detect_visual_studio(
     }
 }
 
-fn editor_label_for_id(id: &str) -> &'static str {
+fn editor_label_for_id(id: &str) -> String {
     PATH_EDITOR_SPECS
         .iter()
         .chain(TERMINAL_EDITOR_SPECS.iter())
         .find(|spec| spec.id == id)
-        .map(|spec| spec.label)
+        .map(|spec| spec.label.to_string())
         .or_else(|| {
             MAC_APP_SPECS
                 .iter()
                 .find(|spec| spec.id == id)
-                .map(|spec| spec.label)
+                .map(|spec| spec.label.to_string())
         })
-        .or(match id {
-            "visual-studio-professional" => Some("Visual Studio Professional"),
-            "visual-studio-community" => Some("Visual Studio Community"),
-            "visual-studio-enterprise" => Some("Visual Studio Enterprise"),
-            "visual-studio-buildtools" => Some("Visual Studio BuildTools"),
-            _ => None,
-        })
-        .unwrap_or(crate::i18n::tr_str("misc.external_editor.fallback_label"))
+        .or_else(|| visual_studio_label_for_id(id))
+        .unwrap_or_else(|| crate::i18n::tr_str("misc.external_editor.fallback_label").to_string())
+}
+
+/// `visual-studio-2022-community` → "Visual Studio 2022 Community", so a
+/// stored setting keeps rendering its label across editions and years.
+fn visual_studio_label_for_id(id: &str) -> Option<String> {
+    let rest = id.strip_prefix("visual-studio-")?;
+    let (year, edition) = rest.split_once('-')?;
+    if year.len() != 4 || !year.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    let edition_label = match edition {
+        "professional" => "Professional",
+        "community" => "Community",
+        "enterprise" => "Enterprise",
+        "buildtools" => "BuildTools",
+        _ => return None,
+    };
+    Some(format!("Visual Studio {year} {edition_label}"))
 }
 
 fn sanitize_debug_id(raw: &str) -> String {
@@ -1545,10 +1568,69 @@ mod tests {
         let editors = detect_external_editors_with_env(&env);
 
         assert!(editors.iter().any(|editor| {
-            editor.id == "visual-studio-professional"
-                && editor.label == "Visual Studio Professional"
+            editor.id == "visual-studio-2022-professional"
+                && editor.label == "Visual Studio 2022 Professional"
                 && editor.path == devenv
         }));
+    }
+
+    #[test]
+    fn detects_visual_studio_2026_under_both_folder_layouts() {
+        for folder in ["2026", "18"] {
+            let root = temp_dir(&format!("visual-studio-{folder}"));
+            let devenv = root.join(format!(
+                "Microsoft Visual Studio/{folder}/Community/Common7/IDE/devenv.exe"
+            ));
+            touch(&devenv);
+            let env = ExternalEditorDetectionEnv {
+                visual_studio_roots: vec![root],
+                ..ExternalEditorDetectionEnv::default()
+            };
+
+            let editors = detect_external_editors_with_env(&env);
+
+            assert!(
+                editors
+                    .iter()
+                    .any(|editor| editor.id == "visual-studio-2026-community"
+                        && editor.label == "Visual Studio 2026 Community"),
+                "the {folder} install folder reports the 2026 marketing year"
+            );
+        }
+    }
+
+    #[test]
+    fn detects_visual_studio_2019() {
+        let root = temp_dir("visual-studio-2019");
+        touch(&root.join("Microsoft Visual Studio/2019/Enterprise/Common7/IDE/devenv.exe"));
+        let env = ExternalEditorDetectionEnv {
+            visual_studio_roots: vec![root],
+            ..ExternalEditorDetectionEnv::default()
+        };
+
+        let editors = detect_external_editors_with_env(&env);
+
+        assert!(editors.iter().any(|editor| {
+            editor.id == "visual-studio-2019-enterprise"
+                && editor.label == "Visual Studio 2019 Enterprise"
+        }));
+    }
+
+    #[test]
+    fn visual_studio_ids_resolve_back_to_their_labels() {
+        assert_eq!(
+            editor_label_for_id("visual-studio-2019-professional"),
+            "Visual Studio 2019 Professional"
+        );
+        assert_eq!(
+            editor_label_for_id("visual-studio-2026-buildtools"),
+            "Visual Studio 2026 BuildTools"
+        );
+        assert_eq!(
+            editor_label_for_id("visual-studio-2026"),
+            "External editor",
+            "an id without an edition falls back rather than half-parsing"
+        );
     }
 
     #[test]

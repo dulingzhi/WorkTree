@@ -125,6 +125,11 @@ fn model_for_state(
 /// twice (the PATH launcher and the macOS app bundle), which would read as a
 /// duplicate row. The editor the user configured is skipped entirely — the
 /// shortcut-bound "Open in code editor" entry already targets that tool.
+///
+/// Visual Studio is the exception on targets: `devenv` only makes sense with
+/// something to open, so its entries carry the repository's solution file
+/// when one is at hand, the folder itself for a CMake project
+/// (`CMakeLists.txt` — devenv's Open Folder mode), and stay hidden otherwise.
 fn detected_editor_entries(
     workdir: &std::path::Path,
     detected: &[crate::external_editor::DetectedExternalEditor],
@@ -145,21 +150,103 @@ fn detected_editor_entries(
             }
             seen_ids.insert(editor.id.clone())
         })
-        .map(|editor| ContextMenuItem::Entry {
-            label: crate::i18n::t!("cm.open_in", name = editor.label.clone())
-                .to_string()
-                .into(),
-            icon: Some("icons/open_external.svg".into()),
-            shortcut: None,
-            disabled: false,
-            action: Box::new(ContextMenuAction::OpenInDetectedEditor {
-                repo_id: None,
-                path: workdir.to_path_buf(),
-                id: editor.id.clone(),
-                editor_path: editor.path.clone(),
-            }),
+        .filter_map(|editor| {
+            let path = if editor.id.starts_with("visual-studio-") {
+                visual_studio_target_for(workdir)?
+            } else {
+                workdir.to_path_buf()
+            };
+            Some(ContextMenuItem::Entry {
+                label: crate::i18n::t!("cm.open_in", name = editor.label.clone())
+                    .to_string()
+                    .into(),
+                icon: Some("icons/open_external.svg".into()),
+                shortcut: None,
+                disabled: false,
+                action: Box::new(ContextMenuAction::OpenInDetectedEditor {
+                    repo_id: None,
+                    path,
+                    id: editor.id.clone(),
+                    editor_path: editor.path.clone(),
+                }),
+            })
         })
         .collect()
+}
+
+/// The path a Visual Studio install should open for this repository: the
+/// first solution file (devenv opens it as the startup solution), or the
+/// workdir itself when a `CMakeLists.txt` marks a CMake project and there is
+/// no solution. `None` when neither applies — there is nothing for devenv
+/// to do.
+///
+/// Memoized per workdir: the menu model is rebuilt on every repaint while
+/// the menu is open, and the search walks the workdir plus each first-level
+/// subdirectory.
+fn visual_studio_target_for(workdir: &std::path::Path) -> Option<std::path::PathBuf> {
+    static CACHE: std::sync::OnceLock<
+        std::sync::Mutex<FxHashMap<std::path::PathBuf, Option<std::path::PathBuf>>>,
+    > = std::sync::OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    let mut guard = cache.lock().expect("visual studio target cache poisoned");
+    guard
+        .entry(workdir.to_path_buf())
+        .or_insert_with(|| {
+            find_solution_file(workdir)
+                .or_else(|| has_cmake_lists(workdir).then(|| workdir.to_path_buf()))
+        })
+        .clone()
+}
+
+/// The repository's solution file: one at the workdir root, else the first
+/// (sorted, so stable) one directly inside a subdirectory — solutions
+/// commonly sit in `Build/` or `src/` rather than at the root.
+fn find_solution_file(workdir: &std::path::Path) -> Option<std::path::PathBuf> {
+    if let Some(solution) = first_file_with_extension(workdir, "sln") {
+        return Some(solution);
+    }
+    let mut subdirs: Vec<std::path::PathBuf> = std::fs::read_dir(workdir)
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.path().is_dir())
+        .map(|entry| entry.path())
+        .collect();
+    subdirs.sort();
+    subdirs
+        .into_iter()
+        .find_map(|dir| first_file_with_extension(&dir, "sln"))
+}
+
+fn first_file_with_extension(dir: &std::path::Path, extension: &str) -> Option<std::path::PathBuf> {
+    let mut found: Vec<std::path::PathBuf> = std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| {
+            entry
+                .path()
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case(extension))
+        })
+        .map(|entry| entry.path())
+        .collect();
+    found.sort();
+    found.into_iter().next()
+}
+
+/// Whether a `CMakeLists.txt` marks this directory (or a first-level
+/// subdirectory of it) as a CMake project.
+fn has_cmake_lists(workdir: &std::path::Path) -> bool {
+    if workdir.join("CMakeLists.txt").is_file() {
+        return true;
+    }
+    std::fs::read_dir(workdir)
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.path().is_dir())
+        .any(|entry| entry.path().join("CMakeLists.txt").is_file())
 }
 
 #[cfg(test)]
@@ -501,5 +588,109 @@ mod tests {
             })
             .collect();
         assert_eq!(labels, vec!["Open in Xcode", "Open in Zed"]);
+    }
+
+    fn workdir_fixture(label: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "gitcomet-repo-tab-vs-{label}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos(),
+        ));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        dir
+    }
+
+    fn visual_studio_editor() -> crate::external_editor::DetectedExternalEditor {
+        detected_editor(
+            "visual-studio-2022-community",
+            "Visual Studio 2022 Community",
+            "C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/devenv.exe",
+        )
+    }
+
+    fn entry_paths(entries: &[ContextMenuItem]) -> Vec<std::path::PathBuf> {
+        entries
+            .iter()
+            .filter_map(|item| match item {
+                ContextMenuItem::Entry { action, .. } => match action.as_ref() {
+                    ContextMenuAction::OpenInDetectedEditor { path, .. } => Some(path.clone()),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn visual_studio_entries_open_the_repository_solution() {
+        let workdir = workdir_fixture("solution");
+        std::fs::write(workdir.join("MyRepo.sln"), "").expect("write solution");
+        let detected = vec![visual_studio_editor()];
+
+        let entries = detected_editor_entries(&workdir, &detected, None);
+
+        assert_eq!(entry_paths(&entries), vec![workdir.join("MyRepo.sln")]);
+    }
+
+    #[test]
+    fn visual_studio_entries_find_solutions_in_a_subdirectory() {
+        let workdir = workdir_fixture("solution-subdir");
+        std::fs::create_dir_all(workdir.join("Build")).expect("create Build dir");
+        std::fs::write(workdir.join("Build/MyRepo.sln"), "").expect("write solution");
+        let detected = vec![visual_studio_editor()];
+
+        let entries = detected_editor_entries(&workdir, &detected, None);
+
+        assert_eq!(
+            entry_paths(&entries),
+            vec![workdir.join("Build/MyRepo.sln")]
+        );
+    }
+
+    #[test]
+    fn visual_studio_entries_open_the_folder_for_cmake_projects() {
+        let workdir = workdir_fixture("cmake");
+        std::fs::write(workdir.join("CMakeLists.txt"), "").expect("write cmake lists");
+        let detected = vec![visual_studio_editor()];
+
+        let entries = detected_editor_entries(&workdir, &detected, None);
+
+        assert_eq!(entry_paths(&entries), vec![workdir.clone()]);
+    }
+
+    #[test]
+    fn visual_studio_entries_prefer_the_solution_over_the_cmake_folder() {
+        let workdir = workdir_fixture("solution-and-cmake");
+        std::fs::write(workdir.join("MyRepo.sln"), "").expect("write solution");
+        std::fs::write(workdir.join("CMakeLists.txt"), "").expect("write cmake lists");
+        let detected = vec![visual_studio_editor()];
+
+        let entries = detected_editor_entries(&workdir, &detected, None);
+
+        assert_eq!(entry_paths(&entries), vec![workdir.join("MyRepo.sln")]);
+    }
+
+    #[test]
+    fn visual_studio_entries_hide_without_a_solution_or_cmake_project() {
+        let workdir = workdir_fixture("nothing-to-open");
+        let detected = vec![
+            visual_studio_editor(),
+            detected_editor("zed", "Zed", "/Applications/Zed.app"),
+        ];
+
+        let entries = detected_editor_entries(&workdir, &detected, None);
+
+        // Visual Studio drops out; the tools that take a plain folder stay.
+        let labels: Vec<&str> = entries
+            .iter()
+            .map(|item| match item {
+                ContextMenuItem::Entry { label, .. } => label.as_ref(),
+                _ => panic!("expected only entries"),
+            })
+            .collect();
+        assert_eq!(labels, vec!["Open in Zed"]);
     }
 }
