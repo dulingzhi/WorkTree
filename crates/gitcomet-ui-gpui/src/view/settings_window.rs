@@ -222,6 +222,18 @@ impl SettingsSection {
     }
 }
 
+/// The model list fetched from the provider's `/models` endpoint, for the AI
+/// commit settings' model picker. The draft fields are plain `String`s that
+/// sync straight to their inputs; this one has a request lifecycle instead.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+enum AiCommitModels {
+    #[default]
+    NotFetched,
+    Loading,
+    Ready(Arc<[String]>),
+    Error(String),
+}
+
 /// A top-level settings grouping, shown as a row in the left-hand navigation.
 /// Each category maps to one of the existing settings cards.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -467,6 +479,8 @@ pub(crate) struct SettingsWindowView {
     external_editor_custom_arguments_input: Entity<components::TextInput>,
     ai_commit_provider: crate::ai_commit::AiProvider,
     ai_commit_provider_scroll: UniformListScrollHandle,
+    ai_commit_models: AiCommitModels,
+    ai_commit_models_scroll: UniformListScrollHandle,
     ai_commit_model_draft: String,
     ai_commit_api_key_draft: String,
     ai_commit_endpoint_draft: String,
@@ -488,6 +502,8 @@ pub(crate) struct SettingsWindowView {
     overflow_probe: bool,
     #[cfg(test)]
     external_editor_browse_notify_count: usize,
+    #[cfg(test)]
+    ai_commit_models_test_fetches: usize,
 }
 
 pub(crate) fn open_settings_window(cx: &mut App) {
@@ -1227,6 +1243,8 @@ impl SettingsWindowView {
             external_editor_custom_arguments_input,
             ai_commit_provider,
             ai_commit_provider_scroll: UniformListScrollHandle::default(),
+            ai_commit_models: AiCommitModels::NotFetched,
+            ai_commit_models_scroll: UniformListScrollHandle::default(),
             ai_commit_model_draft,
             ai_commit_api_key_draft,
             ai_commit_endpoint_draft,
@@ -1250,6 +1268,8 @@ impl SettingsWindowView {
             overflow_probe: false,
             #[cfg(test)]
             external_editor_browse_notify_count: 0,
+            #[cfg(test)]
+            ai_commit_models_test_fetches: 0,
         }
     }
 
@@ -1921,6 +1941,10 @@ impl SettingsWindowView {
         self.ai_commit_provider = provider;
         self.ai_commit_model_draft = provider.default_model().to_string();
         self.ai_commit_endpoint_draft.clear();
+        // The fetched model list belongs to the old provider's endpoint — a
+        // stale list next to the new provider's defaults would invite picking
+        // a model the new endpoint rejects.
+        self.ai_commit_models = AiCommitModels::NotFetched;
         self.ai_commit_model_input.update(cx, |input, cx| {
             input.set_text(provider.default_model().to_string(), cx);
         });
@@ -1928,6 +1952,62 @@ impl SettingsWindowView {
             .update(cx, |input, cx| input.set_text(String::new(), cx));
         self.persist_ai_commit_settings(cx);
         cx.notify();
+    }
+
+    /// Fetch the provider's model list for the model picker. The drafts —
+    /// not the process global — are the source of truth here: the user may
+    /// have edited the endpoint or key without blurring the input yet.
+    fn fetch_ai_commit_models(&mut self, cx: &mut gpui::Context<Self>) {
+        if matches!(self.ai_commit_models, AiCommitModels::Loading) {
+            return;
+        }
+        self.ai_commit_models = AiCommitModels::Loading;
+        cx.notify();
+
+        // The request needs the network; test builds exercise the state
+        // machine up to this point and count what would be sent.
+        #[cfg(not(test))]
+        {
+            let settings = crate::ai_commit::AiCommitSettings {
+                provider: self.ai_commit_provider,
+                api_key: self.ai_commit_api_key_draft.clone(),
+                model: self.ai_commit_model_draft.clone(),
+                endpoint: self.ai_commit_endpoint_draft.clone(),
+            };
+            cx.spawn(async move |pane, cx| {
+                let result = crate::ai_commit::fetch_models(&settings).await;
+                let _ = pane.update(cx, |pane, cx| {
+                    pane.finish_ai_commit_models_fetch(result, cx);
+                });
+            })
+            .detach();
+        }
+        #[cfg(test)]
+        {
+            self.ai_commit_models_test_fetches += 1;
+        }
+    }
+
+    fn finish_ai_commit_models_fetch(
+        &mut self,
+        result: Result<Vec<String>, String>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.ai_commit_models = match result {
+            Ok(models) => AiCommitModels::Ready(models.into()),
+            Err(error) => AiCommitModels::Error(error),
+        };
+        cx.notify();
+    }
+
+    fn set_ai_commit_model(&mut self, model: String, cx: &mut gpui::Context<Self>) {
+        if self.ai_commit_model_draft == model {
+            return;
+        }
+        self.ai_commit_model_draft = model.clone();
+        self.ai_commit_model_input
+            .update(cx, |input, cx| input.set_text(model, cx));
+        self.persist_ai_commit_settings(cx);
     }
 
     fn language_option_label(&self, language: crate::i18n::Language) -> gpui::SharedString {
@@ -3227,6 +3307,35 @@ impl SettingsWindowView {
                 )
                 .on_click(cx.listener(move |this, _e: &ClickEvent, _window, cx| {
                     this.set_ai_commit_provider(provider, cx);
+                }))
+                .into_any_element()
+            })
+            .collect()
+    }
+
+    fn render_ai_commit_model_option_rows(
+        this: &mut Self,
+        range: Range<usize>,
+        _window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> Vec<AnyElement> {
+        let theme = this.theme;
+        let AiCommitModels::Ready(models) = &this.ai_commit_models else {
+            return Vec::new();
+        };
+        range
+            .filter_map(|ix| models.get(ix).cloned())
+            .map(|model| {
+                let selected = this.ai_commit_model_draft == *model;
+                this.option_row(
+                    format!("settings_window_ai_commit_model_{}", model),
+                    model.as_str(),
+                    None,
+                    selected,
+                    theme,
+                )
+                .on_click(cx.listener(move |this, _e: &ClickEvent, _window, cx| {
+                    this.set_ai_commit_model(model.clone(), cx);
                 }))
                 .into_any_element()
             })
@@ -4650,8 +4759,90 @@ impl Render for SettingsWindowView {
                                     .pb_1()
                                     .w_full()
                                     .min_w(px(0.0))
-                                    .child(self.ai_commit_model_input.clone()),
-                            )
+                                    .flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_w(px(0.0))
+                                            .child(self.ai_commit_model_input.clone()),
+                                    )
+                                    .child(
+                                        components::Button::new(
+                                            "settings_window_ai_commit_models_fetch",
+                                            tr("settings.ai_commit.models_fetch"),
+                                        )
+                                        .style(components::ButtonStyle::Outlined)
+                                        .disabled(matches!(
+                                            self.ai_commit_models,
+                                            AiCommitModels::Loading
+                                        ))
+                                        .on_click(
+                                            theme,
+                                            cx,
+                                            |this, _e, _window, cx| {
+                                                this.fetch_ai_commit_models(cx);
+                                            },
+                                        ),
+                                    ),
+                            ),
+                        );
+
+                        match &self.ai_commit_models {
+                            AiCommitModels::NotFetched => {}
+                            AiCommitModels::Loading => {
+                                general_card = general_card.child(
+                                    div()
+                                        .id("settings_window_ai_commit_models_loading")
+                                        .px_2()
+                                        .pb_1()
+                                        .text_xs()
+                                        .text_color(theme.colors.foreground.secondary)
+                                        .child(tr_str("settings.ai_commit.models_loading")),
+                                );
+                            }
+                            AiCommitModels::Error(error) => {
+                                general_card = general_card.child(
+                                    div()
+                                        .id("settings_window_ai_commit_models_error")
+                                        .px_2()
+                                        .pb_1()
+                                        .text_xs()
+                                        .text_color(theme.colors.foreground.secondary)
+                                        .child(t!(
+                                            "settings.ai_commit.models_failed",
+                                            error = error
+                                        )),
+                                );
+                            }
+                            AiCommitModels::Ready(models) => {
+                                let list = uniform_list(
+                                    "settings_window_ai_commit_model_list",
+                                    models.len(),
+                                    cx.processor(Self::render_ai_commit_model_option_rows),
+                                )
+                                .w_full()
+                                .min_w(px(0.0))
+                                .h_full()
+                                .min_h(px(0.0))
+                                .track_scroll(&self.ai_commit_models_scroll);
+                                let list =
+                                    restrict_scroll_to_vertical_axis(list).into_any_element();
+                                general_card = general_card.child(self.dropdown_list_container(
+                                    "settings_window_ai_commit_model_list_container",
+                                    "settings_window_ai_commit_model_scrollbar",
+                                    self.ai_commit_models_scroll.clone(),
+                                    models.len(),
+                                    SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
+                                    SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
+                                    list,
+                                    theme,
+                                ));
+                            }
+                        }
+
+                        general_card = general_card
                             .child(
                                 div()
                                     .px_2()
@@ -4691,8 +4882,7 @@ impl Render for SettingsWindowView {
                                     .text_xs()
                                     .text_color(theme.colors.foreground.secondary)
                                     .child(tr_str("settings.ai_commit.privacy_hint")),
-                            ),
-                        );
+                            );
                     }
 
                     general_card = general_card
@@ -8753,6 +8943,103 @@ mod tests {
                 crate::ai_commit::AiProvider::OpenAiCompatible.default_model()
             );
             assert_eq!(endpoint_text, "");
+        });
+    }
+
+    #[gpui::test]
+    fn ai_commit_model_list_fetch_and_pick(cx: &mut gpui::TestAppContext) {
+        let _visual_guard = lock_visual_test();
+        // Serialize against the other tests that touch the process global.
+        struct RestoreAiSettings;
+        impl Drop for RestoreAiSettings {
+            fn drop(&mut self) {
+                crate::ai_commit::set_current(crate::ai_commit::AiCommitSettings::default());
+            }
+        }
+        let _restore = {
+            let _lock = crate::ai_commit::lock_test_settings();
+            crate::ai_commit::set_current(crate::ai_commit::AiCommitSettings::default());
+            RestoreAiSettings
+        };
+
+        let (store, events) = AppStore::new(std::sync::Arc::new(TestBackend));
+        let (_main_view, cx) =
+            cx.add_window_view(|window, cx| GitCometView::new(store, events, None, window, cx));
+
+        cx.update(|window, app| {
+            let _ = window.draw(app);
+            open_settings_window(app);
+        });
+        cx.run_until_parked();
+
+        let settings_window = cx.update(|_window, app| {
+            app.windows()
+                .into_iter()
+                .find_map(|window| window.downcast::<SettingsWindowView>())
+                .expect("settings window should be open")
+        });
+
+        // The fetch button enters the loading state and issues one request;
+        // a second click while loading must not fire another.
+        cx.update(|_window, app| {
+            let _ = settings_window.update(app, |settings, _window, cx| {
+                settings.fetch_ai_commit_models(cx);
+                settings.fetch_ai_commit_models(cx);
+            });
+        });
+        cx.run_until_parked();
+        cx.update(|_window, app| {
+            settings_window
+                .read_with(app, |settings, _cx| {
+                    assert_eq!(settings.ai_commit_models, AiCommitModels::Loading);
+                    assert_eq!(settings.ai_commit_models_test_fetches, 1);
+                })
+                .expect("settings window should remain readable");
+        });
+
+        // A successful reply turns into the pickable list, and picking a row
+        // lands in the input, the draft, and the process global.
+        cx.update(|_window, app| {
+            let _ = settings_window.update(app, |settings, _window, cx| {
+                settings.finish_ai_commit_models_fetch(
+                    Ok(vec!["glm-5.3".to_string(), "kimi-k3".to_string()]),
+                    cx,
+                );
+                settings.set_ai_commit_model("kimi-k3".to_string(), cx);
+            });
+        });
+        cx.run_until_parked();
+        cx.update(|_window, app| {
+            settings_window
+                .read_with(app, |settings, cx| {
+                    assert_eq!(
+                        settings.ai_commit_models,
+                        AiCommitModels::Ready(
+                            vec!["glm-5.3".to_string(), "kimi-k3".to_string()].into()
+                        )
+                    );
+                    settings.ai_commit_model_input.read_with(cx, |input, _| {
+                        assert_eq!(input.text(), "kimi-k3");
+                    });
+                })
+                .expect("settings window should remain readable");
+            assert_eq!(crate::ai_commit::current().model, "kimi-k3");
+        });
+
+        // Switching providers drops the stale list — it belongs to the old
+        // provider's endpoint.
+        cx.update(|_window, app| {
+            let _ = settings_window.update(app, |settings, _window, cx| {
+                settings.set_ai_commit_provider(crate::ai_commit::AiProvider::OpenAiCompatible, cx);
+            });
+        });
+        cx.run_until_parked();
+        cx.update(|_window, app| {
+            settings_window
+                .read_with(app, |settings, _cx| {
+                    assert_eq!(settings.ai_commit_models, AiCommitModels::NotFetched);
+                })
+                .expect("settings window should remain readable");
         });
     }
 

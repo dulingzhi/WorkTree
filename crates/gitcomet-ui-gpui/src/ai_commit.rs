@@ -28,6 +28,12 @@ pub(crate) const RECENT_COMMITS_COUNT: usize =
 /// Ceiling on the diff text sent to the model; longer diffs are truncated.
 pub(crate) const MAX_DIFF_LENGTH: usize = 4000;
 
+/// Output budget for one reply. Reasoning models spend tokens on thinking
+/// before the visible text — a tight ceiling can be exhausted by the reasoning
+/// alone and come back with no message at all (observed with glm-5.3 at 100) —
+/// so this is generous for a ≤72-character answer.
+pub(crate) const MAX_OUTPUT_TOKENS: u64 = 1024;
+
 /// The system prompt, ported from RepositoryTree's `CommitPromptBuilder`.
 pub(crate) const SYSTEM_PROMPT: &str = "You are a git commit message generator. Given a diff, write a concise conventional commit message (type: description). \
 First line max 72 chars. If the diff is large, focus on the most significant changes. \
@@ -109,20 +115,64 @@ impl AiCommitSettings {
         }
     }
 
-    /// The full request URL for the provider's chat endpoint.
-    pub(crate) fn endpoint_url(&self) -> String {
-        let base = {
-            let endpoint = self.endpoint.trim().trim_end_matches('/');
-            if endpoint.is_empty() {
-                self.provider.default_endpoint()
-            } else {
-                endpoint
-            }
-        };
-        match self.provider {
-            AiProvider::Anthropic => format!("{base}/v1/messages"),
-            AiProvider::OpenAiCompatible => format!("{base}/v1/chat/completions"),
+    /// The trimmed base URL every provider path is built on: the configured
+    /// endpoint, or the provider's default when it is blank.
+    fn base_url(&self) -> &str {
+        let endpoint = self.endpoint.trim().trim_end_matches('/');
+        if endpoint.is_empty() {
+            self.provider.default_endpoint()
+        } else {
+            endpoint
         }
+    }
+
+    /// The full request URL for the provider's chat endpoint.
+    ///
+    /// Relays hand out base URLs in three shapes — bare host, host ending in
+    /// `/v1`, or the complete chat path — and appending `/v1/…` blindly turns
+    /// the second into `/v1/v1/…`, which the server answers with 404. Each
+    /// shape is met where it is.
+    pub(crate) fn endpoint_url(&self) -> String {
+        let base = self.base_url();
+        let chat_path = match self.provider {
+            AiProvider::Anthropic => "/v1/messages",
+            AiProvider::OpenAiCompatible => "/v1/chat/completions",
+        };
+        if base.ends_with(chat_path) {
+            return base.to_string();
+        }
+        if base.ends_with("/v1") {
+            return format!("{base}{}", chat_path.trim_start_matches("/v1"));
+        }
+        format!("{base}{chat_path}")
+    }
+
+    /// Provider-appropriate authentication headers, shared by the chat
+    /// request and the model listing.
+    pub(crate) fn auth_headers(&self) -> Vec<(&'static str, String)> {
+        match self.provider {
+            AiProvider::Anthropic => vec![
+                ("x-api-key", self.api_key.trim().to_string()),
+                ("anthropic-version", "2023-06-01".to_string()),
+            ],
+            AiProvider::OpenAiCompatible => {
+                vec![("Authorization", format!("Bearer {}", self.api_key.trim()))]
+            }
+        }
+    }
+
+    /// Candidate URLs for the model listing, tried in order. The versioned
+    /// path is what the real providers serve (`api.openai.com/v1/models`,
+    /// `api.anthropic.com/v1/models`); the unversioned one catches relays
+    /// that mount `/models` at the root.
+    pub(crate) fn models_urls(&self) -> Vec<String> {
+        let base = self.base_url();
+        let mut urls = Vec::new();
+        if !base.ends_with("/v1") {
+            urls.push(format!("{base}/v1/models"));
+        }
+        urls.push(format!("{base}/models"));
+        urls
     }
 }
 
@@ -250,13 +300,10 @@ pub(crate) fn build_request(
     match settings.provider {
         AiProvider::Anthropic => AiCommitRequest {
             url: settings.endpoint_url(),
-            headers: vec![
-                ("x-api-key", settings.api_key.trim().to_string()),
-                ("anthropic-version", "2023-06-01".to_string()),
-            ],
+            headers: settings.auth_headers(),
             body: serde_json::json!({
                 "model": model,
-                "max_tokens": 100,
+                "max_tokens": MAX_OUTPUT_TOKENS,
                 "system": SYSTEM_PROMPT,
                 "messages": [{ "role": "user", "content": user_content }],
             })
@@ -264,17 +311,14 @@ pub(crate) fn build_request(
         },
         AiProvider::OpenAiCompatible => AiCommitRequest {
             url: settings.endpoint_url(),
-            headers: vec![(
-                "Authorization",
-                format!("Bearer {}", settings.api_key.trim()),
-            )],
+            headers: settings.auth_headers(),
             body: serde_json::json!({
                 "model": model,
                 "messages": [
                     { "role": "system", "content": SYSTEM_PROMPT },
                     { "role": "user", "content": user_content },
                 ],
-                "max_tokens": 100,
+                "max_tokens": MAX_OUTPUT_TOKENS,
                 "temperature": 0.3,
             })
             .to_string(),
@@ -289,41 +333,67 @@ pub(crate) fn parse_response(
     status: u16,
     body: &[u8],
 ) -> Result<String, String> {
-    let json: serde_json::Value =
-        serde_json::from_slice(body).map_err(|err| format!("invalid response JSON: {err}"))?;
     if !(200..300).contains(&status) {
-        return Err(extract_error_message(&json, status));
+        return Err(error_detail(status, body));
     }
 
+    let json: serde_json::Value =
+        serde_json::from_slice(body).map_err(|err| format!("invalid response JSON: {err}"))?;
+
     let text = match provider {
-        AiProvider::Anthropic => json
-            .pointer("/content/0/text")
-            .and_then(|value| value.as_str()),
+        AiProvider::Anthropic => anthropic_text(&json),
         AiProvider::OpenAiCompatible => json
             .pointer("/choices/0/message/content")
-            .and_then(|value| value.as_str()),
+            .and_then(|value| value.as_str())
+            .map(str::to_string),
     }
     .unwrap_or_default();
 
-    let cleaned = sanitize(text);
+    let cleaned = sanitize(&text);
     if cleaned.is_empty() {
         return Err("the model returned an empty message".to_string());
     }
     Ok(cleaned)
 }
 
-/// Both providers wrap failures as `{"error": {"message": …}}`, with
-/// Anthropic also using a bare top-level `message`.
-fn extract_error_message(json: &serde_json::Value, status: u16) -> String {
-    let detail = json
-        .pointer("/error/message")
-        .or_else(|| json.pointer("/message"))
-        .and_then(|value| value.as_str())
-        .map(str::trim)
-        .filter(|text| !text.is_empty());
-    match detail {
-        Some(detail) => format!("HTTP {status}: {detail}"),
-        None => format!("HTTP {status}"),
+/// Anthropic replies are a list of content blocks, and reasoning models put a
+/// `thinking` block ahead of the text — collect every text block rather than
+/// reading the first element, which would miss the reply entirely.
+fn anthropic_text(json: &serde_json::Value) -> Option<String> {
+    let blocks = json.pointer("/content")?.as_array()?;
+    let texts: Vec<&str> = blocks
+        .iter()
+        .filter(|block| block.get("type").and_then(|t| t.as_str()) == Some("text"))
+        .filter_map(|block| block.get("text").and_then(|t| t.as_str()))
+        .collect();
+    if texts.is_empty() {
+        None
+    } else {
+        Some(texts.join("\n"))
+    }
+}
+
+/// Render a non-success body for the user: JSON `{"error": {"message": …}}`
+/// (both providers) or Anthropic's bare top-level `message` when present,
+/// otherwise the raw body text, otherwise just the status. Error bodies are
+/// often not JSON at all — a wrong path on a plain relay answers 404 with
+/// plain text or nothing.
+fn error_detail(status: u16, body: &[u8]) -> String {
+    if let Ok(json) = serde_json::from_slice::<serde_json::Value>(body) {
+        let detail = json
+            .pointer("/error/message")
+            .or_else(|| json.pointer("/message"))
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|text| !text.is_empty());
+        return match detail {
+            Some(detail) => format!("HTTP {status}: {detail}"),
+            None => format!("HTTP {status}"),
+        };
+    }
+    match std::str::from_utf8(body).map(str::trim) {
+        Ok(text) if !text.is_empty() => format!("HTTP {status}: {text}"),
+        _ => format!("HTTP {status}"),
     }
 }
 
@@ -345,6 +415,59 @@ pub(crate) async fn generate(
     .await
     .map_err(|err| err.to_string())?;
     parse_response(settings.provider, response.status.into(), &response.body)
+}
+
+/// Pull the model ids out of a model-listing response body. Both providers
+/// answer `{"data": [{"id": …}, …]}` (OpenAI's and Anthropic's `/v1/models`
+/// share the shape); a bare top-level array is accepted too, since relays
+/// have been seen to unwrap it. Server order is kept — it is often the
+/// relay's curated preference order.
+pub(crate) fn parse_models(status: u16, body: &[u8]) -> Result<Vec<String>, String> {
+    if !(200..300).contains(&status) {
+        return Err(error_detail(status, body));
+    }
+    let json: serde_json::Value =
+        serde_json::from_slice(body).map_err(|err| format!("invalid response JSON: {err}"))?;
+    let entries = json
+        .pointer("/data")
+        .and_then(|value| value.as_array())
+        .or_else(|| json.as_array())
+        .ok_or_else(|| "no model list in response".to_string())?;
+    let models: Vec<String> = entries
+        .iter()
+        .filter_map(|entry| entry.get("id").and_then(|value| value.as_str()))
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+        .map(str::to_string)
+        .collect();
+    if models.is_empty() {
+        return Err("the model list is empty".to_string());
+    }
+    Ok(models)
+}
+
+/// Fetch the provider's model list, trying [`AiCommitSettings::models_urls`]
+/// in order. The first URL that answers with a parseable list wins; the last
+/// failure is what the user sees. Network-disabled in tests like [`generate`].
+#[cfg(not(test))]
+pub(crate) async fn fetch_models(settings: &AiCommitSettings) -> Result<Vec<String>, String> {
+    let mut last_error = String::new();
+    for url in settings.models_urls() {
+        match crate::http::get_json(
+            url,
+            settings.auth_headers(),
+            crate::http::AI_REQUEST_TIMEOUT,
+        )
+        .await
+        {
+            Ok(response) => match parse_models(response.status.into(), &response.body) {
+                Ok(models) => return Ok(models),
+                Err(error) => last_error = error,
+            },
+            Err(error) => last_error = error.to_string(),
+        }
+    }
+    Err(last_error)
 }
 
 #[cfg(test)]
@@ -405,6 +528,43 @@ mod tests {
         assert_eq!(
             settings.endpoint_url(),
             "https://relay.example.com/v1/chat/completions"
+        );
+    }
+
+    #[test]
+    fn custom_endpoint_ending_in_v1_is_not_doubled() {
+        // Relays hand out base URLs both with and without the version segment;
+        // appending `/v1/…` to one that already ends in `/v1` produces a
+        // `/v1/v1/…` path the server answers with 404.
+        let mut openai = settings(AiProvider::OpenAiCompatible);
+        openai.endpoint = "http://127.0.0.1:15721/v1".to_string();
+        assert_eq!(
+            openai.endpoint_url(),
+            "http://127.0.0.1:15721/v1/chat/completions"
+        );
+
+        let mut anthropic = settings(AiProvider::Anthropic);
+        anthropic.endpoint = "http://127.0.0.1:15721/v1/".to_string();
+        assert_eq!(
+            anthropic.endpoint_url(),
+            "http://127.0.0.1:15721/v1/messages"
+        );
+    }
+
+    #[test]
+    fn endpoint_already_pointing_at_the_chat_path_is_used_verbatim() {
+        let mut openai = settings(AiProvider::OpenAiCompatible);
+        openai.endpoint = "https://relay.example.com/v1/chat/completions".to_string();
+        assert_eq!(
+            openai.endpoint_url(),
+            "https://relay.example.com/v1/chat/completions"
+        );
+
+        let mut anthropic = settings(AiProvider::Anthropic);
+        anthropic.endpoint = "https://relay.example.com/v1/messages".to_string();
+        assert_eq!(
+            anthropic.endpoint_url(),
+            "https://relay.example.com/v1/messages"
         );
     }
 
@@ -472,7 +632,7 @@ mod tests {
 
         let body: serde_json::Value = serde_json::from_str(&request.body).unwrap();
         assert_eq!(body["model"], "claude-sonnet-4-20250514");
-        assert_eq!(body["max_tokens"], 100);
+        assert_eq!(body["max_tokens"], MAX_OUTPUT_TOKENS);
         assert_eq!(body["system"], SYSTEM_PROMPT);
         assert_eq!(body["messages"][0]["role"], "user");
         assert!(
@@ -516,6 +676,20 @@ mod tests {
     }
 
     #[test]
+    fn parse_response_skips_anthropic_thinking_blocks() {
+        // Reasoning models answer with a `thinking` block ahead of the text, so
+        // reading only `content/0` misses the reply entirely.
+        let body = br#"{"content":[
+            {"type":"thinking","thinking":"pondering the diff","signature":"sig"},
+            {"type":"text","text":"feat: done"}
+        ]}"#;
+        assert_eq!(
+            parse_response(AiProvider::Anthropic, 200, body).unwrap(),
+            "feat: done"
+        );
+    }
+
+    #[test]
     fn parse_response_sanitizes_the_reply() {
         let anthropic = br#"{"content":[{"type":"text","text":"```\nfeat: fenced\n```"}]}"#;
         assert_eq!(
@@ -538,8 +712,96 @@ mod tests {
     }
 
     #[test]
+    fn parse_response_surfaces_plain_text_error_bodies() {
+        // A wrong path on a plain relay answers with a 404 and no JSON at all;
+        // the body is still the most useful thing to show.
+        assert_eq!(
+            parse_response(AiProvider::OpenAiCompatible, 404, b"Not Found").unwrap_err(),
+            "HTTP 404: Not Found"
+        );
+        assert_eq!(
+            parse_response(AiProvider::OpenAiCompatible, 404, b"").unwrap_err(),
+            "HTTP 404"
+        );
+    }
+
+    #[test]
     fn parse_response_rejects_empty_replies() {
         let body = br#"{"content":[]}"#;
         assert!(parse_response(AiProvider::Anthropic, 200, body).is_err());
+    }
+
+    #[test]
+    fn models_urls_cover_versioned_and_unversioned_mounts() {
+        let bare = settings(AiProvider::OpenAiCompatible);
+        assert_eq!(
+            bare.models_urls(),
+            vec![
+                "https://api.openai.com/v1/models",
+                "https://api.openai.com/models",
+            ]
+        );
+
+        let mut versioned = settings(AiProvider::Anthropic);
+        versioned.endpoint = "http://127.0.0.1:15721/v1/".to_string();
+        assert_eq!(
+            versioned.models_urls(),
+            vec!["http://127.0.0.1:15721/v1/models"]
+        );
+    }
+
+    #[test]
+    fn parse_models_reads_openai_and_anthropic_shapes() {
+        let openai = br#"{"data":[{"id":"gpt-4o-mini"},{"id":"  "},{"id":"gpt-4o"}]}"#;
+        assert_eq!(
+            parse_models(200, openai).unwrap(),
+            vec!["gpt-4o-mini".to_string(), "gpt-4o".to_string()]
+        );
+
+        // Anthropic's /v1/models uses the same envelope.
+        let anthropic = br#"{"data":[{"id":"claude-sonnet-5"}]}"#;
+        assert_eq!(
+            parse_models(200, anthropic).unwrap(),
+            vec!["claude-sonnet-5".to_string()]
+        );
+
+        // Some relays unwrap the envelope entirely.
+        let bare = br#"[{"id":"glm-5.3"}]"#;
+        assert_eq!(
+            parse_models(200, bare).unwrap(),
+            vec!["glm-5.3".to_string()]
+        );
+    }
+
+    #[test]
+    fn parse_models_rejects_error_and_empty_lists() {
+        let error = br#"{"error":{"message":"bad key"}}"#;
+        assert_eq!(parse_models(401, error).unwrap_err(), "HTTP 401: bad key");
+        assert_eq!(parse_models(404, b"").unwrap_err(), "HTTP 404");
+        assert_eq!(
+            parse_models(200, br#"{"data":[]}"#).unwrap_err(),
+            "the model list is empty"
+        );
+        assert_eq!(
+            parse_models(200, br#"{"object":"list"}"#).unwrap_err(),
+            "no model list in response"
+        );
+    }
+
+    #[test]
+    fn auth_headers_match_the_provider() {
+        let anthropic = settings(AiProvider::Anthropic);
+        assert_eq!(
+            anthropic.auth_headers(),
+            vec![
+                ("x-api-key", "sk-test".to_string()),
+                ("anthropic-version", "2023-06-01".to_string()),
+            ]
+        );
+        let openai = settings(AiProvider::OpenAiCompatible);
+        assert_eq!(
+            openai.auth_headers(),
+            vec![("Authorization", "Bearer sk-test".to_string())]
+        );
     }
 }

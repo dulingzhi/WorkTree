@@ -66,6 +66,9 @@ settings:
     api_key: API key
     api_key_placeholder: "sk-…"
     endpoint: "API endpoint (optional)"
+    models_fetch: "Fetch list"
+    models_loading: "Fetching model list…"
+    models_failed: "Failed to fetch models: %{error}"
     privacy_hint: "The API key is stored locally in the session file. Generating a message sends the staged diff to the selected service."
   ui_scale:
     detail_default: Default scale

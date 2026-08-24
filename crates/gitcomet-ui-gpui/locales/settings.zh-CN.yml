@@ -64,6 +64,9 @@ settings:
     api_key: API Key
     api_key_placeholder: "sk-…"
     endpoint: "API 端点（可选）"
+    models_fetch: "获取列表"
+    models_loading: "正在获取模型列表…"
+    models_failed: "获取模型列表失败：%{error}"
     privacy_hint: "API Key 仅保存在本地会话文件中。生成提交信息时会把暂存差异发送给所选服务。"
   ui_scale:
     detail_default: 默认缩放

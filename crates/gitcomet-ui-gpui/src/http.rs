@@ -114,6 +114,20 @@ pub(crate) fn client() -> Arc<dyn HttpClient> {
     Arc::new(GitCometHttpClient::new())
 }
 
+/// The agent AI provider requests run on. Non-2xx must arrive as a response,
+/// not an `Err`: providers explain failures (bad key, wrong model, exhausted
+/// quota) in the body, and the caller surfaces that text to the user. ureq's
+/// default turns e.g. a 404 into `Err(StatusCode)` and drops the body on the
+/// floor.
+fn ai_agent(timeout: Duration) -> ureq::Agent {
+    ureq::Agent::config_builder()
+        .timeout_global(Some(timeout))
+        .max_redirects(MAX_REDIRECTS)
+        .http_status_as_error(false)
+        .build()
+        .into()
+}
+
 /// POST JSON to an AI provider and hand back status plus body. This is the
 /// write-side sibling of [`HttpClient::get`]: same blocking-client-on-the-
 /// thread-pool approach, but with the caller's timeout (AI generation runs
@@ -126,27 +140,51 @@ pub(crate) async fn post_json(
     timeout: Duration,
 ) -> anyhow::Result<HttpResponse> {
     smol::unblock(move || {
-        let agent: ureq::Agent = ureq::Agent::config_builder()
-            .timeout_global(Some(timeout))
-            .max_redirects(MAX_REDIRECTS)
-            .build()
-            .into();
+        let agent = ai_agent(timeout);
         let mut request = agent.post(&url).header("Content-Type", "application/json");
         for (name, value) in headers {
             request = request.header(name, &value);
         }
 
         let response = request.send(&body)?;
-        let status = response.status();
-        let bytes =
-            read_body_within_limit(response.into_body().into_reader(), MAX_RESPONSE_BYTES, &url)?;
-
-        Ok(HttpResponse {
-            status,
-            body: bytes,
-        })
+        finish_response(response, &url)
     })
     .await
+}
+
+/// GET with custom auth headers from an AI provider — the read-side sibling
+/// of [`post_json`] for listing models. The shared GET on the app's
+/// [`HttpClient`] takes no headers, and providers reject unauthenticated
+/// model listings.
+pub(crate) async fn get_json(
+    url: String,
+    headers: Vec<(&'static str, String)>,
+    timeout: Duration,
+) -> anyhow::Result<HttpResponse> {
+    smol::unblock(move || {
+        let agent = ai_agent(timeout);
+        let mut request = agent.get(&url).header("Content-Type", "application/json");
+        for (name, value) in headers {
+            request = request.header(name, &value);
+        }
+
+        let response = request.call()?;
+        finish_response(response, &url)
+    })
+    .await
+}
+
+fn finish_response(
+    response: ureq::http::Response<ureq::Body>,
+    url: &str,
+) -> anyhow::Result<HttpResponse> {
+    let status = response.status();
+    let bytes =
+        read_body_within_limit(response.into_body().into_reader(), MAX_RESPONSE_BYTES, url)?;
+    Ok(HttpResponse {
+        status,
+        body: bytes,
+    })
 }
 
 #[cfg(test)]
