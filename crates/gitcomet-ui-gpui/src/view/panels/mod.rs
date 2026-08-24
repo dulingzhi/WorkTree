@@ -62,6 +62,14 @@ pub(in crate::view) enum ContextMenuAction {
         repo_id: Option<RepoId>,
         path: std::path::PathBuf,
     },
+    /// Open the target in one specific detected editor, carrying the editor's
+    /// detection identity so the launch path can rebuild its setting.
+    OpenInDetectedEditor {
+        repo_id: Option<RepoId>,
+        path: std::path::PathBuf,
+        id: String,
+        editor_path: std::path::PathBuf,
+    },
     OpenFileContent {
         repo_id: RepoId,
         source: gitcomet_core::domain::FileSource,

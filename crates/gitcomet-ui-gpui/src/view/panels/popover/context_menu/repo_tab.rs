@@ -58,19 +58,27 @@ fn model_for_state(
         });
     }
 
-    if crate::external_editor::configured_setting().is_some()
-        && let Some(ref workdir) = workdir
-    {
-        items.push(ContextMenuItem::Entry {
-            label: "Open in code editor".into(),
-            icon: Some("icons/open_external.svg".into()),
-            shortcut: Some(secondary_shortcut("Shift+E").into()),
-            disabled: false,
-            action: Box::new(ContextMenuAction::OpenInCodeEditor {
-                repo_id: None,
-                path: workdir.clone(),
-            }),
-        });
+    if let Some(ref workdir) = workdir {
+        let configured = crate::external_editor::configured_setting();
+        if configured.is_some() {
+            items.push(ContextMenuItem::Entry {
+                label: "Open in code editor".into(),
+                icon: Some("icons/open_external.svg".into()),
+                shortcut: Some(secondary_shortcut("Shift+E").into()),
+                disabled: false,
+                action: Box::new(ContextMenuAction::OpenInCodeEditor {
+                    repo_id: None,
+                    path: workdir.clone(),
+                }),
+            });
+        }
+
+        let detected = crate::external_editor::detect_external_editors_cached();
+        let tool_entries = detected_editor_entries(workdir, &detected, configured.as_ref());
+        if !tool_entries.is_empty() {
+            items.push(ContextMenuItem::Separator);
+            items.extend(tool_entries);
+        }
     }
 
     items.push(ContextMenuItem::Separator);
@@ -105,6 +113,41 @@ fn model_for_state(
     ]);
 
     ContextMenuModel::new(items).with_shortcut_keycaps()
+}
+
+/// One "Open in {tool}" entry per editor detected on this machine, so a
+/// repository can be handed to VS Code, Zed, a JetBrains IDE, … straight from
+/// its tab. The editor the user configured is skipped: the shortcut-bound
+/// "Open in code editor" entry above already targets that install.
+fn detected_editor_entries(
+    workdir: &std::path::Path,
+    detected: &[crate::external_editor::DetectedExternalEditor],
+    configured: Option<&gitcomet_state::session::ExternalCodeEditorSetting>,
+) -> Vec<ContextMenuItem> {
+    detected
+        .iter()
+        .filter(|editor| {
+            !matches!(
+                configured,
+                Some(gitcomet_state::session::ExternalCodeEditorSetting::Detected { id, path })
+                    if *id == editor.id && *path == editor.path
+            )
+        })
+        .map(|editor| ContextMenuItem::Entry {
+            label: crate::i18n::t!("cm.open_in", name = editor.label.clone())
+                .to_string()
+                .into(),
+            icon: Some("icons/open_external.svg".into()),
+            shortcut: None,
+            disabled: false,
+            action: Box::new(ContextMenuAction::OpenInDetectedEditor {
+                repo_id: None,
+                path: workdir.to_path_buf(),
+                id: editor.id.clone(),
+                editor_path: editor.path.clone(),
+            }),
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -318,5 +361,107 @@ mod tests {
         let state = state_with_repo_tabs(RepoId(1), 3);
 
         assert!(model_for_state(&state, RepoId(99), None).items.is_empty());
+    }
+
+    fn detected_editor(
+        id: &str,
+        label: &str,
+        path: &str,
+    ) -> crate::external_editor::DetectedExternalEditor {
+        crate::external_editor::detected_editor_for_tests(id, label, PathBuf::from(path))
+    }
+
+    #[test]
+    fn detected_editor_entries_open_each_tool_at_the_workdir() {
+        let workdir = PathBuf::from("/tmp/repo-tab-menu-2");
+        let detected = vec![
+            detected_editor(
+                "vscode",
+                "Visual Studio Code",
+                "/Applications/Visual Studio Code.app",
+            ),
+            detected_editor("zed", "Zed", "/Applications/Zed.app"),
+        ];
+
+        let entries = detected_editor_entries(&workdir, &detected, None);
+
+        let labels: Vec<&str> = entries
+            .iter()
+            .map(|item| match item {
+                ContextMenuItem::Entry { label, .. } => label.as_ref(),
+                _ => panic!("expected only entries"),
+            })
+            .collect();
+        assert_eq!(
+            labels,
+            vec!["Open in Visual Studio Code", "Open in Zed"],
+            "tests pin the locale to en, so cm.open_in renders its English template"
+        );
+
+        let ContextMenuItem::Entry { action, .. } = &entries[1] else {
+            panic!("expected an entry");
+        };
+        assert!(matches!(
+            action.as_ref(),
+            ContextMenuAction::OpenInDetectedEditor {
+                repo_id: None,
+                path,
+                id,
+                editor_path,
+            } if path == &workdir && id == "zed" && editor_path.as_os_str() == "/Applications/Zed.app"
+        ));
+    }
+
+    #[test]
+    fn detected_editor_entries_skip_the_configured_editor() {
+        let workdir = PathBuf::from("/tmp/repo-tab-menu-2");
+        let configured = gitcomet_state::session::ExternalCodeEditorSetting::Detected {
+            id: "vscode".to_string(),
+            path: PathBuf::from("/Applications/Visual Studio Code.app"),
+        };
+        let detected = vec![
+            detected_editor(
+                "vscode",
+                "Visual Studio Code",
+                "/Applications/Visual Studio Code.app",
+            ),
+            detected_editor("zed", "Zed", "/Applications/Zed.app"),
+        ];
+
+        let entries = detected_editor_entries(&workdir, &detected, Some(&configured));
+
+        let labels: Vec<&str> = entries
+            .iter()
+            .map(|item| match item {
+                ContextMenuItem::Entry { label, .. } => label.as_ref(),
+                _ => panic!("expected only entries"),
+            })
+            .collect();
+        assert_eq!(
+            labels,
+            vec!["Open in Zed"],
+            "the configured install is reachable through the Open in code editor entry"
+        );
+    }
+
+    #[test]
+    fn detected_editor_entries_list_all_tools_for_a_custom_configuration() {
+        let workdir = PathBuf::from("/tmp/repo-tab-menu-2");
+        let configured = gitcomet_state::session::ExternalCodeEditorSetting::Custom {
+            executable: PathBuf::from("/usr/bin/editor"),
+            arguments: None,
+        };
+        let detected = vec![
+            detected_editor(
+                "vscode",
+                "Visual Studio Code",
+                "/Applications/Visual Studio Code.app",
+            ),
+            detected_editor("zed", "Zed", "/Applications/Zed.app"),
+        ];
+
+        let entries = detected_editor_entries(&workdir, &detected, Some(&configured));
+
+        assert_eq!(entries.len(), 2);
     }
 }

@@ -9,6 +9,7 @@ use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 const CUSTOM_PATH_PLACEHOLDER: &str = "{path}";
 
@@ -366,6 +367,48 @@ const MAC_APP_SPECS: &[MacAppSpec] = &[
 
 pub(crate) fn detect_external_editors() -> Vec<DetectedExternalEditor> {
     detect_external_editors_with_env(&ExternalEditorDetectionEnv::from_current_process())
+}
+
+/// Test constructor: the `terminal` field is private, so callers outside this
+/// module cannot build a `DetectedExternalEditor` by literal.
+#[cfg(test)]
+pub(crate) fn detected_editor_for_tests(
+    id: &str,
+    label: &str,
+    path: PathBuf,
+) -> DetectedExternalEditor {
+    DetectedExternalEditor {
+        id: id.to_string(),
+        label: label.to_string(),
+        path,
+        terminal: false,
+    }
+}
+
+/// How long a detection pass stays valid. Menus rebuild their model on every
+/// repaint while open, and the Toolbox scan walks installed IDE directories —
+/// neither should re-stat the machine per frame.
+const DETECTION_CACHE_TTL: Duration = Duration::from_secs(30);
+
+static DETECTED_EDITORS_CACHE: OnceLock<Mutex<Option<(Instant, Vec<DetectedExternalEditor>)>>> =
+    OnceLock::new();
+
+/// Detection against the real machine, cached for [`DETECTION_CACHE_TTL`].
+/// Tests that need deterministic results use
+/// [`detect_external_editors_with_env`] with a synthetic environment instead.
+pub(crate) fn detect_external_editors_cached() -> Vec<DetectedExternalEditor> {
+    let mut cache = DETECTED_EDITORS_CACHE
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .unwrap_or_else(|err| err.into_inner());
+    if let Some((at, editors)) = cache.as_ref()
+        && at.elapsed() < DETECTION_CACHE_TTL
+    {
+        return editors.clone();
+    }
+    let editors = detect_external_editors();
+    *cache = Some((Instant::now(), editors.clone()));
+    editors
 }
 
 pub(crate) fn detect_external_editors_with_env(

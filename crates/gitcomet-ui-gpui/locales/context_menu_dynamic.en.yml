@@ -10,6 +10,7 @@ cm:
     fast_forward_to: "Fast-forward to %{upstream}"
   rebase_onto: "Rebase %{current} onto %{target}"
   interactive_rebase_onto: "Interactive rebase %{current} onto %{target}"
+  open_in: "Open in %{name}"
   tag:
     tags_on: "Tags on %{short}"
     # NB: never name a key `on`/`off`/`yes`/`no` — YAML 1.1 parses them as

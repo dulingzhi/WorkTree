@@ -811,6 +811,46 @@ impl PopoverHost {
                     );
                 }
             }
+            ContextMenuAction::OpenInDetectedEditor {
+                repo_id,
+                path,
+                id,
+                editor_path,
+            } => {
+                let full_path = match repo_id {
+                    Some(repo_id) => match self.resolve_workdir_path(repo_id, &path) {
+                        Ok(path) => path,
+                        Err(err) => {
+                            self.push_toast(components::ToastKind::Error, err, cx);
+                            self.close_popover(cx);
+                            return;
+                        }
+                    },
+                    None => path,
+                };
+                let setting = gitcomet_state::session::ExternalCodeEditorSetting::Detected {
+                    id,
+                    path: editor_path,
+                };
+
+                if !full_path.exists() {
+                    self.push_toast(
+                        components::ToastKind::Error,
+                        format!("Path not found: {}", full_path.display()),
+                        cx,
+                    );
+                } else if let Err(err) = crate::external_editor::launch_editor(&setting, &full_path)
+                {
+                    self.push_toast(
+                        components::ToastKind::Error,
+                        format!(
+                            "Failed to open in {}: {err}",
+                            crate::external_editor::label_for_setting(Some(&setting))
+                        ),
+                        cx,
+                    );
+                }
+            }
             ContextMenuAction::OpenRepo { path } => {
                 self.store.dispatch(Msg::OpenRepo(path));
             }

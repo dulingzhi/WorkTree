@@ -6,6 +6,7 @@ cm:
     fast_forward_to: "快进到 %{upstream}"
   rebase_onto: "将 %{current} 变基到 %{target}"
   interactive_rebase_onto: "交互式变基：将 %{current} 变基到 %{target}"
+  open_in: "在 %{name} 中打开"
   tag:
     tags_on: "%{short} 上的标签"
     create_on: "在 %{short} 上创建标签 %{name}"
