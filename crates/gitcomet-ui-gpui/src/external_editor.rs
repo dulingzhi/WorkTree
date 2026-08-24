@@ -8,6 +8,7 @@ use std::ffi::OsString;
 use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -366,7 +367,21 @@ const MAC_APP_SPECS: &[MacAppSpec] = &[
 ];
 
 pub(crate) fn detect_external_editors() -> Vec<DetectedExternalEditor> {
-    detect_external_editors_with_env(&ExternalEditorDetectionEnv::from_current_process())
+    let started = Instant::now();
+    let env = ExternalEditorDetectionEnv::from_current_process();
+    let path_dir_count = env.path_dirs.len();
+    let editors = detect_external_editors_with_env(&env);
+    // Diagnostic for slow machines (antivirus scanners, network PATH
+    // entries): set GITCOMET_LOG_EDITOR_DETECT=1 to time each pass.
+    if env::var_os("GITCOMET_LOG_EDITOR_DETECT").is_some() {
+        eprintln!(
+            "external editor detection: {} editors from {} PATH dirs in {:?}",
+            editors.len(),
+            path_dir_count,
+            started.elapsed()
+        );
+    }
+    editors
 }
 
 /// Test constructor: the `terminal` field is private, so callers outside this
@@ -385,30 +400,102 @@ pub(crate) fn detected_editor_for_tests(
     }
 }
 
-/// How long a detection pass stays valid. Menus rebuild their model on every
-/// repaint while open, and the Toolbox scan walks installed IDE directories —
-/// neither should re-stat the machine per frame.
-const DETECTION_CACHE_TTL: Duration = Duration::from_secs(30);
+/// How long a detection pass stays valid. Detection sweeps every PATH
+/// directory for ~30 editor launchers — on Windows that is thousands of
+/// filesystem probes, and antivirus scanners or network PATH entries can
+/// stretch it to seconds — so a pass must never run on the UI thread, and
+/// once completed it should be reused for a good while. Stale results are
+/// returned immediately while a background refresh re-detects.
+const DETECTION_CACHE_TTL: Duration = Duration::from_secs(300);
 
 static DETECTED_EDITORS_CACHE: OnceLock<Mutex<Option<(Instant, Vec<DetectedExternalEditor>)>>> =
     OnceLock::new();
+/// Guards against piling refresh threads when menus re-read the cache on
+/// every repaint while a refresh is already running.
+static DETECTION_REFRESH_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
 
-/// Detection against the real machine, cached for [`DETECTION_CACHE_TTL`].
-/// Tests that need deterministic results use
+/// Detection against the real machine, never blocking the caller. Returns
+/// the cached pass while it is fresh, a stale pass while a background
+/// refresh re-detects, or an empty list on a cold start (the refresh fills
+/// the cache within seconds). Tests that need deterministic results use
 /// [`detect_external_editors_with_env`] with a synthetic environment instead.
 pub(crate) fn detect_external_editors_cached() -> Vec<DetectedExternalEditor> {
+    if detection_cache_fresh() {
+        return cached_external_editors().unwrap_or_default();
+    }
+    spawn_detection_refresh();
+    cached_external_editors().unwrap_or_default()
+}
+
+/// Kicks off the first detection pass at launch so the editor list is
+/// usually ready before any menu or the settings window needs it.
+pub(crate) fn warm_external_editor_detection() {
+    spawn_detection_refresh();
+}
+
+fn cached_external_editors() -> Option<Vec<DetectedExternalEditor>> {
+    let cache = DETECTED_EDITORS_CACHE
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .unwrap_or_else(|err| err.into_inner());
+    cache.as_ref().map(|(_, editors)| editors.clone())
+}
+
+/// Whether a completed detection pass is still within its TTL.
+pub(crate) fn detection_cache_fresh() -> bool {
+    let cache = DETECTED_EDITORS_CACHE
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .unwrap_or_else(|err| err.into_inner());
+    cache
+        .as_ref()
+        .is_some_and(|(at, _)| at.elapsed() < DETECTION_CACHE_TTL)
+}
+
+/// Runs a full detection pass and caches it. For background threads only —
+/// on the UI thread use [`detect_external_editors_cached`].
+pub(crate) fn ensure_external_editors_detected() -> Vec<DetectedExternalEditor> {
+    let cached = {
+        let cache = DETECTED_EDITORS_CACHE
+            .get_or_init(|| Mutex::new(None))
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        cache
+            .as_ref()
+            .filter(|(at, _)| at.elapsed() < DETECTION_CACHE_TTL)
+            .map(|(_, editors)| editors.clone())
+    };
+    if let Some(editors) = cached {
+        return editors;
+    }
+    let editors = detect_external_editors();
+    store_detected_editors(editors.clone());
+    editors
+}
+
+fn store_detected_editors(editors: Vec<DetectedExternalEditor>) {
     let mut cache = DETECTED_EDITORS_CACHE
         .get_or_init(|| Mutex::new(None))
         .lock()
         .unwrap_or_else(|err| err.into_inner());
-    if let Some((at, editors)) = cache.as_ref()
-        && at.elapsed() < DETECTION_CACHE_TTL
-    {
-        return editors.clone();
+    *cache = Some((Instant::now(), editors));
+}
+
+fn spawn_detection_refresh() {
+    if DETECTION_REFRESH_IN_FLIGHT.swap(true, Ordering::SeqCst) {
+        return;
     }
-    let editors = detect_external_editors();
-    *cache = Some((Instant::now(), editors.clone()));
-    editors
+    let spawned = std::thread::Builder::new()
+        .name("gitcomet-editor-detection".to_string())
+        .spawn(|| {
+            let editors = detect_external_editors();
+            store_detected_editors(editors);
+            DETECTION_REFRESH_IN_FLIGHT.store(false, Ordering::SeqCst);
+        })
+        .is_ok();
+    if !spawned {
+        DETECTION_REFRESH_IN_FLIGHT.store(false, Ordering::SeqCst);
+    }
 }
 
 pub(crate) fn detect_external_editors_with_env(
@@ -450,8 +537,8 @@ pub(crate) fn external_editor_options(
     saved: Option<&ExternalCodeEditorSetting>,
 ) -> Vec<ExternalEditorOption> {
     // Opening the settings window runs this during construction on the UI
-    // thread; the TTL cache keeps that off the filesystem save for at most
-    // one pass per half-minute.
+    // thread; the cache keeps the filesystem sweep off it entirely (stale
+    // passes are served while a background thread re-detects).
     let detected = detect_external_editors_cached();
     external_editor_options_from_detected(saved, detected)
 }
@@ -1722,6 +1809,27 @@ mod tests {
                 && option.label == "Visual Studio Code (missing)"
                 && matches!(&option.kind, ExternalEditorOptionKind::Detected(saved) if saved == &setting)
         }));
+    }
+
+    #[test]
+    fn cold_detection_pass_still_offers_none_and_saved_options() {
+        // A cold cache must not block the settings window: the option list
+        // starts with just the None entry (plus the saved editor) and the
+        // background detection pass refills the rest.
+        let saved = ExternalCodeEditorSetting::Detected {
+            id: "vscode".to_string(),
+            path: PathBuf::from("/definitely/missing/code"),
+        };
+
+        let options = external_editor_options_from_detected(Some(&saved), Vec::new());
+
+        assert_eq!(options.len(), 3, "options: {options:?}");
+        assert_eq!(options[0].kind, ExternalEditorOptionKind::None);
+        assert!(matches!(
+            &options[1].kind,
+            ExternalEditorOptionKind::Detected(setting) if setting == &saved
+        ));
+        assert_eq!(options[2].kind, ExternalEditorOptionKind::Custom);
     }
 
     #[test]

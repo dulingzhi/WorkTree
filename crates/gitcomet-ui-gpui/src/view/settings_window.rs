@@ -1196,6 +1196,23 @@ impl SettingsWindowView {
             .detach();
         }
 
+        // Editor detection sweeps every PATH directory — seconds on Windows
+        // machines under antivirus scanners — so construction only reads the
+        // cache and a background pass refills the list when it is stale.
+        if !crate::external_editor::detection_cache_fresh() {
+            cx.spawn(async move |this, cx| {
+                let detected = cx
+                    .background_spawn(async move {
+                        crate::external_editor::ensure_external_editors_detected()
+                    })
+                    .await;
+                let _ = this.update(cx, |this, cx| {
+                    this.refresh_external_editor_options(detected, cx);
+                });
+            })
+            .detach();
+        }
+
         Self {
             theme_mode,
             theme,
@@ -1324,6 +1341,22 @@ impl SettingsWindowView {
             self.ui_font_options = crate::font_preferences::ui_font_options();
             self.editor_font_options = crate::font_preferences::editor_font_options();
         }
+        cx.notify();
+    }
+
+    /// Swaps in the editor list produced by the background detection pass
+    /// that construction kicked off when the cache was stale.
+    fn refresh_external_editor_options(
+        &mut self,
+        detected: Vec<crate::external_editor::DetectedExternalEditor>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.external_editor_options =
+            crate::external_editor::external_editor_options_from_detected(
+                self.external_editor_setting.as_ref(),
+                detected,
+            )
+            .into();
         cx.notify();
     }
 

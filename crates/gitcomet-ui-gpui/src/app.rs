@@ -486,6 +486,7 @@ fn run_windowed_app(
 
     application.run(move |cx: &mut App| {
         crate::font_preferences::warm_system_font_catalog(Some(Arc::clone(cx.text_system())));
+        crate::external_editor::warm_external_editor_detection();
         // Windows may already be rendering with bundled-only fallback fonts
         // while the scan runs; re-resolve their preferences once it lands.
         cx.spawn(async move |cx| {
