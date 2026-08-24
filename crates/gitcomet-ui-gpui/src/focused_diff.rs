@@ -151,7 +151,7 @@ impl FocusedDiffView {
         let theme = AppTheme::default_for_window_appearance(window.appearance());
         let ui_scale = crate::ui_scale::current_or_initialize_from_session(&ui_session, cx);
         let font_preferences =
-            crate::font_preferences::current_or_initialize_from_session(window, &ui_session, cx);
+            crate::font_preferences::current_or_initialize_from_session(&ui_session, cx);
 
         Self {
             lines,

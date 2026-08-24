@@ -1351,7 +1351,7 @@ impl GitCometView {
         let mut ui_session = session::load();
         let ui_scale = ui_scale::current_or_initialize_from_session(&ui_session, cx);
         let _font_preferences =
-            crate::font_preferences::current_or_initialize_from_session(window, &ui_session, cx);
+            crate::font_preferences::current_or_initialize_from_session(&ui_session, cx);
         if should_seed_initial_repository_from_session(
             view_mode,
             initial_path.as_deref(),

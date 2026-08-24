@@ -1,8 +1,8 @@
 use crate::bundled_fonts;
 use gitcomet_state::session;
-use gpui::{BorrowAppContext, FontFeatures, Window};
+use gpui::{App, BorrowAppContext, FontFeatures, TextSystem};
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 
 pub(crate) const UI_SYSTEM_FONT_FAMILY: &str = ".SystemUIFont";
 pub(crate) const DEFAULT_UI_FONT_FAMILY: &str = bundled_fonts::IBM_PLEX_SANS_FONT_FAMILY;
@@ -18,6 +18,15 @@ static SYSTEM_FONT_CATALOG: OnceLock<SystemFontCatalog> = OnceLock::new();
 /// variants — so it gets its own cache a launch-time thread can fill while
 /// the UI is starting up.
 static FONTDB_FAMILIES: OnceLock<(Arc<[String]>, Arc<[String]>)> = OnceLock::new();
+/// Scan-free stand-in for [`SYSTEM_FONT_CATALOG`] listing only the bundled
+/// families. UI callers start on this while the launch-time scan runs so
+/// window creation and the first settings open never block on font parsing;
+/// everything refreshes once the real catalog lands.
+static FALLBACK_SYSTEM_FONT_CATALOG: OnceLock<SystemFontCatalog> = OnceLock::new();
+/// Signalled when the launch-time font scan thread finishes, successfully or
+/// not. The Mutex flag pairs with the Condvar; waiters bound their wait so a
+/// dead scan thread cannot hang them forever.
+static FONT_CATALOG_SCAN_DONE: (Mutex<bool>, Condvar) = (Mutex::new(false), Condvar::new());
 
 // These follow the Monaco workbench defaults, but use resolvable real families where the
 // CSS stack starts with a platform token such as -apple-system or system-ui.
@@ -173,25 +182,25 @@ pub(crate) fn display_label(font_family: &str) -> String {
     }
 }
 
-pub(crate) fn ui_font_options(window: &Window) -> Arc<[String]> {
-    Arc::clone(&font_option_catalog(window).ui_options)
+pub(crate) fn ui_font_options() -> Arc<[String]> {
+    font_option_catalog().ui_options
 }
 
-pub(crate) fn editor_font_options(window: &Window) -> Arc<[String]> {
-    Arc::clone(&font_option_catalog(window).editor_options)
+pub(crate) fn editor_font_options() -> Arc<[String]> {
+    font_option_catalog().editor_options
 }
 
 pub(crate) fn applied_ui_font_family(selection: &str) -> String {
     resolve_applied_font_family(
         selection,
-        &system_font_catalog(None).resolved_system_ui_family,
+        &current_system_font_catalog().resolved_system_ui_family,
     )
 }
 
 pub(crate) fn applied_editor_font_family(selection: &str) -> String {
     resolve_applied_font_family(
         selection,
-        &system_font_catalog(None).resolved_system_ui_family,
+        &current_system_font_catalog().resolved_system_ui_family,
     )
 }
 
@@ -203,7 +212,7 @@ pub(crate) fn normalize_editor_font_family(candidate: Option<&str>, options: &[S
     normalize_editor_font_family_with_monospace_options(
         candidate,
         options,
-        system_font_catalog(None).monospace_families.as_ref(),
+        current_system_font_catalog().monospace_families.as_ref(),
     )
 }
 
@@ -238,7 +247,6 @@ where
 }
 
 pub(crate) fn current_or_initialize_from_session<C>(
-    window: &Window,
     ui_session: &session::UiSession,
     cx: &mut C,
 ) -> AppFontPreferences
@@ -247,15 +255,13 @@ where
 {
     let current = current(cx);
     let next = if current.initialized {
-        resolve_for_window(
-            window,
+        resolve_font_selections(
             Some(current.ui_font_family.as_str()),
             Some(current.editor_font_family.as_str()),
             Some(current.use_font_ligatures),
         )
     } else {
-        resolve_for_window(
-            window,
+        resolve_font_selections(
             ui_session.ui_font_family.as_deref(),
             ui_session.editor_font_family.as_deref(),
             ui_session.use_font_ligatures,
@@ -280,7 +286,7 @@ where
             normalize_editor_font_family_with_monospace_options(
                 Some(editor_font_family.as_str()),
                 &catalog.editor_options,
-                system_font_catalog(None).monospace_families.as_ref(),
+                current_system_font_catalog().monospace_families.as_ref(),
             ),
         )
     } else {
@@ -296,28 +302,79 @@ where
     next
 }
 
-fn build_font_options(window: &Window, specials: &[&str]) -> Vec<String> {
+/// The best catalog available right now: the scanned system catalog when the
+/// launch-time background scan has finished, otherwise a scan-free
+/// bundled-only stand-in. Never blocks the calling (UI) thread.
+fn current_system_font_catalog() -> &'static SystemFontCatalog {
+    SYSTEM_FONT_CATALOG
+        .get()
+        .unwrap_or_else(|| FALLBACK_SYSTEM_FONT_CATALOG.get_or_init(fallback_system_font_catalog))
+}
+
+/// Whether the full system font catalog has been scanned and published yet.
+pub(crate) fn system_font_catalog_ready() -> bool {
+    SYSTEM_FONT_CATALOG.get().is_some()
+}
+
+fn fallback_system_font_catalog() -> SystemFontCatalog {
+    let bundled_families = normalize_font_names([
+        bundled_fonts::IBM_PLEX_SANS_FONT_FAMILY.to_string(),
+        bundled_fonts::LILEX_FONT_FAMILY.to_string(),
+        bundled_fonts::FIRA_CODE_FONT_FAMILY.to_string(),
+    ]);
+    let monospace_families = normalize_font_names([
+        bundled_fonts::LILEX_FONT_FAMILY.to_string(),
+        bundled_fonts::FIRA_CODE_FONT_FAMILY.to_string(),
+    ]);
+
+    SystemFontCatalog {
+        resolved_system_ui_family: resolved_system_ui_font_family(&bundled_families),
+        all_families: bundled_families.into(),
+        monospace_families: monospace_families.into(),
+    }
+}
+
+fn ui_font_options_from_system_catalog(catalog: &SystemFontCatalog) -> Arc<[String]> {
     build_font_options_from_names(
-        system_font_catalog(Some(window)).all_families.as_ref(),
-        specials,
+        catalog.all_families.as_ref(),
+        &[UI_SYSTEM_FONT_FAMILY, DEFAULT_UI_FONT_FAMILY],
     )
+    .into()
 }
 
-fn system_font_catalog(window: Option<&Window>) -> &'static SystemFontCatalog {
-    if let Some(catalog) = SYSTEM_FONT_CATALOG.get() {
-        return catalog;
-    }
-
-    if let Some(window) = window {
-        return SYSTEM_FONT_CATALOG.get_or_init(|| collect_system_font_catalog(window));
-    }
-
-    SYSTEM_FONT_CATALOG.get_or_init(collect_fontdb_system_font_catalog)
+fn editor_font_options_from_system_catalog(catalog: &SystemFontCatalog) -> Arc<[String]> {
+    build_font_options_from_names(
+        catalog.all_families.as_ref(),
+        &[EDITOR_MONOSPACE_FONT_FAMILY, UI_SYSTEM_FONT_FAMILY],
+    )
+    .into()
 }
 
-fn collect_system_font_catalog(window: &Window) -> SystemFontCatalog {
+fn build_font_option_catalog(catalog: &SystemFontCatalog) -> FontOptionCatalog {
+    FontOptionCatalog {
+        ui_options: ui_font_options_from_system_catalog(catalog),
+        editor_options: editor_font_options_from_system_catalog(catalog),
+    }
+}
+
+fn font_option_catalog() -> FontOptionCatalog {
+    let Some(catalog) = SYSTEM_FONT_CATALOG.get() else {
+        return build_font_option_catalog(
+            FALLBACK_SYSTEM_FONT_CATALOG.get_or_init(fallback_system_font_catalog),
+        );
+    };
+    // Only the real, scanned catalog is allowed into the OnceLock cache;
+    // fallback entries must never be locked in as if they were complete.
+    FONT_OPTION_CATALOG
+        .get_or_init(|| build_font_option_catalog(catalog))
+        .clone()
+}
+
+fn collect_system_font_catalog_from_text_system(
+    text_system: &Arc<TextSystem>,
+) -> SystemFontCatalog {
     let (_, fontdb_monospace_families) = fontdb_families();
-    let all_families = normalize_font_names(window.text_system().all_font_names());
+    let all_families = normalize_font_names(text_system.all_font_names());
     let available_family_keys = all_families
         .iter()
         .map(|name| name.to_ascii_lowercase())
@@ -354,18 +411,87 @@ fn fontdb_families() -> &'static (Arc<[String]>, Arc<[String]>) {
     })
 }
 
-/// Starts collecting the fontdb half of the system font catalog on a
-/// background thread. `load_system_fonts` parses every installed font file —
-/// seconds on font-heavy machines — and the first settings open used to pay
-/// it synchronously on the UI thread; kicked off at launch, the cache is
-/// usually ready by the time anything needs it.
-pub(crate) fn warm_system_font_catalog() {
+/// Starts the full system font catalog scan on a background thread. Both
+/// halves — `fontdb::Database::load_system_fonts` parsing every installed
+/// font file and the platform's font enumeration — take seconds on
+/// font-heavy machines, so nothing on the UI thread may wait on them:
+/// callers read a bundled-only fallback ([`current_system_font_catalog`])
+/// until the scan publishes the real catalog here.
+///
+/// `text_system` lets the thread run the platform enumeration through the
+/// app's text system handle; the platform trait is `Send + Sync`, so this is
+/// safe to call off the main thread.
+pub(crate) fn warm_system_font_catalog(text_system: Option<Arc<TextSystem>>) {
     std::thread::Builder::new()
         .name("gitcomet-font-catalog".to_string())
-        .spawn(|| {
-            let _ = fontdb_families();
+        .spawn(move || {
+            SYSTEM_FONT_CATALOG.get_or_init(|| match text_system.as_ref() {
+                Some(text_system) => collect_system_font_catalog_from_text_system(text_system),
+                None => collect_fontdb_system_font_catalog(),
+            });
+            mark_font_catalog_scan_done();
         })
         .ok();
+}
+
+fn mark_font_catalog_scan_done() {
+    let mut done = FONT_CATALOG_SCAN_DONE.0.lock().unwrap();
+    *done = true;
+    drop(done);
+    FONT_CATALOG_SCAN_DONE.1.notify_all();
+}
+
+/// Blocks the calling background thread until the launch-time font scan
+/// finishes, bounded by `timeout` so a dead scan thread cannot hang the
+/// caller forever. Returns whether the real catalog was published.
+pub(crate) fn wait_for_system_font_catalog(timeout: std::time::Duration) -> bool {
+    // The launch warm thread never runs under the test harness, so report
+    // the scan as finished and let waiters fall through to the fallback.
+    #[cfg(test)]
+    {
+        return true;
+    }
+
+    #[cfg(not(test))]
+    {
+        let deadline = std::time::Instant::now() + timeout;
+        let mut done = FONT_CATALOG_SCAN_DONE.0.lock().unwrap();
+        while !*done {
+            let now = std::time::Instant::now();
+            if now >= deadline {
+                break;
+            }
+            let (guard, _) = FONT_CATALOG_SCAN_DONE
+                .1
+                .wait_timeout(done, deadline - now)
+                .unwrap();
+            done = guard;
+        }
+        drop(done);
+        SYSTEM_FONT_CATALOG.get().is_some()
+    }
+}
+
+/// Re-resolves the persisted font preferences against the freshly scanned
+/// catalog and redraws, so windows that started on the bundled-only fallback
+/// (for example with a persisted system font the fallback cannot validate)
+/// switch to the real selections once the scan lands.
+pub(crate) fn refresh_after_catalog_scan(cx: &mut App) {
+    let current = current(cx);
+    if !current.initialized {
+        return;
+    }
+
+    let ui_session = session::load();
+    let next = resolve_font_selections(
+        ui_session.ui_font_family.as_deref(),
+        ui_session.editor_font_family.as_deref(),
+        ui_session.use_font_ligatures,
+    );
+    if next != current {
+        cx.set_global(next);
+        cx.refresh_windows();
+    }
 }
 
 fn collect_fontdb_families() -> (Vec<String>, Vec<String>) {
@@ -516,13 +642,12 @@ fn should_resolve_system_ui_font(_selection: &str) -> bool {
     false
 }
 
-fn resolve_for_window(
-    window: &Window,
+fn resolve_font_selections(
     ui_font_family: Option<&str>,
     editor_font_family: Option<&str>,
     use_font_ligatures: Option<bool>,
 ) -> AppFontPreferences {
-    let catalog = font_option_catalog(window);
+    let catalog = font_option_catalog();
     AppFontPreferences {
         ui_font_family: normalize_ui_font_family(ui_font_family, &catalog.ui_options),
         editor_font_family: normalize_editor_font_family(
@@ -532,18 +657,6 @@ fn resolve_for_window(
         use_font_ligatures: use_font_ligatures.unwrap_or(DEFAULT_USE_FONT_LIGATURES),
         initialized: true,
     }
-}
-
-fn font_option_catalog(window: &Window) -> &'static FontOptionCatalog {
-    FONT_OPTION_CATALOG.get_or_init(|| FontOptionCatalog {
-        ui_options: build_font_options(window, &[UI_SYSTEM_FONT_FAMILY, DEFAULT_UI_FONT_FAMILY])
-            .into(),
-        editor_options: build_font_options(
-            window,
-            &[EDITOR_MONOSPACE_FONT_FAMILY, UI_SYSTEM_FONT_FAMILY],
-        )
-        .into(),
-    })
 }
 
 #[cfg(test)]
@@ -562,6 +675,72 @@ mod tests {
             EDITOR_MONOSPACE_FONT_FAMILY
         );
         assert_eq!(display_label("JetBrains Mono"), "JetBrains Mono");
+    }
+
+    #[test]
+    fn fallback_catalog_lists_only_bundled_families_without_scanning() {
+        let fallback = fallback_system_font_catalog();
+
+        assert_eq!(
+            fallback.all_families.as_ref(),
+            [
+                bundled_fonts::FIRA_CODE_FONT_FAMILY.to_string(),
+                bundled_fonts::IBM_PLEX_SANS_FONT_FAMILY.to_string(),
+                bundled_fonts::LILEX_FONT_FAMILY.to_string(),
+            ]
+        );
+        assert_eq!(
+            fallback.monospace_families.as_ref(),
+            [
+                bundled_fonts::FIRA_CODE_FONT_FAMILY.to_string(),
+                bundled_fonts::LILEX_FONT_FAMILY.to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn fallback_catalog_options_lead_with_special_families() {
+        let options = build_font_option_catalog(&fallback_system_font_catalog());
+
+        assert_eq!(
+            options.ui_options[..2],
+            [UI_SYSTEM_FONT_FAMILY, DEFAULT_UI_FONT_FAMILY]
+        );
+        assert_eq!(
+            options.editor_options[..2],
+            [EDITOR_MONOSPACE_FONT_FAMILY, UI_SYSTEM_FONT_FAMILY]
+        );
+        // Every non-special entry must come from the bundled-only families.
+        for option in options.ui_options.iter().skip(2) {
+            assert!(
+                fallback_is_bundled_family(option),
+                "unexpected fallback UI option: {option}"
+            );
+        }
+        for option in options.editor_options.iter().skip(2) {
+            assert!(
+                fallback_is_bundled_family(option),
+                "unexpected fallback editor option: {option}"
+            );
+        }
+    }
+
+    fn fallback_is_bundled_family(option: &str) -> bool {
+        matches!(
+            option,
+            bundled_fonts::FIRA_CODE_FONT_FAMILY
+                | bundled_fonts::IBM_PLEX_SANS_FONT_FAMILY
+                | bundled_fonts::LILEX_FONT_FAMILY
+        )
+    }
+
+    #[test]
+    fn wait_for_system_font_catalog_returns_immediately_under_tests() {
+        // The launch warm thread never runs in the test harness; waiters must
+        // fall through instead of blocking the test executor.
+        assert!(wait_for_system_font_catalog(
+            std::time::Duration::from_millis(0)
+        ));
     }
 
     #[test]

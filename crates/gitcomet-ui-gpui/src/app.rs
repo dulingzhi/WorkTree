@@ -485,7 +485,22 @@ fn run_windowed_app(
     }
 
     application.run(move |cx: &mut App| {
-        crate::font_preferences::warm_system_font_catalog();
+        crate::font_preferences::warm_system_font_catalog(Some(Arc::clone(cx.text_system())));
+        // Windows may already be rendering with bundled-only fallback fonts
+        // while the scan runs; re-resolve their preferences once it lands.
+        cx.spawn(async move |cx| {
+            let ready = cx
+                .background_spawn(async move {
+                    crate::font_preferences::wait_for_system_font_catalog(
+                        std::time::Duration::from_secs(15),
+                    )
+                })
+                .await;
+            if ready {
+                let _ = cx.update(crate::font_preferences::refresh_after_catalog_scan);
+            }
+        })
+        .detach();
         cx.set_global(clean_shutdown_tracker);
         if let Some(on_shutdown) = on_shutdown {
             cx.on_app_quit(move |_cx| {

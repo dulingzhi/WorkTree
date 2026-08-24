@@ -836,7 +836,7 @@ impl SettingsWindowView {
         let ui_session = session::load();
         let ui_scale = ui_scale::current_or_initialize_from_session(&ui_session, cx);
         let font_preferences =
-            crate::font_preferences::current_or_initialize_from_session(window, &ui_session, cx);
+            crate::font_preferences::current_or_initialize_from_session(&ui_session, cx);
         let theme_mode = ui_session
             .theme_mode
             .as_deref()
@@ -1175,6 +1175,27 @@ impl SettingsWindowView {
                 cx.notify();
             });
 
+        // The system font scan may still be running; the dropdowns start on
+        // the bundled fallback and refill themselves once the scan publishes
+        // the real catalog.
+        if !crate::font_preferences::system_font_catalog_ready() {
+            cx.spawn(async move |this, cx| {
+                let ready = cx
+                    .background_spawn(async move {
+                        crate::font_preferences::wait_for_system_font_catalog(
+                            std::time::Duration::from_secs(10),
+                        )
+                    })
+                    .await;
+                if ready {
+                    let _ = this.update(cx, |this, cx| {
+                        this.refresh_font_options(cx);
+                    });
+                }
+            })
+            .detach();
+        }
+
         Self {
             theme_mode,
             theme,
@@ -1184,8 +1205,8 @@ impl SettingsWindowView {
             ui_font_family: font_preferences.ui_font_family,
             editor_font_family: font_preferences.editor_font_family,
             use_font_ligatures: font_preferences.use_font_ligatures,
-            ui_font_options: crate::font_preferences::ui_font_options(window),
-            editor_font_options: crate::font_preferences::editor_font_options(window),
+            ui_font_options: crate::font_preferences::ui_font_options(),
+            editor_font_options: crate::font_preferences::editor_font_options(),
             external_editor_options,
             settings_window_scroll: ScrollHandle::default(),
             theme_scroll: UniformListScrollHandle::default(),
@@ -1292,6 +1313,17 @@ impl SettingsWindowView {
         } else {
             Some(section)
         };
+        cx.notify();
+    }
+
+    /// Refills the font dropdown lists after the background system font scan
+    /// completes. Construction may have captured the bundled-only fallback;
+    /// this swaps in the scanned families once they exist.
+    fn refresh_font_options(&mut self, cx: &mut gpui::Context<Self>) {
+        if crate::font_preferences::system_font_catalog_ready() {
+            self.ui_font_options = crate::font_preferences::ui_font_options();
+            self.editor_font_options = crate::font_preferences::editor_font_options();
+        }
         cx.notify();
     }
 
