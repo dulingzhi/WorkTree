@@ -449,7 +449,10 @@ pub(crate) fn detect_external_editors_with_env(
 pub(crate) fn external_editor_options(
     saved: Option<&ExternalCodeEditorSetting>,
 ) -> Vec<ExternalEditorOption> {
-    let detected = detect_external_editors();
+    // Opening the settings window runs this during construction on the UI
+    // thread; the TTL cache keeps that off the filesystem save for at most
+    // one pass per half-minute.
+    let detected = detect_external_editors_cached();
     external_editor_options_from_detected(saved, detected)
 }
 

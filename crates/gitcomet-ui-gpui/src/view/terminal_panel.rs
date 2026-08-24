@@ -2227,23 +2227,27 @@ impl GitCometView {
     }
 
     pub(crate) fn running_terminal_summary(&self) -> TerminalShutdownSummary {
-        let mut summary = terminal_shutdown_summary_for_instances(
+        let (instances, children) = instances_with_child_snapshot(
             self.terminal_sessions
                 .values()
                 .flat_map(|session| session.instances.iter()),
         );
-        summary.repo_names = self.repo_names_with_running_terminals();
+        let mut summary = terminal_shutdown_summary_for_instances(&instances, children.as_ref());
+        summary.repo_names = self.repo_names_with_running_terminals(children.as_ref());
         summary
     }
 
-    fn repo_names_with_running_terminals(&self) -> Vec<String> {
+    fn repo_names_with_running_terminals(
+        &self,
+        children: Option<&RunningChildProcessSnapshot>,
+    ) -> Vec<String> {
         self.terminal_sessions
             .iter()
             .filter(|(_, session)| {
                 session
                     .instances
                     .iter()
-                    .any(|i| i.connected && terminal_instance_has_running_command(i))
+                    .any(|instance| terminal_instance_has_running_command(instance, children))
             })
             .map(|(_, session)| session.repo_name.clone())
             .collect()
@@ -2260,7 +2264,9 @@ impl GitCometView {
                     .terminal_sessions
                     .get(repo_id)
                     .map(|session| {
-                        terminal_shutdown_summary_for_instances(session.instances.iter())
+                        let (instances, children) =
+                            instances_with_child_snapshot(session.instances.iter());
+                        terminal_shutdown_summary_for_instances(&instances, children.as_ref())
                     })
                     .unwrap_or_default();
                 if summary.running_command_count > 0
@@ -2276,7 +2282,9 @@ impl GitCometView {
                     .get(repo_id)
                     .and_then(|session| session.instances.get(*index))
                     .map(|instance| {
-                        terminal_shutdown_summary_for_instances(std::iter::once(instance))
+                        let (instances, children) =
+                            instances_with_child_snapshot(std::iter::once(instance));
+                        terminal_shutdown_summary_for_instances(&instances, children.as_ref())
                     })
                     .unwrap_or_default();
                 if summary.running_command_count > 0
@@ -3529,8 +3537,9 @@ fn hash_terminal_color<H: Hasher>(color: alacritty_terminal::vte::ansi::Color, h
     }
 }
 
-fn terminal_shutdown_summary_for_instances<'a>(
-    instances: impl IntoIterator<Item = &'a TerminalInstance>,
+fn terminal_shutdown_summary_for_instances(
+    instances: &[&TerminalInstance],
+    children: Option<&RunningChildProcessSnapshot>,
 ) -> TerminalShutdownSummary {
     let mut summary = TerminalShutdownSummary::default();
     for instance in instances {
@@ -3538,20 +3547,43 @@ fn terminal_shutdown_summary_for_instances<'a>(
             continue;
         }
         summary.terminal_count += 1;
-        if terminal_instance_has_running_command(instance) {
+        if terminal_instance_has_running_command(instance, children) {
             summary.running_command_count += 1;
         }
     }
     summary
 }
 
-fn terminal_instance_has_running_command(instance: &TerminalInstance) -> bool {
+/// Collects the terminal instances a flow needs to check, and the single
+/// process-table snapshot they share — or `None` when no instance could
+/// report a running command, so the flow skips the scan entirely.
+fn instances_with_child_snapshot<'a>(
+    instances: impl IntoIterator<Item = &'a TerminalInstance>,
+) -> (
+    Vec<&'a TerminalInstance>,
+    Option<RunningChildProcessSnapshot>,
+) {
+    let instances: Vec<&TerminalInstance> = instances.into_iter().collect();
+    let needs_scan = instances
+        .iter()
+        .any(|instance| instance.connected && instance.child_pid.is_some());
+    let children = needs_scan.then(RunningChildProcessSnapshot::scan);
+    (instances, children)
+}
+
+fn terminal_instance_has_running_command(
+    instance: &TerminalInstance,
+    children: Option<&RunningChildProcessSnapshot>,
+) -> bool {
     if !instance.connected {
         return false;
     }
-    instance
-        .child_pid
-        .is_some_and(terminal_process_has_running_child_command)
+    let Some(child_pid) = instance.child_pid else {
+        return false;
+    };
+    // The snapshot is only skipped when no instance in the flow has a shell
+    // pid, in which case none of them can report a running command.
+    children.is_some_and(|snapshot| snapshot.pid_has_child(child_pid))
 }
 
 fn terminate_terminals_for_action(view: &mut GitCometView, action: &TerminalShutdownAction) {
@@ -3592,26 +3624,40 @@ fn shutdown_terminal_instance(instance: &TerminalInstance, terminate: bool) {
     }
 }
 
-/// Returns whether the shell process `pid` has at least one child process, which
-/// indicates a command is currently running (an idle interactive shell has none).
-/// Works uniformly across platforms via `sysinfo`. Called only on user-initiated
-/// close, so a one-shot process snapshot is acceptable.
-fn terminal_process_has_running_child_command(pid: u32) -> bool {
-    let mut system = sysinfo::System::new();
-    // We must enumerate all processes to find any whose *parent* is `pid` (a
-    // child-of-pid query can't be narrowed to a single PID), but we only read
-    // `parent()`, which is base info — so skip the expensive cmd/environ/exe/cwd
-    // field collection that `everything()` would do for every process.
-    system.refresh_processes_specifics(
-        sysinfo::ProcessesToUpdate::All,
-        true,
-        sysinfo::ProcessRefreshKind::nothing(),
-    );
-    let target = sysinfo::Pid::from_u32(pid);
-    system
-        .processes()
-        .values()
-        .any(|process| process.parent() == Some(target))
+/// Returns whether the shell process `pid` has at least one child process,
+/// which indicates a command is currently running (an idle interactive shell
+/// has none). Works uniformly across platforms via `sysinfo`.
+///
+/// A snapshot enumerates every process on the machine — expensive enough that
+/// quit used to pay it once per terminal, twice over, on the UI thread. Build
+/// one per flow and share it across every terminal being checked.
+struct RunningChildProcessSnapshot {
+    system: sysinfo::System,
+}
+
+impl RunningChildProcessSnapshot {
+    fn scan() -> Self {
+        let mut system = sysinfo::System::new();
+        // We must enumerate all processes to find any whose *parent* is a
+        // terminal pid (a child-of-pid query can't be narrowed to one PID),
+        // but we only read `parent()`, which is base info — so skip the
+        // expensive cmd/environ/exe/cwd field collection that `everything()`
+        // would do for every process.
+        system.refresh_processes_specifics(
+            sysinfo::ProcessesToUpdate::All,
+            true,
+            sysinfo::ProcessRefreshKind::nothing(),
+        );
+        Self { system }
+    }
+
+    fn pid_has_child(&self, pid: u32) -> bool {
+        let target = sysinfo::Pid::from_u32(pid);
+        self.system
+            .processes()
+            .values()
+            .any(|process| process.parent() == Some(target))
+    }
 }
 
 #[cfg(unix)]
@@ -4254,5 +4300,46 @@ mod tests {
             !gutter.contains(&point(px(300.0), px(400.0))),
             "point exactly on bottom edge is NOT contained (exclusive)"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn running_child_snapshot_answers_from_one_scan() {
+        use std::process::{Command, Stdio};
+        use std::time::Duration;
+
+        // One shell holding a background child (a "running command") and one
+        // bare process with none, both checked against a single snapshot.
+        let mut shell = Command::new("sh")
+            .arg("-c")
+            .arg("sleep 30 & wait")
+            .stdin(Stdio::null())
+            .spawn()
+            .expect("spawn shell");
+        let mut idle = Command::new("sleep")
+            .arg("30")
+            .stdin(Stdio::null())
+            .spawn()
+            .expect("spawn sleep");
+        std::thread::sleep(Duration::from_millis(300));
+
+        let snapshot = RunningChildProcessSnapshot::scan();
+
+        assert!(
+            snapshot.pid_has_child(shell.id()),
+            "the shell's background sleep counts as a running command"
+        );
+        assert!(
+            !snapshot.pid_has_child(idle.id()),
+            "a bare process has no child, so no running command"
+        );
+
+        for pid in [shell.id() as i32, idle.id() as i32] {
+            if let Some(pid) = Pid::from_raw(pid) {
+                let _ = kill_process_group(pid, Signal::TERM);
+            }
+        }
+        let _ = shell.wait();
+        let _ = idle.wait();
     }
 }

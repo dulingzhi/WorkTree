@@ -485,6 +485,7 @@ fn run_windowed_app(
     }
 
     application.run(move |cx: &mut App| {
+        crate::font_preferences::warm_system_font_catalog();
         cx.set_global(clean_shutdown_tracker);
         if let Some(on_shutdown) = on_shutdown {
             cx.on_app_quit(move |_cx| {

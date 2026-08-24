@@ -13,6 +13,11 @@ const LEGACY_EDITOR_MONOSPACE_FONT_FAMILY: &str = "monospace";
 
 static FONT_OPTION_CATALOG: OnceLock<FontOptionCatalog> = OnceLock::new();
 static SYSTEM_FONT_CATALOG: OnceLock<SystemFontCatalog> = OnceLock::new();
+/// The fontdb half of the system catalog: parsing every installed font file
+/// is by far the slowest step, needs no window, and serves both catalog
+/// variants — so it gets its own cache a launch-time thread can fill while
+/// the UI is starting up.
+static FONTDB_FAMILIES: OnceLock<(Arc<[String]>, Arc<[String]>)> = OnceLock::new();
 
 // These follow the Monaco workbench defaults, but use resolvable real families where the
 // CSS stack starts with a platform token such as -apple-system or system-ui.
@@ -311,15 +316,16 @@ fn system_font_catalog(window: Option<&Window>) -> &'static SystemFontCatalog {
 }
 
 fn collect_system_font_catalog(window: &Window) -> SystemFontCatalog {
-    let (_, fontdb_monospace_families) = collect_fontdb_families();
+    let (_, fontdb_monospace_families) = fontdb_families();
     let all_families = normalize_font_names(window.text_system().all_font_names());
     let available_family_keys = all_families
         .iter()
         .map(|name| name.to_ascii_lowercase())
         .collect::<BTreeSet<_>>();
     let monospace_families = fontdb_monospace_families
-        .into_iter()
+        .iter()
         .filter(|name| available_family_keys.contains(&name.to_ascii_lowercase()))
+        .cloned()
         .collect::<Vec<_>>();
     let resolved_system_ui_family = resolved_system_ui_font_family(&all_families);
 
@@ -331,14 +337,35 @@ fn collect_system_font_catalog(window: &Window) -> SystemFontCatalog {
 }
 
 fn collect_fontdb_system_font_catalog() -> SystemFontCatalog {
-    let (all_families, monospace_families) = collect_fontdb_families();
-    let resolved_system_ui_family = resolved_system_ui_font_family(&all_families);
+    let (all_families, monospace_families) = fontdb_families();
+    let resolved_system_ui_family = resolved_system_ui_font_family(all_families);
 
     SystemFontCatalog {
-        all_families: all_families.into(),
-        monospace_families: monospace_families.into(),
+        all_families: all_families.clone(),
+        monospace_families: monospace_families.clone(),
         resolved_system_ui_family,
     }
+}
+
+fn fontdb_families() -> &'static (Arc<[String]>, Arc<[String]>) {
+    FONTDB_FAMILIES.get_or_init(|| {
+        let (all_families, monospace_families) = collect_fontdb_families();
+        (all_families.into(), monospace_families.into())
+    })
+}
+
+/// Starts collecting the fontdb half of the system font catalog on a
+/// background thread. `load_system_fonts` parses every installed font file —
+/// seconds on font-heavy machines — and the first settings open used to pay
+/// it synchronously on the UI thread; kicked off at launch, the cache is
+/// usually ready by the time anything needs it.
+pub(crate) fn warm_system_font_catalog() {
+    std::thread::Builder::new()
+        .name("gitcomet-font-catalog".to_string())
+        .spawn(|| {
+            let _ = fontdb_families();
+        })
+        .ok();
 }
 
 fn collect_fontdb_families() -> (Vec<String>, Vec<String>) {
