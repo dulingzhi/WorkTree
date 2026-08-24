@@ -500,6 +500,16 @@ enum ContextMenuItem {
         disabled: bool,
         action: Box<ContextMenuAction>,
     },
+    /// A collapsible group of entries rendered inline: activating the row
+    /// reveals the children indented beneath it. Menu lists that would run
+    /// long (the repo tab's external tools) fold into one row this way.
+    Submenu {
+        /// Stable key tracking the group's open state across rebuilds.
+        id: SharedString,
+        label: SharedString,
+        icon: Option<SharedString>,
+        children: Vec<ContextMenuItem>,
+    },
     /// A caption plus a segmented control, for settings whose options are
     /// mutually exclusive and read better side by side than as a checked list
     /// (the merge tool's view mode). Segments are clicked, not
@@ -563,26 +573,92 @@ impl ContextMenuModel {
         self.entry_debug_selectors = entry_debug_selectors;
         self
     }
+}
+
+/// The model flattened into the rows a menu actually shows: top-level items
+/// with the children of open submenus spliced in beneath their parent.
+/// Selection indices (`context_menu_selected_ix`) refer to positions here,
+/// because opening or closing a submenu changes which rows exist.
+#[derive(Clone)]
+pub(super) struct ContextMenuRows {
+    rows: Vec<(ContextMenuItem, u8)>,
+}
+
+impl ContextMenuRows {
+    fn from_model(model: &ContextMenuModel, open_submenus: &FxHashSet<SharedString>) -> Self {
+        let mut rows = Vec::with_capacity(model.items.len());
+        fn flatten_into(
+            target: &mut Vec<(ContextMenuItem, u8)>,
+            items: Vec<ContextMenuItem>,
+            depth: u8,
+            open_submenus: &FxHashSet<SharedString>,
+        ) {
+            for item in items {
+                match item {
+                    ContextMenuItem::Submenu {
+                        id,
+                        label,
+                        icon,
+                        children,
+                    } => {
+                        let is_open = open_submenus.contains(&id);
+                        // The pushed row keeps no children: rendering only
+                        // needs the row itself, and the open set decides
+                        // whether the children were spliced in below.
+                        target.push((
+                            ContextMenuItem::Submenu {
+                                id,
+                                label,
+                                icon,
+                                children: Vec::new(),
+                            },
+                            depth,
+                        ));
+                        if is_open {
+                            flatten_into(target, children, depth + 1, open_submenus);
+                        }
+                    }
+                    other => target.push((other, depth)),
+                }
+            }
+        }
+        flatten_into(&mut rows, model.items.clone(), 0, open_submenus);
+        Self { rows }
+    }
+
+    fn get(&self, ix: usize) -> Option<&(ContextMenuItem, u8)> {
+        self.rows.get(ix)
+    }
+
+    fn into_iter(self) -> impl Iterator<Item = (ContextMenuItem, u8)> {
+        self.rows.into_iter()
+    }
+
+    fn iter(&self) -> impl Iterator<Item = &(ContextMenuItem, u8)> + '_ {
+        self.rows.iter()
+    }
 
     fn is_selectable(&self, ix: usize) -> bool {
-        matches!(
-            self.items.get(ix),
-            Some(ContextMenuItem::Entry { disabled, .. }) if !*disabled
-        )
+        match self.rows.get(ix) {
+            Some((ContextMenuItem::Entry { disabled, .. }, _)) => !*disabled,
+            // A submenu row toggles its children; it is always actionable.
+            Some((ContextMenuItem::Submenu { .. }, _)) => true,
+            _ => false,
+        }
     }
 
     fn first_selectable(&self) -> Option<usize> {
-        (0..self.items.len()).find(|&ix| self.is_selectable(ix))
+        (0..self.rows.len()).find(|&ix| self.is_selectable(ix))
     }
 
     fn last_selectable(&self) -> Option<usize> {
-        (0..self.items.len())
+        (0..self.rows.len())
             .rev()
             .find(|&ix| self.is_selectable(ix))
     }
 
     fn next_selectable(&self, from: Option<usize>, dir: isize) -> Option<usize> {
-        if self.items.is_empty() {
+        if self.rows.is_empty() {
             return None;
         }
         let Some(mut ix) = from else {
@@ -593,8 +669,8 @@ impl ContextMenuModel {
             };
         };
 
-        let n = self.items.len() as isize;
-        for _ in 0..self.items.len() {
+        let n = self.rows.len() as isize;
+        for _ in 0..self.rows.len() {
             ix = ((ix as isize + dir).rem_euclid(n)) as usize;
             if self.is_selectable(ix) {
                 return Some(ix);

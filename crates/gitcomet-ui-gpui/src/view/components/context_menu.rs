@@ -237,6 +237,8 @@ pub struct ContextMenuEntry {
     selected: bool,
     disabled: bool,
     tooltip_host: Option<WeakEntity<TooltipHost>>,
+    /// Icon shown at the row's trailing edge — a submenu's disclosure chevron.
+    trailing_icon: Option<&'static str>,
 }
 
 impl ContextMenuEntry {
@@ -250,6 +252,7 @@ impl ContextMenuEntry {
             selected: false,
             disabled: false,
             tooltip_host: None,
+            trailing_icon: None,
         }
     }
 
@@ -283,6 +286,11 @@ impl ContextMenuEntry {
         self
     }
 
+    pub fn trailing_icon(mut self, icon: &'static str) -> Self {
+        self.trailing_icon = Some(icon);
+        self
+    }
+
     pub fn render<V: 'static>(
         self,
         theme: AppTheme,
@@ -308,6 +316,7 @@ fn context_menu_entry<V: 'static>(
         selected,
         disabled,
         tooltip_host,
+        trailing_icon,
     } = entry;
     let ui_scale = ui_scale.into();
     let scaled_px = |value| ui_scale.px(value);
@@ -403,6 +412,13 @@ fn context_menu_entry<V: 'static>(
         } else {
             end.child(shortcut)
         };
+    }
+    if let Some(trailing_icon) = trailing_icon {
+        end = end.child(crate::view::icons::svg_icon(
+            trailing_icon,
+            text_color,
+            scaled_px(13.0),
+        ));
     }
     row = row.child(end);
 

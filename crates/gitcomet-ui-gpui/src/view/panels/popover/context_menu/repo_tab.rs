@@ -76,8 +76,12 @@ fn model_for_state(
         let detected = crate::external_editor::detect_external_editors_cached();
         let tool_entries = detected_editor_entries(workdir, &detected, configured.as_ref());
         if !tool_entries.is_empty() {
-            items.push(ContextMenuItem::Separator);
-            items.extend(tool_entries);
+            items.push(ContextMenuItem::Submenu {
+                id: "repo_tab_external_tools".into(),
+                label: "Open in external tool".into(),
+                icon: Some("icons/open_external.svg".into()),
+                children: tool_entries,
+            });
         }
     }
 
@@ -115,23 +119,31 @@ fn model_for_state(
     ContextMenuModel::new(items).with_shortcut_keycaps()
 }
 
-/// One "Open in {tool}" entry per editor detected on this machine, so a
-/// repository can be handed to VS Code, Zed, a JetBrains IDE, … straight from
-/// its tab. The editor the user configured is skipped: the shortcut-bound
-/// "Open in code editor" entry above already targets that install.
+/// One "Open in {tool}" entry per distinct editor detected on this machine,
+/// so a repository can be handed to VS Code, Zed, a JetBrains IDE, … straight
+/// from its tab. One entry per editor *id*: the same tool is often detected
+/// twice (the PATH launcher and the macOS app bundle), which would read as a
+/// duplicate row. The editor the user configured is skipped entirely — the
+/// shortcut-bound "Open in code editor" entry already targets that tool.
 fn detected_editor_entries(
     workdir: &std::path::Path,
     detected: &[crate::external_editor::DetectedExternalEditor],
     configured: Option<&gitcomet_state::session::ExternalCodeEditorSetting>,
 ) -> Vec<ContextMenuItem> {
+    let configured_id = match configured {
+        Some(gitcomet_state::session::ExternalCodeEditorSetting::Detected { id, .. }) => {
+            Some(id.as_str())
+        }
+        _ => None,
+    };
+    let mut seen_ids = std::collections::BTreeSet::new();
     detected
         .iter()
         .filter(|editor| {
-            !matches!(
-                configured,
-                Some(gitcomet_state::session::ExternalCodeEditorSetting::Detected { id, path })
-                    if *id == editor.id && *path == editor.path
-            )
+            if Some(editor.id.as_str()) == configured_id {
+                return false;
+            }
+            seen_ids.insert(editor.id.clone())
         })
         .map(|editor| ContextMenuItem::Entry {
             label: crate::i18n::t!("cm.open_in", name = editor.label.clone())
@@ -415,9 +427,11 @@ mod tests {
     #[test]
     fn detected_editor_entries_skip_the_configured_editor() {
         let workdir = PathBuf::from("/tmp/repo-tab-menu-2");
+        // A different path than the detected row: the skip keys on the editor
+        // id, since detection and configuration can disagree on the install.
         let configured = gitcomet_state::session::ExternalCodeEditorSetting::Detected {
             id: "vscode".to_string(),
-            path: PathBuf::from("/Applications/Visual Studio Code.app"),
+            path: PathBuf::from("/usr/local/bin/code"),
         };
         let detected = vec![
             detected_editor(
@@ -463,5 +477,29 @@ mod tests {
         let entries = detected_editor_entries(&workdir, &detected, Some(&configured));
 
         assert_eq!(entries.len(), 2);
+    }
+
+    #[test]
+    fn detected_editor_entries_collapse_double_detected_tools_into_one_row() {
+        let workdir = PathBuf::from("/tmp/repo-tab-menu-2");
+        // Xcode is found twice on a stock macOS install: the `xed` launcher
+        // on PATH and the app bundle. Both rows share an id, so only the
+        // first survives.
+        let detected = vec![
+            detected_editor("xcode", "Xcode", "/usr/bin/xed"),
+            detected_editor("xcode", "Xcode", "/Applications/Xcode.app"),
+            detected_editor("zed", "Zed", "/Applications/Zed.app"),
+        ];
+
+        let entries = detected_editor_entries(&workdir, &detected, None);
+
+        let labels: Vec<&str> = entries
+            .iter()
+            .map(|item| match item {
+                ContextMenuItem::Entry { label, .. } => label.as_ref(),
+                _ => panic!("expected only entries"),
+            })
+            .collect();
+        assert_eq!(labels, vec!["Open in Xcode", "Open in Zed"]);
     }
 }

@@ -217,6 +217,10 @@ pub(in super::super) struct PopoverHost {
     prompt_tab_group_focus_handle: FocusHandle,
     prompt_tab_wrap_end_focus_handle: FocusHandle,
     context_menu_selected_ix: Option<usize>,
+    /// Submenu groups currently expanded in the open context menu, keyed by
+    /// the group's stable id. Selection indices shift when a group opens or
+    /// closes, so both are cleared together.
+    context_menu_open_submenus: FxHashSet<SharedString>,
     repo_picker_selected_index: Option<usize>,
     /// Session recent repositories snapshotted when a repository picker opens,
     /// so the list can't shift under the user mid-interaction.
@@ -1721,6 +1725,7 @@ impl PopoverHost {
             prompt_tab_group_focus_handle,
             prompt_tab_wrap_end_focus_handle,
             context_menu_selected_ix: None,
+            context_menu_open_submenus: FxHashSet::default(),
             repo_picker_selected_index: None,
             cached_recent_repos: Vec::new(),
             cached_pinned_repos: Vec::new(),
@@ -1932,6 +1937,7 @@ impl PopoverHost {
         self.popover = None;
         self.popover_anchor = None;
         self.context_menu_selected_ix = None;
+        self.context_menu_open_submenus.clear();
         self.picker_row_menu = None;
         self.menu_invoker_focus = None;
         self.notify_fingerprint = 0;
@@ -3052,6 +3058,7 @@ impl PopoverHost {
 
         self.popover_anchor = Some(anchor);
         self.context_menu_selected_ix = None;
+        self.context_menu_open_submenus.clear();
         self.repo_picker_selected_index = None;
         // Belongs with the reset above, not with the RepoPicker arm below: every
         // popover kind draws `row_menu_layer`, so a menu left over from a closed
@@ -3082,7 +3089,8 @@ impl PopoverHost {
                 .popover
                 .as_ref()
                 .and_then(|kind| self.context_menu_model(kind, cx))
-                .and_then(|m| m.first_selectable());
+                .map(|m| ContextMenuRows::from_model(&m, &self.context_menu_open_submenus))
+                .and_then(|rows| rows.first_selectable());
             window.focus(&self.context_menu_focus_handle, cx);
         } else {
             match &kind {

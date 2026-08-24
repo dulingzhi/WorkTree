@@ -411,6 +411,8 @@ pub(super) fn layer(
             }
             // Clicked rather than keyboard-selected, and no row menu has one.
             ContextMenuItem::Segmented { .. } => {}
+            // The repo tab menu's inline group; no picker row menu nests one.
+            ContextMenuItem::Submenu { .. } => {}
         }
     }
 

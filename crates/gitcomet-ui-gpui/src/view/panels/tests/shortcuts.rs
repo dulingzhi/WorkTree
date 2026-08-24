@@ -92,11 +92,15 @@ fn shortcut_entry<'a>(
 }
 
 fn runtime_entry_ix_for_shortcut(model: &ContextMenuModel, shortcut: &str) -> Option<usize> {
+    // The runtime helpers walk the flattened rows; a collapsed submenu
+    // contributes a single row, so shortcut-bearing top-level entries keep
+    // their model positions and the two indexes stay comparable.
+    let rows = ContextMenuRows::from_model(model, &FxHashSet::default());
     match shortcut {
-        "Enter" => super::super::popover::context_menu::context_menu_activate_entry_ix(model, None),
+        "Enter" => super::super::popover::context_menu::context_menu_activate_entry_ix(&rows, None),
         _ if shortcut.chars().count() == 1 => {
             let key = shortcut.to_ascii_lowercase();
-            super::super::popover::context_menu::context_menu_shortcut_entry_ix(model, &key)
+            super::super::popover::context_menu::context_menu_shortcut_entry_ix(&rows, &key)
         }
         _ => None,
     }
