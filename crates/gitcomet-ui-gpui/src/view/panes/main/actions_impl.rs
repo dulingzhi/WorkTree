@@ -162,26 +162,27 @@ impl MainPaneView {
                         .filter_map(|inline_ix| self.diff_visual_ix_for_mapped_ix(inline_ix))
                         .collect();
                 }
-                (0..self.file_diff_inline_row_len())
-                    .filter_map(|inline_ix| {
-                        let is_change =
+                // First row of each contiguous change block, like the provider
+                // path above — one stop per block, not per changed row.
+                diff_navigation::change_block_entries(
+                    self.file_diff_inline_row_len(),
+                    |inline_ix| {
+                        matches!(
+                            self.file_diff_inline_visual_kind(inline_ix),
+                            gitcomet_core::domain::DiffLineKind::Add
+                                | gitcomet_core::domain::DiffLineKind::Remove
+                        ) && self.file_diff_inline_row(inline_ix).is_some_and(|l| {
                             matches!(
-                                self.file_diff_inline_visual_kind(inline_ix),
+                                l.kind,
                                 gitcomet_core::domain::DiffLineKind::Add
                                     | gitcomet_core::domain::DiffLineKind::Remove
-                            ) && self.file_diff_inline_row(inline_ix).is_some_and(|l| {
-                                matches!(
-                                    l.kind,
-                                    gitcomet_core::domain::DiffLineKind::Add
-                                        | gitcomet_core::domain::DiffLineKind::Remove
-                                )
-                            });
-                        if !is_change {
-                            return None;
-                        }
-                        self.diff_visual_ix_for_mapped_ix(inline_ix)
-                    })
-                    .collect()
+                            )
+                        })
+                    },
+                )
+                .into_iter()
+                .filter_map(|inline_ix| self.diff_visual_ix_for_mapped_ix(inline_ix))
+                .collect()
             }
             DiffViewMode::Split => {
                 if let Some(provider) = self.file_diff_row_provider.as_ref() {
@@ -191,15 +192,15 @@ impl MainPaneView {
                         .filter_map(|row_ix| self.diff_visual_ix_for_mapped_ix(row_ix))
                         .collect();
                 }
-                (0..self.file_diff_split_row_len())
-                    .filter_map(|row_ix| {
-                        let is_change = !matches!(
-                            self.file_diff_split_visual_kind(row_ix),
-                            gitcomet_core::file_diff::FileDiffRowKind::Context
-                        );
-                        is_change.then(|| self.diff_visual_ix_for_mapped_ix(row_ix))?
-                    })
-                    .collect()
+                diff_navigation::change_block_entries(self.file_diff_split_row_len(), |row_ix| {
+                    !matches!(
+                        self.file_diff_split_visual_kind(row_ix),
+                        gitcomet_core::file_diff::FileDiffRowKind::Context
+                    )
+                })
+                .into_iter()
+                .filter_map(|row_ix| self.diff_visual_ix_for_mapped_ix(row_ix))
+                .collect()
             }
         }
     }

@@ -408,22 +408,30 @@ index 1111111..2222222 100644
 }
 
 fn build_full_diff_multi_line_change_fixture_texts() -> (String, String, String) {
-    let old_text = "alpha\nold one\nold two\nold three\nomega\n".to_string();
-    let new_text = "alpha\nnew one\nnew two\nnew three\nomega\n".to_string();
+    let old_text =
+        "alpha\nold one\nold two\nomega\nmid one\nbeta\ntail one\ntail two\nzeta\n".to_string();
+    let new_text =
+        "alpha\nnew one\nnew two\nomega\nMID one\nbeta\nTAIL one\nTAIL two\nzeta\n".to_string();
     let unified = "\
 diff --git a/src/lib.rs b/src/lib.rs
 index 1111111..2222222 100644
 --- a/src/lib.rs
 +++ b/src/lib.rs
-@@ -1,5 +1,5 @@
+@@ -1,9 +1,9 @@
  alpha
 -old one
 -old two
--old three
 +new one
 +new two
-+new three
  omega
+-mid one
++MID one
+ beta
+-tail one
+-tail two
++TAIL one
++TAIL two
+ zeta
 "
     .to_string();
     (unified, old_text, new_text)
@@ -434,20 +442,28 @@ fn build_full_diff_word_wrap_navigation_fixture_texts() -> (String, String, Stri
     let new_one = format!("new first {}", "right_payload_".repeat(160));
     let old_two = "old second changed row".to_string();
     let new_two = "new second changed row".to_string();
-    let old_text = format!("alpha\n{old_one}\n{old_two}\nomega\n");
-    let new_text = format!("alpha\n{new_one}\n{new_two}\nomega\n");
+    let old_three = "old third changed row".to_string();
+    let new_three = "new third changed row".to_string();
+    // Context row between the second and third changed rows keeps them in
+    // separate change blocks, so each navigation stop is a block start whose
+    // first visual row must skip the wrapped continuations before it.
+    let old_text = format!("alpha\n{old_one}\n{old_two}\nmidst\n{old_three}\nomega\n");
+    let new_text = format!("alpha\n{new_one}\n{new_two}\nmidst\n{new_three}\nomega\n");
     let unified = format!(
         "\
 diff --git a/src/lib.rs b/src/lib.rs
 index 1111111..2222222 100644
 --- a/src/lib.rs
 +++ b/src/lib.rs
-@@ -1,4 +1,4 @@
+@@ -1,6 +1,6 @@
  alpha
 -{old_one}
 -{old_two}
 +{new_one}
 +{new_two}
+ midst
+-{old_three}
++{new_three}
  omega
 "
     );
@@ -3349,7 +3365,7 @@ fn set_diff_text_selection_for_test(
     draw_and_drain_test_window(cx);
 }
 
-fn assert_full_diff_change_shortcuts_visit_each_changed_row(
+fn assert_full_diff_change_shortcuts_visit_each_change_block(
     cx: &mut gpui::VisualTestContext,
     view: &gpui::Entity<super::super::GitCometView>,
     repo_id: gitcomet_state::model::RepoId,
@@ -3410,12 +3426,12 @@ fn assert_full_diff_change_shortcuts_visit_each_changed_row(
     wait_for_main_pane_condition(
         cx,
         view,
-        "full diff has per-row navigation entries",
+        "full diff has per-block navigation entries",
         |pane| {
             let entries = pane.diff_nav_entries();
             pane.diff_content_mode == DiffContentMode::Full
                 && pane.diff_view == diff_view
-                && entries.len() >= 2
+                && entries.len() >= 3
         },
         |pane| {
             (
@@ -3427,14 +3443,13 @@ fn assert_full_diff_change_shortcuts_visit_each_changed_row(
         },
     );
     let entries = cx.update(|_window, app| view.read(app).main_pane.read(app).diff_nav_entries());
-    assert_eq!(
-        entries[1],
-        entries[0].saturating_add(1),
-        "fixture should expose adjacent changed rows in one contiguous change block"
+    assert!(
+        entries[1] > entries[0].saturating_add(1),
+        "fixture should expose context rows between Full diff change blocks in {diff_view:?}"
     );
     assert!(
         entries.len() >= 3,
-        "fixture should expose at least three changed rows to test continuing from a selection"
+        "fixture should expose at least three change blocks to test continuing from a selection"
     );
 
     focus_diff_panel(cx, view);
@@ -3445,7 +3460,7 @@ fn assert_full_diff_change_shortcuts_visit_each_changed_row(
         assert_eq!(
             pane.diff_selection_anchor,
             Some(entries[0]),
-            "first F3 should select the first changed row in Full diff {diff_view:?}"
+            "first F3 should select the first change block in Full diff {diff_view:?}"
         );
     });
 
@@ -3456,7 +3471,7 @@ fn assert_full_diff_change_shortcuts_visit_each_changed_row(
         assert_eq!(
             pane.diff_selection_anchor,
             Some(entries[1]),
-            "second F3 should advance within the same Full diff change block in {diff_view:?}"
+            "second F3 should jump the whole change block to the next one in Full diff {diff_view:?}"
         );
     });
 
@@ -3467,7 +3482,7 @@ fn assert_full_diff_change_shortcuts_visit_each_changed_row(
         assert_eq!(
             pane.diff_selection_anchor,
             Some(entries[0]),
-            "F2 should move back one changed row in Full diff {diff_view:?}"
+            "F2 should move back one change block in Full diff {diff_view:?}"
         );
     });
 
@@ -3537,13 +3552,13 @@ fn assert_full_diff_change_shortcuts_visit_each_changed_row(
 }
 
 #[gpui::test]
-fn full_diff_inline_change_shortcuts_visit_each_changed_row(cx: &mut gpui::TestAppContext) {
+fn full_diff_inline_change_shortcuts_visit_each_change_block(cx: &mut gpui::TestAppContext) {
     let (store, events) = AppStore::new(Arc::new(TestBackend));
     let (view, cx) = cx.add_window_view(|window, cx| {
         super::super::GitCometView::new(store, events, None, window, cx)
     });
 
-    assert_full_diff_change_shortcuts_visit_each_changed_row(
+    assert_full_diff_change_shortcuts_visit_each_change_block(
         cx,
         &view,
         gitcomet_state::model::RepoId(70601),
@@ -3553,13 +3568,13 @@ fn full_diff_inline_change_shortcuts_visit_each_changed_row(cx: &mut gpui::TestA
 }
 
 #[gpui::test]
-fn full_diff_split_change_shortcuts_visit_each_changed_row(cx: &mut gpui::TestAppContext) {
+fn full_diff_split_change_shortcuts_visit_each_change_block(cx: &mut gpui::TestAppContext) {
     let (store, events) = AppStore::new(Arc::new(TestBackend));
     let (view, cx) = cx.add_window_view(|window, cx| {
         super::super::GitCometView::new(store, events, None, window, cx)
     });
 
-    assert_full_diff_change_shortcuts_visit_each_changed_row(
+    assert_full_diff_change_shortcuts_visit_each_change_block(
         cx,
         &view,
         gitcomet_state::model::RepoId(70602),
@@ -3671,7 +3686,7 @@ fn assert_full_diff_word_wrap_change_shortcuts_skip_continuations(
         );
         assert!(
             second_row.source_visible_ix > first_row.source_visible_ix,
-            "second navigation entry should advance to the next changed logical row"
+            "second navigation entry should advance to the next change block's first changed logical row"
         );
         let has_wrapped_continuation_between_entries = pane
             .diff_wrap_visible_rows

@@ -1052,16 +1052,18 @@ impl StreamedFileDiffSource {
         ))
     }
 
+    /// First row of each contiguous change block — the stops next/prev change
+    /// navigation jumps between, matching the patch and markdown preview
+    /// views. A Remove run directly followed by its Add run (or a Modify run)
+    /// is one block, not one stop per row.
     fn change_visible_indices_for_runs(&self, inline: bool) -> Vec<usize> {
         let len = if inline {
             self.plan.inline_row_count
         } else {
             self.plan.row_count
         };
-        let mut out = Vec::new();
-
-        for row_ix in 0..len {
-            let is_change = if inline {
+        crate::view::diff_navigation::change_block_entries(len, |row_ix| {
+            if inline {
                 self.inline_visual_kind(row_ix).is_some_and(|kind| {
                     matches!(
                         kind,
@@ -1073,13 +1075,8 @@ impl StreamedFileDiffSource {
                 self.split_visual_kind(row_ix).is_some_and(|kind| {
                     !matches!(kind, gitcomet_core::file_diff::FileDiffRowKind::Context)
                 })
-            };
-            if is_change {
-                out.push(row_ix);
             }
-        }
-
-        out
+        })
     }
 
     fn split_change_visible_indices(&self) -> Vec<usize> {
@@ -2132,7 +2129,7 @@ mod tests {
     }
 
     #[test]
-    fn file_diff_change_visible_indices_include_every_changed_row() {
+    fn file_diff_change_visible_indices_start_each_change_block() {
         let source = streamed_file_diff_source_for_test(
             "alpha\nold one\nold two\nold three\nomega\n",
             "alpha\nnew one\nnew two\nnew three\nomega\n",
@@ -2140,8 +2137,17 @@ mod tests {
         let split = PagedFileDiffRows::new(Arc::clone(&source), 1);
         let inline = PagedFileDiffInlineRows::new(Arc::clone(&source), 1);
 
-        assert_eq!(split.change_visible_indices(), vec![1, 2, 3]);
-        assert_eq!(inline.change_visible_indices(), vec![1, 2, 3, 4, 5, 6]);
+        // One contiguous Modify run is a single stop, not one per row.
+        assert_eq!(split.change_visible_indices(), vec![1]);
+        assert_eq!(inline.change_visible_indices(), vec![1]);
+
+        // Context between runs separates stops.
+        let source = streamed_file_diff_source_for_test("a\none\nb\ntwo\n", "a\nONE\nb\nTWO\n");
+        let split = PagedFileDiffRows::new(Arc::clone(&source), 1);
+        let inline = PagedFileDiffInlineRows::new(Arc::clone(&source), 1);
+
+        assert_eq!(split.change_visible_indices(), vec![1, 3]);
+        assert_eq!(inline.change_visible_indices(), vec![1, 4]);
     }
 
     #[test]
