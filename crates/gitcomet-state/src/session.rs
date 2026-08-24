@@ -38,6 +38,12 @@ pub struct UiSession {
     /// Commit-author avatar source key; `None` means the built-in initials
     /// circles (no network).
     pub avatar_source: Option<String>,
+    /// AI commit-message generation: provider key (`ai_commit::AiProvider`),
+    /// then its credentials. `None`/empty keeps the feature unconfigured.
+    pub ai_commit_provider: Option<String>,
+    pub ai_commit_api_key: Option<String>,
+    pub ai_commit_model: Option<String>,
+    pub ai_commit_endpoint: Option<String>,
     pub ui_scale_percent: Option<u32>,
     pub ui_font_family: Option<String>,
     pub editor_font_family: Option<String>,
@@ -181,6 +187,10 @@ struct UiSessionFile {
     theme_mode: Option<String>,
     language: Option<String>,
     avatar_source: Option<String>,
+    ai_commit_provider: Option<String>,
+    ai_commit_api_key: Option<String>,
+    ai_commit_model: Option<String>,
+    ai_commit_endpoint: Option<String>,
     ui_scale_percent: Option<u32>,
     ui_font_family: Option<String>,
     editor_font_family: Option<String>,
@@ -305,6 +315,10 @@ pub fn load_from_path(path: &Path) -> UiSession {
         theme_mode: file.theme_mode,
         language: file.language,
         avatar_source: file.avatar_source,
+        ai_commit_provider: file.ai_commit_provider,
+        ai_commit_api_key: file.ai_commit_api_key,
+        ai_commit_model: file.ai_commit_model,
+        ai_commit_endpoint: file.ai_commit_endpoint,
         ui_scale_percent: file.ui_scale_percent,
         ui_font_family: file.ui_font_family,
         editor_font_family: file.editor_font_family,
@@ -750,6 +764,10 @@ pub struct UiSettings {
     pub theme_mode: Option<String>,
     pub language: Option<String>,
     pub avatar_source: Option<String>,
+    pub ai_commit_provider: Option<String>,
+    pub ai_commit_api_key: Option<String>,
+    pub ai_commit_model: Option<String>,
+    pub ai_commit_endpoint: Option<String>,
     pub ui_scale_percent: Option<u32>,
     pub ui_font_family: Option<String>,
     pub editor_font_family: Option<String>,
@@ -837,6 +855,18 @@ pub fn persist_ui_settings_to_path(settings: UiSettings, path: &Path) -> io::Res
         }
         if let Some(avatar_source) = settings.avatar_source {
             file.avatar_source = Some(avatar_source);
+        }
+        if let Some(provider) = settings.ai_commit_provider {
+            file.ai_commit_provider = Some(provider);
+        }
+        if let Some(api_key) = settings.ai_commit_api_key {
+            file.ai_commit_api_key = Some(api_key);
+        }
+        if let Some(model) = settings.ai_commit_model {
+            file.ai_commit_model = Some(model);
+        }
+        if let Some(endpoint) = settings.ai_commit_endpoint {
+            file.ai_commit_endpoint = Some(endpoint);
         }
         if let Some(percent) = settings.ui_scale_percent {
             file.ui_scale_percent = Some(percent);
@@ -2122,6 +2152,59 @@ mod tests {
         assert_eq!(
             load_from_path(&session_file).avatar_source,
             Some("cravatar".to_string())
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn persist_ui_settings_round_trips_ai_commit_settings() {
+        let dir = env::temp_dir().join(format!(
+            "gitcomet-session-ai-commit-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        let _ = fs::create_dir_all(&dir);
+        let session_file = dir.join("session.json");
+
+        // Default (unset) leaves the feature unconfigured.
+        assert_eq!(load_from_path(&session_file).ai_commit_provider, None);
+
+        persist_ui_settings_to_path(
+            UiSettings {
+                ai_commit_provider: Some("openai".to_string()),
+                ai_commit_api_key: Some("sk-test".to_string()),
+                ai_commit_model: Some("gpt-4o-mini".to_string()),
+                ai_commit_endpoint: Some("https://relay.example.com".to_string()),
+                ..UiSettings::default()
+            },
+            &session_file,
+        )
+        .expect("persist ai commit settings");
+        let loaded = load_from_path(&session_file);
+        assert_eq!(loaded.ai_commit_provider, Some("openai".to_string()));
+        assert_eq!(loaded.ai_commit_api_key, Some("sk-test".to_string()));
+        assert_eq!(loaded.ai_commit_model, Some("gpt-4o-mini".to_string()));
+        assert_eq!(
+            loaded.ai_commit_endpoint,
+            Some("https://relay.example.com".to_string())
+        );
+
+        // A later settings write that doesn't touch the fields preserves them.
+        persist_ui_settings_to_path(
+            UiSettings {
+                theme_mode: Some("dark".to_string()),
+                ..UiSettings::default()
+            },
+            &session_file,
+        )
+        .expect("persist theme");
+        assert_eq!(
+            load_from_path(&session_file).ai_commit_api_key,
+            Some("sk-test".to_string())
         );
 
         let _ = fs::remove_dir_all(&dir);

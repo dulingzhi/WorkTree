@@ -357,6 +357,16 @@ fn send_unavailable_git_effect_result(
                 result: Err(git_unavailable_error(runtime)),
             },
         )),
+        Effect::LoadAiCommitContext {
+            repo_id,
+            request_rev,
+        } => send(Msg::Internal(
+            crate::msg::InternalMsg::AiCommitContextLoaded {
+                repo_id,
+                request_rev,
+                result: Err(git_unavailable_error(runtime)),
+            },
+        )),
         Effect::SaveWorktreeFile {
             repo_id,
             path,
@@ -1863,6 +1873,18 @@ pub(super) fn schedule_effect(
                 msg_tx,
                 repo_id,
                 limit,
+                request_rev,
+            );
+        }
+        Effect::LoadAiCommitContext {
+            repo_id,
+            request_rev,
+        } => {
+            repo_load::schedule_load_ai_commit_context(
+                executor,
+                repos,
+                msg_tx,
+                repo_id,
                 request_rev,
             );
         }

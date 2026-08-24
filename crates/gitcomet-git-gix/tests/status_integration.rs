@@ -1124,6 +1124,50 @@ fn diff_unified_works_for_staged_and_unstaged() {
 }
 
 #[test]
+fn staged_diff_unified_covers_every_staged_file_and_ignores_unstaged() {
+    if !require_git_shell_for_status_integration_tests() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path();
+
+    run_git(repo, &["init"]);
+    run_git(repo, &["config", "user.email", "you@example.com"]);
+    run_git(repo, &["config", "user.name", "You"]);
+    run_git(repo, &["config", "commit.gpgsign", "false"]);
+    run_git(repo, &["commit", "--allow-empty", "-m", "init"]);
+
+    // Two files staged, one left unstaged on top of a staged edit.
+    write(repo, "a.txt", "one\n");
+    write(repo, "b.txt", "bee\n");
+    run_git(repo, &["add", "a.txt", "b.txt"]);
+    write(repo, "a.txt", "one\nunstaged tail\n");
+
+    let backend = GixBackend;
+    let opened = backend.open(repo).unwrap();
+
+    let diff = opened.staged_diff_unified().unwrap();
+    assert!(
+        diff.contains("diff --git a/a.txt b/a.txt"),
+        "expected a.txt in the whole-staged diff: {diff}"
+    );
+    assert!(
+        diff.contains("diff --git a/b.txt b/b.txt"),
+        "expected b.txt in the whole-staged diff: {diff}"
+    );
+    assert!(
+        !diff.contains("unstaged tail"),
+        "unstaged worktree content must not leak into the staged diff: {diff}"
+    );
+
+    // A clean index yields an empty diff rather than an error (git diff's
+    // exit code is 0 there, but the exit-1-with-differences path is the same
+    // shared runner `diff_unified` exercises).
+    run_git(repo, &["commit", "-m", "stage everything"]);
+    assert_eq!(opened.staged_diff_unified().unwrap(), "");
+}
+
+#[test]
 fn diff_working_tree_unstaged_ignores_crlf_only_line_ending_changes() {
     if !require_git_shell_for_status_integration_tests() {
         return;

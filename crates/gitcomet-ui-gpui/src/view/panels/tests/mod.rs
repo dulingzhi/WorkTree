@@ -1204,6 +1204,7 @@ pub(super) fn set_ui_scale_percent_for_test(
     });
 }
 
+mod ai_commit;
 mod comparison;
 mod conflict;
 mod diff_stage_gutter;

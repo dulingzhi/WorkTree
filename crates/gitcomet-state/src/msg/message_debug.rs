@@ -146,6 +146,16 @@ impl std::fmt::Debug for InternalMsg {
                 .field("request_rev", request_rev)
                 .field("result", result)
                 .finish(),
+            InternalMsg::AiCommitContextLoaded {
+                repo_id,
+                request_rev,
+                result,
+            } => f
+                .debug_struct("AiCommitContextLoaded")
+                .field("repo_id", repo_id)
+                .field("request_rev", request_rev)
+                .field("result", result)
+                .finish(),
             InternalMsg::RebaseStateLoaded { repo_id, result } => f
                 .debug_struct("RebaseStateLoaded")
                 .field("repo_id", repo_id)

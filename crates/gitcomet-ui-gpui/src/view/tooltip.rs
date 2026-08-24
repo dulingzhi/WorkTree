@@ -192,6 +192,12 @@ impl GitCometView {
                             // Language is owned by the settings window.
                             language: None,
                             avatar_source: None,
+                            // AI commit settings are owned by the settings
+                            // window too.
+                            ai_commit_provider: None,
+                            ai_commit_api_key: None,
+                            ai_commit_model: None,
+                            ai_commit_endpoint: None,
                             ui_scale_percent: Some(this.ui_scale_percent),
                             ui_font_family: Some(font_preferences.ui_font_family),
                             editor_font_family: Some(font_preferences.editor_font_family),

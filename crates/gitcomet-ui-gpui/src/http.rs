@@ -19,6 +19,11 @@ use std::time::Duration;
 /// How long a single request may take before it is abandoned.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 
+/// How long an AI commit-message generation may take. Model latency has
+/// little in common with the fetch-style requests above, so it gets its own
+/// agent and a far looser ceiling.
+pub(crate) const AI_REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
+
 /// Ceiling on a response body.
 ///
 /// Requests are driven by repository content — a markdown file names the URLs —
@@ -107,6 +112,41 @@ fn read_body_within_limit(reader: impl Read, limit: u64, url: &str) -> anyhow::R
 /// The client to install on the application.
 pub(crate) fn client() -> Arc<dyn HttpClient> {
     Arc::new(GitCometHttpClient::new())
+}
+
+/// POST JSON to an AI provider and hand back status plus body. This is the
+/// write-side sibling of [`HttpClient::get`]: same blocking-client-on-the-
+/// thread-pool approach, but with the caller's timeout (AI generation runs
+/// far longer than fetches) and request headers (each provider authenticates
+/// differently).
+pub(crate) async fn post_json(
+    url: String,
+    headers: Vec<(&'static str, String)>,
+    body: String,
+    timeout: Duration,
+) -> anyhow::Result<HttpResponse> {
+    smol::unblock(move || {
+        let agent: ureq::Agent = ureq::Agent::config_builder()
+            .timeout_global(Some(timeout))
+            .max_redirects(MAX_REDIRECTS)
+            .build()
+            .into();
+        let mut request = agent.post(&url).header("Content-Type", "application/json");
+        for (name, value) in headers {
+            request = request.header(name, &value);
+        }
+
+        let response = request.send(&body)?;
+        let status = response.status();
+        let bytes =
+            read_body_within_limit(response.into_body().into_reader(), MAX_RESPONSE_BYTES, &url)?;
+
+        Ok(HttpResponse {
+            status,
+            body: bytes,
+        })
+    })
+    .await
 }
 
 #[cfg(test)]

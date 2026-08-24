@@ -182,6 +182,7 @@ enum SettingsSection {
     UiFont,
     EditorFont,
     ExternalCodeEditor,
+    AiCommitMessage,
     DateFormat,
     Timezone,
     TerminalExternal,
@@ -208,6 +209,7 @@ impl SettingsSection {
             | Self::UiFont
             | Self::EditorFont
             | Self::ExternalCodeEditor
+            | Self::AiCommitMessage
             | Self::DateFormat
             | Self::Timezone => SettingsCategory::General,
             Self::TerminalExternal | Self::TerminalActionBar => SettingsCategory::Terminal,
@@ -301,7 +303,8 @@ impl SettingsCategory {
         match self {
             Self::General => {
                 "general theme language ui language date format ui scale ui font editor font \
-                 ligatures external code editor date timezone appearance"
+                 ligatures external code editor ai commit messages provider api key model \
+                 endpoint date timezone appearance"
             }
             Self::Terminal => "terminal external terminal action bar terminal button opens",
             Self::ChangeTracking => "change tracking untracked files",
@@ -462,12 +465,23 @@ pub(crate) struct SettingsWindowView {
     external_editor_custom_arguments_draft: String,
     external_editor_custom_path_input: Entity<components::TextInput>,
     external_editor_custom_arguments_input: Entity<components::TextInput>,
+    ai_commit_provider: crate::ai_commit::AiProvider,
+    ai_commit_provider_scroll: UniformListScrollHandle,
+    ai_commit_model_draft: String,
+    ai_commit_api_key_draft: String,
+    ai_commit_endpoint_draft: String,
+    ai_commit_model_input: Entity<components::TextInput>,
+    ai_commit_api_key_input: Entity<components::TextInput>,
+    ai_commit_endpoint_input: Entity<components::TextInput>,
     expanded_section: Option<SettingsSection>,
     hover_resize_edge: Option<ResizeEdge>,
     title_drag_state: chrome::TitleBarDragState,
     _git_executable_input_subscription: gpui::Subscription,
     _external_editor_custom_path_input_subscription: gpui::Subscription,
     _external_editor_custom_arguments_input_subscription: gpui::Subscription,
+    _ai_commit_model_input_subscription: gpui::Subscription,
+    _ai_commit_api_key_input_subscription: gpui::Subscription,
+    _ai_commit_endpoint_input_subscription: gpui::Subscription,
     _appearance_subscription: gpui::Subscription,
     _search_input_subscription: gpui::Subscription,
     #[cfg(test)]
@@ -894,6 +908,15 @@ impl SettingsWindowView {
                 ),
                 _ => (String::new(), String::new()),
             };
+        // Like the avatar source, the AI settings are a process global the ✨
+        // button reads; the window seeds itself from the session-loaded
+        // current value.
+        crate::ai_commit::init_from_session(&ui_session);
+        let ai_commit_current = crate::ai_commit::current();
+        let ai_commit_provider = ai_commit_current.provider;
+        let ai_commit_model_draft = ai_commit_current.model;
+        let ai_commit_api_key_draft = ai_commit_current.api_key;
+        let ai_commit_endpoint_draft = ai_commit_current.endpoint;
         let theme = theme_mode.resolve_theme(window.appearance());
         let runtime_info = SettingsRuntimeInfo::detect();
         let git_executable_mode =
@@ -1066,6 +1089,76 @@ impl SettingsWindowView {
             },
         );
 
+        let ai_commit_model_input = cx.new(|cx| {
+            let mut input = components::TextInput::new(
+                components::TextInputOptions {
+                    placeholder: ai_commit_provider.default_model().into(),
+                    ..Default::default()
+                },
+                window,
+                cx,
+            );
+            input.set_theme(theme, cx);
+            input.set_text(ai_commit_model_draft.clone(), cx);
+            input
+        });
+        let ai_commit_model_input_subscription =
+            cx.observe(&ai_commit_model_input, |this, input, cx| {
+                let next = input.read(cx).text().to_string();
+                if this.ai_commit_model_draft == next {
+                    return;
+                }
+                this.ai_commit_model_draft = next;
+                this.persist_ai_commit_settings(cx);
+                cx.notify();
+            });
+        let ai_commit_api_key_input = cx.new(|cx| {
+            let mut input = components::TextInput::new(
+                components::TextInputOptions {
+                    placeholder: tr("settings.ai_commit.api_key_placeholder"),
+                    ..Default::default()
+                },
+                window,
+                cx,
+            );
+            input.set_theme(theme, cx);
+            input.set_text(ai_commit_api_key_draft.clone(), cx);
+            input
+        });
+        let ai_commit_api_key_input_subscription =
+            cx.observe(&ai_commit_api_key_input, |this, input, cx| {
+                let next = input.read(cx).text().to_string();
+                if this.ai_commit_api_key_draft == next {
+                    return;
+                }
+                this.ai_commit_api_key_draft = next;
+                this.persist_ai_commit_settings(cx);
+                cx.notify();
+            });
+        let ai_commit_endpoint_input = cx.new(|cx| {
+            let mut input = components::TextInput::new(
+                components::TextInputOptions {
+                    placeholder: ai_commit_provider.default_endpoint().into(),
+                    ..Default::default()
+                },
+                window,
+                cx,
+            );
+            input.set_theme(theme, cx);
+            input.set_text(ai_commit_endpoint_draft.clone(), cx);
+            input
+        });
+        let ai_commit_endpoint_input_subscription =
+            cx.observe(&ai_commit_endpoint_input, |this, input, cx| {
+                let next = input.read(cx).text().to_string();
+                if this.ai_commit_endpoint_draft == next {
+                    return;
+                }
+                this.ai_commit_endpoint_draft = next;
+                this.persist_ai_commit_settings(cx);
+                cx.notify();
+            });
+
         Self {
             theme_mode,
             theme,
@@ -1132,6 +1225,14 @@ impl SettingsWindowView {
             external_editor_custom_arguments_draft,
             external_editor_custom_path_input,
             external_editor_custom_arguments_input,
+            ai_commit_provider,
+            ai_commit_provider_scroll: UniformListScrollHandle::default(),
+            ai_commit_model_draft,
+            ai_commit_api_key_draft,
+            ai_commit_endpoint_draft,
+            ai_commit_model_input,
+            ai_commit_api_key_input,
+            ai_commit_endpoint_input,
             expanded_section: None,
             hover_resize_edge: None,
             title_drag_state: chrome::TitleBarDragState::default(),
@@ -1140,6 +1241,9 @@ impl SettingsWindowView {
                 external_editor_custom_path_input_subscription,
             _external_editor_custom_arguments_input_subscription:
                 external_editor_custom_arguments_input_subscription,
+            _ai_commit_model_input_subscription: ai_commit_model_input_subscription,
+            _ai_commit_api_key_input_subscription: ai_commit_api_key_input_subscription,
+            _ai_commit_endpoint_input_subscription: ai_commit_endpoint_input_subscription,
             _appearance_subscription: appearance_subscription,
             _search_input_subscription: search_input_subscription,
             #[cfg(test)]
@@ -1181,6 +1285,7 @@ impl SettingsWindowView {
     }
 
     fn preference_settings(&self) -> session::UiSettings {
+        let ai_commit = crate::ai_commit::current();
         let mut settings = session::UiSettings {
             repo_picker_sort: None,
             repo_picker_collapsed_sections: None,
@@ -1194,6 +1299,10 @@ impl SettingsWindowView {
             theme_mode: Some(self.theme_mode.key().to_string()),
             language: Some(self.language.key().to_string()),
             avatar_source: Some(crate::avatar_source::current().key().to_string()),
+            ai_commit_provider: Some(ai_commit.provider.key().to_string()),
+            ai_commit_api_key: Some(ai_commit.api_key),
+            ai_commit_model: Some(ai_commit.model),
+            ai_commit_endpoint: Some(ai_commit.endpoint),
             ui_scale_percent: Some(self.ui_scale_percent),
             ui_font_family: Some(self.ui_font_family.clone()),
             editor_font_family: Some(self.editor_font_family.clone()),
@@ -1771,6 +1880,54 @@ impl SettingsWindowView {
     /// resolved language appended when following the system.
     fn language_summary(&self) -> gpui::SharedString {
         self.language_option_label(self.language)
+    }
+
+    /// Summary value for the AI section row: the provider's name, annotated
+    /// when no API key is set yet.
+    fn ai_commit_summary(&self) -> gpui::SharedString {
+        let label = self.ai_commit_provider.label();
+        if self.ai_commit_api_key_draft.trim().is_empty() {
+            crate::i18n::t!("settings.ai_commit.summary_unconfigured", provider = label).into()
+        } else {
+            label
+        }
+    }
+
+    /// Push the AI section's drafts into the process-global settings and
+    /// persist them. The ✨ button reads the global, so every edit keeps it
+    /// in sync.
+    fn persist_ai_commit_settings(&mut self, cx: &mut gpui::Context<Self>) {
+        crate::ai_commit::set_current(crate::ai_commit::AiCommitSettings {
+            provider: self.ai_commit_provider,
+            api_key: self.ai_commit_api_key_draft.clone(),
+            model: self.ai_commit_model_draft.clone(),
+            endpoint: self.ai_commit_endpoint_draft.clone(),
+        });
+        self.persist_preferences(cx);
+    }
+
+    /// Switch the AI provider, resetting model and endpoint to the new
+    /// provider's defaults so a stray value from the other provider is never
+    /// sent to the new endpoint.
+    fn set_ai_commit_provider(
+        &mut self,
+        provider: crate::ai_commit::AiProvider,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self.ai_commit_provider == provider {
+            return;
+        }
+
+        self.ai_commit_provider = provider;
+        self.ai_commit_model_draft = provider.default_model().to_string();
+        self.ai_commit_endpoint_draft.clear();
+        self.ai_commit_model_input.update(cx, |input, cx| {
+            input.set_text(provider.default_model().to_string(), cx);
+        });
+        self.ai_commit_endpoint_input
+            .update(cx, |input, cx| input.set_text(String::new(), cx));
+        self.persist_ai_commit_settings(cx);
+        cx.notify();
     }
 
     fn language_option_label(&self, language: crate::i18n::Language) -> gpui::SharedString {
@@ -3051,6 +3208,31 @@ impl SettingsWindowView {
             .collect()
     }
 
+    fn render_ai_commit_provider_option_rows(
+        this: &mut Self,
+        range: Range<usize>,
+        _window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> Vec<AnyElement> {
+        let theme = this.theme;
+        range
+            .filter_map(|ix| crate::ai_commit::AiProvider::ALL.get(ix).copied())
+            .map(|provider| {
+                this.option_row(
+                    format!("settings_window_ai_commit_provider_{}", provider.key()),
+                    provider.label(),
+                    None,
+                    this.ai_commit_provider == provider,
+                    theme,
+                )
+                .on_click(cx.listener(move |this, _e: &ClickEvent, _window, cx| {
+                    this.set_ai_commit_provider(provider, cx);
+                }))
+                .into_any_element()
+            })
+            .collect()
+    }
+
     fn render_editor_font_option_rows(
         this: &mut Self,
         range: Range<usize>,
@@ -3646,6 +3828,12 @@ impl Render for SettingsWindowView {
             .update(cx, |input, cx| input.set_theme(theme, cx));
         self.external_editor_custom_arguments_input
             .update(cx, |input, cx| input.set_theme(theme, cx));
+        self.ai_commit_model_input
+            .update(cx, |input, cx| input.set_theme(theme, cx));
+        self.ai_commit_api_key_input
+            .update(cx, |input, cx| input.set_theme(theme, cx));
+        self.ai_commit_endpoint_input
+            .update(cx, |input, cx| input.set_theme(theme, cx));
         self.search_input
             .update(cx, |input, cx| input.set_theme(theme, cx));
 
@@ -3768,9 +3956,21 @@ impl Render for SettingsWindowView {
                             self.expanded_section == Some(SettingsSection::ExternalCodeEditor),
                             theme,
                         )
-                        .border_color(no_separator)
                         .on_click(cx.listener(|this, _e: &ClickEvent, _window, cx| {
                             this.toggle_section(SettingsSection::ExternalCodeEditor, cx);
+                        }));
+
+                    let ai_commit_row = self
+                        .summary_row(
+                            "settings_window_ai_commit",
+                            tr_str("settings.row.ai_commit"),
+                            self.ai_commit_summary(),
+                            self.expanded_section == Some(SettingsSection::AiCommitMessage),
+                            theme,
+                        )
+                        .border_color(no_separator)
+                        .on_click(cx.listener(|this, _e: &ClickEvent, _window, cx| {
+                            this.toggle_section(SettingsSection::AiCommitMessage, cx);
                         }));
 
                     let timezone_row = self
@@ -4403,6 +4603,94 @@ impl Render for SettingsWindowView {
                                     .w_full()
                                     .min_w(px(0.0))
                                     .child(self.external_editor_custom_arguments_input.clone()),
+                            ),
+                        );
+                    }
+
+                    general_card = general_card.child(ai_commit_row);
+                    if self.expanded_section == Some(SettingsSection::AiCommitMessage) {
+                        let provider_count = crate::ai_commit::AiProvider::ALL.len();
+                        let list = uniform_list(
+                            "settings_window_ai_commit_provider_list",
+                            provider_count,
+                            cx.processor(Self::render_ai_commit_provider_option_rows),
+                        )
+                        .w_full()
+                        .min_w(px(0.0))
+                        .h_full()
+                        .min_h(px(0.0))
+                        .track_scroll(&self.ai_commit_provider_scroll);
+                        let list = restrict_scroll_to_vertical_axis(list).into_any_element();
+                        general_card = general_card.child(self.dropdown_list_container(
+                            "settings_window_ai_commit_provider_list_container",
+                            "settings_window_ai_commit_provider_scrollbar",
+                            self.ai_commit_provider_scroll.clone(),
+                            provider_count,
+                            SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
+                            SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
+                            list,
+                            theme,
+                        ));
+                        general_card = general_card.child(
+                            self.detail_container(
+                                "settings_window_ai_commit_fields_container",
+                                theme,
+                            )
+                            .child(
+                                div()
+                                    .px_2()
+                                    .pt_1()
+                                    .text_xs()
+                                    .text_color(theme.colors.foreground.secondary)
+                                    .child(tr_str("settings.ai_commit.model")),
+                            )
+                            .child(
+                                div()
+                                    .px_2()
+                                    .pb_1()
+                                    .w_full()
+                                    .min_w(px(0.0))
+                                    .child(self.ai_commit_model_input.clone()),
+                            )
+                            .child(
+                                div()
+                                    .px_2()
+                                    .pt_1()
+                                    .text_xs()
+                                    .text_color(theme.colors.foreground.secondary)
+                                    .child(tr_str("settings.ai_commit.api_key")),
+                            )
+                            .child(
+                                div()
+                                    .px_2()
+                                    .pb_1()
+                                    .w_full()
+                                    .min_w(px(0.0))
+                                    .child(self.ai_commit_api_key_input.clone()),
+                            )
+                            .child(
+                                div()
+                                    .px_2()
+                                    .pt_1()
+                                    .text_xs()
+                                    .text_color(theme.colors.foreground.secondary)
+                                    .child(tr_str("settings.ai_commit.endpoint")),
+                            )
+                            .child(
+                                div()
+                                    .px_2()
+                                    .pb_1()
+                                    .w_full()
+                                    .min_w(px(0.0))
+                                    .child(self.ai_commit_endpoint_input.clone()),
+                            )
+                            .child(
+                                div()
+                                    .px_2()
+                                    .pt_1()
+                                    .text_xs()
+                                    .text_color(theme.colors.foreground.secondary)
+                                    .child(tr_str("settings.ai_commit.privacy_hint")),
                             ),
                         );
                     }
@@ -8372,6 +8660,99 @@ mod tests {
             assert_eq!(program_input, "  wezterm  ");
             assert_eq!(args_input, "  start  \n\n  --cwd  \n  {cwd}  \n");
             assert_eq!(status.as_deref(), Some("External terminal settings saved."));
+        });
+    }
+
+    #[gpui::test]
+    fn ai_commit_drafts_follow_the_provider_switch(cx: &mut gpui::TestAppContext) {
+        let _visual_guard = lock_visual_test();
+        // `ai_commit::current()` is a process global; serialize against the
+        // panels' ✨ generation tests and restore the default on exit.
+        struct RestoreAiSettings;
+        impl Drop for RestoreAiSettings {
+            fn drop(&mut self) {
+                crate::ai_commit::set_current(crate::ai_commit::AiCommitSettings::default());
+            }
+        }
+        let _restore = {
+            let _lock = crate::ai_commit::lock_test_settings();
+            crate::ai_commit::set_current(crate::ai_commit::AiCommitSettings::default());
+            RestoreAiSettings
+        };
+
+        let (store, events) = AppStore::new(std::sync::Arc::new(TestBackend));
+        let (_main_view, cx) =
+            cx.add_window_view(|window, cx| GitCometView::new(store, events, None, window, cx));
+
+        cx.update(|window, app| {
+            let _ = window.draw(app);
+            open_settings_window(app);
+        });
+        cx.run_until_parked();
+
+        let settings_window = cx.update(|_window, app| {
+            app.windows()
+                .into_iter()
+                .find_map(|window| window.downcast::<SettingsWindowView>())
+                .expect("settings window should be open")
+        });
+
+        // Typing an API key flows into the process global the ✨ button reads.
+        cx.update(|_window, app| {
+            let _ = settings_window.update(app, |settings, _window, cx| {
+                settings.ai_commit_api_key_input.update(cx, |input, cx| {
+                    input.set_text("sk-settings-test", cx);
+                });
+            });
+        });
+        cx.run_until_parked();
+        cx.update(|_window, _app| {
+            let current = crate::ai_commit::current();
+            assert_eq!(current.api_key, "sk-settings-test");
+            assert!(
+                current.is_configured(),
+                "an API key alone makes the provider usable"
+            );
+        });
+
+        // Switching providers resets model and endpoint to the new defaults
+        // while keeping the key.
+        cx.update(|_window, app| {
+            let _ = settings_window.update(app, |settings, _window, cx| {
+                settings.set_ai_commit_provider(crate::ai_commit::AiProvider::OpenAiCompatible, cx);
+            });
+        });
+        cx.run_until_parked();
+        cx.update(|_window, app| {
+            let current = crate::ai_commit::current();
+            assert_eq!(
+                current.provider,
+                crate::ai_commit::AiProvider::OpenAiCompatible
+            );
+            assert_eq!(current.api_key, "sk-settings-test");
+            assert_eq!(
+                current.model,
+                crate::ai_commit::AiProvider::OpenAiCompatible.default_model()
+            );
+            assert_eq!(current.endpoint, "");
+
+            let (model_text, endpoint_text) = settings_window
+                .read_with(app, |settings, cx| {
+                    (
+                        settings
+                            .ai_commit_model_input
+                            .read_with(cx, |input, _| input.text().to_string()),
+                        settings
+                            .ai_commit_endpoint_input
+                            .read_with(cx, |input, _| input.text().to_string()),
+                    )
+                })
+                .expect("settings window should remain readable");
+            assert_eq!(
+                model_text,
+                crate::ai_commit::AiProvider::OpenAiCompatible.default_model()
+            );
+            assert_eq!(endpoint_text, "");
         });
     }
 

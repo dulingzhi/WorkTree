@@ -99,6 +99,10 @@ pub enum Effect {
         limit: usize,
         request_rev: u64,
     },
+    LoadAiCommitContext {
+        repo_id: RepoId,
+        request_rev: u64,
+    },
     LoadFileHistory {
         repo_id: RepoId,
         path: PathBuf,

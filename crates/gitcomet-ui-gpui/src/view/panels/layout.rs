@@ -3330,6 +3330,16 @@ impl DetailsPaneView {
             .as_ref()
             .is_some_and(|id| id.as_ref() == commit_options_invoker.as_ref());
         let previous_messages_invoker: SharedString = "previous_commit_messages".into();
+        let ai_generating = self.ai_commit_generation.is_some();
+        let ai_generating_this_repo = self
+            .ai_commit_generation
+            .as_ref()
+            .is_some_and(|generation| self.active_repo_id() == Some(generation.repo_id()));
+        let ai_icon_color = if ai_generating_this_repo {
+            theme.colors.accent.foreground
+        } else {
+            theme.colors.foreground.secondary
+        };
         let previous_messages_active = self
             .active_context_menu_invoker
             .as_ref()
@@ -3418,12 +3428,33 @@ impl DetailsPaneView {
             })
             .debug_selector(|| "previous_commit_messages_button".to_string())
             .gitcomet_tooltip(theme, tr("layout.commit_box.previous_messages"));
+        let ai_generate = components::Button::new("ai_commit_generate", "")
+            .start_slot(if ai_generating_this_repo {
+                spinner(("ai_commit_spinner", repo_key)).into_any_element()
+            } else {
+                svg_icon("icons/sparkle.svg", ai_icon_color, px(14.0)).into_any_element()
+            })
+            .style(components::ButtonStyle::Subtle)
+            .disabled(self.active_repo_id().is_none() || ai_generating)
+            .on_click(theme, cx, |this, _e, _w, cx| {
+                this.start_ai_commit_message_generation(cx);
+            })
+            .debug_selector(|| "ai_commit_generate_button".to_string())
+            .gitcomet_tooltip(
+                theme,
+                tr(if ai_generating_this_repo {
+                    "layout.commit_box.ai_generating"
+                } else {
+                    "layout.commit_box.ai_generate"
+                }),
+            );
         div().flex().flex_col().gap_2().child(commit_message).child(
             div().flex().items_center().justify_end().child(
                 div()
                     .flex()
                     .items_center()
                     .gap_2()
+                    .child(ai_generate)
                     .child(previous_messages_menu)
                     .child(
                         components::SplitButton::new(commit_main, commit_menu)

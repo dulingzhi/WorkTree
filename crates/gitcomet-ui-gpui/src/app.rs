@@ -1,3 +1,4 @@
+use crate::ai_commit;
 use crate::assets::GitCometAssets;
 use crate::avatar_source;
 use crate::i18n::{self, t, tr};
@@ -539,6 +540,7 @@ fn open_gitcomet_window(
     let ui_scale = ui_scale::current_or_initialize_from_session(&ui_session, cx);
     i18n::current_or_initialize_from_session(&ui_session, cx);
     avatar_source::init_from_session(&ui_session);
+    ai_commit::init_from_session(&ui_session);
     let min_size = main_window_min_size_for_percent(ui_scale.percent);
     let default_size = main_window_default_size_for_percent(ui_scale.percent);
     let restored_w = ui_session

@@ -63,3 +63,5 @@ layout:
     tooltip_amend_and_push: "修补上一次提交；已发布的修补需要显式使用带租约的强制推送"
     options: 提交选项
     previous_messages: 历史提交信息
+    ai_generate: AI 生成提交信息
+    ai_generating: 正在用 AI 生成提交信息…

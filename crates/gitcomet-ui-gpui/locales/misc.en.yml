@@ -50,6 +50,11 @@ misc:
     column_sha: SHA
   details:
     commit_message_placeholder: "Enter commit message"
+  ai_commit:
+    not_configured: "AI commit messages are not configured yet — set a provider and API key in Settings → General."
+    no_staged_changes: "Nothing is staged yet — stage changes to generate a commit message from."
+    empty_diff: "The staged diff is empty, so there is nothing for the model to describe."
+    failed: "AI commit message failed: %{error}"
   file_editor:
     workdir_unavailable: "Repository working directory is unavailable."
   branch_sidebar:

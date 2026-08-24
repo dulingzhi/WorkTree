@@ -1,5 +1,7 @@
 use crate::model::GitLogTagFetchMode;
-use crate::model::{ConflictFileLoadMode, DefaultTagType, RepoId, SidebarDataRequest, SidebarMode};
+use crate::model::{
+    AiCommitContext, ConflictFileLoadMode, DefaultTagType, RepoId, SidebarDataRequest, SidebarMode,
+};
 use gitcomet_core::auth::StagedGitAuth;
 use gitcomet_core::conflict_session::ConflictSession;
 use gitcomet_core::domain::*;
@@ -315,6 +317,11 @@ pub enum Msg {
     LoadRecentCommitMessages {
         repo_id: RepoId,
         limit: usize,
+    },
+    /// Fetch the staged diff plus recent commit subjects that AI
+    /// commit-message generation builds its prompt from.
+    LoadAiCommitContext {
+        repo_id: RepoId,
     },
     /// Full `%B` message of a single commit, for the history hover card.
     /// Message-only, so it skips the tree diff `commit_details` pays for.
@@ -1078,6 +1085,11 @@ pub enum InternalMsg {
         repo_id: RepoId,
         request_rev: u64,
         result: Result<Vec<RecentCommitMessage>, Error>,
+    },
+    AiCommitContextLoaded {
+        repo_id: RepoId,
+        request_rev: u64,
+        result: Result<AiCommitContext, Error>,
     },
     RebaseStateLoaded {
         repo_id: RepoId,

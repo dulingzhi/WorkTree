@@ -4,6 +4,8 @@ pub(in crate::view) mod main;
 mod reflog;
 mod sidebar;
 
+#[cfg(test)]
+pub(in crate::view) use details::AiCommitGeneration;
 pub(super) use details::{DetailsPaneInit, DetailsPaneView};
 pub(super) use history::HistoryView;
 #[allow(unused_imports)]

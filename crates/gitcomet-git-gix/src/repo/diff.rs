@@ -31,7 +31,10 @@ const MAX_IMAGE_DIFF_SIDE_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_IMAGE_DIFF_SIDE_BYTES: u64 = 1024;
 
 impl GixRepo {
-    fn build_unified_diff_command(&self, target: &DiffTarget) -> Command {
+    /// The shared `git -c …` prefix every unified-diff invocation starts
+    /// with: format pins the diff header so a user's git config cannot
+    /// reshape what the UI (or a prompt) reads out of it.
+    fn unified_diff_config_command(&self) -> Command {
         let mut cmd = self.git_workdir_cmd();
         cmd.arg("-c").arg("color.ui=false");
         // Pin the header format: the UI resolves a file's path out of the
@@ -49,6 +52,11 @@ impl GixRepo {
             .arg("-c")
             .arg("diff.dstPrefix=b/");
         cmd.arg("--no-pager");
+        cmd
+    }
+
+    fn build_unified_diff_command(&self, target: &DiffTarget) -> Command {
+        let mut cmd = self.unified_diff_config_command();
 
         match target {
             DiffTarget::WorkingTree { path, area } => {
@@ -94,8 +102,24 @@ impl GixRepo {
     }
 
     pub(super) fn diff_unified_impl(&self, target: &DiffTarget) -> Result<String> {
+        self.run_unified_diff(self.build_unified_diff_command(target))
+    }
+
+    /// The whole staged area as one unified diff (`git diff --cached`), the
+    /// payload AI commit-message generation summarizes. Unlike
+    /// [`Self::diff_unified_impl`] it is not filtered to a single path.
+    pub(super) fn staged_diff_unified_impl(&self) -> Result<String> {
+        let mut cmd = self.unified_diff_config_command();
+        cmd.arg("diff").arg("--no-ext-diff").arg("--cached");
+        self.run_unified_diff(cmd)
+    }
+
+    /// Run a unified-diff command and collect its stdout. Shared by every
+    /// caller so the "exit 1 means differences, not failure" rule and the
+    /// UTF-8 requirement stay in one place.
+    fn run_unified_diff(&self, cmd: Command) -> Result<String> {
         let label = "git diff";
-        let output = run_git_raw_output(self.build_unified_diff_command(target), label)?;
+        let output = run_git_raw_output(cmd, label)?;
 
         // git diff exits 1 when there are differences — that is not a failure.
         let ok_exit = output.status.success() || output.status.code() == Some(1);

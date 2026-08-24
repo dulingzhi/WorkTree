@@ -573,6 +573,17 @@ pub trait GitRepository: Send + Sync {
         Ok(divergence)
     }
     fn diff_unified(&self, target: &DiffTarget) -> Result<String>;
+    /// The whole staged area as one unified diff — the payload AI
+    /// commit-message generation summarizes. Unlike `diff_unified` it is not
+    /// filtered to a single path.
+    ///
+    /// Default implementation reports the backend as unsupported so test
+    /// doubles stay unaffected.
+    fn staged_diff_unified(&self) -> Result<String> {
+        Err(Error::new(ErrorKind::Unsupported(
+            "staged diff is not implemented for this backend",
+        )))
+    }
     /// Load and parse unified diff rows for the target.
     ///
     /// Default implementation goes through `diff_unified`; backends may

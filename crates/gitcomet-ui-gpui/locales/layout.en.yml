@@ -64,3 +64,5 @@ layout:
     tooltip_amend_and_push: "Amend the previous commit; published amends require explicit force push with lease"
     options: Commit options
     previous_messages: Previous commit messages
+    ai_generate: Generate a commit message with AI
+    ai_generating: Generating a commit message with AI…

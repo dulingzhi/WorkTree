@@ -530,6 +530,11 @@ impl GitRepository for GixRepo {
         self.diff_unified_impl(target)
     }
 
+    fn staged_diff_unified(&self) -> Result<String> {
+        let _scope = git_ops_trace::scope(GitOpTraceKind::Diff);
+        self.staged_diff_unified_impl()
+    }
+
     fn diff_parsed(&self, target: &DiffTarget) -> Result<Diff> {
         let _scope = git_ops_trace::scope(GitOpTraceKind::Diff);
         self.diff_parsed_impl(target)

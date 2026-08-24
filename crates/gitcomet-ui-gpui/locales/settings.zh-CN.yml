@@ -51,10 +51,20 @@ settings:
     open_theme_folder: 打开自定义主题文件夹
     theme_guide: 主题指南
     avatar_source: 提交作者头像
+    ai_commit: AI 提交信息
   avatar_source:
     option_initials: 当前头像（首字母，离线）
     option_gravatar: "Gravatar（gravatar.com）"
     option_cravatar: "Cravatar（cravatar.cn）"
+  ai_commit:
+    provider_anthropic: "Anthropic"
+    provider_openai: "OpenAI 兼容"
+    summary_unconfigured: "%{provider}（未填 API Key）"
+    model: 模型
+    api_key: API Key
+    api_key_placeholder: "sk-…"
+    endpoint: "API 端点（可选）"
+    privacy_hint: "API Key 仅保存在本地会话文件中。生成提交信息时会把暂存差异发送给所选服务。"
   ui_scale:
     detail_default: 默认缩放
     detail_fit_more: 在屏幕上显示更多内容

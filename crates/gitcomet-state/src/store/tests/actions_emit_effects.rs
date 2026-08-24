@@ -4513,3 +4513,145 @@ fn cherry_pick_setup_never_enables_rewording_after_partial_or_stale_message_load
     assert!(matches!(setup.full_messages, Loadable::Error(_)));
     assert_eq!(setup.entries[0].message, "subject");
 }
+
+#[test]
+fn ai_commit_context_load_emits_effect_and_stores_result() {
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+    let repo_id = RepoId(1);
+    let mut repo_state = RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    );
+    repo_state.open = Loadable::Ready(());
+    state.repos.push(repo_state);
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::LoadAiCommitContext { repo_id },
+    );
+    let request_rev = match effects.as_slice() {
+        [
+            Effect::LoadAiCommitContext {
+                repo_id: effect_repo_id,
+                request_rev,
+            },
+        ] if *effect_repo_id == repo_id => *request_rev,
+        effects => panic!("expected AI commit context load effect, got {effects:?}"),
+    };
+    assert!(matches!(
+        &state.repos[0].ai_commit_context,
+        Loadable::Loading
+    ));
+
+    // A result from a stale rev is dropped.
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::AiCommitContextLoaded {
+            repo_id,
+            request_rev: request_rev.wrapping_sub(1),
+            result: Ok(AiCommitContext {
+                diff: "stale".to_string(),
+                recent_subjects: vec![],
+            }),
+        }),
+    );
+    assert!(matches!(
+        &state.repos[0].ai_commit_context,
+        Loadable::Loading
+    ));
+
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::AiCommitContextLoaded {
+            repo_id,
+            request_rev,
+            result: Ok(AiCommitContext {
+                diff: "diff --git a/a.txt b/a.txt".to_string(),
+                recent_subjects: vec!["feat: prior".to_string()],
+            }),
+        }),
+    );
+    match &state.repos[0].ai_commit_context {
+        Loadable::Ready(context) => {
+            assert_eq!(context.diff, "diff --git a/a.txt b/a.txt");
+            assert_eq!(context.recent_subjects, vec!["feat: prior".to_string()]);
+        }
+        other => panic!("expected a ready AI commit context, got {other:?}"),
+    }
+    // Storing the result bumps the rev past the request's snapshot.
+    assert_eq!(
+        state.repos[0].ai_commit_context_rev,
+        request_rev.wrapping_add(1)
+    );
+
+    // Unlike recent commit messages, a fresh click always reloads — the
+    // staged diff changes between clicks.
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::LoadAiCommitContext { repo_id },
+    );
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::LoadAiCommitContext { .. }]
+    ));
+    assert!(matches!(
+        &state.repos[0].ai_commit_context,
+        Loadable::Loading
+    ));
+}
+
+#[test]
+fn ai_commit_context_load_error_is_recorded_not_swallowed() {
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+    let repo_id = RepoId(1);
+    let mut repo_state = RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    );
+    repo_state.open = Loadable::Ready(());
+    state.repos.push(repo_state);
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::LoadAiCommitContext { repo_id },
+    );
+    let request_rev = match effects.as_slice() {
+        [Effect::LoadAiCommitContext { request_rev, .. }] => *request_rev,
+        effects => panic!("expected AI commit context load effect, got {effects:?}"),
+    };
+
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::AiCommitContextLoaded {
+            repo_id,
+            request_rev,
+            result: Err(gitcomet_core::error::Error::new(
+                gitcomet_core::error::ErrorKind::Backend("diff failed".to_string()),
+            )),
+        }),
+    );
+    assert!(matches!(
+        &state.repos[0].ai_commit_context,
+        Loadable::Error(_)
+    ));
+}

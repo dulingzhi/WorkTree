@@ -3,9 +3,9 @@ use super::util::{
     push_notification, selected_diff_load_plan,
 };
 use crate::model::{
-    AppNotificationKind, AppState, CommitMultiSelection, ConflictFileLoadMode, DiagnosticKind,
-    ForeignDiffOrigin, Loadable, RangeSelection, RepoId, RepoLoadsInFlight, RepoState,
-    SidebarDataRequest, SidebarMode,
+    AiCommitContext, AppNotificationKind, AppState, CommitMultiSelection, ConflictFileLoadMode,
+    DiagnosticKind, ForeignDiffOrigin, Loadable, RangeSelection, RepoId, RepoLoadsInFlight,
+    RepoState, SidebarDataRequest, SidebarMode,
 };
 use crate::msg::{CommitSelectMode, ConflictAutosolveMode, Effect};
 use gitcomet_core::conflict_session::{
@@ -1565,6 +1565,45 @@ pub(super) fn recent_commit_messages_loaded(
             }
         };
         repo_state.set_recent_commit_messages(value);
+    }
+    Vec::new()
+}
+
+/// The ✨ button's data fetch. Every click starts a fresh load — the staged
+/// diff changes between clicks, so unlike `recent_commit_messages` the result
+/// is never reused.
+pub(super) fn load_ai_commit_context(state: &mut AppState, repo_id: RepoId) -> Vec<Effect> {
+    let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
+        return Vec::new();
+    };
+    if !matches!(repo_state.open, Loadable::Ready(())) {
+        return Vec::new();
+    }
+    repo_state.set_ai_commit_context(Loadable::Loading);
+    let request_rev = repo_state.ai_commit_context_rev;
+    vec![Effect::LoadAiCommitContext {
+        repo_id,
+        request_rev,
+    }]
+}
+
+pub(super) fn ai_commit_context_loaded(
+    state: &mut AppState,
+    repo_id: RepoId,
+    request_rev: u64,
+    result: std::result::Result<AiCommitContext, Error>,
+) -> Vec<Effect> {
+    if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id)
+        && repo_state.ai_commit_context_rev == request_rev
+    {
+        let value = match result {
+            Ok(v) => Loadable::Ready(v),
+            Err(e) => {
+                push_diagnostic(repo_state, DiagnosticKind::Error, e.to_string());
+                Loadable::Error(e.to_string())
+            }
+        };
+        repo_state.set_ai_commit_context(value);
     }
     Vec::new()
 }

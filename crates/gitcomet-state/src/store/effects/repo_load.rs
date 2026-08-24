@@ -1,4 +1,6 @@
-use crate::model::{AppState, ConflictFileLoadMode};
+use crate::model::{
+    AI_COMMIT_RECENT_SUBJECTS_LIMIT, AiCommitContext, AppState, ConflictFileLoadMode,
+};
 use crate::msg::Msg;
 use gitcomet_core::conflict_session::{ConflictPayload, ConflictSession, ConflictStageParts};
 use gitcomet_core::domain::{
@@ -1803,6 +1805,41 @@ pub(super) fn schedule_load_recent_commit_messages(
                 repo_id,
                 request_rev,
                 result: repo.recent_commit_messages(limit),
+            }),
+        );
+    });
+}
+
+/// Gather everything one AI commit-message generation needs: the whole
+/// staged diff and the recent commit subjects shown to the model as format
+/// examples. A failure of either surfaces as the context load's error — the
+/// subjects are best-effort and an empty history is not a failure.
+pub(super) fn schedule_load_ai_commit_context(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    request_rev: u64,
+) {
+    spawn_with_repo(executor, repos, repo_id, msg_tx, move |repo, msg_tx| {
+        let result = repo.staged_diff_unified().map(|diff| {
+            let recent_subjects = repo
+                .recent_commit_messages(AI_COMMIT_RECENT_SUBJECTS_LIMIT)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|message| message.summary.to_string())
+                .collect();
+            AiCommitContext {
+                diff,
+                recent_subjects,
+            }
+        });
+        send_or_log(
+            &msg_tx,
+            Msg::Internal(crate::msg::InternalMsg::AiCommitContextLoaded {
+                repo_id,
+                request_rev,
+                result,
             }),
         );
     });

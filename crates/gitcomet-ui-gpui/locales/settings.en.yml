@@ -53,10 +53,20 @@ settings:
     open_theme_folder: Open custom theme folder
     theme_guide: Theme guide
     avatar_source: Commit author avatars
+    ai_commit: AI commit messages
   avatar_source:
     option_initials: "Initials (current, offline)"
     option_gravatar: "Gravatar (gravatar.com)"
     option_cravatar: "Cravatar (cravatar.cn)"
+  ai_commit:
+    provider_anthropic: "Anthropic"
+    provider_openai: "OpenAI compatible"
+    summary_unconfigured: "%{provider} (no API key)"
+    model: Model
+    api_key: API key
+    api_key_placeholder: "sk-…"
+    endpoint: "API endpoint (optional)"
+    privacy_hint: "The API key is stored locally in the session file. Generating a message sends the staged diff to the selected service."
   ui_scale:
     detail_default: Default scale
     detail_fit_more: Fit more on screen

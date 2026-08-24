@@ -108,6 +108,7 @@ pub(crate) fn msg_requires_available_git(msg: &Msg) -> bool {
             | Msg::LoadConflictFile { .. }
             | Msg::LoadReflog { .. }
             | Msg::LoadRecentCommitMessages { .. }
+            | Msg::LoadAiCommitContext { .. }
             | Msg::LoadHoverCommitMessage { .. }
             | Msg::LoadFileHistory { .. }
             | Msg::LoadBlame { .. }
@@ -1028,6 +1029,7 @@ fn reduce_inner(
         Msg::LoadRecentCommitMessages { repo_id, limit } => {
             effects::load_recent_commit_messages(state, repo_id, limit)
         }
+        Msg::LoadAiCommitContext { repo_id } => effects::load_ai_commit_context(state, repo_id),
         Msg::LoadFileHistory {
             repo_id,
             path,
@@ -2160,6 +2162,11 @@ fn reduce_inner(
             request_rev,
             result,
         }) => effects::recent_commit_messages_loaded(state, repo_id, request_rev, result),
+        Msg::Internal(crate::msg::InternalMsg::AiCommitContextLoaded {
+            repo_id,
+            request_rev,
+            result,
+        }) => effects::ai_commit_context_loaded(state, repo_id, request_rev, result),
         Msg::Internal(crate::msg::InternalMsg::DiffLoaded {
             repo_id,
             target,

@@ -764,6 +764,19 @@ pub struct PendingCommitRetry {
     pub push_after_commit: bool,
 }
 
+/// How many recent commit subjects the AI commit-message prompt offers as
+/// format examples. Lives here so the loader and the UI's prompt builder
+/// share one number.
+pub const AI_COMMIT_RECENT_SUBJECTS_LIMIT: usize = 10;
+
+/// Inputs for one AI commit-message generation: the whole staged diff and the
+/// recent commit subjects the prompt offers as format examples.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AiCommitContext {
+    pub diff: String,
+    pub recent_subjects: Vec<String>,
+}
+
 #[derive(Clone, Debug)]
 pub struct HistoryState {
     pub history_scope: LogScope,
@@ -1183,6 +1196,11 @@ pub struct RepoState {
     pub reflog_rev: u64,
     pub recent_commit_messages: Loadable<Arc<Vec<RecentCommitMessage>>>,
     pub recent_commit_messages_rev: u64,
+    /// Inputs for AI commit-message generation: the whole staged diff plus
+    /// recent commit subjects as format examples. Transient — fetched on
+    /// demand when the ✨ button is clicked, never refreshed implicitly.
+    pub ai_commit_context: Loadable<Arc<AiCommitContext>>,
+    pub ai_commit_context_rev: u64,
     pub rebase_in_progress: Loadable<bool>,
     pub sequencer_state: Loadable<SequencerState>,
     pub merge_commit_message: Loadable<Option<String>>,
@@ -1303,6 +1321,8 @@ impl RepoState {
             reflog_rev: 0,
             recent_commit_messages: Loadable::NotLoaded,
             recent_commit_messages_rev: 0,
+            ai_commit_context: Loadable::NotLoaded,
+            ai_commit_context_rev: 0,
             rebase_in_progress: Loadable::NotLoaded,
             sequencer_state: Loadable::NotLoaded,
             merge_commit_message: Loadable::NotLoaded,
@@ -1450,6 +1470,15 @@ impl RepoState {
         }
         self.recent_commit_messages = messages;
         self.recent_commit_messages_rev = self.recent_commit_messages_rev.wrapping_add(1);
+    }
+
+    pub(crate) fn set_ai_commit_context(&mut self, context: Loadable<AiCommitContext>) {
+        let context = loadable_into_arc(context);
+        if self.ai_commit_context == context {
+            return;
+        }
+        self.ai_commit_context = context;
+        self.ai_commit_context_rev = self.ai_commit_context_rev.wrapping_add(1);
     }
 
     pub(crate) fn clear_head_dependent_cached_state(&mut self) {

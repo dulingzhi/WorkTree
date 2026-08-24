@@ -11,6 +11,31 @@ struct PendingCommitAmend {
     last_command_log_entry: Option<CommandLogEntry>,
 }
 
+/// Where one ✨ AI commit-message generation stands. The button starts a
+/// context fetch (`LoadAiCommitContext`); once the staged diff lands the
+/// provider request runs asynchronously, then its reply replaces the message
+/// box content. Switching repos abandons whichever phase is active.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in super::super) enum AiCommitGeneration {
+    FetchingContext {
+        repo_id: RepoId,
+        /// `ai_commit_context_rev` when the click happened; the load is done
+        /// once the rev moves past this snapshot.
+        seen_rev: u64,
+    },
+    Generating {
+        repo_id: RepoId,
+    },
+}
+
+impl AiCommitGeneration {
+    pub(in super::super) fn repo_id(&self) -> RepoId {
+        match self {
+            Self::FetchingContext { repo_id, .. } | Self::Generating { repo_id } => *repo_id,
+        }
+    }
+}
+
 /// The cached [`WorktreeFileListInputs`] and the scan they were derived from:
 /// repo, worktree-dirty revision, and the worktree's own path.
 type WorktreeFileListInputsCacheEntry = (
@@ -74,6 +99,15 @@ pub(in super::super) struct DetailsPaneView {
     pub(in super::super) commit_push_after_enabled: bool,
     pending_commit_amend: Option<PendingCommitAmend>,
     pending_amend_prefill: Option<RepoId>,
+    pub(in super::super) ai_commit_generation: Option<AiCommitGeneration>,
+    /// Test builds only: how many times a generation reached the provider
+    /// request (the network call itself is compiled out in tests).
+    #[cfg(test)]
+    pub(in super::super) ai_commit_test_generations: u32,
+    /// Test builds only: the context the last generation would have sent.
+    #[cfg(test)]
+    pub(in super::super) ai_commit_test_last_context:
+        Option<Arc<gitcomet_state::model::AiCommitContext>>,
     pub(in super::super) commit_message_user_edited: bool,
     pub(in super::super) commit_message_last_text: SharedString,
     pub(in super::super) commit_message_programmatic_change: bool,
@@ -234,6 +268,7 @@ impl DetailsPaneView {
             repo.worktree_dirty_rev.hash(&mut hasher);
             repo.merge_message_rev.hash(&mut hasher);
             repo.recent_commit_messages_rev.hash(&mut hasher);
+            repo.ai_commit_context_rev.hash(&mut hasher);
             repo.head_branch_rev.hash(&mut hasher);
             repo.branches_rev.hash(&mut hasher);
             repo.diff_state.diff_target_rev.hash(&mut hasher);
@@ -437,6 +472,11 @@ impl DetailsPaneView {
             commit_push_after_enabled,
             pending_commit_amend: None,
             pending_amend_prefill: None,
+            ai_commit_generation: None,
+            #[cfg(test)]
+            ai_commit_test_generations: 0,
+            #[cfg(test)]
+            ai_commit_test_last_context: None,
             commit_message_user_edited: false,
             commit_message_last_text: SharedString::default(),
             commit_message_programmatic_change: false,
@@ -729,6 +769,165 @@ impl DetailsPaneView {
             .read_with(cx, |input, _| input.focus_handle());
         window.focus(&focus, cx);
         cx.notify();
+    }
+
+    /// The ✨ button: start an AI commit-message generation for the active
+    /// repo. Kicks off a fresh staged-diff context fetch; the provider
+    /// request follows once the context lands (see
+    /// [`Self::drive_ai_commit_generation`]). Guarded feedback — provider
+    /// not configured, nothing staged — surfaces as a warning toast.
+    pub(in super::super) fn start_ai_commit_message_generation(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(repo_id) = self.active_repo_id() else {
+            return;
+        };
+        if self.ai_commit_generation.is_some() {
+            return;
+        }
+        if !crate::ai_commit::current().is_configured() {
+            self.push_ai_commit_warning(
+                crate::i18n::tr_str("misc.ai_commit.not_configured").to_string(),
+                cx,
+            );
+            return;
+        }
+        let Some(repo) = self.state.repos.iter().find(|repo| repo.id == repo_id) else {
+            return;
+        };
+        if repo
+            .staged_status_entries()
+            .map_or(0, |entries| entries.len())
+            == 0
+        {
+            self.push_ai_commit_warning(
+                crate::i18n::tr_str("misc.ai_commit.no_staged_changes").to_string(),
+                cx,
+            );
+            return;
+        }
+        self.ai_commit_generation = Some(AiCommitGeneration::FetchingContext {
+            repo_id,
+            seen_rev: repo.ai_commit_context_rev,
+        });
+        self.store.dispatch(Msg::LoadAiCommitContext { repo_id });
+        cx.notify();
+    }
+
+    /// Advance the generation state machine as state snapshots land. Runs on
+    /// every applied snapshot; cheap when nothing is in flight.
+    fn drive_ai_commit_generation(&mut self, cx: &mut gpui::Context<Self>) {
+        let Some(AiCommitGeneration::FetchingContext { repo_id, seen_rev }) =
+            self.ai_commit_generation.clone()
+        else {
+            return;
+        };
+        let Some(repo) = self.state.repos.iter().find(|repo| repo.id == repo_id) else {
+            self.ai_commit_generation = None;
+            return;
+        };
+        if repo.ai_commit_context_rev == seen_rev {
+            // Still waiting for the load this click kicked off.
+            return;
+        }
+        match repo.ai_commit_context.clone() {
+            Loadable::Loading => {
+                self.ai_commit_generation = Some(AiCommitGeneration::FetchingContext {
+                    repo_id,
+                    seen_rev: repo.ai_commit_context_rev,
+                });
+            }
+            Loadable::Ready(context) => {
+                self.ai_commit_generation = None;
+                if context.diff.trim().is_empty() {
+                    self.push_ai_commit_warning(
+                        crate::i18n::tr_str("misc.ai_commit.empty_diff").to_string(),
+                        cx,
+                    );
+                    return;
+                }
+                self.spawn_ai_commit_generation(repo_id, context, cx);
+            }
+            Loadable::Error(message) => {
+                self.ai_commit_generation = None;
+                self.push_ai_commit_warning(
+                    crate::i18n::t!("misc.ai_commit.failed", error = message).into_owned(),
+                    cx,
+                );
+            }
+            Loadable::NotLoaded => {
+                // The load was reset (repo refresh) without our rev moving —
+                // abandon rather than spin.
+                self.ai_commit_generation = None;
+            }
+        }
+    }
+
+    fn spawn_ai_commit_generation(
+        &mut self,
+        repo_id: RepoId,
+        context: Arc<gitcomet_state::model::AiCommitContext>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.ai_commit_generation = Some(AiCommitGeneration::Generating { repo_id });
+
+        // The request itself needs the network; test builds exercise the
+        // state machine up to this point and record what would be sent.
+        #[cfg(not(test))]
+        {
+            let settings = crate::ai_commit::current();
+            let diff = context.diff.clone();
+            let recent_subjects = context.recent_subjects.clone();
+            cx.spawn(async move |pane, cx| {
+                let result = crate::ai_commit::generate(&settings, &diff, &recent_subjects).await;
+                let _ = pane.update(cx, |pane, cx| {
+                    pane.finish_ai_commit_generation(result, cx);
+                });
+            })
+            .detach();
+        }
+        #[cfg(test)]
+        {
+            self.ai_commit_test_generations += 1;
+            self.ai_commit_test_last_context = Some(context);
+            cx.notify();
+        }
+    }
+
+    fn finish_ai_commit_generation(
+        &mut self,
+        result: std::result::Result<String, String>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.ai_commit_generation = None;
+        match result {
+            Ok(message) => {
+                // Same shape as a pick from the previous-messages menu, minus
+                // the focus grab (the reply lands while the user is elsewhere).
+                self.commit_message_user_edited = true;
+                self.commit_message_programmatic_change = true;
+                self.commit_message_last_text = message.clone().into();
+                self.commit_message_input
+                    .update(cx, |input, cx| input.set_text(message, cx));
+                self.commit_message_scroll
+                    .set_offset(point(px(0.0), px(0.0)));
+            }
+            Err(error) => self.push_ai_commit_warning(
+                crate::i18n::t!("misc.ai_commit.failed", error = error).into_owned(),
+                cx,
+            ),
+        }
+        cx.notify();
+    }
+
+    fn push_ai_commit_warning(&mut self, message: String, cx: &mut gpui::Context<Self>) {
+        let root_view = self.root_view.clone();
+        cx.defer(move |cx| {
+            let _ = root_view.update(cx, |root, cx| {
+                root.push_toast(components::ToastKind::Warning, message, cx);
+            });
+        });
     }
 
     fn sync_commit_amend_enabled_to_root(&self, enabled: bool, cx: &mut gpui::Context<Self>) {
@@ -1154,6 +1353,7 @@ impl DetailsPaneView {
             self.commit_amend_enabled = false;
             self.pending_commit_amend = None;
             self.pending_amend_prefill = None;
+            self.ai_commit_generation = None;
             if was_amend_enabled {
                 self.sync_commit_amend_enabled_to_root(false, cx);
             }
@@ -1253,6 +1453,7 @@ impl DetailsPaneView {
         }
 
         self.apply_pending_amend_prefill(cx);
+        self.drive_ai_commit_generation(cx);
 
         self.update_commit_details_delay(cx);
     }
