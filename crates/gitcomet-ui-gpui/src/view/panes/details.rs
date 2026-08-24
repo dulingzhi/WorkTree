@@ -1648,6 +1648,7 @@ mod tests {
             stdout: String::new(),
             stderr: String::new(),
             announce_success: true,
+            announce_failure: true,
         }
     }
 

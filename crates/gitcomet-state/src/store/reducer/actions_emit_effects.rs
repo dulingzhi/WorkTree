@@ -312,17 +312,38 @@ pub(super) fn fetch_all(
     state: &mut AppState,
     repo_id: RepoId,
 ) -> Vec<Effect> {
-    let prune = state
-        .repos
-        .iter()
-        .find(|r| r.id == repo_id)
-        .is_some_and(|repo_state| repo_state.fetch_prune_deleted_remote_tracking_branches);
+    let prune = fetch_prune_setting(state, repo_id);
     bump_in_flight(repos, state, repo_id, InFlightKind::Pull);
     vec![Effect::FetchAll {
         repo_id,
         prune,
         auth: None,
     }]
+}
+
+/// Same command as [`fetch_all`], but reported as the quiet `AutoFetchAll`
+/// kind: the store's activation handler dispatches this after a tab's local
+/// refresh, so remote changes arrive without toasts or failure banners.
+pub(super) fn auto_fetch_all(
+    repos: &FxHashMap<RepoId, Arc<dyn GitRepository>>,
+    state: &mut AppState,
+    repo_id: RepoId,
+) -> Vec<Effect> {
+    let prune = fetch_prune_setting(state, repo_id);
+    bump_in_flight(repos, state, repo_id, InFlightKind::Pull);
+    vec![Effect::AutoFetchAll {
+        repo_id,
+        prune,
+        auth: None,
+    }]
+}
+
+fn fetch_prune_setting(state: &AppState, repo_id: RepoId) -> bool {
+    state
+        .repos
+        .iter()
+        .find(|r| r.id == repo_id)
+        .is_some_and(|repo_state| repo_state.fetch_prune_deleted_remote_tracking_branches)
 }
 
 pub(super) fn prune_merged_branches(
@@ -1121,6 +1142,7 @@ pub(super) fn repo_command_finished(
     let mut extra_effects = Vec::new();
     match &command {
         RepoCommandKind::FetchAll
+        | RepoCommandKind::AutoFetchAll
         | RepoCommandKind::PruneMergedBranches
         | RepoCommandKind::PruneLocalTags
         | RepoCommandKind::Pull { .. }

@@ -677,6 +677,11 @@ pub enum Msg {
     FetchAll {
         repo_id: RepoId,
     },
+    /// Dispatched by the store's activation handler, not the UI: fetch all
+    /// remotes quietly after a repository tab is activated.
+    AutoFetchAll {
+        repo_id: RepoId,
+    },
     PruneMergedBranches {
         repo_id: RepoId,
     },

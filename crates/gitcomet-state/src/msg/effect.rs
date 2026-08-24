@@ -445,6 +445,13 @@ pub enum Effect {
         prune: bool,
         auth: Option<StagedGitAuth>,
     },
+    /// The activation-triggered twin of [`Effect::FetchAll`]: same command,
+    /// reported as `RepoCommandKind::AutoFetchAll` so completion stays quiet.
+    AutoFetchAll {
+        repo_id: RepoId,
+        prune: bool,
+        auth: Option<StagedGitAuth>,
+    },
     PruneMergedBranches {
         repo_id: RepoId,
     },

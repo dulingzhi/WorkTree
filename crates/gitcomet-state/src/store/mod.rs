@@ -9,7 +9,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, RwLock, mpsc};
 use std::thread;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 mod effects;
 mod executor;
@@ -19,6 +19,12 @@ mod repo_load_trace;
 mod repo_monitor;
 mod send_diagnostics;
 mod worker_channel;
+
+/// Minimum spacing between the automatic "fetch all" runs that follow
+/// repository activation. The activation refresh itself is throttled to a few
+/// seconds upstream — right for local reads, far too often for a network
+/// round-trip on every alt-tab.
+const AUTO_ACTIVATION_FETCH_INTERVAL: Duration = Duration::from_secs(60);
 
 use effects::RepoTaskToken;
 use effects::{EffectExecutors, schedule_effect};
@@ -348,6 +354,7 @@ impl AppStore {
             let session_persist_executor = TaskExecutor::new(1);
             let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
             let mut repo_task_tokens: FxHashMap<RepoId, RepoTaskToken> = FxHashMap::default();
+            let mut last_activation_fetch: FxHashMap<RepoId, Instant> = FxHashMap::default();
             let mut repo_monitors = RepoMonitorManager::new();
             let id_alloc = AtomicU64::new(1);
             let active_repo_id = Arc::new(AtomicU64::new(0));
@@ -742,6 +749,55 @@ impl AppStore {
                                 backend: &backend,
                             },
                         );
+
+                        // The full refresh above is local-only: remote-tracking
+                        // refs still reflect the last fetch. Follow it with an
+                        // automatic "fetch all" so activating a tab also pulls
+                        // remote changes; when it lands, the command-finished
+                        // handler runs another full refresh, updating remote
+                        // branches and divergence. Activation is throttled to a
+                        // few seconds upstream — far too often for a network
+                        // round-trip — so this carries its own, longer per-repo
+                        // interval. Reported as AutoFetchAll: quiet on success
+                        // and failure alike, log-only.
+                        let auto_fetch_started = Instant::now();
+                        let auto_fetch_due =
+                            last_activation_fetch.get(&repo_id).is_none_or(|last| {
+                                auto_fetch_started.saturating_duration_since(*last)
+                                    >= AUTO_ACTIVATION_FETCH_INTERVAL
+                            });
+                        if auto_fetch_due {
+                            last_activation_fetch.insert(repo_id, auto_fetch_started);
+                            let effects = {
+                                let mut app_state =
+                                    thread_state.write().unwrap_or_else(|e| e.into_inner());
+                                let app_state = make_mut_state_with_diagnostics(&mut app_state);
+                                let effects = reduce(
+                                    &mut repos,
+                                    &id_alloc,
+                                    app_state,
+                                    Msg::AutoFetchAll { repo_id },
+                                );
+                                effects
+                            };
+                            handle_reducer_effects(
+                                effects,
+                                ReducerEffectsContext {
+                                    thread_state: &thread_state,
+                                    active_repo_id: &active_repo_id,
+                                    event_tx: &event_tx,
+                                    repo_monitors: &mut repo_monitors,
+                                    repos: &repos,
+                                    repo_task_tokens: &mut repo_task_tokens,
+                                    thread_msg_tx: &thread_msg_tx,
+                                    executor: &executor,
+                                    repo_load_executor: &repo_load_executor,
+                                    metadata_executor: &metadata_executor,
+                                    session_persist_executor: &session_persist_executor,
+                                    backend: &backend,
+                                },
+                            );
+                        }
                     }
                     msg => {
                         let effects = {

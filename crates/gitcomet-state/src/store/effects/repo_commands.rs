@@ -588,15 +588,11 @@ pub(super) fn schedule_fetch_all(
     repo_id: RepoId,
     prune: bool,
     auth: Option<StagedGitAuth>,
+    kind: RepoCommandKind,
 ) {
-    schedule_repo_command(
-        executor,
-        repos,
-        msg_tx,
-        repo_id,
-        RepoCommandKind::FetchAll,
-        move |repo| run_with_git_auth(auth, || repo.fetch_all_with_output_prune(prune)),
-    );
+    schedule_repo_command(executor, repos, msg_tx, repo_id, kind, move |repo| {
+        run_with_git_auth(auth, || repo.fetch_all_with_output_prune(prune))
+    });
 }
 
 pub(super) fn schedule_prune_merged_branches(

@@ -969,8 +969,12 @@ pub(super) fn handle_session_persist_result(
 fn command_success_is_worth_announcing(command: &RepoCommandKind) -> bool {
     !matches!(
         command,
-        RepoCommandKind::StageHunk | RepoCommandKind::UnstageHunk
+        RepoCommandKind::StageHunk | RepoCommandKind::UnstageHunk | RepoCommandKind::AutoFetchAll
     )
+}
+
+fn command_failure_is_worth_announcing(command: &RepoCommandKind) -> bool {
+    !matches!(command, RepoCommandKind::AutoFetchAll)
 }
 
 pub(super) fn push_command_log(
@@ -996,6 +1000,7 @@ pub(super) fn push_command_log(
             output.stderr.clone()
         },
         announce_success: command_success_is_worth_announcing(command),
+        announce_failure: command_failure_is_worth_announcing(command),
     });
     if repo_state.command_log.len() > MAX_COMMAND_LOG {
         let extra = repo_state.command_log.len() - MAX_COMMAND_LOG;
@@ -1020,6 +1025,7 @@ pub(super) fn push_action_log(
         stdout: String::new(),
         stderr: error.map(format_error_for_user).unwrap_or_default(),
         announce_success: true,
+        announce_failure: true,
     });
     if repo_state.command_log.len() > MAX_COMMAND_LOG {
         let extra = repo_state.command_log.len() - MAX_COMMAND_LOG;
@@ -1139,7 +1145,9 @@ fn summarize_command(
 
     if !ok {
         let label = match command {
-            RepoCommandKind::FetchAll => rust_i18n::t!("store.reducer.label_fetch").to_string(),
+            RepoCommandKind::FetchAll | RepoCommandKind::AutoFetchAll => {
+                rust_i18n::t!("store.reducer.label_fetch").to_string()
+            }
             RepoCommandKind::PruneMergedBranches => {
                 rust_i18n::t!("store.reducer.label_prune_merged_branches").to_string()
             }
@@ -1310,7 +1318,7 @@ fn summarize_command(
     }
 
     let summary = match command {
-        RepoCommandKind::FetchAll => {
+        RepoCommandKind::FetchAll | RepoCommandKind::AutoFetchAll => {
             if output.stderr.trim().is_empty() && output.stdout.trim().is_empty() {
                 rust_i18n::t!("store.reducer.fetch_up_to_date").to_string()
             } else {
@@ -1967,6 +1975,7 @@ mod tests {
             stdout: String::new(),
             stderr: String::new(),
             announce_success: true,
+            announce_failure: true,
         }
     }
 

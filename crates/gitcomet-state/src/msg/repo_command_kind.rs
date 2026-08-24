@@ -8,6 +8,10 @@ use std::path::PathBuf;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RepoCommandKind {
     FetchAll,
+    /// `git fetch --all` started by repository activation, not by the user.
+    /// Reported through the same pipeline but quietly: no success toast and no
+    /// failure banner, so an offline machine does not nag on every activation.
+    AutoFetchAll,
     PruneMergedBranches,
     PruneLocalTags,
     Pull {

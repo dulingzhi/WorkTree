@@ -753,8 +753,12 @@ pub struct CommandLogEntry {
     /// Whether finishing this command is worth telling the user about. Routine,
     /// user-initiated edits announce themselves through the change they make —
     /// a toast per staged line is noise — but they still belong in the log.
-    /// Failures are always surfaced, whatever this says.
     pub announce_success: bool,
+    /// Whether a failure is worth an error banner. Background commands the user
+    /// did not ask for (the activation auto-fetch) stay log-only, so an offline
+    /// machine is not nagged on every tab activation; user-initiated commands
+    /// always surface their failures.
+    pub announce_failure: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

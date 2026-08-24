@@ -381,6 +381,127 @@ fn fetch_all_emits_effect_with_repo_prune_setting() {
 }
 
 #[test]
+fn auto_fetch_all_emits_quiet_effect_with_repo_prune_setting() {
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+
+    let repo_id = RepoId(1);
+    repos.insert(repo_id, Arc::new(DummyRepo::new("/tmp/repo")));
+    let mut repo_state = RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    );
+    repo_state.fetch_prune_deleted_remote_tracking_branches = false;
+    state.repos.push(repo_state);
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::AutoFetchAll { repo_id },
+    );
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::AutoFetchAll {
+            repo_id: RepoId(1),
+            prune: false,
+            ..
+        }]
+    ));
+    assert_eq!(state.repos[0].pull_in_flight, 1);
+
+    state.repos[0].fetch_prune_deleted_remote_tracking_branches = true;
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::AutoFetchAll { repo_id },
+    );
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::AutoFetchAll {
+            repo_id: RepoId(1),
+            prune: true,
+            ..
+        }]
+    ));
+    assert_eq!(state.repos[0].pull_in_flight, 2);
+}
+
+#[test]
+fn auto_fetch_all_finishes_quietly_and_still_refreshes() {
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+
+    let repo_id = RepoId(1);
+    repos.insert(repo_id, Arc::new(DummyRepo::new("/tmp/repo")));
+    state.repos.push(RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    ));
+
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::AutoFetchAll { repo_id },
+    );
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::RepoCommandFinished {
+            repo_id,
+            command: RepoCommandKind::AutoFetchAll,
+            result: Ok(CommandOutput::empty_success("git fetch --all")),
+        }),
+    );
+    assert_eq!(state.repos[0].pull_in_flight, 0);
+    // The fetch landing must refresh the repo, same as a user-initiated fetch.
+    assert!(
+        effects.iter().any(
+            |effect| matches!(effect, Effect::LoadHeadBranch { repo_id: id } if *id == repo_id)
+        )
+    );
+    // ... but never announce itself, on success or failure.
+    let entry = state.repos[0].command_log.last().expect("log entry");
+    assert!(entry.ok);
+    assert!(!entry.announce_success);
+    assert!(!entry.announce_failure);
+
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::AutoFetchAll { repo_id },
+    );
+    let _effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::RepoCommandFinished {
+            repo_id,
+            command: RepoCommandKind::AutoFetchAll,
+            result: Err(Error::new(ErrorKind::Backend(
+                "network unreachable".to_string(),
+            ))),
+        }),
+    );
+    assert_eq!(state.repos[0].pull_in_flight, 0);
+    let entry = state.repos[0].command_log.last().expect("log entry");
+    assert!(!entry.ok);
+    assert!(!entry.announce_failure);
+    // An automatic fetch never escalates into an auth-retry prompt.
+    assert!(state.auth_prompt.is_none());
+}
+
+#[test]
 fn commit_emits_effect() {
     let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
     let id_alloc = AtomicU64::new(1);
