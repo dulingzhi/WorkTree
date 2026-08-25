@@ -2180,6 +2180,38 @@ mod tests {
     }
 
     #[test]
+    fn jj_repos_hide_the_worktree_submodule_and_stash_sections() {
+        let mut repo = populated_repo();
+        repo.capabilities = gitcomet_core::services::RepoCapabilities::jj_read_only();
+
+        let rows = branch_sidebar_rows(&repo, &BTreeSet::new(), &BTreeSet::new(), "");
+
+        // Worktree/submodule/stash management is unrouted on jj repos, so
+        // their sections (headers and items) must not render at all.
+        assert!(
+            !rows.iter().any(|row| matches!(
+                row,
+                BranchSidebarRow::WorktreesHeader { .. }
+                    | BranchSidebarRow::WorktreeItem { .. }
+                    | BranchSidebarRow::WorktreePlaceholder { .. }
+                    | BranchSidebarRow::SubmodulePlaceholder { .. }
+                    | BranchSidebarRow::SubmodulesHeader { .. }
+                    | BranchSidebarRow::SubmoduleItem { .. }
+                    | BranchSidebarRow::StashHeader { .. }
+                    | BranchSidebarRow::StashItem { .. }
+                    | BranchSidebarRow::StashPlaceholder { .. }
+            )),
+            "worktree/submodule/stash rows should be gated on jj repos"
+        );
+        // Branch and tag sections stay: their reads (and branch writes) are
+        // routed.
+        assert!(
+            rows.iter()
+                .any(|row| matches!(row, BranchSidebarRow::TagsHeader { .. }))
+        );
+    }
+
+    #[test]
     fn pinned_branches_render_in_a_pinned_section_above_their_home_section() {
         let repo = populated_repo();
         let pinned = BTreeSet::from([
