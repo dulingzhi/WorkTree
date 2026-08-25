@@ -150,6 +150,20 @@ pub(super) fn repo_externally_changed(
         return Vec::new();
     };
 
+    // Observability for the jj snapshot trigger: these refreshes are what
+    // reach the adapter's throttled `jj st`, so the is_jj marker plus the
+    // change flags let GITCOMET_REPO_LOAD_TRACE answer "how often do we
+    // snapshot?" for a colocated repo.
+    crate::store::repo_load_trace::trace!(
+        "repo_externally_changed_handled repo_id={:?} is_jj={} change_worktree={} change_index={} change_git_state={} change_tags={}",
+        repo_id,
+        repo_state.capabilities.is_jj,
+        change.worktree,
+        change.index,
+        change.git_state,
+        change.tags
+    );
+
     let file_browser_effect =
         file_browser_refresh_for_external_change(repo_state, change, sidebar_shows_this_files_tree);
 

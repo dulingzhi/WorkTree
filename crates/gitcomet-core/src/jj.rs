@@ -139,6 +139,15 @@ fn jj_probe_log_enabled() -> bool {
     *ENABLED.get_or_init(|| std::env::var_os("GITCOMET_LOG_JJ").is_some())
 }
 
+/// Emit a jj integration trace line to stderr when `GITCOMET_LOG_JJ` is set.
+/// Shared by the runtime probe above and the gix jj adapter (snapshot
+/// decisions), so the whole jj integration is observable from one stream.
+pub fn trace(args: std::fmt::Arguments<'_>) {
+    if jj_probe_log_enabled() {
+        eprintln!("[gitcomet-jj] {args}");
+    }
+}
+
 fn jj_program() -> OsString {
     #[cfg(test)]
     if let Some(program) = jj_test_program()

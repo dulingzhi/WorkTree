@@ -124,6 +124,174 @@ fn repo_load_trace_names_repo_activation_and_refresh_messages() {
 }
 
 #[test]
+fn external_git_state_change_on_colocated_jj_repo_reuses_full_refresh_pipeline() {
+    // A colocated repo is read-only, but reads still refresh: when the user's
+    // own jj commands move git HEAD/bookmarks, every jj command exports those
+    // to `.git`, which the watcher reports as GitState. The reducer must run
+    // the SAME full refresh a full-capability repo gets — the status load in
+    // it is the read the jj adapter hooks its throttled snapshot into.
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let repo_id = RepoId(1);
+    let mut state = AppState::default();
+
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::OpenRepo(PathBuf::from("/tmp/repo")),
+    );
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::RepoOpenedOk {
+            repo_id,
+            spec: RepoSpec {
+                workdir: PathBuf::from("/tmp/repo"),
+            },
+            repo: Arc::new(DummyRepo::with_capabilities(
+                "/tmp/repo",
+                gitcomet_core::services::RepoCapabilities::jj_read_only(),
+            )),
+        }),
+    );
+
+    // Complete the initial open-repo refresh so the external-change refresh isn't coalesced away.
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::HeadBranchLoaded {
+            repo_id,
+            result: Ok("main".to_string()),
+        }),
+    );
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::UpstreamDivergenceLoaded {
+            repo_id,
+            result: Ok(None),
+        }),
+    );
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::RebaseStateLoaded {
+            repo_id,
+            result: Ok(gitcomet_core::services::SequencerState::None),
+        }),
+    );
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::MergeCommitMessageLoaded {
+            repo_id,
+            result: Ok(None),
+        }),
+    );
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::WorktreeStatusLoaded {
+            repo_id,
+            result: Ok(Vec::new()),
+        }),
+    );
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::StagedStatusLoaded {
+            repo_id,
+            result: Ok(Vec::new()),
+        }),
+    );
+    let history_scope = state.repos[0].history_state.history_scope;
+    let seq = active_log_seq(&state.repos[0]);
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::LogLoaded {
+            repo_id,
+            seq,
+            scope: history_scope,
+            cursor: None,
+            result: Ok(LogPage {
+                commits: Vec::new(),
+                next_cursor: None,
+            }),
+        }),
+    );
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::BranchesLoaded {
+            repo_id,
+            result: Ok(Vec::new()),
+        }),
+    );
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::RemoteBranchesLoaded {
+            repo_id,
+            result: Ok(Vec::new()),
+        }),
+    );
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::RepoExternallyChanged {
+            repo_id,
+            change: crate::msg::RepoExternalChange::GitState,
+        },
+    );
+
+    // The same full-refresh effects a full-capability repo gets.
+    assert!(
+        effects
+            .iter()
+            .any(|e| matches!(e, Effect::LoadStatus { repo_id: rid } if *rid == repo_id)),
+        "jj repo GitState refresh must reload status (the read the adapter snapshots in), got {effects:?}"
+    );
+    assert!(
+        effects
+            .iter()
+            .any(|e| matches!(e, Effect::LoadLog { repo_id: rid, .. } if *rid == repo_id)),
+        "jj repo GitState refresh must reload the log, got {effects:?}"
+    );
+    assert!(
+        effects
+            .iter()
+            .any(|e| matches!(e, Effect::LoadHeadBranch { repo_id: rid } if *rid == repo_id)),
+        "jj repo GitState refresh must reload the head branch, got {effects:?}"
+    );
+    assert!(
+        effects
+            .iter()
+            .any(|e| matches!(e, Effect::LoadBranches { repo_id: rid } if *rid == repo_id)),
+        "jj repo GitState refresh must reload branches, got {effects:?}"
+    );
+    assert!(
+        effects
+            .iter()
+            .any(|e| matches!(e, Effect::LoadRemoteBranches { repo_id: rid } if *rid == repo_id)),
+        "jj repo GitState refresh must reload remote branches, got {effects:?}"
+    );
+}
+
+#[test]
 fn external_worktree_change_refreshes_status_and_selected_diff() {
     let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
     let id_alloc = AtomicU64::new(1);

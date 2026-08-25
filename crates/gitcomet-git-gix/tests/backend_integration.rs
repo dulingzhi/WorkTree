@@ -80,6 +80,44 @@ fn jj_available_for_integration_tests() -> bool {
         .unwrap_or(false)
 }
 
+/// Run `jj git init --colocate` in `repo`, panicking with the command's
+/// output on failure.
+fn colocate_with_jj(repo: &Path) {
+    let output = std::process::Command::new("jj")
+        .arg("git")
+        .arg("init")
+        .arg("--colocate")
+        .current_dir(repo)
+        .output()
+        .expect("run jj git init --colocate");
+    assert!(
+        output.status.success(),
+        "jj git init --colocate failed: {}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+}
+
+/// The current working-copy commit id (`@`), read straight from jj.
+fn jj_working_copy_commit_id(repo: &Path) -> String {
+    let output = std::process::Command::new("jj")
+        .arg("log")
+        .arg("--no-graph")
+        .arg("-r")
+        .arg("@")
+        .arg("-T")
+        .arg("commit_id")
+        .current_dir(repo)
+        .output()
+        .expect("run jj log");
+    assert!(
+        output.status.success(),
+        "jj log -r @ failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
+
 /// The P1 adapter contract, checked without a real jj install: a colocated
 /// repo (fake `.jj` marker) opens through `JjRepository`, every read still
 /// answers through gix, and every write refuses with `Unsupported`.
@@ -147,20 +185,7 @@ fn gix_backend_reads_real_colocated_jj_repo() {
     let repo = dir.path().join("repo");
     fs::create_dir_all(&repo).expect("create repo directory");
     init_repo_with_commit(&repo);
-
-    let colocate = std::process::Command::new("jj")
-        .arg("git")
-        .arg("init")
-        .arg("--colocate")
-        .current_dir(&repo)
-        .output()
-        .expect("run jj git init --colocate");
-    assert!(
-        colocate.status.success(),
-        "jj git init --colocate failed: {}{}",
-        String::from_utf8_lossy(&colocate.stdout),
-        String::from_utf8_lossy(&colocate.stderr),
-    );
+    colocate_with_jj(&repo);
 
     let backend = GixBackend;
     let opened = backend.open(&repo).expect("open colocated repository");
@@ -186,6 +211,61 @@ fn gix_backend_reads_real_colocated_jj_repo() {
     assert!(
         status.staged.is_empty() && status.unstaged.is_empty(),
         "colocated working copy should read clean, got {status:?}"
+    );
+}
+
+/// The snapshot trigger: a status read through the adapter runs a throttled
+/// `jj st`, absorbing working-copy edits into `@` on the jj side while the
+/// git-side view stays untouched (`@` is invisible to git; HEAD/index keep
+/// `@`'s parent, so the unstaged lane keeps showing the edit — that IS the jj
+/// working-copy view). A second read inside the throttle interval must not
+/// spawn jj again.
+#[test]
+fn jj_status_read_snapshots_working_copy_and_throttles_repeats() {
+    if !jj_available_for_integration_tests() {
+        eprintln!("skipping: jj binary not found in PATH");
+        return;
+    }
+
+    let dir = tempfile::tempdir().expect("create tempdir");
+    let repo = dir.path().join("repo");
+    fs::create_dir_all(&repo).expect("create repo directory");
+    init_repo_with_commit(&repo);
+    colocate_with_jj(&repo);
+
+    let before = jj_working_copy_commit_id(&repo);
+    fs::write(repo.join("file.txt"), "contents\nedited").expect("edit tracked file");
+
+    let backend = GixBackend;
+    let opened = backend.open(&repo).expect("open colocated repository");
+
+    // The first status read claims the snapshot slot and runs `jj st`.
+    let status = opened.status().expect("read status");
+    let after_first = jj_working_copy_commit_id(&repo);
+    assert_ne!(
+        before, after_first,
+        "the status read must snapshot the working-copy edit into @"
+    );
+    assert!(
+        status.staged.is_empty(),
+        "colocated staged lane reads empty, got {:?}",
+        status.staged
+    );
+    assert!(
+        status
+            .unstaged
+            .iter()
+            .any(|entry| entry.path == Path::new("file.txt")),
+        "the edit stays in the unstaged lane, got {:?}",
+        status.unstaged
+    );
+
+    // An immediate second read is throttled: no new snapshot, no new `@`.
+    opened.status().expect("read status again");
+    let after_second = jj_working_copy_commit_id(&repo);
+    assert_eq!(
+        after_first, after_second,
+        "a second read inside the throttle interval must not re-run jj"
     );
 }
 

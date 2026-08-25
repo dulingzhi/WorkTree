@@ -9,6 +9,26 @@
 //! `RepoCapabilities::read_only` flag in the reducer keeps those paths from
 //! being reached in the first place; the Unsupported error is the second lock
 //! on the same door.
+//!
+//! # How a colocated repo actually syncs (verified against jj 0.44)
+//!
+//! Every jj command runs snapshot + import git head/refs + export bookmarks,
+//! but the working-copy commit `@` itself stays *invisible to git*: a plain
+//! `jj st` after a worktree edit moves nothing on the git side — git HEAD
+//! keeps pointing at `@`'s parent and the index keeps that commit's tree, so
+//! plain-git status keeps showing the edit as unstaged. Git HEAD (and the
+//! index) only move when `@`'s parent moves (`jj new`, `jj edit`, …), and
+//! bookmark moves are exported to git refs immediately. Both write to `.git`,
+//! so the existing file-watcher → `RepoExternallyChanged` refresh pipeline
+//! picks them up with no help from us.
+//!
+//! Consequences for this adapter: gix reads never *need* a snapshot to stay
+//! fresh — `status` naturally reads as the jj working-copy change
+//! (diff(`@`'s tree, worktree)) with an empty staged lane. What the snapshot
+//! trigger below buys is jj-side freshness while GitComet is open: edits get
+//! absorbed into `@` periodically, so the user's other jj tooling (terminal
+//! `jj log`, op log) sees current state even if they never run a jj command
+//! themselves. It is rate-limited because a snapshot is a process spawn.
 
 use crate::repo::GixRepo;
 use crate::util::bytes_to_text_preserving_utf8;
@@ -19,6 +39,7 @@ use gitcomet_core::domain::{
     SubmoduleDiffSummary, Tag, UpstreamDivergence, Worktree,
 };
 use gitcomet_core::error::{Error, ErrorKind};
+use gitcomet_core::jj::{self, JjRuntimeAvailability};
 use gitcomet_core::process::background_command;
 use gitcomet_core::services::{
     BlameLine, CommandOutput, GitRepository, PullMode, RepoCapabilities, Result,
@@ -27,18 +48,32 @@ use gitcomet_core::services::{
 use rustc_hash::FxHashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
+/// Minimum spacing between working-copy snapshot attempts. A snapshot is a
+/// `jj st` process spawn, and the refresh pipelines that reach
+/// [`JjRepository::status`] can fire in bursts (watcher flushes are debounced
+/// to 250ms/2s; activation is throttled to 5s upstream), so each burst pays at
+/// most one spawn. Between attempts the user's jj history may lag the working
+/// copy by at most this interval plus the upstream debounce.
+const JJ_SNAPSHOT_MIN_INTERVAL: Duration = Duration::from_secs(5);
 
 pub(crate) struct JjRepository {
     inner: GixRepo,
+    last_snapshot: Mutex<Option<Instant>>,
 }
 
 impl JjRepository {
     pub(crate) fn new(inner: GixRepo) -> Self {
-        Self { inner }
+        Self {
+            inner,
+            last_snapshot: Mutex::new(None),
+        }
     }
 
     /// The gix-backed reader every read delegates to.
-    #[allow(dead_code)] // snapshot triggers / status mapping hook in later P1 tasks
+    #[allow(dead_code)] // status-mapping hook in a later P1 task
     pub(crate) fn gix(&self) -> &GixRepo {
         &self.inner
     }
@@ -47,10 +82,69 @@ impl JjRepository {
     /// background-console treatment. Every jj invocation snapshots the
     /// working copy and imports git refs first — that is the point of routing
     /// writes through it.
-    #[allow(dead_code)] // write routing (commit/bookmarks/network) lands in later P1 tasks
     pub(super) fn jj_cmd(&self) -> Command {
         jj_workdir_cmd_for(&self.inner.spec().workdir)
     }
+
+    /// Absorb working-copy edits into `@` if a snapshot is due.
+    ///
+    /// Hooked into [`Self::status`] only: every trigger — the watcher's
+    /// worktree flushes, the `git_state` full refresh, and activation (which
+    /// reduces to that same refresh) — funnels a status load through here, and
+    /// inlining the snapshot is the only way to order it against the read
+    /// (sibling effects execute on a thread pool in parallel). Between
+    /// snapshots the git view stays correct regardless (see the module docs),
+    /// so a skipped snapshot costs jj-side freshness, never read correctness.
+    ///
+    /// The throttle lock is held across the spawn on purpose: concurrent
+    /// reads then block and skip instead of racing a second snapshot. Failures
+    /// are traced and swallowed — the read still answers from the previous
+    /// snapshot and the next due read retries.
+    fn snapshot_if_due(&self, reason: &'static str) {
+        let mut last_snapshot = self
+            .last_snapshot
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        if !claim_snapshot_slot(&mut last_snapshot, Instant::now(), JJ_SNAPSHOT_MIN_INTERVAL) {
+            return;
+        }
+        if let Some(JjRuntimeAvailability::Unavailable { detail }) =
+            jj::current_jj_runtime().map(|state| state.availability)
+        {
+            jj::trace(format_args!(
+                "snapshot skipped after {reason}: jj unavailable ({detail})"
+            ));
+            return;
+        }
+        let started = Instant::now();
+        let mut cmd = self.jj_cmd();
+        cmd.arg("st");
+        let outcome = run_jj_command_with_output(cmd, "jj st");
+        jj::trace(format_args!(
+            "snapshot after {reason}: {} in {:?}",
+            match &outcome {
+                Ok(_) => "ok".to_string(),
+                Err(err) => err.to_string(),
+            },
+            started.elapsed()
+        ));
+    }
+}
+
+/// Whether a snapshot attempt is due given the last one.
+fn snapshot_due(last: Option<Instant>, now: Instant, min_interval: Duration) -> bool {
+    last.is_none_or(|last| now.saturating_duration_since(last) >= min_interval)
+}
+
+/// Gate + record in one step: claims the slot (throttling concurrent and
+/// subsequent attempts) exactly when a snapshot is due. Split out from the
+/// runner so the throttle logic is testable without spawning jj.
+fn claim_snapshot_slot(last: &mut Option<Instant>, now: Instant, min_interval: Duration) -> bool {
+    if !snapshot_due(*last, now, min_interval) {
+        return false;
+    }
+    *last = Some(now);
+    true
 }
 
 /// Build a `jj --repository <workdir> …` background command.
@@ -143,6 +237,7 @@ impl GitRepository for JjRepository {
     }
 
     fn status(&self) -> Result<RepoStatus> {
+        self.snapshot_if_due("status read");
         self.inner.status()
     }
 
@@ -413,5 +508,51 @@ mod tests {
             args,
             vec!["--repository".to_string(), "/tmp/somewhere".to_string()]
         );
+    }
+
+    #[test]
+    fn snapshot_due_gates_by_min_interval() {
+        let interval = Duration::from_secs(5);
+        let now = Instant::now();
+
+        // The first attempt is always due.
+        assert!(snapshot_due(None, now, interval));
+        // A recent snapshot blocks, one from before the interval reopens.
+        assert!(!snapshot_due(
+            Some(now),
+            now + Duration::from_secs(4),
+            interval
+        ));
+        assert!(snapshot_due(
+            Some(now),
+            now + Duration::from_secs(5),
+            interval
+        ));
+        // A clock at or before the last attempt (saturating, never panics).
+        assert!(!snapshot_due(
+            Some(now),
+            now - Duration::from_secs(1),
+            interval
+        ));
+    }
+
+    #[test]
+    fn claim_snapshot_slot_records_only_when_due() {
+        let interval = Duration::from_secs(5);
+        let t0 = Instant::now();
+        let mut last = None;
+
+        assert!(claim_snapshot_slot(&mut last, t0, interval));
+        assert_eq!(last, Some(t0), "a claimed slot records its timestamp");
+
+        // Within the interval the claim is refused and the slot is untouched.
+        let t1 = t0 + Duration::from_secs(1);
+        assert!(!claim_snapshot_slot(&mut last, t1, interval));
+        assert_eq!(last, Some(t0));
+
+        // Once the interval elapsed the claim succeeds and moves the slot.
+        let t2 = t0 + interval;
+        assert!(claim_snapshot_slot(&mut last, t2, interval));
+        assert_eq!(last, Some(t2));
     }
 }
