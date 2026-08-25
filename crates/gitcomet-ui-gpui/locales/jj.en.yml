@@ -33,6 +33,11 @@ jj:
     diff_loading: Loading diff…
     diff_error: "Could not read the diff: %{error}"
     diff_empty: "This path has no textual changes."
+  actions:
+    new_here: New here
+    squash: Squash into @
+    abandon: Abandon
+    abandon_hint: "Abandon is undoable from the operation log."
   conflicts:
     count: "%{count} conflicted paths"
     recheck: Re-check

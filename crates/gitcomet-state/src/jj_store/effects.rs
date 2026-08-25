@@ -256,6 +256,7 @@ fn run_mutation(
     match mutation {
         JjMutation::Describe { change, message } => plain(repo.describe(change, message)),
         JjMutation::New { message } => plain(repo.new_change(message.as_deref()).map(|_| ())),
+        JjMutation::NewAt { onto } => plain(repo.new_change_at(onto).map(|_| ())),
         JjMutation::Abandon { change } => plain(repo.abandon(change)),
         JjMutation::Squash { from, into } => plain(repo.squash(from, into.as_ref())),
         JjMutation::BookmarkCreate { name, target } => plain(repo.bookmark_create(name, target)),

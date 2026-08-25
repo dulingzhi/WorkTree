@@ -405,3 +405,26 @@ fn change_files_empty_on_the_open_change() {
             .is_empty()
     );
 }
+
+/// `new_change_at` opens a fresh change on top of any log row (not just @)
+/// and moves the working copy there — the "start work here" gesture.
+#[test]
+fn new_change_at_opens_a_change_on_top_of_a_selected_row() {
+    if !tooling_ready() {
+        return;
+    }
+    let temp = tempfile::tempdir().expect("tempdir");
+    init_colocated_repo(temp.path());
+    let repo = open_repo(temp.path());
+    let base = commit_change(&repo, "base change");
+    commit_change(&repo, "tip change");
+
+    let here = repo.new_change_at(&base.change_id).expect("new change at");
+    assert!(here.is_working_copy);
+    assert_ne!(here.change_id, base.change_id);
+    // The new change sits directly on top of the target: the target is @'s
+    // only parent.
+    let page = repo.log(&JjLogQuery::new("parents(@)", 10)).expect("log");
+    assert_eq!(page.changes.len(), 1, "the new @ has exactly one parent");
+    assert_eq!(page.changes[0].change_id, base.change_id);
+}

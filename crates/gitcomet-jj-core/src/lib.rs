@@ -75,6 +75,11 @@ pub trait JjRepository: Send + Sync {
     /// and return it as the new working copy.
     fn new_change(&self, message: Option<&str>) -> Result<JjChange>;
 
+    /// Open a fresh change on top of `change` (`jj new <change>`) and make
+    /// it the working copy — the "start work here" gesture on any row of
+    /// the log, not just @.
+    fn new_change_at(&self, change: &ChangeId) -> Result<JjChange>;
+
     /// Drop a change, rebasing its descendants (`jj abandon`).
     fn abandon(&self, change: &ChangeId) -> Result<()>;
 

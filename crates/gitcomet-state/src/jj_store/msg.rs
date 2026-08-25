@@ -113,6 +113,11 @@ pub enum JjMsg {
         repo_id: RepoId,
         message: Option<String>,
     },
+    /// Open a fresh change on top of the selected row and move @ there.
+    NewChangeAt {
+        repo_id: RepoId,
+        change: ChangeId,
+    },
     AbandonChange {
         repo_id: RepoId,
         change: ChangeId,
@@ -338,6 +343,11 @@ impl std::fmt::Debug for JjMsg {
                 .field("repo_id", repo_id)
                 .field("message", message)
                 .finish(),
+            NewChangeAt { repo_id, change } => f
+                .debug_struct("NewChangeAt")
+                .field("repo_id", repo_id)
+                .field("change", change)
+                .finish(),
             AbandonChange { repo_id, change } => f
                 .debug_struct("AbandonChange")
                 .field("repo_id", repo_id)
@@ -460,6 +470,7 @@ impl JjMsg {
             | SetRevset { repo_id, .. }
             | DescribeChange { repo_id, .. }
             | NewChange { repo_id, .. }
+            | NewChangeAt { repo_id, .. }
             | AbandonChange { repo_id, .. }
             | SquashChange { repo_id, .. }
             | BookmarkCreate { repo_id, .. }
@@ -538,6 +549,7 @@ impl StoreMessage for JjMsg {
             SetRevset { .. } => "jj_set_revset",
             DescribeChange { .. } => "jj_describe_change",
             NewChange { .. } => "jj_new_change",
+            NewChangeAt { .. } => "jj_new_change_at",
             AbandonChange { .. } => "jj_abandon_change",
             SquashChange { .. } => "jj_squash_change",
             BookmarkCreate { .. } => "jj_bookmark_create",
@@ -699,6 +711,10 @@ pub enum JjMutation {
     },
     New {
         message: Option<String>,
+    },
+    /// `jj new <onto>` — open a fresh change on top of a selected row.
+    NewAt {
+        onto: ChangeId,
     },
     Abandon {
         change: ChangeId,

@@ -487,6 +487,49 @@ impl JjRepoView {
         }
         cx.notify();
     }
+
+    /// Open a fresh change on top of the selected row (`jj new <change>`) —
+    /// the "start work here" gesture on any change, not just @.
+    fn new_change_here(&mut self, change: ChangeId, cx: &mut gpui::Context<Self>) {
+        if let Some(repo) = self.state.active_repo() {
+            if repo.pending_command.is_none() {
+                self.store.dispatch(JjMsg::NewChangeAt {
+                    repo_id: repo.id,
+                    change,
+                });
+            }
+        }
+        cx.notify();
+    }
+
+    /// Fold the selected change into the working copy (`jj squash`).
+    fn squash_selected_into_working_copy(&mut self, from: ChangeId, cx: &mut gpui::Context<Self>) {
+        if let Some(repo) = self.state.active_repo() {
+            if repo.pending_command.is_none() {
+                self.store.dispatch(JjMsg::SquashChange {
+                    repo_id: repo.id,
+                    from,
+                    into: None,
+                });
+            }
+        }
+        cx.notify();
+    }
+
+    /// Drop the selected change (`jj abandon`). The operation log keeps the
+    /// drop reversible, so this skips a confirmation dialog — the hint next
+    /// to the button points at the undo card.
+    fn abandon_selected_change(&mut self, change: ChangeId, cx: &mut gpui::Context<Self>) {
+        if let Some(repo) = self.state.active_repo() {
+            if repo.pending_command.is_none() {
+                self.store.dispatch(JjMsg::AbandonChange {
+                    repo_id: repo.id,
+                    change,
+                });
+            }
+        }
+        cx.notify();
+    }
 }
 
 impl Render for JjRepoView {
@@ -1010,6 +1053,80 @@ impl Render for JjRepoView {
                         diff_body = Some(diff.into_any_element());
                     }
 
+                    // Change actions (#84): start work on this change, fold
+                    // it into @, or drop it. All three ride the serialized
+                    // mutation lane; squash and abandon are no-ops on @
+                    // itself, so they stay disabled while @ is selected.
+                    let busy = pending_command.is_some();
+                    let selected_is_at = self
+                        .working_copy()
+                        .is_some_and(|working_copy| working_copy.change_id == selected_change);
+                    let new_here_change = selected_change.clone();
+                    let squash_change = selected_change.clone();
+                    let abandon_change = selected_change.clone();
+                    let actions_row = div()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .px_3()
+                        .pb_2()
+                        .child(
+                            components::Button::new(
+                                "jj_new_here",
+                                crate::i18n::tr("jj.actions.new_here"),
+                            )
+                            .style(components::ButtonStyle::Outlined)
+                            .disabled(busy)
+                            .on_click(
+                                theme,
+                                cx,
+                                move |this, _e, _w, cx| {
+                                    this.new_change_here(new_here_change.clone(), cx);
+                                },
+                            ),
+                        )
+                        .child(
+                            components::Button::new(
+                                "jj_squash_here",
+                                crate::i18n::tr("jj.actions.squash"),
+                            )
+                            .style(components::ButtonStyle::Outlined)
+                            .disabled(busy || selected_is_at)
+                            .on_click(
+                                theme,
+                                cx,
+                                move |this, _e, _w, cx| {
+                                    this.squash_selected_into_working_copy(
+                                        squash_change.clone(),
+                                        cx,
+                                    );
+                                },
+                            ),
+                        )
+                        .child(
+                            components::Button::new(
+                                "jj_abandon_here",
+                                crate::i18n::tr("jj.actions.abandon"),
+                            )
+                            .style(components::ButtonStyle::Outlined)
+                            .disabled(busy || selected_is_at)
+                            .on_click(
+                                theme,
+                                cx,
+                                move |this, _e, _w, cx| {
+                                    this.abandon_selected_change(abandon_change.clone(), cx);
+                                },
+                            ),
+                        )
+                        .child(
+                            div()
+                                .ml_auto()
+                                .flex_none()
+                                .text_xs()
+                                .text_color(theme.colors.foreground.secondary)
+                                .child(crate::i18n::tr("jj.actions.abandon_hint")),
+                        );
+
                     card = card.child(
                         div()
                             .id("jj_change_details")
@@ -1048,6 +1165,7 @@ impl Render for JjRepoView {
                                             .child(header_side),
                                     ),
                             )
+                            .child(actions_row)
                             .child(files_body)
                             .when_some(diff_body, |d, diff| d.child(diff)),
                     );
@@ -1538,6 +1656,11 @@ mod tests {
         fn new_change(&self, message: Option<&str>) -> Result<gitcomet_jj_core::JjChange> {
             self.record(format!("new:{message:?}"));
             Ok(change("new-at", true))
+        }
+
+        fn new_change_at(&self, onto: &ChangeId) -> Result<gitcomet_jj_core::JjChange> {
+            self.record(format!("new-at:{}", onto.0));
+            Ok(change("new-here", true))
         }
 
         fn abandon(&self, change: &ChangeId) -> Result<()> {
@@ -2149,6 +2272,73 @@ mod tests {
             .as_ref()
             .expect("push output recorded");
         assert_eq!(output.command, "jj git push");
+    }
+
+    /// Change actions (#84): the details card's gestures dispatch as
+    /// serialized mutations against the selected row — new-at opens on top
+    /// of it, squash folds it into @, abandon drops it.
+    #[gpui::test]
+    fn change_action_gestures_reach_the_backend(cx: &mut gpui::TestAppContext) {
+        let repo = FakeJjRepository::new("/tmp/fake-jj-actions");
+        let backend = Arc::new(FakeJjBackend {
+            repo: std::sync::Mutex::new(Some(Arc::clone(&repo))),
+        });
+        let (store, events) = JjStore::new(backend);
+        let store = Arc::new(store);
+        store.dispatch(JjMsg::OpenRepo {
+            workdir: std::path::PathBuf::from("/tmp/fake-jj-actions"),
+        });
+        wait_until("repo to load with a working copy", || {
+            store
+                .snapshot()
+                .active_repo()
+                .is_some_and(|repo| repo.working_copy.is_some())
+        });
+
+        let (view, cx) = cx.add_window_view(|window, cx| {
+            JjRepoView::new(
+                Arc::clone(&store),
+                events,
+                AppTheme::gitcomet_light(),
+                window,
+                cx,
+            )
+        });
+        cx.run_until_parked();
+
+        let mutation_settled = || {
+            store
+                .snapshot()
+                .active_repo()
+                .is_some_and(|repo| repo.pending_command.is_none())
+        };
+        let base = ChangeId("base".to_string());
+        cx.update(|_window, app| {
+            view.update(app, |view, cx| {
+                view.new_change_here(base.clone(), cx);
+            });
+        });
+        wait_until("new-at to run and settle", || {
+            repo.has_call("new-at:base") && mutation_settled()
+        });
+
+        cx.update(|_window, app| {
+            view.update(app, |view, cx| {
+                view.squash_selected_into_working_copy(base.clone(), cx);
+            });
+        });
+        wait_until("squash to run and settle", || {
+            repo.has_call("squash:base:None") && mutation_settled()
+        });
+
+        cx.update(|_window, app| {
+            view.update(app, |view, cx| {
+                view.abandon_selected_change(base, cx);
+            });
+        });
+        wait_until("abandon to run and settle", || {
+            repo.has_call("abandon:base") && mutation_settled()
+        });
     }
 
     /// The describe bar's gestures reach the store as mutations on @:

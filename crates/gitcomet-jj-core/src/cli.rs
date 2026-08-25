@@ -390,6 +390,14 @@ impl crate::JjRepository for JjCliRepository {
         self.working_copy()
     }
 
+    fn new_change_at(&self, change: &ChangeId) -> Result<JjChange> {
+        safe_arg(&change.0, "change id")?;
+        let mut cmd = self.jj_cmd();
+        cmd.arg("new").arg(&change.0);
+        self.run(cmd, "jj new")?;
+        self.working_copy()
+    }
+
     fn abandon(&self, change: &ChangeId) -> Result<()> {
         safe_arg(&change.0, "change id")?;
         let mut cmd = self.jj_cmd();

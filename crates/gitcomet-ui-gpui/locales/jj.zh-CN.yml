@@ -34,6 +34,11 @@ jj:
     diff_loading: 正在加载差异…
     diff_error: "无法读取差异：%{error}"
     diff_empty: 此路径没有文本改动。
+  actions:
+    new_here: 在此新建
+    squash: 并入 @
+    abandon: 丢弃
+    abandon_hint: 丢弃可通过操作日志撤销。
   conflicts:
     count: "%{count} 个冲突路径"
     recheck: 重新检查

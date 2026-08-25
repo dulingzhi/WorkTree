@@ -322,6 +322,11 @@ pub(crate) fn reduce(
         JjMsg::NewChange { repo_id, message } => {
             run_mutation(state, repo_id, "new change", || JjMutation::New { message })
         }
+        JjMsg::NewChangeAt { repo_id, change } => {
+            run_mutation(state, repo_id, "new change", || JjMutation::NewAt {
+                onto: change,
+            })
+        }
         JjMsg::AbandonChange { repo_id, change } => {
             run_mutation(state, repo_id, "abandon", || JjMutation::Abandon { change })
         }

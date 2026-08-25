@@ -117,6 +117,11 @@ impl JjRepository for FakeJjRepository {
         Ok(change("new-at", true))
     }
 
+    fn new_change_at(&self, onto: &ChangeId) -> Result<JjChange> {
+        self.record(&format!("new-at:{}", onto.0));
+        Ok(change("new-here", true))
+    }
+
     fn abandon(&self, change: &ChangeId) -> Result<()> {
         self.record(&format!("abandon:{}", change.0));
         Ok(())
@@ -341,6 +346,34 @@ fn mutations_run_and_refresh_the_state() {
             .count()
             >= 2
     );
+}
+
+/// The new-at gesture (#84) rides the same serialized mutation lane and
+/// refreshes the store like every other change operation.
+#[test]
+fn new_change_at_runs_against_the_selected_row() {
+    let repo = FakeJjRepository::new("/tmp/fake-jj");
+    let (store, _event_rx) = JjStore::new(FakeJjBackend::with(Arc::clone(&repo)));
+    store.dispatch(JjMsg::OpenRepo {
+        workdir: PathBuf::from("/tmp/fake-jj"),
+    });
+    wait_until(&store, |state| {
+        state.repos.first().is_some_and(|r| !r.changes.is_empty())
+    });
+    let repo_id = store.snapshot().repos[0].id;
+
+    store.dispatch(JjMsg::NewChangeAt {
+        repo_id,
+        change: ChangeId("base".to_string()),
+    });
+
+    wait_until(&store, |state| {
+        state
+            .repos
+            .first()
+            .is_some_and(|repo| repo.refresh_epoch >= 1 && repo.pending_command.is_none())
+    });
+    assert!(repo.calls().contains(&"new-at:base".to_string()));
 }
 
 #[test]
