@@ -15,6 +15,7 @@ use gitcomet_core::services::{
     SafePushAfterCommitDecision, SafePushAfterCommitTarget, SequencerState, SubmoduleTrustDecision,
     SubmoduleTrustTarget,
 };
+use gitcomet_core::vcs_read::{LogQuery, VcsReadModel};
 use rustc_hash::FxHashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -269,6 +270,100 @@ pub(crate) fn allow_test_repo_local_mergetool_command(workdir: &Path, tool_name:
     mergetool::allow_test_repo_local_mergetool_command(workdir, tool_name);
 }
 
+/// Native neutral-read implementation: the single source of truth for the
+/// reads shared across VCSes. The overlapping [`GitRepository`] methods below
+/// are facades over this impl, so the two surfaces cannot drift and retiring
+/// the legacy trait later is a deletion, not a rewrite.
+///
+/// Trace scopes that used to sit on the legacy read methods live here now:
+/// entering the neutral surface is what the scope measures, whichever trait
+/// the caller arrived through.
+impl VcsReadModel for GixRepo {
+    fn spec(&self) -> &RepoSpec {
+        &self.spec
+    }
+
+    fn capabilities(&self) -> RepoCapabilities {
+        self.capabilities
+    }
+
+    fn log_page(
+        &self,
+        query: &LogQuery,
+        cancellation: &CancellationToken,
+        on_chunk: &mut dyn FnMut(gitcomet_core::services::LogChunk),
+    ) -> Result<LogPage> {
+        let _scope = git_ops_trace::scope(GitOpTraceKind::LogWalk);
+        self.log_history_mode_page_streaming_impl(
+            query.mode,
+            query.author.as_deref(),
+            query.limit,
+            query.cursor.as_ref(),
+            cancellation,
+            on_chunk,
+        )
+    }
+
+    fn commit_details(&self, id: &CommitId) -> Result<CommitDetails> {
+        self.commit_details_impl(id)
+    }
+
+    fn diff(&self, target: &DiffTarget) -> Result<Diff> {
+        let _scope = git_ops_trace::scope(GitOpTraceKind::Diff);
+        self.diff_parsed_impl(target)
+    }
+
+    fn diff_range_files(
+        &self,
+        from: &CommitId,
+        to: Option<&CommitId>,
+    ) -> Result<Vec<CommitFileChange>> {
+        self.diff_range_files_impl(from, to)
+    }
+
+    fn current_branch(&self) -> Result<String> {
+        self.current_branch_impl()
+    }
+
+    fn head_commit_id(&self) -> Result<Option<CommitId>> {
+        self.head_commit_id_impl()
+    }
+
+    fn list_branches(&self) -> Result<Vec<Branch>> {
+        let _scope = git_ops_trace::scope(GitOpTraceKind::RefEnumerate);
+        self.list_branches_impl()
+    }
+
+    fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
+        let _scope = git_ops_trace::scope(GitOpTraceKind::RefEnumerate);
+        self.list_remote_branches_impl()
+    }
+
+    fn list_tags(&self) -> Result<Vec<Tag>> {
+        let _scope = git_ops_trace::scope(GitOpTraceKind::RefEnumerate);
+        self.list_tags_impl()
+    }
+
+    fn list_remotes(&self) -> Result<Vec<Remote>> {
+        let _scope = git_ops_trace::scope(GitOpTraceKind::RefEnumerate);
+        self.list_remotes_impl()
+    }
+
+    fn upstream_divergence(&self) -> Result<Option<UpstreamDivergence>> {
+        self.upstream_divergence_impl()
+    }
+
+    fn status(&self) -> Result<RepoStatus> {
+        let _scope = git_ops_trace::scope(GitOpTraceKind::Status);
+        self.status_impl()
+    }
+
+    fn author_email_map(&self) -> Result<FxHashMap<String, String>> {
+        let _scope = git_ops_trace::scope(GitOpTraceKind::LogWalk);
+        self.author_email_map_impl()
+    }
+}
+
 impl GitRepository for GixRepo {
     fn spec(&self) -> &RepoSpec {
         &self.spec
@@ -308,12 +403,14 @@ impl GitRepository for GixRepo {
         cancellation: &CancellationToken,
         on_chunk: &mut dyn FnMut(gitcomet_core::services::LogChunk),
     ) -> Result<LogPage> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::LogWalk);
-        self.log_history_mode_page_streaming_impl(
-            mode,
-            author,
-            limit,
-            cursor,
+        VcsReadModel::log_page(
+            self,
+            &LogQuery {
+                mode,
+                author: author.map(str::to_string),
+                limit,
+                cursor: cursor.cloned(),
+            },
             cancellation,
             on_chunk,
         )
@@ -360,12 +457,11 @@ impl GitRepository for GixRepo {
     }
 
     fn author_email_map(&self) -> Result<FxHashMap<String, String>> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::LogWalk);
-        self.author_email_map_impl()
+        VcsReadModel::author_email_map(self)
     }
 
     fn commit_details(&self, id: &CommitId) -> Result<CommitDetails> {
-        self.commit_details_impl(id)
+        VcsReadModel::commit_details(self, id)
     }
 
     fn diff_range_files(
@@ -373,7 +469,7 @@ impl GitRepository for GixRepo {
         from: &CommitId,
         to: Option<&CommitId>,
     ) -> Result<Vec<CommitFileChange>> {
-        self.diff_range_files_impl(from, to)
+        VcsReadModel::diff_range_files(self, from, to)
     }
 
     fn commit_messages(&self, ids: &[CommitId]) -> Result<Vec<String>> {
@@ -393,23 +489,22 @@ impl GitRepository for GixRepo {
     }
 
     fn current_branch(&self) -> Result<String> {
-        self.current_branch_impl()
+        VcsReadModel::current_branch(self)
     }
 
     fn current_branch_cancellable(&self, cancellation: &CancellationToken) -> Result<String> {
         cancellation.check_cancelled()?;
-        let branch = self.current_branch_impl()?;
+        let branch = VcsReadModel::current_branch(self)?;
         cancellation.check_cancelled()?;
         Ok(branch)
     }
 
     fn head_commit_id(&self) -> Result<Option<CommitId>> {
-        self.head_commit_id_impl()
+        VcsReadModel::head_commit_id(self)
     }
 
     fn list_branches(&self) -> Result<Vec<Branch>> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::RefEnumerate);
-        self.list_branches_impl()
+        VcsReadModel::list_branches(self)
     }
 
     fn list_branches_cancellable(&self, cancellation: &CancellationToken) -> Result<Vec<Branch>> {
@@ -421,8 +516,7 @@ impl GitRepository for GixRepo {
     }
 
     fn list_tags(&self) -> Result<Vec<Tag>> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::RefEnumerate);
-        self.list_tags_impl()
+        VcsReadModel::list_tags(self)
     }
 
     fn list_tags_cancellable(&self, cancellation: &CancellationToken) -> Result<Vec<Tag>> {
@@ -444,8 +538,7 @@ impl GitRepository for GixRepo {
     }
 
     fn list_remotes(&self) -> Result<Vec<Remote>> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::RefEnumerate);
-        self.list_remotes_impl()
+        VcsReadModel::list_remotes(self)
     }
 
     fn list_remotes_cancellable(&self, cancellation: &CancellationToken) -> Result<Vec<Remote>> {
@@ -457,8 +550,7 @@ impl GitRepository for GixRepo {
     }
 
     fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::RefEnumerate);
-        self.list_remote_branches_impl()
+        VcsReadModel::list_remote_branches(self)
     }
 
     fn list_remote_branches_cancellable(
@@ -496,8 +588,7 @@ impl GitRepository for GixRepo {
     }
 
     fn status(&self) -> Result<RepoStatus> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::Status);
-        self.status_impl()
+        VcsReadModel::status(self)
     }
 
     fn status_cancellable(&self, cancellation: &CancellationToken) -> Result<RepoStatus> {
@@ -506,7 +597,7 @@ impl GitRepository for GixRepo {
     }
 
     fn upstream_divergence(&self) -> Result<Option<UpstreamDivergence>> {
-        self.upstream_divergence_impl()
+        VcsReadModel::upstream_divergence(self)
     }
 
     fn upstream_divergence_cancellable(
@@ -552,8 +643,7 @@ impl GitRepository for GixRepo {
     }
 
     fn diff_parsed(&self, target: &DiffTarget) -> Result<Diff> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::Diff);
-        self.diff_parsed_impl(target)
+        VcsReadModel::diff(self, target)
     }
 
     fn diff_parsed_cancellable(

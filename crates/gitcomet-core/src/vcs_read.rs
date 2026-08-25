@@ -49,12 +49,13 @@
 //!
 //! # Migration shape
 //!
-//! A blanket implementation gives every existing
-//! [`crate::services::GitRepository`] (the gix backend, the jj adapter, and
-//! every test double) [`VcsReadModel`] for free, so callers can move to the
-//! neutral surface one site at a time while both traits stay live
-//! ("双轨"). Backends that were never git-shaped implement this trait
-//! directly and keep their own write surface.
+//! Both surfaces stay live ("双轨"). The gix backend implements this trait
+//! *natively* — the real logic — with its [`crate::services::GitRepository`]
+//! read methods as facades over it; every implementor that is still
+//! legacy-shaped (the jj adapter, test doubles) serves the neutral surface
+//! through the `dyn GitRepository` bridge below, one dynamic hop per read.
+//! Backends that were never git-shaped implement this trait directly and
+//! keep their own write surface.
 
 use crate::domain::{
     Branch, CommitDetails, CommitFileChange, CommitId, Diff, DiffTarget, HistoryMode, LogCursor,
@@ -179,15 +180,27 @@ pub trait VcsReadModel: Send + Sync {
     }
 }
 
-/// Every [`GitRepository`] already is a [`VcsReadModel`]: reads delegate to
-/// the corresponding trait methods, so the gix backend, the jj adapter, and
-/// all existing test doubles implement the neutral surface for free while
-/// both traits stay live.
+/// Every *legacy object* is a [`VcsReadModel`]: `dyn GitRepository` bridges
+/// to the corresponding trait methods, so the gix jj adapter and every test
+/// double keep serving the neutral surface while both traits stay live.
+///
+/// This is deliberately an impl for the trait object, not a blanket
+/// `impl<T: GitRepository …> VcsReadModel for T`: a backend that implements
+/// [`GitRepository`] concretely must be free to carry a *native*
+/// [`VcsReadModel`] impl holding the real logic (with the legacy read
+/// methods as facades over it), and a blanket impl would collide with that
+/// (E0119). Consequences of the object-only shape:
+///
+/// * `Arc<dyn GitRepository>` does not coerce to `Arc<dyn VcsReadModel>` —
+///   callers bridge through a reference or re-wrapping helper.
+/// * Concrete backends with a native impl (the gix repo) dispatch
+///   statically; everything else goes through one dynamic hop on read, which
+///   these queries amortize instantly.
 ///
 /// Calls are fully qualified (`GitRepository::…`) — inside this impl both
 /// traits are candidates for `self.` resolution and the qualified form pins
 /// the delegation to the legacy trait, keeping it recursion-proof.
-impl<T: GitRepository + ?Sized> VcsReadModel for T {
+impl VcsReadModel for dyn GitRepository {
     fn spec(&self) -> &RepoSpec {
         GitRepository::spec(self)
     }
@@ -275,12 +288,15 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::sync::{Arc, Mutex};
 
+    /// One recorded walk call: `(method, scope, limit, author)`.
+    type RecordedCall = (&'static str, Option<String>, usize, Option<String>);
+
     /// Minimal [`GitRepository`] double: required methods are `unsupported`
-    /// stubs, and exactly the reads the blanket impl delegates to return
+    /// stubs, and exactly the reads the dyn bridge delegates to return
     /// fixed data or record their arguments.
     struct NeutralReadRepo {
         spec: RepoSpec,
-        calls: Mutex<Vec<(&'static str, Option<String>, usize, Option<String>)>>,
+        calls: Mutex<Vec<RecordedCall>>,
     }
 
     impl NeutralReadRepo {
@@ -293,7 +309,7 @@ mod tests {
             }
         }
 
-        fn calls(&self) -> Vec<(&'static str, Option<String>, usize, Option<String>)> {
+        fn calls(&self) -> Vec<RecordedCall> {
             self.calls.lock().expect("calls mutex").clone()
         }
     }
@@ -512,6 +528,18 @@ mod tests {
         }
     }
 
+    /// The legacy-object bridge: the production shape every still-legacy
+    /// implementor (jj adapter, test doubles) serves the neutral surface
+    /// through during the dual-track transition.
+    ///
+    /// The object lifetime is spelled `+ 'static` on purpose: an elided
+    /// `&dyn GitRepository` defaults the object bound to the reference's
+    /// lifetime, which then cannot satisfy the bridge impl's
+    /// `dyn GitRepository + 'static` self type without borrowing forever.
+    fn bridged<'a>(repo: &'a NeutralReadRepo) -> &'a (dyn GitRepository + 'static) {
+        repo
+    }
+
     #[test]
     fn log_page_delegates_query_fields_and_forwards_chunks() {
         let repo = NeutralReadRepo::new();
@@ -522,11 +550,13 @@ mod tests {
             cursor: None,
         };
         let mut chunks = Vec::new();
-        let page = repo
-            .log_page(&query, &CancellationToken::new(), &mut |chunk| {
-                chunks.push(chunk);
-            })
-            .expect("delegated log walk should succeed");
+        let page = VcsReadModel::log_page(
+            bridged(&repo),
+            &query,
+            &CancellationToken::new(),
+            &mut |chunk| chunks.push(chunk),
+        )
+        .expect("delegated log walk should succeed");
 
         assert!(page.commits.is_empty());
         assert_eq!(
@@ -544,8 +574,7 @@ mod tests {
             limit: 5,
             ..LogQuery::default()
         };
-        let page = repo
-            .log_page_once(&query)
+        let page = VcsReadModel::log_page_once(bridged(&repo), &query)
             .expect("convenience walk should succeed");
         assert_eq!(page.next_cursor, None);
         assert_eq!(repo.calls(), vec![("log", None, 5, None)]);
@@ -556,44 +585,45 @@ mod tests {
         let repo = NeutralReadRepo::new();
         let cancellation = CancellationToken::new();
         cancellation.cancel();
-        let error = repo
-            .log_page(
-                &LogQuery {
-                    limit: 1,
-                    ..LogQuery::default()
-                },
-                &cancellation,
-                &mut |_| {},
-            )
-            .expect_err("cancelled walks must fail");
+        let error = VcsReadModel::log_page(
+            bridged(&repo),
+            &LogQuery {
+                limit: 1,
+                ..LogQuery::default()
+            },
+            &cancellation,
+            &mut |_| {},
+        )
+        .expect_err("cancelled walks must fail");
         assert!(matches!(error.kind(), ErrorKind::Cancelled));
         assert!(repo.calls().is_empty(), "no walk should start");
     }
 
     #[test]
-    fn blanket_impl_delegates_every_read() {
-        // Every call is qualified: on the concrete type both traits are in
-        // scope and carry the same method names, and qualification is what
-        // pins the assertion to the neutral surface under test.
+    fn legacy_object_bridge_delegates_every_read() {
+        // Every call goes through `&dyn GitRepository`: that object is the
+        // neutral surface's entry point for still-legacy backends, and the
+        // assertions pin what the bridge forwards.
         let repo = NeutralReadRepo::new();
+        let read = bridged(&repo);
 
         assert_eq!(
-            VcsReadModel::spec(&repo).workdir,
+            VcsReadModel::spec(read).workdir,
             PathBuf::from("/tmp/neutral-read-repo")
         );
         assert_eq!(
-            VcsReadModel::capabilities(&repo),
+            VcsReadModel::capabilities(read),
             RepoCapabilities::default()
         );
         assert_eq!(
-            VcsReadModel::commit_details(&repo, &CommitId("c0ffee".into()))
+            VcsReadModel::commit_details(read, &CommitId("c0ffee".into()))
                 .expect("details")
                 .message,
             "details message"
         );
         assert_eq!(
             VcsReadModel::diff(
-                &repo,
+                read,
                 &DiffTarget::Commit {
                     commit_id: CommitId("c0ffee".into()),
                     path: None,
@@ -604,13 +634,13 @@ mod tests {
             .len(),
             0
         );
-        assert_eq!(VcsReadModel::current_branch(&repo).expect("branch"), "main");
+        assert_eq!(VcsReadModel::current_branch(read).expect("branch"), "main");
         assert_eq!(
-            VcsReadModel::head_commit_id(&repo).expect("head"),
+            VcsReadModel::head_commit_id(read).expect("head"),
             Some(CommitId("c0ffee".into()))
         );
 
-        let branches = VcsReadModel::list_branches(&repo).expect("branches");
+        let branches = VcsReadModel::list_branches(read).expect("branches");
         assert_eq!(branches.len(), 1);
         assert_eq!(
             branches[0].divergence,
@@ -621,40 +651,122 @@ mod tests {
         );
 
         assert_eq!(
-            VcsReadModel::list_remote_branches(&repo).expect("remote branches")[0].remote,
+            VcsReadModel::list_remote_branches(read).expect("remote branches")[0].remote,
             "origin"
         );
-        assert_eq!(VcsReadModel::list_tags(&repo).expect("tags")[0].name, "v1");
+        assert_eq!(VcsReadModel::list_tags(read).expect("tags")[0].name, "v1");
         assert_eq!(
-            VcsReadModel::list_remotes(&repo).expect("remotes")[0].name,
+            VcsReadModel::list_remotes(read).expect("remotes")[0].name,
             "origin"
         );
         assert_eq!(
-            VcsReadModel::upstream_divergence(&repo).expect("divergence"),
+            VcsReadModel::upstream_divergence(read).expect("divergence"),
             Some(UpstreamDivergence {
                 ahead: 2,
                 behind: 1
             })
         );
 
-        let status = VcsReadModel::status(&repo).expect("status");
+        let status = VcsReadModel::status(read).expect("status");
         assert!(status.staged.is_empty());
         assert_eq!(status.unstaged.len(), 1);
 
-        let emails = VcsReadModel::author_email_map(&repo).expect("emails");
+        let emails = VcsReadModel::author_email_map(read).expect("emails");
         assert_eq!(
             emails.get("Author").map(String::as_str),
             Some("author@example.com")
         );
     }
 
+    /// A backend that was never git-shaped: implements only
+    /// [`VcsReadModel`], the way the native jj flavor does. Proves the trait
+    /// stands alone — no `GitRepository` requirement hides underneath — and
+    /// stays object-safe for `Arc<dyn VcsReadModel>` holders.
+    struct NativeOnlyRepo;
+
+    impl VcsReadModel for NativeOnlyRepo {
+        fn spec(&self) -> &RepoSpec {
+            static SPEC: std::sync::LazyLock<RepoSpec> = std::sync::LazyLock::new(|| RepoSpec {
+                workdir: PathBuf::from("/tmp/native-only-repo"),
+            });
+            &SPEC
+        }
+
+        fn capabilities(&self) -> RepoCapabilities {
+            RepoCapabilities::jj_read_only()
+        }
+
+        fn log_page(
+            &self,
+            _query: &LogQuery,
+            _cancellation: &CancellationToken,
+            _on_chunk: &mut dyn FnMut(LogChunk),
+        ) -> Result<LogPage> {
+            Ok(LogPage {
+                commits: Vec::new(),
+                next_cursor: None,
+            })
+        }
+
+        fn commit_details(&self, _id: &CommitId) -> Result<CommitDetails> {
+            unsupported()
+        }
+
+        fn diff(&self, _target: &DiffTarget) -> Result<Diff> {
+            unsupported()
+        }
+
+        fn diff_range_files(
+            &self,
+            _from: &CommitId,
+            _to: Option<&CommitId>,
+        ) -> Result<Vec<CommitFileChange>> {
+            unsupported()
+        }
+
+        fn current_branch(&self) -> Result<String> {
+            Ok(String::new())
+        }
+
+        fn head_commit_id(&self) -> Result<Option<CommitId>> {
+            Ok(None)
+        }
+
+        fn list_branches(&self) -> Result<Vec<Branch>> {
+            Ok(Vec::new())
+        }
+
+        fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
+            Ok(Vec::new())
+        }
+
+        fn list_tags(&self) -> Result<Vec<Tag>> {
+            Ok(Vec::new())
+        }
+
+        fn list_remotes(&self) -> Result<Vec<Remote>> {
+            Ok(Vec::new())
+        }
+
+        fn upstream_divergence(&self) -> Result<Option<UpstreamDivergence>> {
+            Ok(None)
+        }
+
+        fn status(&self) -> Result<RepoStatus> {
+            Ok(RepoStatus::default())
+        }
+    }
+
     #[test]
-    fn object_safe_through_dyn() {
-        // The store holds repositories as `Arc<dyn …>`; the trait must stay
-        // object-safe, and the blanket impl must let a concrete backend
-        // coerce into the neutral trait object without going through
-        // GitRepository first.
-        let read: Arc<dyn VcsReadModel> = Arc::new(NeutralReadRepo::new());
-        assert_eq!(read.current_branch().expect("branch"), "main");
+    fn native_backend_implements_vcs_read_model_without_gitrepository() {
+        let read: Arc<dyn VcsReadModel> = Arc::new(NativeOnlyRepo);
+        assert!(read.capabilities().is_jj);
+        assert!(read.capabilities().read_only);
+        assert_eq!(
+            read.current_branch().expect("branch"),
+            String::new(),
+            "detached working copy is the empty placeholder"
+        );
+        assert_eq!(read.status().expect("status"), RepoStatus::default());
     }
 }

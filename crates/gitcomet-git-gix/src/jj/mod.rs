@@ -122,14 +122,14 @@ impl JjRepository {
         let mut args = Vec::new();
         let jj_name = self.jj_config_get("user.name");
         let jj_email = self.jj_config_get("user.email");
-        if jj_name.is_empty() || jj_email.is_empty() {
-            if let Some((name, email)) = self.git_config_identity() {
-                if jj_name.is_empty() {
-                    args.push(format!("user.name={name}"));
-                }
-                if jj_email.is_empty() {
-                    args.push(format!("user.email={email}"));
-                }
+        if (jj_name.is_empty() || jj_email.is_empty())
+            && let Some((name, email)) = self.git_config_identity()
+        {
+            if jj_name.is_empty() {
+                args.push(format!("user.name={name}"));
+            }
+            if jj_email.is_empty() {
+                args.push(format!("user.email={email}"));
             }
         }
         args
