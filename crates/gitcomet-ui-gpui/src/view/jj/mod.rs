@@ -42,6 +42,18 @@ pub(crate) struct JjRepoView {
     /// Selected list row, keyed by `ChangeId` (stable across rewrites,
     /// unlike commit ids) so paging never reselects a different change.
     selected_change: Option<ChangeId>,
+    /// The revset filter bar's input. Enter applies it as the list's
+    /// revset — `SetRevset` reloads from the top under a fresh epoch.
+    revset_input: Entity<components::TextInput>,
+    _revset_input_subscription: gpui::Subscription,
+    /// The revset the input was last synced from (the revset twin of
+    /// `describe_synced_change`): refreshes carrying the same revset
+    /// never rewrite what the user is typing.
+    revset_synced: Option<String>,
+    /// Keyboard focus for the change list. ↑/↓ step the selection, Escape
+    /// clears it; row clicks focus this handle so arrows work right after
+    /// a click.
+    list_focus: gpui::FocusHandle,
     _poller: gpui::Task<()>,
     /// Held (not drained) under the test runtime, mirroring `Poller`.
     _held_events: Option<smol::channel::Receiver<StoreEvent>>,
@@ -72,10 +84,35 @@ impl JjRepoView {
                 this.submit_describe(cx);
             }
         });
+        let revset_input = cx.new(|cx| {
+            components::TextInput::new(
+                components::TextInputOptions {
+                    placeholder: crate::i18n::tr("jj.revset.placeholder"),
+                    ..Default::default()
+                },
+                window,
+                cx,
+            )
+        });
+        let _revset_input_subscription = cx.observe(&revset_input, |this, input, cx| {
+            let enter_pressed = input.update(cx, |input, _| input.take_enter_pressed());
+            if enter_pressed {
+                this.apply_revset(cx);
+            }
+        });
+        let list_focus = cx.focus_handle();
+
+        // The pane can outlive a mid-session creation (the pane is created
+        // lazily on the render path), so the store may already hold a repo
+        // — sync both bars from it before first render.
+        let sync_inputs = |this: &mut Self, cx: &mut gpui::Context<Self>| {
+            this.sync_describe_input(cx);
+            this.sync_revset_input(cx);
+        };
 
         let runtime = crate::ui_runtime::current();
         if !runtime.uses_live_store_poller() {
-            return Self {
+            let mut this = Self {
                 store,
                 state,
                 theme,
@@ -83,9 +120,15 @@ impl JjRepoView {
                 _describe_input_subscription,
                 describe_synced_change: None,
                 selected_change: None,
+                revset_input,
+                _revset_input_subscription,
+                revset_synced: None,
+                list_focus,
                 _poller: gpui::Task::ready(()),
                 _held_events: Some(events),
             };
+            sync_inputs(&mut this, cx);
+            return this;
         }
 
         let poller_store = Arc::clone(&store);
@@ -107,12 +150,13 @@ impl JjRepoView {
                 let _ = weak.update(cx, |this, cx| {
                     this.state = snapshot;
                     this.sync_describe_input(cx);
+                    this.sync_revset_input(cx);
                     cx.notify();
                 });
             }
         });
 
-        Self {
+        let mut this = Self {
             store,
             state,
             theme,
@@ -120,14 +164,22 @@ impl JjRepoView {
             _describe_input_subscription,
             describe_synced_change: None,
             selected_change: None,
+            revset_input,
+            _revset_input_subscription,
+            revset_synced: None,
+            list_focus,
             _poller,
             _held_events: None,
-        }
+        };
+        sync_inputs(&mut this, cx);
+        this
     }
 
     pub(super) fn set_theme(&mut self, theme: AppTheme, cx: &mut gpui::Context<Self>) {
         self.theme = theme;
         self.describe_input
+            .update(cx, |input, cx| input.set_theme(theme, cx));
+        self.revset_input
             .update(cx, |input, cx| input.set_theme(theme, cx));
         cx.notify();
     }
@@ -203,6 +255,71 @@ impl JjRepoView {
             self.store.dispatch(JjMsg::LoadMoreLog { repo_id: repo.id });
         }
         cx.notify();
+    }
+
+    /// Enter on the revset bar: reload the list under the bar's revset.
+    /// Empty means `all()` — the reducer trims and bumps the epoch so
+    /// in-flight pages for the old revset are dropped.
+    fn apply_revset(&mut self, cx: &mut gpui::Context<Self>) {
+        let Some(repo) = self.state.active_repo() else {
+            return;
+        };
+        let revset = self.revset_input.read(cx).text().trim().to_string();
+        self.store.dispatch(JjMsg::SetRevset {
+            repo_id: repo.id,
+            revset: revset.clone(),
+        });
+        // Own the new value so the reload's refresh doesn't rewrite the bar.
+        self.revset_synced = Some(revset);
+    }
+
+    /// Rewrite the revset bar only when the repo's revset changed outside
+    /// the bar (initial load); refreshes under the same revset never
+    /// touch what the user is typing.
+    fn sync_revset_input(&mut self, cx: &mut gpui::Context<Self>) {
+        let Some(repo) = self.state.active_repo() else {
+            return;
+        };
+        let revset = repo.log_revset.clone();
+        if self.revset_synced.as_ref() == Some(&revset) {
+            return;
+        }
+        self.revset_synced = Some(revset.clone());
+        self.revset_input
+            .update(cx, |input, cx| input.set_text(revset, cx));
+    }
+
+    fn handle_list_key_down(&mut self, event: &gpui::KeyDownEvent, cx: &mut gpui::Context<Self>) {
+        match event.keystroke.key.as_ref() {
+            "up" => self.move_selection(-1, cx),
+            "down" => self.move_selection(1, cx),
+            "escape" => {
+                if self.selected_change.take().is_some() {
+                    cx.notify();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Step the selection `delta` rows through the rendered rows (which
+    /// exclude @). Focus follows the click that selects a row, so this
+    /// only runs while the list itself holds focus — inputs keep their
+    /// keys.
+    fn move_selection(&mut self, delta: i32, cx: &mut gpui::Context<Self>) {
+        let Some(repo) = self.state.active_repo() else {
+            return;
+        };
+        let ids: Vec<ChangeId> = repo
+            .changes
+            .iter()
+            .filter(|change| !change.is_working_copy)
+            .map(|change| change.change_id.clone())
+            .collect();
+        if let Some(next) = next_selected_change(&ids, self.selected_change.as_ref(), delta) {
+            self.selected_change = Some(next);
+            cx.notify();
+        }
     }
 }
 
@@ -342,9 +459,77 @@ impl Render for JjRepoView {
                     );
                 }
 
-                // The change list (working copy pinned above, skipped here).
+                // Status strip: conflicts embedded in @, and the most
+                // recent failed command. The resolve flow lands in #80;
+                // for now the paths are surfaced where describe happens.
+                if !repo.conflicts.is_empty() {
+                    let mut conflict_paths = div().flex().flex_col().gap_1();
+                    for conflict in &repo.conflicts {
+                        conflict_paths = conflict_paths.child(
+                            div()
+                                .text_sm()
+                                .truncate()
+                                .text_color(theme.colors.foreground.primary)
+                                .child(conflict.path.clone()),
+                        );
+                    }
+                    card = card.child(
+                        div()
+                            .id("jj_conflicts_card")
+                            .debug_selector(|| "jj_conflicts_card".to_string())
+                            .rounded(px(theme.radii.panel))
+                            .border_1()
+                            .border_color(theme.colors.status.warning.border)
+                            .bg(theme.colors.surface.raised)
+                            .p_3()
+                            .flex()
+                            .flex_col()
+                            .gap_2()
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(theme.colors.status.warning.foreground)
+                                    .child(crate::i18n::t!(
+                                        "jj.conflicts.count",
+                                        count = repo.conflicts.len()
+                                    )),
+                            )
+                            .child(conflict_paths),
+                    );
+                }
+                if let Some((operation, error)) = repo.last_command_error.clone() {
+                    card = card.child(
+                        div()
+                            .text_xs()
+                            .text_color(theme.colors.status.danger.foreground)
+                            .child(crate::i18n::t!(
+                                "jj.status.last_command_failed",
+                                operation = operation,
+                                error = error
+                            )),
+                    );
+                }
+
+                // The change list (working copy pinned above, skipped here),
+                // under a revset filter bar.
                 let rows = change_row_vms(repo, now);
                 let selected = self.selected_change.clone();
+                let list_focus = self.list_focus.clone();
+
+                let revset_bar = div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(self.revset_input.clone())
+                    .child(
+                        div()
+                            .ml_auto()
+                            .flex_none()
+                            .text_xs()
+                            .text_color(theme.colors.foreground.secondary)
+                            .child(crate::i18n::t!("jj.changes.count", count = rows.len())),
+                    );
+
                 let mut list = div().flex().flex_col();
                 if repo.log_loading && rows.is_empty() {
                     list = list.child(
@@ -362,8 +547,11 @@ impl Render for JjRepoView {
                         row,
                         is_selected,
                         theme,
-                        cx.listener(move |this, _e, _w, cx| {
+                        cx.listener(move |this, _e, window, cx| {
                             this.selected_change = Some(row_change.clone());
+                            // Clicking a row also puts the list in keyboard
+                            // focus so ↑/↓ work immediately after.
+                            window.focus(&this.list_focus, cx);
                             cx.notify();
                         }),
                     ));
@@ -386,10 +574,17 @@ impl Render for JjRepoView {
                             .child(error),
                     );
                 }
-                card = card.child(
+                card = card.child(revset_bar).child(
                     div()
                         .id("jj_change_list")
                         .debug_selector(|| "jj_change_list".to_string())
+                        .track_focus(&list_focus)
+                        .key_context("JjChangeList")
+                        .on_key_down(cx.listener(
+                            |this, event: &gpui::KeyDownEvent, _window, cx| {
+                                this.handle_list_key_down(event, cx);
+                            },
+                        ))
                         .rounded(px(theme.radii.panel))
                         .border_1()
                         .border_color(theme.colors.stroke.default)
@@ -574,6 +769,26 @@ fn jj_repos_missing_from_git(jj: &JjAppState, git_workdirs: &[std::path::PathBuf
         .filter(|repo| !git_workdirs.contains(&repo.spec.workdir))
         .map(|repo| repo.id)
         .collect()
+}
+
+/// One keyboard step through the rendered rows: `delta` rows down (+) or
+/// up (−) from `current`, clamped at the ends (no wrap). With nothing
+/// selected — or a selection that left the list — Down starts at the top
+/// and Up at the bottom, so both arrows always land on a visible row.
+fn next_selected_change(
+    ids: &[ChangeId],
+    current: Option<&ChangeId>,
+    delta: i32,
+) -> Option<ChangeId> {
+    if ids.is_empty() {
+        return None;
+    }
+    let index = match current.and_then(|current| ids.iter().position(|id| id == current)) {
+        Some(index) => index as i64,
+        None => return if delta > 0 { ids.first() } else { ids.last() }.cloned(),
+    };
+    let next = (index + delta as i64).clamp(0, ids.len() as i64 - 1) as usize;
+    Some(ids[next].clone())
 }
 
 /// A minimal `JjRepoState` for tests, shared with `change_list`'s tests.
@@ -819,6 +1034,151 @@ mod tests {
         let git_workdirs = vec![std::path::PathBuf::from("/tmp/jj-a")];
 
         assert!(jj_repos_missing_from_git(&jj, &git_workdirs).is_empty());
+    }
+
+    #[test]
+    fn next_selected_change_steps_and_clamps_without_wrapping() {
+        let ids: Vec<ChangeId> = ["a", "b", "c"]
+            .iter()
+            .map(|s| ChangeId(s.to_string()))
+            .collect();
+        let id = |s: &str| ChangeId(s.to_string());
+
+        // From nothing, Down enters at the top and Up at the bottom.
+        assert_eq!(next_selected_change(&ids, None, 1), Some(id("a")));
+        assert_eq!(next_selected_change(&ids, None, -1), Some(id("c")));
+
+        // Steps move one row at a time and clamp at both ends.
+        assert_eq!(next_selected_change(&ids, Some(&id("a")), 1), Some(id("b")));
+        assert_eq!(next_selected_change(&ids, Some(&id("b")), 1), Some(id("c")));
+        assert_eq!(next_selected_change(&ids, Some(&id("c")), 1), Some(id("c")));
+        assert_eq!(
+            next_selected_change(&ids, Some(&id("a")), -1),
+            Some(id("a"))
+        );
+
+        // A selection that left the list (rewritten away, filtered out)
+        // behaves like no selection: both arrows land on a visible row.
+        assert_eq!(
+            next_selected_change(&ids, Some(&id("gone")), 1),
+            Some(id("a"))
+        );
+        assert_eq!(
+            next_selected_change(&ids, Some(&id("gone")), -1),
+            Some(id("c"))
+        );
+
+        assert_eq!(next_selected_change(&[], None, 1), None);
+    }
+
+    /// Enter on the revset bar reloads the list under the bar's revset.
+    #[gpui::test]
+    fn revset_bar_applies_the_filter_on_enter(cx: &mut gpui::TestAppContext) {
+        let repo = FakeJjRepository::new("/tmp/fake-jj-revset");
+        let backend = Arc::new(FakeJjBackend {
+            repo: std::sync::Mutex::new(Some(Arc::clone(&repo))),
+        });
+        let (store, events) = JjStore::new(backend);
+        let store = Arc::new(store);
+        store.dispatch(JjMsg::OpenRepo {
+            workdir: std::path::PathBuf::from("/tmp/fake-jj-revset"),
+        });
+        wait_until("repo to load", || {
+            store
+                .snapshot()
+                .active_repo()
+                .is_some_and(|repo| repo.working_copy.is_some())
+        });
+
+        let (view, cx) = cx.add_window_view(|window, cx| {
+            JjRepoView::new(
+                Arc::clone(&store),
+                events,
+                AppTheme::gitcomet_light(),
+                window,
+                cx,
+            )
+        });
+        cx.run_until_parked();
+
+        cx.update(|_window, app| {
+            view.update(app, |view, cx| {
+                view.revset_input
+                    .update(cx, |input, cx| input.set_text("main..@", cx));
+                view.apply_revset(cx);
+            });
+        });
+        wait_until("the list to reload under the revset", || {
+            repo.has_call("log:main..@")
+        });
+
+        // The store's log_revset and the bar agree after applying.
+        cx.update(|_window, app| {
+            let snapshot = store.snapshot();
+            let revset = snapshot
+                .active_repo()
+                .map(|repo| repo.log_revset.clone())
+                .unwrap_or_default();
+            let bar = view.read(app).revset_input.read(app).text().to_string();
+            assert_eq!(revset, "main..@");
+            assert_eq!(bar, "main..@");
+        });
+    }
+
+    /// ↑/↓ step the selection through the list (skipping @), and Escape
+    /// clears it.
+    #[gpui::test]
+    fn arrow_keys_move_the_selection(cx: &mut gpui::TestAppContext) {
+        let repo = FakeJjRepository::new("/tmp/fake-jj-keys");
+        let backend = Arc::new(FakeJjBackend {
+            repo: std::sync::Mutex::new(Some(Arc::clone(&repo))),
+        });
+        let (store, events) = JjStore::new(backend);
+        let store = Arc::new(store);
+        store.dispatch(JjMsg::OpenRepo {
+            workdir: std::path::PathBuf::from("/tmp/fake-jj-keys"),
+        });
+        wait_until("repo to load with changes", || {
+            store
+                .snapshot()
+                .active_repo()
+                .is_some_and(|repo| repo.changes.len() >= 2)
+        });
+
+        let (view, cx) = cx.add_window_view(|window, cx| {
+            JjRepoView::new(
+                Arc::clone(&store),
+                events,
+                AppTheme::gitcomet_light(),
+                window,
+                cx,
+            )
+        });
+        cx.run_until_parked();
+        // Build the element tree so the list's key handler is registered.
+        cx.update(|window, app| {
+            let _ = window.draw(app);
+        });
+
+        cx.update(|window, app| {
+            let focus = view.read(app).list_focus.clone();
+            window.focus(&focus, app);
+        });
+        cx.simulate_keystrokes("down");
+        cx.simulate_keystrokes("down");
+        cx.update(|_window, app| {
+            // Two Downs from nothing: "base" (the first non-@ row), then
+            // clamped — the fixture has only one non-@ change.
+            assert_eq!(
+                view.read(app).selected_change,
+                Some(ChangeId("base".to_string()))
+            );
+        });
+
+        cx.simulate_keystrokes("escape");
+        cx.update(|_window, app| {
+            assert_eq!(view.read(app).selected_change, None);
+        });
     }
 
     /// The describe bar's gestures reach the store as mutations on @:

@@ -20,5 +20,10 @@ jj:
     submit: 描述
     new_change: 新建变更
     busy: "正在执行 %{operation}…"
+  revset:
+    placeholder: "按 revset 过滤（留空显示全部）…"
+  conflicts:
+    count: "%{count} 个冲突路径"
   status:
     degraded_watch: "%{reason}"
+    last_command_failed: "上一条命令失败（%{operation}）：%{error}"

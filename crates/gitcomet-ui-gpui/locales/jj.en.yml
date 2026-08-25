@@ -19,5 +19,10 @@ jj:
     submit: Describe
     new_change: New change
     busy: "Running %{operation}…"
+  revset:
+    placeholder: "Filter by revset (empty shows all())…"
+  conflicts:
+    count: "%{count} conflicted paths"
   status:
     degraded_watch: "%{reason}"
+    last_command_failed: "Last command failed (%{operation}): %{error}"
