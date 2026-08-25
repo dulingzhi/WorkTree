@@ -13,5 +13,11 @@ jj:
     count: "%{count} changes"
     more_available: more available
     empty: "No changes match the current view."
+    load_more: Load more changes
+  describe:
+    placeholder: "Describe this change…"
+    submit: Describe
+    new_change: New change
+    busy: "Running %{operation}…"
   status:
     degraded_watch: "%{reason}"

@@ -14,5 +14,11 @@ jj:
     count: "%{count} 个变更"
     more_available: 还有更多
     empty: "当前视图下没有变更。"
+    load_more: 加载更多变更
+  describe:
+    placeholder: "描述这个变更…"
+    submit: 描述
+    new_change: 新建变更
+    busy: "正在执行 %{operation}…"
   status:
     degraded_watch: "%{reason}"

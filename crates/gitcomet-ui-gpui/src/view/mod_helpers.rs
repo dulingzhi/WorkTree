@@ -5648,6 +5648,11 @@ pub struct GitCometView {
     /// the first `.jj` repository becomes active (`jj` feature only).
     #[cfg(feature = "jj")]
     pub(super) jj_store: Option<Arc<gitcomet_state::jj_store::JjStore>>,
+    /// The active-flavor store's event receiver, parked between store
+    /// creation (state-apply path, no window) and pane creation (render
+    /// path, `jj_center_content`).
+    #[cfg(feature = "jj")]
+    pub(super) jj_events: Option<smol::channel::Receiver<StoreEvent>>,
     #[cfg(feature = "jj")]
     pub(super) jj_pane: Option<Entity<super::jj::JjRepoView>>,
     pub(super) repo_tabs_bar: Entity<RepoTabsBarView>,

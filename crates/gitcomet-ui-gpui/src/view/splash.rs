@@ -1097,7 +1097,7 @@ impl GitCometView {
         // A `.jj` repository swaps the whole content card for the native
         // jj view; chrome above it (tabs, action bar) stays shared.
         #[cfg(feature = "jj")]
-        if let Some(jj_content) = self.jj_center_content(cx) {
+        if let Some(jj_content) = self.jj_center_content(window, cx) {
             return jj_content;
         }
 

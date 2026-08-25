@@ -1903,6 +1903,8 @@ impl GitCometView {
             #[cfg(feature = "jj")]
             jj_store: None,
             #[cfg(feature = "jj")]
+            jj_events: None,
+            #[cfg(feature = "jj")]
             jj_pane: None,
             repo_tabs_bar,
             action_bar,
