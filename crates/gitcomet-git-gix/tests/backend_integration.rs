@@ -90,6 +90,7 @@ fn gix_backend_open_detects_colocated_jj_repo_as_read_only() {
         opened.capabilities(),
         RepoCapabilities {
             commits: true,
+            branches: true,
             ..RepoCapabilities::jj_read_only()
         }
     );
@@ -172,6 +173,7 @@ fn jj_adapter_delegates_reads_and_refuses_writes() {
         opened.capabilities(),
         RepoCapabilities {
             commits: true,
+            branches: true,
             ..RepoCapabilities::jj_read_only()
         }
     );
@@ -198,12 +200,13 @@ fn jj_adapter_delegates_reads_and_refuses_writes() {
     );
 
     // Writes refuse with `Unsupported` — the second lock behind the reducer's
-    // capability gate. Commit is the exception: it is routed through the jj
-    // CLI, so it is covered by the colocated tests below instead of here (a
-    // fake `.jj` marker is not a repo jj can operate on).
+    // capability gate. Commit and bookmark writes are the exceptions: they
+    // are routed through the jj CLI, so they are covered by the colocated
+    // tests below instead of here (a fake `.jj` marker is not a repo jj can
+    // operate on). Checkout stays unrouted.
     for unsupported in [
         opened.stage(&[Path::new("file.txt")]).err(),
-        opened.create_branch("topic", &page.commits[0].id).err(),
+        opened.checkout_branch(&branches[0].name).err(),
         opened.fetch_all().err(),
     ] {
         let err = unsupported.expect("write must fail");
@@ -239,6 +242,7 @@ fn gix_backend_reads_real_colocated_jj_repo() {
         opened.capabilities(),
         RepoCapabilities {
             commits: true,
+            branches: true,
             ..RepoCapabilities::jj_read_only()
         }
     );
@@ -535,6 +539,77 @@ fn jj_commit_routes_describe_then_new() {
         "",
         "jj new leaves a fresh, undescribed working-copy commit"
     );
+}
+
+/// Bookmark writes route through `jj bookmark …` and land in git refs on the
+/// same invocation: create/rename/delete (plain and force — the same op
+/// under jj semantics) all become visible to plain git and to gix reads.
+#[test]
+fn jj_bookmark_writes_route_and_export_to_git_refs() {
+    if !jj_available_for_integration_tests() {
+        eprintln!("skipping: jj binary not found in PATH");
+        return;
+    }
+
+    let dir = tempfile::tempdir().expect("create tempdir");
+    let repo = dir.path().join("repo");
+    fs::create_dir_all(&repo).expect("create repo directory");
+    init_repo_with_commit(&repo);
+    colocate_with_jj(&repo);
+
+    let backend = GixBackend;
+    let opened = backend.open(&repo).expect("open colocated repository");
+    let head_sha = run_git_capture(&repo, &["rev-parse", "HEAD"])
+        .trim()
+        .to_string();
+    let branch_listed = |name: &str| {
+        !run_git_capture(&repo, &["branch", "--list", name])
+            .trim()
+            .is_empty()
+    };
+
+    opened
+        .create_branch(
+            "topic",
+            &gitcomet_core::domain::CommitId(head_sha.clone().into()),
+        )
+        .expect("routed bookmark create");
+    assert!(branch_listed("topic"), "the bookmark exports to refs/heads");
+    assert_eq!(
+        run_git_capture(&repo, &["rev-parse", "refs/heads/topic"]).trim(),
+        head_sha,
+        "the exported ref points at the requested target"
+    );
+    assert!(
+        opened
+            .list_branches()
+            .expect("gix sees the bookmark")
+            .iter()
+            .any(|branch| branch.name == "topic"),
+        "gix reads must see the jj-created bookmark"
+    );
+
+    opened
+        .rename_branch("topic", "renamed")
+        .expect("routed bookmark rename");
+    assert!(!branch_listed("topic"), "the old name is gone");
+    assert!(branch_listed("renamed"), "the new name took its place");
+
+    opened
+        .delete_branch("renamed")
+        .expect("routed bookmark delete");
+    assert!(
+        !branch_listed("renamed"),
+        "plain delete removes the bookmark"
+    );
+
+    opened
+        .create_branch("temp", &gitcomet_core::domain::CommitId(head_sha.into()))
+        .expect("create again for the force path");
+    opened
+        .delete_branch_force("temp")
+        .expect("force delete is the same routed operation");
+    assert!(!branch_listed("temp"), "force delete removes the bookmark");
 }
 
 /// The routed amend: describe only. The working-copy change keeps absorbing

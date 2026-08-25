@@ -35,7 +35,7 @@
 //! It is rate-limited because a snapshot is a process spawn.
 
 use crate::repo::GixRepo;
-use crate::util::bytes_to_text_preserving_utf8;
+use crate::util::{bytes_to_text_preserving_utf8, validate_hex_commit_id, validate_ref_like_arg};
 use gitcomet_core::domain::{
     Branch, CommitDetails, CommitFileChange, CommitId, DiffArea, DiffPreviewTextSide, DiffTarget,
     FileDiffImage, FileDiffText, FileEntry, LogCursor, LogPage, RecentCommitMessage, RefMetadata,
@@ -88,6 +88,15 @@ impl JjRepository {
     /// writes through it.
     pub(super) fn jj_cmd(&self) -> Command {
         jj_workdir_cmd_for(&self.inner.spec().workdir)
+    }
+
+    /// Delete a bookmark locally; shared by the plain and force trait
+    /// methods, which are the same operation under jj semantics.
+    fn delete_bookmark(&self, name: &str) -> Result<()> {
+        let mut cmd = self.jj_cmd();
+        cmd.arg("bookmark").arg("delete").arg(name);
+        run_jj_command_with_output(cmd, "jj bookmark delete")?;
+        Ok(())
     }
 
     /// Absorb working-copy edits into `@` if a snapshot is due.
@@ -203,13 +212,14 @@ macro_rules! jj_write_unsupported {
 
 impl GitRepository for JjRepository {
     fn capabilities(&self) -> RepoCapabilities {
-        // The inner gix repo owns the `.jj` detection; commit is the one
-        // write this adapter routes through the jj CLI, so it re-enables
-        // `commits` on top of the detected (read-only) set. `read_only`
-        // stays true — the reducer's write gate treats commit messages as
-        // the only exception, keyed on `commits`.
+        // The inner gix repo owns the `.jj` detection; this adapter routes
+        // commit (describe + new) and bookmark writes (create/delete/rename)
+        // through the jj CLI, so both re-enable on top of the detected
+        // (read-only) set. `read_only` stays true — the reducer's write gate
+        // admits exactly these messages, keyed on `commits`/`branches`.
         RepoCapabilities {
             commits: true,
+            branches: true,
             ..self.inner.capabilities()
         }
     }
@@ -407,12 +417,51 @@ impl GitRepository for JjRepository {
     // through the jj CLI. The optional write methods in the trait default to
     // Unsupported or funnel into these, so nothing else is needed here.
 
-    fn create_branch(&self, _name: &str, _target: &CommitId) -> Result<()> {
-        Err(jj_write_unsupported!("create_branch"))
+    /// Bookmark writes route through `jj bookmark …`. Each invocation
+    /// snapshots + exports, so `refs/heads/<name>` is updated on the git
+    /// side by the same command and gix reads (the branch panel refresh)
+    /// see the new state immediately — no extra sync needed.
+    ///
+    /// Divergence presentation degrades, not breaks: jj never writes
+    /// `branch.<name>.remote` tracking config and git HEAD is usually
+    /// detached, so `upstream_divergence` reads `None` and the panel simply
+    /// shows no ahead/behind chip. A jj-native bookmark panel (P3) restores
+    /// it from jj's own tracked-remote model.
+    fn create_branch(&self, name: &str, target: &CommitId) -> Result<()> {
+        validate_ref_like_arg(name, "bookmark name")?;
+        validate_hex_commit_id(target)?;
+        let mut cmd = self.jj_cmd();
+        cmd.arg("bookmark")
+            .arg("create")
+            .arg(name)
+            .arg("-r")
+            .arg(target.as_ref());
+        run_jj_command_with_output(cmd, "jj bookmark create")?;
+        Ok(())
     }
 
-    fn delete_branch(&self, _name: &str) -> Result<()> {
-        Err(jj_write_unsupported!("delete_branch"))
+    fn rename_branch(&self, old_name: &str, new_name: &str) -> Result<()> {
+        validate_ref_like_arg(old_name, "bookmark name")?;
+        validate_ref_like_arg(new_name, "bookmark name")?;
+        let mut cmd = self.jj_cmd();
+        cmd.arg("bookmark")
+            .arg("rename")
+            .arg(old_name)
+            .arg(new_name);
+        run_jj_command_with_output(cmd, "jj bookmark rename")?;
+        Ok(())
+    }
+
+    fn delete_branch(&self, name: &str) -> Result<()> {
+        validate_ref_like_arg(name, "bookmark name")?;
+        self.delete_bookmark(name)
+    }
+
+    /// jj bookmarks carry no "merged-only" protection, so force and plain
+    /// delete are the same operation.
+    fn delete_branch_force(&self, name: &str) -> Result<()> {
+        validate_ref_like_arg(name, "bookmark name")?;
+        self.delete_bookmark(name)
     }
 
     fn checkout_branch(&self, _name: &str) -> Result<()> {

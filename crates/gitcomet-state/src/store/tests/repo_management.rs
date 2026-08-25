@@ -601,6 +601,88 @@ fn unrouted_commit_messages_still_drop_on_read_only_repos() {
     assert_eq!(state.repos[0].commit_in_flight, 0);
 }
 
+/// The routed-bookmark exception: branch create/delete/rename messages pass
+/// the gate when `capabilities.branches` is set, while
+/// CreateBranchAndCheckout stays dropped (checkout has no jj routing) and
+/// unrouted branch writes keep dropping.
+#[test]
+fn routed_bookmark_messages_pass_the_read_only_gate() {
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+
+    let repo_id = RepoId(1);
+    let mut repo_state = RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    );
+    repo_state.capabilities = gitcomet_core::services::RepoCapabilities {
+        branches: true,
+        ..gitcomet_core::services::RepoCapabilities::jj_read_only()
+    };
+    repo_state.set_open(Loadable::Ready(()));
+    state.repos.push(repo_state);
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::CreateBranch {
+            repo_id,
+            name: "topic".to_string(),
+            target: "abc123".to_string(),
+        },
+    );
+    assert!(
+        effects.iter().any(|effect| matches!(
+            effect,
+            Effect::CreateBranch {
+                repo_id: id,
+                name,
+                ..
+            } if *id == repo_id && name == "topic"
+        )),
+        "the routed bookmark create must emit its effect: {effects:?}"
+    );
+
+    // The combined create-and-checkout message stays dropped: checkout is
+    // not routed, so admitting it would run half the operation.
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::CreateBranchAndCheckout {
+            repo_id,
+            name: "topic".to_string(),
+            target: "abc123".to_string(),
+        },
+    );
+    assert!(
+        effects.is_empty(),
+        "create-and-checkout must stay dropped without checkout routing: {effects:?}"
+    );
+
+    // Without the capability the same create drops like any other write.
+    if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+        repo_state.capabilities.branches = false;
+    }
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::DeleteBranch {
+            repo_id,
+            name: "topic".to_string(),
+        },
+    );
+    assert!(
+        effects.is_empty(),
+        "unrouted bookmark writes must stay dropped: {effects:?}"
+    );
+}
+
 #[test]
 fn write_messages_still_reach_their_arms_on_full_capability_repos() {
     let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();

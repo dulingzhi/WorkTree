@@ -54,6 +54,11 @@ pub struct RepoCapabilities {
     /// and `commits` are true together there: the reducer lets commit
     /// messages through while every other write stays dropped.
     pub commits: bool,
+    /// Branch create/delete/rename is available. On colocated Jujutsu repos
+    /// these route through `jj bookmark …` (bookmarks export to refs/heads
+    /// on the same invocation, so gix reads stay fresh); checkout keeps its
+    /// own flag because it has no jj routing yet.
+    pub branches: bool,
     /// A staging area (index) exists, so the staged/unstaged lanes apply.
     pub staging: bool,
     /// Stashing is supported.
@@ -72,6 +77,7 @@ impl Default for RepoCapabilities {
             is_jj: false,
             read_only: false,
             commits: true,
+            branches: true,
             staging: true,
             stash: true,
             interactive_rebase: true,
@@ -83,13 +89,15 @@ impl Default for RepoCapabilities {
 
 impl RepoCapabilities {
     /// Capabilities of a colocated Jujutsu repository in compatibility
-    /// (read-only) mode. The gix jj adapter re-enables `commits` on top of
-    /// this — the raw detector has no opinion on command routing.
+    /// (read-only) mode. The gix jj adapter re-enables `commits` and
+    /// `branches` on top of this — the raw detector has no opinion on
+    /// command routing.
     pub const fn jj_read_only() -> Self {
         Self {
             is_jj: true,
             read_only: true,
             commits: false,
+            branches: false,
             staging: false,
             stash: false,
             interactive_rebase: false,
