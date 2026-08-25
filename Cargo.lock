@@ -2368,6 +2368,7 @@ name = "gitcomet-state"
 version = "0.2.1"
 dependencies = [
  "gitcomet-core",
+ "gitcomet-jj-core",
  "gix",
  "notify",
  "rust-i18n",

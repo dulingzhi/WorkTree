@@ -23,7 +23,7 @@ enum MonitorMsg {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(in crate::store) enum MonitorFailureKind {
+pub(crate) enum MonitorFailureKind {
     Start,
     Stop,
     Join,
@@ -132,7 +132,7 @@ fn panic_payload_to_string(payload: Box<dyn Any + Send + 'static>) -> String {
     }
 }
 
-pub(in crate::store) fn join_monitor_or_log(
+pub(crate) fn join_monitor_or_log(
     join: thread::JoinHandle<()>,
     repo_id: RepoId,
     context: &'static str,
@@ -173,23 +173,23 @@ fn spawn_monitor_join(repo_id: RepoId, join: thread::JoinHandle<()>, context: &'
 }
 
 #[cfg(test)]
-pub(in crate::store) fn monitor_failure_count(kind: MonitorFailureKind) -> u64 {
+pub(crate) fn monitor_failure_count(kind: MonitorFailureKind) -> u64 {
     monitor_failure_counter(kind).load(Ordering::Relaxed)
 }
 
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(in crate::store) struct RepoMonitorIgnoreLookupStats {
-    pub(in crate::store) request_count: u64,
-    pub(in crate::store) cache_hits: u64,
-    pub(in crate::store) cache_misses: u64,
-    pub(in crate::store) fallback_count: u64,
-    pub(in crate::store) average_lookup_nanos: u64,
-    pub(in crate::store) max_lookup_nanos: u64,
+pub(crate) struct RepoMonitorIgnoreLookupStats {
+    pub(crate) request_count: u64,
+    pub(crate) cache_hits: u64,
+    pub(crate) cache_misses: u64,
+    pub(crate) fallback_count: u64,
+    pub(crate) average_lookup_nanos: u64,
+    pub(crate) max_lookup_nanos: u64,
 }
 
 #[cfg(test)]
-pub(in crate::store) fn repo_monitor_ignore_lookup_stats() -> RepoMonitorIgnoreLookupStats {
+pub(crate) fn repo_monitor_ignore_lookup_stats() -> RepoMonitorIgnoreLookupStats {
     let request_count = REPO_MONITOR_IGNORE_LOOKUP_REQUESTS.load(Ordering::Relaxed);
     let cache_hits = REPO_MONITOR_IGNORE_LOOKUP_CACHE_HITS.load(Ordering::Relaxed);
     let cache_misses = REPO_MONITOR_IGNORE_LOOKUP_CACHE_MISSES.load(Ordering::Relaxed);
@@ -209,7 +209,7 @@ pub(in crate::store) fn repo_monitor_ignore_lookup_stats() -> RepoMonitorIgnoreL
 }
 
 #[cfg(test)]
-pub(in crate::store) fn record_stop_send_failure(repo_id: RepoId, context: &'static str) {
+pub(crate) fn record_stop_send_failure(repo_id: RepoId, context: &'static str) {
     let (tx, rx) = mpsc::channel::<MonitorMsg>();
     drop(rx);
     send_stop_or_log(&tx, repo_id, context);
@@ -283,41 +283,41 @@ impl DebouncedChange {
     }
 }
 
-pub(in crate::store) struct RepoMonitorManager {
+pub(crate) struct RepoMonitorManager {
     handles: FxHashMap<RepoId, RepoMonitorHandle>,
 }
 
 impl RepoMonitorManager {
-    pub(in crate::store) fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             handles: FxHashMap::default(),
         }
     }
 
-    pub(in crate::store) fn stop_all(&mut self) {
+    pub(crate) fn stop_all(&mut self) {
         for (repo_id, handle) in self.handles.drain() {
             stop_monitor_handle(repo_id, handle, "RepoMonitorManager::stop_all");
         }
     }
 
-    pub(in crate::store) fn stop(&mut self, repo_id: RepoId) {
+    pub(crate) fn stop(&mut self, repo_id: RepoId) {
         let Some(handle) = self.handles.remove(&repo_id) else {
             return;
         };
         stop_monitor_handle(repo_id, handle, "RepoMonitorManager::stop");
     }
 
-    pub(in crate::store) fn running_repo_ids(&self) -> Vec<RepoId> {
+    pub(crate) fn running_repo_ids(&self) -> Vec<RepoId> {
         self.handles.keys().copied().collect()
     }
 
-    pub(in crate::store) fn is_running(&self, repo_id: RepoId) -> bool {
+    pub(crate) fn is_running(&self, repo_id: RepoId) -> bool {
         self.handles
             .get(&repo_id)
             .is_some_and(|handle| handle.monitor_enabled.load(Ordering::Relaxed))
     }
 
-    pub(in crate::store) fn start<M: StoreMessage>(
+    pub(crate) fn start<M: StoreMessage>(
         &mut self,
         repo_id: RepoId,
         workdir: PathBuf,
@@ -350,7 +350,7 @@ impl RepoMonitorManager {
     }
 
     #[cfg(test)]
-    pub(in crate::store) fn insert_blocked_monitor_for_test(
+    pub(crate) fn insert_blocked_monitor_for_test(
         &mut self,
         repo_id: RepoId,
         release_rx: mpsc::Receiver<()>,

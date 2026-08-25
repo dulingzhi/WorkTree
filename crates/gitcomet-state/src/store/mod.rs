@@ -15,7 +15,7 @@ mod effects;
 mod reducer;
 mod reducer_diagnostics;
 mod repo_load_trace;
-mod runtime;
+pub(crate) mod runtime;
 mod send_diagnostics;
 mod worker_channel;
 

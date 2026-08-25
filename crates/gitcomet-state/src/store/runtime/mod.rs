@@ -21,12 +21,17 @@
 //! duplicate load requests — encodes each store's own load kinds and stays
 //! with that store's model (`crate::model::RepoLoadsInFlight` for git).
 //!
-//! Two git-specific details ride along here temporarily and move back out
-//! when a second store lands: the `InsertRepoForTest` command variant (it
-//! carries an `Arc<dyn GitRepository>`), and `repo_monitor`'s gitdir /
-//! gitignore discovery, which opens the repository through gix. Everything
-//! else in this subtree is VCS-neutral.
+//! Two git-specific details ride along here temporarily: the
+//! `InsertRepoForTest` command variant (it carries an `Arc<dyn
+//! GitRepository>`), and `repo_monitor`'s gitdir / gitignore discovery,
+//! which opens the repository through gix. Everything else in this subtree
+//! is VCS-neutral.
+//!
+//! The second consumer is here: the jj store (`crate::jj_store`)
+//! instantiates the executor, worker channel, and monitor with its own
+//! `JjMsg`. That is why this subtree is visible at crate level rather than
+//! inside `store` — the git store remains the primary owner.
 
-pub(super) mod executor;
-pub(super) mod repo_monitor;
-pub(super) mod worker;
+pub(crate) mod executor;
+pub(crate) mod repo_monitor;
+pub(crate) mod worker;

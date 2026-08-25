@@ -21,7 +21,7 @@ use crate::store::send_diagnostics::{self, SendFailureKind};
 /// How a store's message type participates in the shared worker machinery.
 /// Every method corresponds to a real call site here; the mechanics around
 /// each call (channel sends, guards, priority) stay in this module.
-pub(in crate::store) trait StoreMessage: Send + 'static {
+pub(crate) trait StoreMessage: Send + 'static {
     /// Whether this message changes which repository the store is bound to
     /// (open/close/activate/reorder) and must not sit behind queued work.
     fn is_control_message(&self) -> bool;
@@ -49,20 +49,20 @@ pub(in crate::store) trait StoreMessage: Send + 'static {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(in crate::store) struct StoreInstanceId(u64);
+pub(crate) struct StoreInstanceId(u64);
 
 impl StoreInstanceId {
-    pub(in crate::store) fn next() -> Self {
+    pub(crate) fn next() -> Self {
         static NEXT_STORE_ID: AtomicU64 = AtomicU64::new(1);
         Self(NEXT_STORE_ID.fetch_add(1, Ordering::Relaxed))
     }
 
-    pub(in crate::store) fn get(self) -> u64 {
+    pub(crate) fn get(self) -> u64 {
         self.0
     }
 }
 
-pub(in crate::store) enum WorkerCommand<M> {
+pub(crate) enum WorkerCommand<M> {
     Msg(Box<M>),
     Shutdown,
     #[cfg(any(test, feature = "test-support"))]
@@ -90,7 +90,7 @@ impl<M> Clone for WorkerSenderInner<M> {
     }
 }
 
-pub(in crate::store) struct WorkerSender<M> {
+pub(crate) struct WorkerSender<M> {
     inner: WorkerSenderInner<M>,
     alive: Arc<AtomicBool>,
     store_id: StoreInstanceId,
@@ -117,7 +117,7 @@ struct RepoLoadGuard {
 }
 
 impl<M: StoreMessage> WorkerSender<M> {
-    pub(in crate::store) fn new(
+    pub(crate) fn new(
         tx: mpsc::Sender<WorkerCommand<M>>,
         alive: Arc<AtomicBool>,
         store_id: StoreInstanceId,
@@ -132,7 +132,7 @@ impl<M: StoreMessage> WorkerSender<M> {
     }
 
     #[cfg(test)]
-    pub(in crate::store) fn for_test_msg_sender(tx: mpsc::Sender<M>) -> Self {
+    pub(crate) fn for_test_msg_sender(tx: mpsc::Sender<M>) -> Self {
         Self {
             inner: WorkerSenderInner::MsgForTest(tx),
             alive: Arc::new(AtomicBool::new(true)),
@@ -142,21 +142,21 @@ impl<M: StoreMessage> WorkerSender<M> {
         }
     }
 
-    pub(in crate::store) fn store_id(&self) -> StoreInstanceId {
+    pub(crate) fn store_id(&self) -> StoreInstanceId {
         self.store_id
     }
 
-    pub(in crate::store) fn is_alive(&self) -> bool {
+    pub(crate) fn is_alive(&self) -> bool {
         self.alive.load(Ordering::Acquire)
     }
 
-    pub(in crate::store) fn is_cancelled(&self) -> bool {
+    pub(crate) fn is_cancelled(&self) -> bool {
         self.cancellation
             .as_ref()
             .is_some_and(CancellationToken::is_cancelled)
     }
 
-    pub(in crate::store) fn with_repo_load_guard(
+    pub(crate) fn with_repo_load_guard(
         &self,
         repo_id: RepoId,
         load_epoch: u64,
@@ -171,7 +171,7 @@ impl<M: StoreMessage> WorkerSender<M> {
         guarded
     }
 
-    pub(in crate::store) fn dispatch(&self, msg: M) {
+    pub(crate) fn dispatch(&self, msg: M) {
         self.send_or_log(
             msg,
             SendFailureKind::StoreDispatch,
@@ -180,7 +180,7 @@ impl<M: StoreMessage> WorkerSender<M> {
         );
     }
 
-    pub(in crate::store) fn send_effect_or_log(&self, msg: M, context: &'static str) {
+    pub(crate) fn send_effect_or_log(&self, msg: M, context: &'static str) {
         if self.is_cancelled() {
             repo_load_trace::trace!(
                 "suppress_effect_message_cancelled msg={} context={}",
@@ -198,7 +198,7 @@ impl<M: StoreMessage> WorkerSender<M> {
         self.send_or_log(msg, SendFailureKind::EffectMessage, context, true);
     }
 
-    pub(in crate::store) fn send_repo_monitor_or_log(&self, msg: M, context: &'static str) {
+    pub(crate) fn send_repo_monitor_or_log(&self, msg: M, context: &'static str) {
         self.send_or_log(msg, SendFailureKind::RepoMonitorMessage, context, true);
     }
 
@@ -236,7 +236,7 @@ impl<M: StoreMessage> WorkerSender<M> {
         }
     }
 
-    pub(in crate::store) fn shutdown(&self) {
+    pub(crate) fn shutdown(&self) {
         if !self.alive.swap(false, Ordering::AcqRel) {
             return;
         }
@@ -251,11 +251,7 @@ impl<M: StoreMessage> WorkerSender<M> {
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    pub(in crate::store) fn insert_repo_for_test(
-        &self,
-        repo_id: RepoId,
-        repo: Arc<dyn GitRepository>,
-    ) {
+    pub(crate) fn insert_repo_for_test(&self, repo_id: RepoId, repo: Arc<dyn GitRepository>) {
         if !self.is_alive() {
             return;
         }
@@ -275,9 +271,9 @@ impl<M: StoreMessage> WorkerSender<M> {
 /// superseded work. Shared by every store flavor; the git store keeps the
 /// per-repo table in its worker loop.
 #[derive(Clone)]
-pub(in crate::store) struct RepoTaskToken {
-    pub(in crate::store) load_epoch: u64,
-    pub(in crate::store) cancellation: CancellationToken,
+pub(crate) struct RepoTaskToken {
+    pub(crate) load_epoch: u64,
+    pub(crate) cancellation: CancellationToken,
     /// Cancellation for the *current* log walk alone. An author-filtered walk
     /// on a large repository runs for tens of seconds and the repo-load pool
     /// has one or two threads, so a superseded walk has to be stopped for its
@@ -287,7 +283,7 @@ pub(in crate::store) struct RepoTaskToken {
 }
 
 impl RepoTaskToken {
-    pub(in crate::store) fn new(load_epoch: u64) -> Self {
+    pub(crate) fn new(load_epoch: u64) -> Self {
         Self {
             load_epoch,
             cancellation: CancellationToken::new(),
@@ -297,7 +293,7 @@ impl RepoTaskToken {
 
     /// Cancels the log walk in flight, if any, and hands out the token for the
     /// walk that replaces it.
-    pub(in crate::store) fn take_over_log(&self) -> CancellationToken {
+    pub(crate) fn take_over_log(&self) -> CancellationToken {
         let mut slot = self
             .log_cancellation
             .lock()
@@ -309,7 +305,7 @@ impl RepoTaskToken {
     }
 
     /// Cancels every task running under this token, log walks included.
-    pub(in crate::store) fn cancel(&self) {
+    pub(crate) fn cancel(&self) {
         self.cancellation.cancel();
         self.log_cancellation
             .lock()
@@ -318,7 +314,7 @@ impl RepoTaskToken {
     }
 }
 
-pub(in crate::store) fn is_control_command<M: StoreMessage>(command: &WorkerCommand<M>) -> bool {
+pub(crate) fn is_control_command<M: StoreMessage>(command: &WorkerCommand<M>) -> bool {
     match command {
         WorkerCommand::Msg(msg) => msg.is_control_message(),
         WorkerCommand::Shutdown => true,
@@ -327,9 +323,7 @@ pub(in crate::store) fn is_control_command<M: StoreMessage>(command: &WorkerComm
     }
 }
 
-pub(in crate::store) fn can_control_command_overtake<M: StoreMessage>(
-    command: &WorkerCommand<M>,
-) -> bool {
+pub(crate) fn can_control_command_overtake<M: StoreMessage>(command: &WorkerCommand<M>) -> bool {
     matches!(
         command,
         WorkerCommand::Msg(msg) if msg.can_overtake_control_message()
@@ -364,7 +358,7 @@ fn has_order_barrier_before_control<M: StoreMessage>(
     false
 }
 
-pub(in crate::store) fn recv_next_worker_command<M: StoreMessage>(
+pub(crate) fn recv_next_worker_command<M: StoreMessage>(
     command_rx: &mpsc::Receiver<WorkerCommand<M>>,
     deferred: &mut VecDeque<WorkerCommand<M>>,
 ) -> Result<WorkerCommand<M>, mpsc::RecvError> {
