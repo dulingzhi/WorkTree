@@ -2399,6 +2399,7 @@ dependencies = [
  "futures",
  "gitcomet-core",
  "gitcomet-git-gix",
+ "gitcomet-jj-core",
  "gitcomet-state",
  "gitcomet-tree-sitter-alloc",
  "gitcomet-win32-window-utils",

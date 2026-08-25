@@ -20,6 +20,8 @@ ui-gpui-runtime = [
 ]
 ui-gpui = ["ui-gpui-runtime"]
 gix = ["dep:gitcomet-git-gix"]
+# Native Jujutsu UI flavor (see gitcomet-ui-gpui's `jj` feature).
+jj = ["ui-gpui", "gitcomet-ui-gpui/jj"]
 
 [dependencies]
 clap = { workspace = true }

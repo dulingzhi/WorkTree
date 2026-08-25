@@ -165,6 +165,8 @@ mod history_graph;
 pub(crate) mod history_mode;
 mod history_refs_hover;
 mod icons;
+#[cfg(feature = "jj")]
+mod jj;
 #[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
 mod linux_desktop_integration;
 mod markdown_preview;
@@ -1898,6 +1900,10 @@ impl GitCometView {
             sidebar_pane,
             main_pane,
             details_pane,
+            #[cfg(feature = "jj")]
+            jj_store: None,
+            #[cfg(feature = "jj")]
+            jj_pane: None,
             repo_tabs_bar,
             action_bar,
             bottom_status_bar,
@@ -2032,6 +2038,10 @@ impl GitCometView {
             .update(cx, |pane, cx| pane.set_theme(theme, cx));
         self.details_pane
             .update(cx, |pane, cx| pane.set_theme(theme, cx));
+        #[cfg(feature = "jj")]
+        if let Some(pane) = &self.jj_pane {
+            pane.update(cx, |pane, cx| pane.set_theme(theme, cx));
+        }
         self.reflog_pane
             .update(cx, |pane, cx| pane.set_theme(theme, cx));
         self.repo_tabs_bar

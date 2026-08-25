@@ -157,6 +157,8 @@ impl GitCometView {
         }
 
         self.state = next;
+        #[cfg(feature = "jj")]
+        self.sync_jj_flavor(cx);
         self.command_palette.update(cx, |palette, cx| {
             palette.set_has_active_repo(self.state.active_repo.is_some(), cx);
         });

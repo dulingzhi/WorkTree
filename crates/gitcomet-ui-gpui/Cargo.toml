@@ -20,6 +20,12 @@ benchmarks = [
     "dep:gitcomet-git-gix",
     "gpui/test-support",
 ]
+# The native Jujutsu flavor: swaps the repo content area for JjRepoView when
+# the opened repository has a `.jj` directory. Everything else (tab bar,
+# settings, shortcuts, theme) is shared with the git flavor. The jj store in
+# gitcomet-state is always compiled; this feature only gates its UI, so
+# git-only builds are unaffected.
+jj = ["dep:gitcomet-jj-core"]
 
 [dependencies]
 alacritty_terminal = { workspace = true }
@@ -29,6 +35,7 @@ futures = { workspace = true }
 gitcomet-core = { workspace = true }
 gitcomet-tree-sitter-alloc = { path = "../gitcomet-tree-sitter-alloc" }
 gitcomet-git-gix = { workspace = true, optional = true }
+gitcomet-jj-core = { workspace = true, optional = true }
 gitcomet-state = { workspace = true }
 gpui = { workspace = true }
 gpui_platform = { workspace = true }

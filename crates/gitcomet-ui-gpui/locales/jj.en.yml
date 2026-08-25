@@ -1,0 +1,17 @@
+# Locale files are keyed by filename (`jj.en.yml` -> locale "en"), so the
+# content below is the key tree directly — no `en:` root.
+jj:
+  flavor_chip: Jujutsu
+  open_failed: "Could not open this repository with jj: %{error}"
+  loading: Loading changes…
+  working_copy:
+    title: Working copy
+    empty_description: "(no description set)"
+    conflicted: conflicted
+    divergent: divergent
+  changes:
+    count: "%{count} changes"
+    more_available: more available
+    empty: "No changes match the current view."
+  status:
+    degraded_watch: "%{reason}"

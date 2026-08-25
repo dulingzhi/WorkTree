@@ -9,10 +9,10 @@ const SPLASH_BACKDROP_PNG_BYTES: &[u8] =
 /// Gap (on the 8px grid) around the inset content/details cards so they read as
 /// rounded surfaces floating on the shared window canvas, with the sidebar
 /// blended into that canvas.
-const CONTENT_CARD_GAP_PX: f32 = 8.0;
+pub(super) const CONTENT_CARD_GAP_PX: f32 = 8.0;
 /// Bottom margin the main content card leaves for the bottom bar. The collapsed
 /// section popover matches it so its top/bottom gaps read symmetric.
-const CONTENT_CARD_BOTTOM_MARGIN_PX: f32 = 2.0;
+pub(super) const CONTENT_CARD_BOTTOM_MARGIN_PX: f32 = 2.0;
 /// Width of the panel a collapsed-rail section (Local/Remote branches,
 /// Worktrees, Submodules, Stashes) opens into. Wider than the expanded
 /// sidebar's 280px default: the rail's popover is transient and floats over the
@@ -1092,6 +1092,13 @@ impl GitCometView {
 
         if self.is_splash_screen_active() {
             return self.splash_screen(cx);
+        }
+
+        // A `.jj` repository swaps the whole content card for the native
+        // jj view; chrome above it (tabs, action bar) stays shared.
+        #[cfg(feature = "jj")]
+        if let Some(jj_content) = self.jj_center_content(cx) {
+            return jj_content;
         }
 
         if renders_full_chrome(self.view_mode) {

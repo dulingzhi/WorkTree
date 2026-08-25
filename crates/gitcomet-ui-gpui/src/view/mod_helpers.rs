@@ -5644,6 +5644,12 @@ pub struct GitCometView {
     pub(super) sidebar_pane: Entity<SidebarPaneView>,
     pub(super) main_pane: Entity<MainPaneView>,
     pub(super) details_pane: Entity<DetailsPaneView>,
+    /// The native Jujutsu store and its content view, created lazily when
+    /// the first `.jj` repository becomes active (`jj` feature only).
+    #[cfg(feature = "jj")]
+    pub(super) jj_store: Option<Arc<gitcomet_state::jj_store::JjStore>>,
+    #[cfg(feature = "jj")]
+    pub(super) jj_pane: Option<Entity<super::jj::JjRepoView>>,
     pub(super) repo_tabs_bar: Entity<RepoTabsBarView>,
     pub(super) action_bar: Entity<ActionBarView>,
     pub(super) bottom_status_bar: Entity<BottomStatusBarView>,

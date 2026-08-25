@@ -1,0 +1,18 @@
+# Locale files are keyed by filename (`jj.zh-CN.yml` -> locale "zh-CN"), so
+# the content below is the key tree directly — no `zh-CN:` root.
+# Keys must mirror `jj.en.yml` one for one.
+jj:
+  flavor_chip: Jujutsu
+  open_failed: "无法使用 jj 打开此仓库：%{error}"
+  loading: 正在加载变更…
+  working_copy:
+    title: 工作副本
+    empty_description: "（未设置描述）"
+    conflicted: 有冲突
+    divergent: 已分裂
+  changes:
+    count: "%{count} 个变更"
+    more_available: 还有更多
+    empty: "当前视图下没有变更。"
+  status:
+    degraded_watch: "%{reason}"
