@@ -24,6 +24,8 @@ jj:
     placeholder: "按 revset 过滤（留空显示全部）…"
   conflicts:
     count: "%{count} 个冲突路径"
+    recheck: 重新检查
+    copy_hint: "点击路径即可复制。"
   bookmarks:
     title: 书签
     count: "%{count}"

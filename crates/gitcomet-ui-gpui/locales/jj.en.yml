@@ -23,6 +23,8 @@ jj:
     placeholder: "Filter by revset (empty shows all())…"
   conflicts:
     count: "%{count} conflicted paths"
+    recheck: Re-check
+    copy_hint: "Click a path to copy it."
   bookmarks:
     title: Bookmarks
     count: "%{count}"

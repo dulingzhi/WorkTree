@@ -42,9 +42,9 @@ chrome:
   error_banner:
     scroll_hint: Scroll for full output
   readonly_banner:
-    title: Jujutsu repository. Commits, bookmarks, and fetch/push/pull run
-      through the jj CLI; staging, stashes, and checkout stay disabled so
-      GitComet cannot conflict with jj.
+    title: Jujutsu repository. This view is read-only compat browsing;
+      commits, bookmarks, and fetch/push live in the Jujutsu workspace,
+      so GitComet cannot conflict with jj.
     jj_unavailable: The jj command-line tool was not found on this system.
       Install jj for full support of colocated repositories.
   editor:

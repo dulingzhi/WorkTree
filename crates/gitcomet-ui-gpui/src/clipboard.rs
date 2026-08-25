@@ -12,6 +12,7 @@ pub(crate) enum CopySource {
     TerminalContextMenu,
     TerminalProtocol,
     ContextMenu,
+    JjConflictPath,
 }
 
 impl CopySource {
@@ -30,6 +31,7 @@ impl CopySource {
             Self::TerminalContextMenu => "terminal-context-menu",
             Self::TerminalProtocol => "terminal-protocol",
             Self::ContextMenu => "context-menu",
+            Self::JjConflictPath => "jj-conflict-path",
         }
     }
 }
@@ -45,7 +47,9 @@ enum ClipboardBackend {
     X11,
 }
 
-pub(crate) fn write_text<T: 'static>(cx: &mut gpui::Context<T>, text: String, source: CopySource) {
+/// Takes `&mut App` so element click handlers (which only see `&mut App`)
+/// share the same WSLg-aware path as `Context<T>` callers, which coerce.
+pub(crate) fn write_text(cx: &mut gpui::App, text: String, source: CopySource) {
     let backend = clipboard_backend();
     write_copy_diagnostic(source, text.len(), backend);
 

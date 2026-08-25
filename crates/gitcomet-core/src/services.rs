@@ -45,24 +45,22 @@ impl CancellationToken {
 pub struct RepoCapabilities {
     /// Jujutsu colocated repository (`.jj` directory present).
     pub is_jj: bool,
-    /// All mutating commands are refused. Jujutsu repositories stay read-only
-    /// until jj-aware command routing lands; browsing keeps working because
-    /// every read goes through the same git object database.
+    /// All mutating commands are refused. Jujutsu repositories open in
+    /// compat-browsing mode (mutations live in the native jj panels);
+    /// browsing keeps working because every read goes through the same git
+    /// object database.
     pub read_only: bool,
-    /// Committing is available. On colocated Jujutsu repos this is the one
-    /// write routed through the jj CLI (`describe` + `new`), so `read_only`
-    /// and `commits` are true together there: the reducer lets commit
-    /// messages through while every other write stays dropped.
+    /// Committing is available. On colocated Jujutsu repos this stays off in
+    /// compat mode (#80) — the native jj panels own the describe workflow.
     pub commits: bool,
     /// Branch create/delete/rename is available. On colocated Jujutsu repos
-    /// these route through `jj bookmark …` (bookmarks export to refs/heads
-    /// on the same invocation, so gix reads stay fresh); checkout keeps its
-    /// own flag because it has no jj routing yet.
+    /// this stays off in compat mode (#80) — bookmarks live in the native
+    /// jj panels.
     pub branches: bool,
-    /// Fetch/pull/push is available. On colocated Jujutsu repos these route
-    /// through `jj git …` (jj owns the transport and credentials). Force,
-    /// lease, and set-upstream variants keep their own paths and are not
-    /// covered by this flag.
+    /// Fetch/pull/push is available. On colocated Jujutsu repos this stays
+    /// off in compat mode (#80) — network ops live in the native jj panels.
+    /// Force, lease, and set-upstream variants keep their own paths and are
+    /// not covered by this flag.
     pub network: bool,
     /// A staging area (index) exists, so the staged/unstaged lanes apply.
     pub staging: bool,
@@ -95,9 +93,9 @@ impl Default for RepoCapabilities {
 
 impl RepoCapabilities {
     /// Capabilities of a colocated Jujutsu repository in compatibility
-    /// (read-only) mode. The gix jj adapter re-enables `commits`,
-    /// `branches`, and `network` on top of this — the raw detector has no
-    /// opinion on command routing.
+    /// (read-only) mode. Every write bit stays off (#80): the gix jj
+    /// adapter is compat browsing only, and mutations belong to the native
+    /// jj panels.
     pub const fn jj_read_only() -> Self {
         Self {
             is_jj: true,

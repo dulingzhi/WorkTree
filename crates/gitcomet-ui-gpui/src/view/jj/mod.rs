@@ -402,6 +402,19 @@ impl JjRepoView {
         }
         cx.notify();
     }
+
+    /// The conflicts card's "Re-check": a snapshot absorbs any working-copy
+    /// edits into `@`, and its finish refresh re-reads the conflict list —
+    /// one gesture that both materializes fresh conflicts and clears
+    /// resolved ones without reopening the repo.
+    fn recheck_conflicts(&mut self, cx: &mut gpui::Context<Self>) {
+        if let Some(repo) = self.state.active_repo() {
+            if repo.pending_command.is_none() {
+                self.store.dispatch(JjMsg::Snapshot { repo_id: repo.id });
+            }
+        }
+        cx.notify();
+    }
 }
 
 impl Render for JjRepoView {
@@ -541,17 +554,41 @@ impl Render for JjRepoView {
                 }
 
                 // Status strip: conflicts embedded in @, and the most
-                // recent failed command. The resolve flow lands in #80;
-                // for now the paths are surfaced where describe happens.
+                // recent failed command. Resolving happens in the user's
+                // editor of choice — each path copies on click so it can be
+                // opened there, and Re-check snapshots and re-reads so
+                // resolved files drop out without reopening the repo.
                 if !repo.conflicts.is_empty() {
+                    let busy = pending_command.is_some();
+                    let recheck_button = components::Button::new(
+                        "jj_conflicts_recheck",
+                        crate::i18n::tr("jj.conflicts.recheck"),
+                    )
+                    .style(components::ButtonStyle::Outlined)
+                    .disabled(busy)
+                    .on_click(theme, cx, |this, _e, _w, cx| {
+                        this.recheck_conflicts(cx);
+                    });
                     let mut conflict_paths = div().flex().flex_col().gap_1();
                     for conflict in &repo.conflicts {
+                        let path = conflict.path.clone();
+                        let selector_path = path.clone();
+                        let copy_path = path.clone();
                         conflict_paths = conflict_paths.child(
                             div()
+                                .id(ElementId::Name(format!("jj_conflict_path_{path}").into()))
+                                .debug_selector(move || format!("jj_conflict_path_{selector_path}"))
                                 .text_sm()
                                 .truncate()
                                 .text_color(theme.colors.foreground.primary)
-                                .child(conflict.path.clone()),
+                                .child(path)
+                                .on_click(move |_e, _w, cx| {
+                                    crate::clipboard::write_text(
+                                        cx,
+                                        copy_path.clone(),
+                                        crate::clipboard::CopySource::JjConflictPath,
+                                    );
+                                }),
                         );
                     }
                     card = card.child(
@@ -568,12 +605,25 @@ impl Render for JjRepoView {
                             .gap_2()
                             .child(
                                 div()
-                                    .text_xs()
-                                    .text_color(theme.colors.status.warning.foreground)
-                                    .child(crate::i18n::t!(
-                                        "jj.conflicts.count",
-                                        count = repo.conflicts.len()
-                                    )),
+                                    .flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(theme.colors.status.warning.foreground)
+                                            .child(crate::i18n::t!(
+                                                "jj.conflicts.count",
+                                                count = repo.conflicts.len()
+                                            )),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .text_color(theme.colors.foreground.secondary)
+                                            .child(crate::i18n::tr("jj.conflicts.copy_hint")),
+                                    )
+                                    .child(div().ml_auto().flex_none().child(recheck_button)),
                             )
                             .child(conflict_paths),
                     );
@@ -1054,6 +1104,7 @@ mod tests {
     struct FakeJjRepository {
         spec: gitcomet_core::domain::RepoSpec,
         calls: std::sync::Mutex<Vec<String>>,
+        conflicts: std::sync::Mutex<Vec<gitcomet_jj_core::JjConflict>>,
     }
 
     impl FakeJjRepository {
@@ -1063,7 +1114,20 @@ mod tests {
                     workdir: std::path::PathBuf::from(workdir),
                 },
                 calls: std::sync::Mutex::new(Vec::new()),
+                conflicts: std::sync::Mutex::new(Vec::new()),
             })
+        }
+
+        /// Conflicts the fake reports on the next `conflicts()` read — a
+        /// repo can gain (or resolve) conflicts after the initial load, so
+        /// the recheck flow has something new to pick up.
+        fn set_conflicts(&self, paths: &[&str]) {
+            *self.conflicts.lock().unwrap_or_else(|e| e.into_inner()) = paths
+                .iter()
+                .map(|path| gitcomet_jj_core::JjConflict {
+                    path: (*path).to_string(),
+                })
+                .collect();
         }
 
         fn record(&self, label: String) {
@@ -1191,7 +1255,11 @@ mod tests {
 
         fn conflicts(&self) -> Result<Vec<gitcomet_jj_core::JjConflict>> {
             self.record("conflicts".to_string());
-            Ok(Vec::new())
+            Ok(self
+                .conflicts
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone())
         }
 
         fn fetch_all_with_output(&self) -> Result<CommandOutput> {
@@ -1496,6 +1564,68 @@ mod tests {
             });
         });
         wait_until("op undo to run", || repo.has_call("op_undo"));
+    }
+
+    /// The conflict flow (#80): Re-check dispatches a snapshot whose finish
+    /// refresh re-reads the conflict list, so conflicts that appeared (or
+    /// were resolved) outside GitComet reach the card without reopening the
+    /// repo.
+    #[gpui::test]
+    fn conflict_recheck_snapshots_and_rereads_the_conflict_list(cx: &mut gpui::TestAppContext) {
+        let repo = FakeJjRepository::new("/tmp/fake-jj-conflicts");
+        let backend = Arc::new(FakeJjBackend {
+            repo: std::sync::Mutex::new(Some(Arc::clone(&repo))),
+        });
+        let (store, events) = JjStore::new(backend);
+        let store = Arc::new(store);
+        store.dispatch(JjMsg::OpenRepo {
+            workdir: std::path::PathBuf::from("/tmp/fake-jj-conflicts"),
+        });
+        wait_until("repo to load without conflicts", || {
+            store
+                .snapshot()
+                .active_repo()
+                .is_some_and(|repo| repo.working_copy.is_some() && repo.conflicts.is_empty())
+        });
+
+        let (view, cx) = cx.add_window_view(|window, cx| {
+            JjRepoView::new(
+                Arc::clone(&store),
+                events,
+                AppTheme::gitcomet_light(),
+                window,
+                cx,
+            )
+        });
+        cx.run_until_parked();
+
+        // A conflict that materialized after open only reaches the card
+        // through a refresh: Re-check snapshots and re-reads.
+        repo.set_conflicts(&["src/merge.rs"]);
+        cx.update(|_window, app| {
+            view.update(app, |view, cx| view.recheck_conflicts(cx));
+        });
+        wait_until("recheck to refresh the conflict list", || {
+            repo.has_call("snapshot")
+                && store.snapshot().active_repo().is_some_and(|repo| {
+                    repo.conflicts.len() == 1
+                        && repo.conflicts[0].path == "src/merge.rs"
+                        && repo.pending_command.is_none()
+                })
+        });
+
+        // The cleared case is the same gesture: resolving every file (the
+        // fake answers empty again) empties the card on the next recheck.
+        repo.set_conflicts(&[]);
+        cx.update(|_window, app| {
+            view.update(app, |view, cx| view.recheck_conflicts(cx));
+        });
+        wait_until("recheck to clear resolved conflicts", || {
+            store
+                .snapshot()
+                .active_repo()
+                .is_some_and(|repo| repo.conflicts.is_empty())
+        });
     }
 
     /// The describe bar's gestures reach the store as mutations on @:

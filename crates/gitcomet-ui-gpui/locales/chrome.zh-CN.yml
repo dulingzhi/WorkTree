@@ -32,8 +32,8 @@ chrome:
   error_banner:
     scroll_hint: 滚动查看完整输出
   readonly_banner:
-    title: Jujutsu 仓库。提交、书签与获取/推送/拉取已通过 jj CLI 执行；暂存、贮藏与
-      检出仍不可用，以免与 jj 冲突。
+    title: Jujutsu 仓库。此视图为只读兼容浏览；提交、书签与获取/推送在
+      Jujutsu 工作区内进行，GitComet 不会与 jj 冲突。
     jj_unavailable: 未在系统上找到 jj 命令行工具。安装 jj 后可完整支持此类仓库。
   editor:
     no_active_repo: 没有可在代码编辑器中打开的活动仓库。
