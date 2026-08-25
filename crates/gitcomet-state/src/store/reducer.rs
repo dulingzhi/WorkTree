@@ -941,6 +941,14 @@ fn reduce_inner(
             | Msg::DeleteBranch { .. }
             | Msg::ForceDeleteBranch { .. }
             | Msg::DeleteBranches { .. } => repo.capabilities.branches,
+            // Fetch/pull/push route through `jj git …`. Force, lease,
+            // set-upstream, and push-after-commit variants stay dropped:
+            // jj's safety model has no equivalent for them yet.
+            Msg::FetchAll { .. }
+            | Msg::AutoFetchAll { .. }
+            | Msg::Pull { .. }
+            | Msg::PullBranch { .. }
+            | Msg::Push { .. } => repo.capabilities.network,
             _ => false,
         };
         if !routed {

@@ -683,6 +683,94 @@ fn routed_bookmark_messages_pass_the_read_only_gate() {
     );
 }
 
+/// The routed-network exception: fetch/pull/push messages pass the gate when
+/// `capabilities.network` is set, while the force/lease push variants stay
+/// dropped (jj's push safety model has no equivalent for them yet).
+#[test]
+fn routed_network_messages_pass_the_read_only_gate() {
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+
+    let repo_id = RepoId(1);
+    let mut repo_state = RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    );
+    repo_state.capabilities = gitcomet_core::services::RepoCapabilities {
+        network: true,
+        ..gitcomet_core::services::RepoCapabilities::jj_read_only()
+    };
+    repo_state.set_open(Loadable::Ready(()));
+    state.repos.push(repo_state);
+
+    let effects = reduce(&mut repos, &id_alloc, &mut state, Msg::FetchAll { repo_id });
+    assert!(
+        effects.iter().any(|effect| matches!(
+            effect,
+            Effect::FetchAll {
+                repo_id: id, ..
+            } if *id == repo_id
+        )),
+        "the routed fetch must emit its effect: {effects:?}"
+    );
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Pull {
+            repo_id,
+            mode: gitcomet_core::services::PullMode::Merge,
+        },
+    );
+    assert!(
+        effects.iter().any(|effect| matches!(
+            effect,
+            Effect::Pull {
+                repo_id: id, ..
+            } if *id == repo_id
+        )),
+        "the routed pull must emit its effect: {effects:?}"
+    );
+
+    let effects = reduce(&mut repos, &id_alloc, &mut state, Msg::Push { repo_id });
+    assert!(
+        effects.iter().any(|effect| matches!(
+            effect,
+            Effect::Push {
+                repo_id: id, ..
+            } if *id == repo_id
+        )),
+        "the routed push must emit its effect: {effects:?}"
+    );
+
+    // Force pushes stay dropped: jj's lease-based safety checks have no
+    // mapped equivalent, so admitting them would bypass the guard.
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::ForcePush { repo_id },
+    );
+    assert!(
+        effects.is_empty(),
+        "force push must stay dropped without a jj routing: {effects:?}"
+    );
+
+    // Without the capability the same fetch drops like any other write.
+    if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+        repo_state.capabilities.network = false;
+    }
+    let effects = reduce(&mut repos, &id_alloc, &mut state, Msg::FetchAll { repo_id });
+    assert!(
+        effects.is_empty(),
+        "unrouted network writes must stay dropped: {effects:?}"
+    );
+}
+
 #[test]
 fn write_messages_still_reach_their_arms_on_full_capability_repos() {
     let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();

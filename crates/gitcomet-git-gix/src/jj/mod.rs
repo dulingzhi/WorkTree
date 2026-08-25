@@ -3,12 +3,18 @@
 //! A colocated repo shares the git object database and refs with jj, so every
 //! read keeps working through [`GixRepo`] unchanged. Writes are the problem:
 //! jj snapshots the working copy and syncs the git index/HEAD around every
-//! command, so a git-side write would race it. Commit is the one write routed
-//! through the jj CLI (`describe` + `new`); every other write returns
-//! [`ErrorKind::Unsupported`] until its routing lands — the
-//! `RepoCapabilities::read_only` flag in the reducer keeps those paths from
-//! being reached in the first place; the Unsupported error is the second lock
-//! on the same door.
+//! command, so a git-side write would race it. Commit (`describe` + `new`),
+//! bookmark, and network (`jj git fetch`/`push`) writes are routed through
+//! the jj CLI; every other write returns [`ErrorKind::Unsupported`] until its
+//! routing lands — the `RepoCapabilities::read_only` flag in the reducer
+//! keeps those paths from being reached in the first place; the Unsupported
+//! error is the second lock on the same door. On identities: jj 0.44 does
+//! not read git config, so [`JjRepository::jj_cmd`] bridges any missing
+//! `user.name`/`user.email` halves from git config onto every jj invocation.
+//! One residual case cannot be repaired from here — a change created before
+//! any identity existed keeps its empty author (jj offers no command to
+//! rewrite it), and `jj git push` refuses to publish it; configuring jj's
+//! identity is the user-side fix.
 //!
 //! # How a colocated repo actually syncs (verified against jj 0.44)
 //!
@@ -49,10 +55,10 @@ use gitcomet_core::services::{
     BlameLine, CommandOutput, GitRepository, PullMode, RepoCapabilities, Result,
     SubmoduleTrustDecision,
 };
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 /// Minimum spacing between working-copy snapshot attempts. A snapshot is a
@@ -66,6 +72,7 @@ const JJ_SNAPSHOT_MIN_INTERVAL: Duration = Duration::from_secs(5);
 pub(crate) struct JjRepository {
     inner: GixRepo,
     last_snapshot: Mutex<Option<Instant>>,
+    identity_config_args: OnceLock<Vec<String>>,
 }
 
 impl JjRepository {
@@ -73,6 +80,7 @@ impl JjRepository {
         Self {
             inner,
             last_snapshot: Mutex::new(None),
+            identity_config_args: OnceLock::new(),
         }
     }
 
@@ -82,12 +90,75 @@ impl JjRepository {
         &self.inner
     }
 
-    /// A `jj` command pre-configured with `--repository <workdir>` and the
-    /// background-console treatment. Every jj invocation snapshots the
+    /// A `jj` command pre-configured with `--repository <workdir>`, the
+    /// background-console treatment, and the bridged identity config (see
+    /// [`Self::identity_config_args`]). Every jj invocation snapshots the
     /// working copy and imports git refs first — that is the point of routing
     /// writes through it.
     pub(super) fn jj_cmd(&self) -> Command {
-        jj_workdir_cmd_for(&self.inner.spec().workdir)
+        let mut cmd = jj_workdir_cmd_for(&self.inner.spec().workdir);
+        for config in self.identity_config_args() {
+            cmd.arg("--config").arg(config);
+        }
+        cmd
+    }
+
+    /// Identity `--config` args bridged from git config, computed once.
+    ///
+    /// jj 0.44 resolves the commit identity from its own config only — it
+    /// does not read gitconfig — and an unconfigured identity silently
+    /// poisons routed writes: `jj describe` rewrites the change with an empty
+    /// committer, and `jj git push` later refuses to publish it ("no author
+    /// and/or committer set"). Bridging the values jj has not configured
+    /// keeps GitComet's git-config identity working in jj mode; an explicit
+    /// jj identity always wins. Best-effort throughout: without a resolvable
+    /// git identity the args are empty and jj's own warnings stand.
+    fn identity_config_args(&self) -> &[String] {
+        self.identity_config_args
+            .get_or_init(|| self.compute_identity_config_args())
+    }
+
+    fn compute_identity_config_args(&self) -> Vec<String> {
+        let mut args = Vec::new();
+        let jj_name = self.jj_config_get("user.name");
+        let jj_email = self.jj_config_get("user.email");
+        if jj_name.is_empty() || jj_email.is_empty() {
+            if let Some((name, email)) = self.git_config_identity() {
+                if jj_name.is_empty() {
+                    args.push(format!("user.name={name}"));
+                }
+                if jj_email.is_empty() {
+                    args.push(format!("user.email={email}"));
+                }
+            }
+        }
+        args
+    }
+
+    /// `jj config get <key>` as a best-effort probe: the empty string when
+    /// the key is unset or when jj cannot run at all.
+    fn jj_config_get(&self, key: &str) -> String {
+        let mut cmd = jj_workdir_cmd_for(&self.inner.spec().workdir);
+        cmd.arg("config").arg("get").arg(key);
+        cmd.output()
+            .ok()
+            .filter(|output| output.status.success())
+            .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+            .unwrap_or_default()
+    }
+
+    /// The gix-resolved git identity (repo-local + global gitconfig), when
+    /// both halves exist.
+    fn git_config_identity(&self) -> Option<(String, String)> {
+        let repo = self.inner.reopen_repo().ok()?;
+        let config = repo.config_snapshot();
+        let value = |key: &str| {
+            config
+                .string(key)
+                .map(|value| bytes_to_text_preserving_utf8(&value))
+                .filter(|value| !value.is_empty())
+        };
+        Some((value("user.name")?, value("user.email")?))
     }
 
     /// Delete a bookmark locally; shared by the plain and force trait
@@ -96,6 +167,41 @@ impl JjRepository {
         let mut cmd = self.jj_cmd();
         cmd.arg("bookmark").arg("delete").arg(name);
         run_jj_command_with_output(cmd, "jj bookmark delete")?;
+        Ok(())
+    }
+
+    /// Track same-named remote bookmarks before a fetch or push.
+    ///
+    /// Colocated repos cloned with plain `git` (rather than `jj git clone`)
+    /// import their `origin/*` refs as *untracked* remote bookmarks, and jj
+    /// refuses to touch those: `jj git push` answers "Nothing changed" with a
+    /// successful exit status, and fetches never advance the local bookmark.
+    /// Tracking the pairs where a local branch shares a remote bookmark's name
+    /// restores git-shaped behavior. `jj bookmark track` is idempotent —
+    /// already-tracked pairs only log a warning and still exit 0.
+    fn track_same_named_remote_bookmarks(&self) -> Result<()> {
+        let local_names: FxHashSet<String> = self
+            .inner
+            .list_branches()?
+            .into_iter()
+            .map(|branch| branch.name)
+            .collect();
+        let pairs: Vec<String> = self
+            .inner
+            .list_remote_branches()?
+            .into_iter()
+            .filter(|remote| local_names.contains(&remote.name))
+            .map(|remote| format!("{}@{}", remote.name, remote.remote))
+            .collect();
+        if pairs.is_empty() {
+            return Ok(());
+        }
+        let mut cmd = self.jj_cmd();
+        cmd.arg("bookmark").arg("track");
+        for pair in &pairs {
+            cmd.arg(pair);
+        }
+        run_jj_command_with_output(cmd, "jj bookmark track")?;
         Ok(())
     }
 
@@ -213,13 +319,15 @@ macro_rules! jj_write_unsupported {
 impl GitRepository for JjRepository {
     fn capabilities(&self) -> RepoCapabilities {
         // The inner gix repo owns the `.jj` detection; this adapter routes
-        // commit (describe + new) and bookmark writes (create/delete/rename)
-        // through the jj CLI, so both re-enable on top of the detected
-        // (read-only) set. `read_only` stays true — the reducer's write gate
-        // admits exactly these messages, keyed on `commits`/`branches`.
+        // commit (describe + new), bookmark writes (create/delete/rename),
+        // and network operations (fetch/pull/push) through the jj CLI, so
+        // all three re-enable on top of the detected (read-only) set.
+        // `read_only` stays true — the reducer's write gate admits exactly
+        // these messages, keyed on `commits`/`branches`/`network`.
         RepoCapabilities {
             commits: true,
             branches: true,
+            network: true,
             ..self.inner.capabilities()
         }
     }
@@ -530,16 +638,72 @@ impl GitRepository for JjRepository {
         Ok(())
     }
 
+    /// Network operations route through `jj git …`. jj owns the transport
+    /// and credentials, so git's askpass hooks do not apply — auth failures
+    /// surface as `Backend` errors rather than in-app prompts. Fetching all
+    /// remotes mirrors `git fetch --all`; jj prunes gone remote bookmarks
+    /// as part of its fetch model, so a separate prune flag is inherent.
+    /// Tracking is established first so the local bookmarks actually follow
+    /// the fetched tips (see [`Self::track_same_named_remote_bookmarks`]).
+    fn fetch_all_with_output(&self) -> Result<CommandOutput> {
+        self.track_same_named_remote_bookmarks()?;
+        let mut cmd = self.jj_cmd();
+        cmd.arg("git").arg("fetch").arg("--all-remotes");
+        run_jj_command_with_output(cmd, "jj git fetch --all-remotes")
+    }
+
     fn fetch_all(&self) -> Result<()> {
-        Err(jj_write_unsupported!("fetch_all"))
+        self.fetch_all_with_output().map(|_| ())
+    }
+
+    /// jj has no pull: fetching IS pulling. New commits simply appear, and
+    /// jj rebases local descendants (and `@`) automatically — every
+    /// [`PullMode`] maps to the same fetch and no merge commits are ever
+    /// produced.
+    fn pull_with_output(&self, _mode: PullMode) -> Result<CommandOutput> {
+        self.fetch_all_with_output()
     }
 
     fn pull(&self, _mode: PullMode) -> Result<()> {
-        Err(jj_write_unsupported!("pull"))
+        self.fetch_all()
+    }
+
+    /// Pull a single remote bookmark: `jj git fetch --remote <r> --branch <b>`.
+    fn pull_branch_with_output(&self, remote: &str, branch: &str) -> Result<CommandOutput> {
+        validate_ref_like_arg(remote, "remote name")?;
+        validate_ref_like_arg(branch, "bookmark name")?;
+        self.track_same_named_remote_bookmarks()?;
+        let mut cmd = self.jj_cmd();
+        cmd.arg("git")
+            .arg("fetch")
+            .arg("--remote")
+            .arg(remote)
+            .arg("--branch")
+            .arg(branch);
+        run_jj_command_with_output(
+            cmd,
+            &format!("jj git fetch --remote {remote} --branch {branch}"),
+        )
+    }
+
+    /// Push uses jj's own default: tracking bookmarks that moved ahead of
+    /// their remote, guarded by jj's built-in force-with-lease-style safety
+    /// checks. New, untracked bookmarks are not published by this operation
+    /// (matching `git push`, which also does not create remote branches).
+    /// Tracking is established first — without it a bookmark whose remote
+    /// counterpart jj never tracked (plain-`git`-cloned colocated repo) would
+    /// make the push a silent "Nothing changed" no-op. Force and lease
+    /// variants stay `Unsupported` — jj's safety model has no equivalent to
+    /// route them to yet.
+    fn push_with_output(&self) -> Result<CommandOutput> {
+        self.track_same_named_remote_bookmarks()?;
+        let mut cmd = self.jj_cmd();
+        cmd.arg("git").arg("push");
+        run_jj_command_with_output(cmd, "jj git push")
     }
 
     fn push(&self) -> Result<()> {
-        Err(jj_write_unsupported!("push"))
+        self.push_with_output().map(|_| ())
     }
 
     fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {

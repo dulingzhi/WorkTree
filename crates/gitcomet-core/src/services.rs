@@ -59,6 +59,11 @@ pub struct RepoCapabilities {
     /// on the same invocation, so gix reads stay fresh); checkout keeps its
     /// own flag because it has no jj routing yet.
     pub branches: bool,
+    /// Fetch/pull/push is available. On colocated Jujutsu repos these route
+    /// through `jj git …` (jj owns the transport and credentials). Force,
+    /// lease, and set-upstream variants keep their own paths and are not
+    /// covered by this flag.
+    pub network: bool,
     /// A staging area (index) exists, so the staged/unstaged lanes apply.
     pub staging: bool,
     /// Stashing is supported.
@@ -78,6 +83,7 @@ impl Default for RepoCapabilities {
             read_only: false,
             commits: true,
             branches: true,
+            network: true,
             staging: true,
             stash: true,
             interactive_rebase: true,
@@ -89,15 +95,16 @@ impl Default for RepoCapabilities {
 
 impl RepoCapabilities {
     /// Capabilities of a colocated Jujutsu repository in compatibility
-    /// (read-only) mode. The gix jj adapter re-enables `commits` and
-    /// `branches` on top of this — the raw detector has no opinion on
-    /// command routing.
+    /// (read-only) mode. The gix jj adapter re-enables `commits`,
+    /// `branches`, and `network` on top of this — the raw detector has no
+    /// opinion on command routing.
     pub const fn jj_read_only() -> Self {
         Self {
             is_jj: true,
             read_only: true,
             commits: false,
             branches: false,
+            network: false,
             staging: false,
             stash: false,
             interactive_rebase: false,

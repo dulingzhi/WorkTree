@@ -84,13 +84,14 @@ fn gix_backend_open_detects_colocated_jj_repo_as_read_only() {
 
     let backend = GixBackend;
     let opened = backend.open(&repo).expect("open repository");
-    // The adapter re-enables `commits` on top of the detected read-only set —
-    // the one write routed through the jj CLI.
+    // The adapter re-enables the routed write families (commits, bookmarks,
+    // network) on top of the detected read-only set.
     assert_eq!(
         opened.capabilities(),
         RepoCapabilities {
             commits: true,
             branches: true,
+            network: true,
             ..RepoCapabilities::jj_read_only()
         }
     );
@@ -108,8 +109,15 @@ fn jj_available_for_integration_tests() -> bool {
 
 /// Run `jj git init --colocate` in `repo`, panicking with the command's
 /// output on failure.
+///
+/// The env identity matters: jj stamps the working-copy change's author at
+/// creation and never restamps it, and jj 0.44 does not read git config —
+/// without this, the changes the routed-commit flow later describes would be
+/// empty-author, which `jj git push` refuses to publish.
 fn colocate_with_jj(repo: &Path) {
     let output = std::process::Command::new("jj")
+        .env("JJ_USER", "Test")
+        .env("JJ_EMAIL", "test@example.com")
         .arg("git")
         .arg("init")
         .arg("--colocate")
@@ -154,6 +162,22 @@ fn jj_working_copy_description(repo: &Path) -> String {
     jj_log_at_working_copy(repo, "description")
 }
 
+/// Run `jj <args>` in `repo`, panicking with the command's output on failure.
+fn run_jj(repo: &Path, args: &[&str]) {
+    let output = std::process::Command::new("jj")
+        .args(args)
+        .current_dir(repo)
+        .output()
+        .expect("run jj command");
+    assert!(
+        output.status.success(),
+        "jj {:?} failed: {}{}",
+        args,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+}
+
 /// The P1 adapter contract, checked without a real jj install: a colocated
 /// repo (fake `.jj` marker) opens through `JjRepository`, every read still
 /// answers through gix, and every write refuses with `Unsupported`.
@@ -174,6 +198,7 @@ fn jj_adapter_delegates_reads_and_refuses_writes() {
         RepoCapabilities {
             commits: true,
             branches: true,
+            network: true,
             ..RepoCapabilities::jj_read_only()
         }
     );
@@ -200,14 +225,13 @@ fn jj_adapter_delegates_reads_and_refuses_writes() {
     );
 
     // Writes refuse with `Unsupported` — the second lock behind the reducer's
-    // capability gate. Commit and bookmark writes are the exceptions: they
-    // are routed through the jj CLI, so they are covered by the colocated
-    // tests below instead of here (a fake `.jj` marker is not a repo jj can
-    // operate on). Checkout stays unrouted.
+    // capability gate. Commit, bookmark, and network writes are the
+    // exceptions: they are routed through the jj CLI, so they are covered by
+    // the colocated tests below instead of here (a fake `.jj` marker is not a
+    // repo jj can operate on). Checkout stays unrouted.
     for unsupported in [
         opened.stage(&[Path::new("file.txt")]).err(),
         opened.checkout_branch(&branches[0].name).err(),
-        opened.fetch_all().err(),
     ] {
         let err = unsupported.expect("write must fail");
         assert!(
@@ -243,6 +267,7 @@ fn gix_backend_reads_real_colocated_jj_repo() {
         RepoCapabilities {
             commits: true,
             branches: true,
+            network: true,
             ..RepoCapabilities::jj_read_only()
         }
     );
@@ -656,6 +681,143 @@ fn jj_commit_amend_describes_the_working_copy_change() {
             .any(|entry| entry.path == Path::new("file.txt")),
         "the edit stays in the unstaged lane (index keeps @'s parent tree): {:?}",
         status.unstaged
+    );
+}
+
+/// Commits one change on the seed clone's `main` and pushes it to the bare
+/// origin, returning the new remote tip. The `git pull` first keeps the seed
+/// clone from falling behind after the routed push moved `origin/main` ahead.
+fn seed_push_next_commit(dir: &Path, message: &str) -> String {
+    let seed = dir.join("seed");
+    run_git(&seed, &["pull"]);
+    fs::write(seed.join("file.txt"), format!("contents\n{message}")).expect("write seed file");
+    run_git(&seed, &["add", "."]);
+    run_git(
+        &seed,
+        &[
+            "-c",
+            "user.email=test@example.com",
+            "-c",
+            "user.name=Test",
+            "commit",
+            "-m",
+            message,
+        ],
+    );
+    run_git(&seed, &["push"]);
+    run_git_capture(&seed, &["rev-parse", "HEAD"])
+        .trim()
+        .to_string()
+}
+
+/// Network ops route through `jj git …`. Push exports the moved bookmark to
+/// the remote; fetch/pull/pull-branch land the remote's new tips in the git
+/// remote-tracking refs, where plain git and gix reads both observe them.
+/// Every `PullMode` maps to a fetch: jj auto-rebases the working copy instead
+/// of creating merge commits, so the modes are indistinguishable here.
+#[test]
+fn jj_network_ops_route_through_jj_git() {
+    if !jj_available_for_integration_tests() {
+        eprintln!("skipping: jj binary not found in PATH");
+        return;
+    }
+
+    let dir = tempfile::tempdir().expect("create tempdir");
+    run_git(dir.path(), &["init", "--bare", "origin.git"]);
+    let seed = dir.path().join("seed");
+    run_git(dir.path(), &["clone", "origin.git", "seed"]);
+    run_git(&seed, &["checkout", "-b", "main"]);
+    fs::write(seed.join("file.txt"), "contents").expect("write seed file");
+    run_git(&seed, &["add", "."]);
+    run_git(
+        &seed,
+        &[
+            "-c",
+            "user.email=test@example.com",
+            "-c",
+            "user.name=Test",
+            "commit",
+            "-m",
+            "init",
+        ],
+    );
+    run_git(&seed, &["push", "-u", "origin", "main"]);
+
+    let repo = dir.path().join("repo");
+    run_git(
+        dir.path(),
+        &["clone", "--branch", "main", "origin.git", "repo"],
+    );
+    // A repo-local git identity makes the adapter's identity bridge
+    // hermetic: jj stamps the committer on the routed describe from it.
+    run_git(&repo, &["config", "user.name", "GitComet Test"]);
+    run_git(&repo, &["config", "user.email", "gittest@example.com"]);
+    colocate_with_jj(&repo);
+
+    let backend = GixBackend;
+    let opened = backend.open(&repo).expect("open colocated repository");
+    let ls_remote_main = || {
+        run_git_capture(&repo, &["ls-remote", "origin", "main"])
+            .split_whitespace()
+            .next()
+            .expect("ls-remote line for main")
+            .to_string()
+    };
+    let remote_ref_main = || {
+        run_git_capture(&repo, &["rev-parse", "refs/remotes/origin/main"])
+            .trim()
+            .to_string()
+    };
+
+    // Push: the routed commit lands as the working-copy change's parent;
+    // moving `main` onto it (jj semantics — bookmarks move explicitly) gives
+    // `jj git push` a tracking bookmark ahead of the remote to export.
+    fs::write(repo.join("file.txt"), "contents\nlocal work").expect("edit tracked file");
+    opened.commit("local work").expect("routed commit");
+    let local_sha = run_git_capture(&repo, &["rev-parse", "HEAD"])
+        .trim()
+        .to_string();
+    assert_ne!(local_sha, ls_remote_main(), "local must be ahead first");
+    run_jj(&repo, &["bookmark", "set", "main", "-r", &local_sha]);
+    opened.push().expect("routed push");
+    assert_eq!(
+        ls_remote_main(),
+        local_sha,
+        "jj git push must export the moved bookmark to the remote"
+    );
+
+    // Fetch: `jj git fetch --all-remotes` updates the remote-tracking ref and
+    // the gix-read remote branch table lands on the new tip.
+    let second_sha = seed_push_next_commit(dir.path(), "second");
+    opened.fetch_all().expect("routed fetch");
+    assert_eq!(remote_ref_main(), second_sha, "fetch must import the tip");
+    assert!(
+        opened
+            .list_remote_branches()
+            .expect("list remote branches")
+            .iter()
+            .any(|branch| branch.remote == "origin"
+                && branch.name == "main"
+                && branch.target == gitcomet_core::domain::CommitId(second_sha.clone().into())),
+        "gix reads must see the fetched tip"
+    );
+
+    // Pull: every mode maps to the same fetch.
+    let third_sha = seed_push_next_commit(dir.path(), "third");
+    opened
+        .pull(gitcomet_core::services::PullMode::Merge)
+        .expect("routed pull");
+    assert_eq!(remote_ref_main(), third_sha, "pull must import the tip");
+
+    // Pull-branch: the branch-scoped variant narrows the fetch, same result.
+    let fourth_sha = seed_push_next_commit(dir.path(), "fourth");
+    opened
+        .pull_branch_with_output("origin", "main")
+        .expect("routed pull branch");
+    assert_eq!(
+        remote_ref_main(),
+        fourth_sha,
+        "branch-scoped pull must import the tip"
     );
 }
 
