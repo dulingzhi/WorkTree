@@ -24,6 +24,18 @@ jj:
     placeholder: "按 revset 过滤（留空显示全部）…"
   conflicts:
     count: "%{count} 个冲突路径"
+  bookmarks:
+    title: 书签
+    count: "%{count}"
+    placeholder: "新书签名称…"
+    create: 创建
+    delete: 删除
+    empty: "暂无书签。"
+  op_log:
+    title: 操作日志
+    undo: 撤销最近操作
+    empty: "暂无操作记录。"
+    unnamed: "（未命名操作）"
   status:
     degraded_watch: "%{reason}"
     last_command_failed: "上一条命令失败（%{operation}）：%{error}"

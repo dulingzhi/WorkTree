@@ -17,11 +17,13 @@
 use super::*;
 
 mod change_list;
+mod panels;
 
 use change_list::{change_row_vms, render_change_row};
 use gitcomet_jj_core::ChangeId;
 use gitcomet_state::jj_store::{JjAppState, JjMsg, JjStore};
 use gitcomet_state::msg::StoreEvent;
+use panels::{bookmark_row_vms, op_row_vms, render_bookmark_row, render_op_row};
 
 use super::splash::{CONTENT_CARD_BOTTOM_MARGIN_PX, CONTENT_CARD_GAP_PX};
 
@@ -54,6 +56,10 @@ pub(crate) struct JjRepoView {
     /// clears it; row clicks focus this handle so arrows work right after
     /// a click.
     list_focus: gpui::FocusHandle,
+    /// The bookmark creation bar's input. Enter creates a bookmark from
+    /// the name, targeting the selected change (or @).
+    bookmark_input: Entity<components::TextInput>,
+    _bookmark_input_subscription: gpui::Subscription,
     _poller: gpui::Task<()>,
     /// Held (not drained) under the test runtime, mirroring `Poller`.
     _held_events: Option<smol::channel::Receiver<StoreEvent>>,
@@ -100,6 +106,22 @@ impl JjRepoView {
                 this.apply_revset(cx);
             }
         });
+        let bookmark_input = cx.new(|cx| {
+            components::TextInput::new(
+                components::TextInputOptions {
+                    placeholder: crate::i18n::tr("jj.bookmarks.placeholder"),
+                    ..Default::default()
+                },
+                window,
+                cx,
+            )
+        });
+        let _bookmark_input_subscription = cx.observe(&bookmark_input, |this, input, cx| {
+            let enter_pressed = input.update(cx, |input, _| input.take_enter_pressed());
+            if enter_pressed {
+                this.create_bookmark(cx);
+            }
+        });
         let list_focus = cx.focus_handle();
 
         // The pane can outlive a mid-session creation (the pane is created
@@ -124,6 +146,8 @@ impl JjRepoView {
                 _revset_input_subscription,
                 revset_synced: None,
                 list_focus,
+                bookmark_input,
+                _bookmark_input_subscription,
                 _poller: gpui::Task::ready(()),
                 _held_events: Some(events),
             };
@@ -168,6 +192,8 @@ impl JjRepoView {
             _revset_input_subscription,
             revset_synced: None,
             list_focus,
+            bookmark_input,
+            _bookmark_input_subscription,
             _poller,
             _held_events: None,
         };
@@ -180,6 +206,8 @@ impl JjRepoView {
         self.describe_input
             .update(cx, |input, cx| input.set_theme(theme, cx));
         self.revset_input
+            .update(cx, |input, cx| input.set_theme(theme, cx));
+        self.bookmark_input
             .update(cx, |input, cx| input.set_theme(theme, cx));
         cx.notify();
     }
@@ -320,6 +348,59 @@ impl JjRepoView {
             self.selected_change = Some(next);
             cx.notify();
         }
+    }
+
+    /// Enter / Create button: bookmark the selected change — or @ when
+    /// nothing is selected — under the bar's name.
+    fn create_bookmark(&mut self, cx: &mut gpui::Context<Self>) {
+        let Some(repo) = self.state.active_repo() else {
+            return;
+        };
+        if repo.pending_command.is_some() {
+            return;
+        }
+        let name = self.bookmark_input.read(cx).text().trim().to_string();
+        if name.is_empty() {
+            return;
+        }
+        let Some(target) = self
+            .selected_change
+            .clone()
+            .or_else(|| self.working_copy().map(|wc| wc.change_id))
+        else {
+            return;
+        };
+        self.store.dispatch(JjMsg::BookmarkCreate {
+            repo_id: repo.id,
+            name,
+            target,
+        });
+        self.bookmark_input
+            .update(cx, |input, cx| input.set_text("", cx));
+        cx.notify();
+    }
+
+    fn delete_bookmark(&mut self, name: &str, cx: &mut gpui::Context<Self>) {
+        if let Some(repo) = self.state.active_repo() {
+            if repo.pending_command.is_none() {
+                self.store.dispatch(JjMsg::BookmarkDelete {
+                    repo_id: repo.id,
+                    name: name.to_string(),
+                });
+            }
+        }
+        cx.notify();
+    }
+
+    /// Undo the latest operation (`jj op revert <latest>` records a new
+    /// operation with the inverse effect, so undoing is itself undoable).
+    fn undo_operation(&mut self, cx: &mut gpui::Context<Self>) {
+        if let Some(repo) = self.state.active_repo() {
+            if repo.pending_command.is_none() && !repo.ops.is_empty() {
+                self.store.dispatch(JjMsg::OpUndo { repo_id: repo.id });
+            }
+        }
+        cx.notify();
     }
 }
 
@@ -605,6 +686,144 @@ impl Render for JjRepoView {
                         }),
                     );
                 }
+
+                // Bookmarks: a create bar (targeting the selection, or @)
+                // and one row per bookmark; only local bookmarks carry a
+                // delete affordance — remote refs belong to their remote.
+                let busy = pending_command.is_some();
+                let bookmark_rows = bookmark_row_vms(repo);
+                let mut bookmark_list = div().flex().flex_col();
+                for row in &bookmark_rows {
+                    let name = row.name.clone();
+                    let delete_button = row.is_local.then(|| {
+                        components::Button::new(
+                            SharedString::from(format!("jj_bookmark_delete_{}", row.display_name)),
+                            crate::i18n::tr("jj.bookmarks.delete"),
+                        )
+                        .style(components::ButtonStyle::Transparent)
+                        .disabled(busy)
+                        .on_click(theme, cx, move |this, _e, _w, cx| {
+                            this.delete_bookmark(&name, cx);
+                        })
+                        .into_any_element()
+                    });
+                    bookmark_list =
+                        bookmark_list.child(render_bookmark_row(row, theme, delete_button));
+                }
+                if bookmark_rows.is_empty() {
+                    bookmark_list = bookmark_list.child(
+                        div()
+                            .p_3()
+                            .text_sm()
+                            .text_color(theme.colors.foreground.secondary)
+                            .child(crate::i18n::tr("jj.bookmarks.empty")),
+                    );
+                }
+                let create_button = components::Button::new(
+                    "jj_bookmark_create",
+                    crate::i18n::tr("jj.bookmarks.create"),
+                )
+                .style(components::ButtonStyle::Filled)
+                .disabled(busy)
+                .on_click(theme, cx, |this, _e, _w, cx| {
+                    this.create_bookmark(cx);
+                });
+                card = card.child(
+                    div()
+                        .id("jj_bookmarks_card")
+                        .debug_selector(|| "jj_bookmarks_card".to_string())
+                        .rounded(px(theme.radii.panel))
+                        .border_1()
+                        .border_color(theme.colors.stroke.default)
+                        .flex()
+                        .flex_col()
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .p_3()
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .font_weight(FontWeight::BOLD)
+                                        .text_color(theme.colors.foreground.secondary)
+                                        .child(crate::i18n::tr("jj.bookmarks.title")),
+                                )
+                                .child(
+                                    div()
+                                        .ml_auto()
+                                        .flex_none()
+                                        .text_xs()
+                                        .text_color(theme.colors.foreground.secondary)
+                                        .child(crate::i18n::t!(
+                                            "jj.bookmarks.count",
+                                            count = bookmark_rows.len()
+                                        )),
+                                ),
+                        )
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .px_3()
+                                .pb_2()
+                                .child(self.bookmark_input.clone())
+                                .child(create_button),
+                        )
+                        .child(bookmark_list),
+                );
+
+                // Operation log: recent operations, newest first, with the
+                // undo entry point in the header.
+                let op_rows = op_row_vms(repo, now);
+                let mut op_list = div().flex().flex_col();
+                for row in &op_rows {
+                    op_list = op_list.child(render_op_row(row, theme));
+                }
+                if op_rows.is_empty() {
+                    op_list = op_list.child(
+                        div()
+                            .p_3()
+                            .text_sm()
+                            .text_color(theme.colors.foreground.secondary)
+                            .child(crate::i18n::tr("jj.op_log.empty")),
+                    );
+                }
+                let undo_button =
+                    components::Button::new("jj_op_undo", crate::i18n::tr("jj.op_log.undo"))
+                        .style(components::ButtonStyle::Danger)
+                        .disabled(busy || op_rows.is_empty())
+                        .on_click(theme, cx, |this, _e, _w, cx| {
+                            this.undo_operation(cx);
+                        });
+                card = card.child(
+                    div()
+                        .id("jj_op_log_card")
+                        .debug_selector(|| "jj_op_log_card".to_string())
+                        .rounded(px(theme.radii.panel))
+                        .border_1()
+                        .border_color(theme.colors.stroke.default)
+                        .flex()
+                        .flex_col()
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .p_3()
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .font_weight(FontWeight::BOLD)
+                                        .text_color(theme.colors.foreground.secondary)
+                                        .child(crate::i18n::tr("jj.op_log.title")),
+                                )
+                                .child(div().ml_auto().flex_none().child(undo_button)),
+                        )
+                        .child(op_list),
+                );
 
                 card
             }
@@ -922,7 +1141,12 @@ mod tests {
 
         fn bookmarks(&self) -> Result<Vec<JjBookmark>> {
             self.record("bookmarks".to_string());
-            Ok(Vec::new())
+            Ok(vec![JjBookmark {
+                name: "main".to_string(),
+                remote: None,
+                target_commit_id: JjCommitId("cbase".to_string()),
+                conflicted: false,
+            }])
         }
 
         fn bookmark_create(&self, name: &str, _target: &ChangeId) -> Result<()> {
@@ -947,7 +1171,12 @@ mod tests {
 
         fn op_log(&self, _limit: usize) -> Result<Vec<JjOp>> {
             self.record("op_log".to_string());
-            Ok(Vec::new())
+            Ok(vec![JjOp {
+                op_id: "op1".to_string(),
+                description: "add workspace".to_string(),
+                user: "A <a@a>".to_string(),
+                started_at_unix: 1,
+            }])
         }
 
         fn op_undo(&self) -> Result<()> {
@@ -1179,6 +1408,94 @@ mod tests {
         cx.update(|_window, app| {
             assert_eq!(view.read(app).selected_change, None);
         });
+    }
+
+    /// Bookmark create/delete and operation undo reach the backend:
+    /// create targets the selected change (@ when nothing is selected),
+    /// delete spells the bare local name, undo reverts the latest op.
+    #[gpui::test]
+    fn bookmark_and_undo_gestures_reach_the_backend(cx: &mut gpui::TestAppContext) {
+        let repo = FakeJjRepository::new("/tmp/fake-jj-bm");
+        let backend = Arc::new(FakeJjBackend {
+            repo: std::sync::Mutex::new(Some(Arc::clone(&repo))),
+        });
+        let (store, events) = JjStore::new(backend);
+        let store = Arc::new(store);
+        store.dispatch(JjMsg::OpenRepo {
+            workdir: std::path::PathBuf::from("/tmp/fake-jj-bm"),
+        });
+        wait_until("repo to load with a bookmark and an op", || {
+            store.snapshot().active_repo().is_some_and(|repo| {
+                repo.working_copy.is_some() && !repo.bookmarks.is_empty() && !repo.ops.is_empty()
+            })
+        });
+
+        let (view, cx) = cx.add_window_view(|window, cx| {
+            JjRepoView::new(
+                Arc::clone(&store),
+                events,
+                AppTheme::gitcomet_light(),
+                window,
+                cx,
+            )
+        });
+        cx.run_until_parked();
+
+        // Create from the bar: no selection → target is @ ("at").
+        cx.update(|_window, app| {
+            view.update(app, |view, cx| {
+                view.bookmark_input
+                    .update(cx, |input, cx| input.set_text("topic", cx));
+                view.create_bookmark(cx);
+                // The bar clears once the create is dispatched.
+                assert_eq!(view.bookmark_input.read(cx).text(), "");
+            });
+        });
+        let mutation_settled = || {
+            store
+                .snapshot()
+                .active_repo()
+                .is_some_and(|repo| repo.pending_command.is_none())
+        };
+        wait_until("bookmark create to run and settle", || {
+            repo.has_call("bookmark_create:topic") && mutation_settled()
+        });
+
+        cx.update(|_window, app| {
+            view.update(app, |view, cx| {
+                // A create with a selected change targets the selection.
+                view.selected_change = Some(ChangeId("base".to_string()));
+                view.bookmark_input
+                    .update(cx, |input, cx| input.set_text("base-tip", cx));
+                view.create_bookmark(cx);
+            });
+        });
+        wait_until("bookmark create to target the selection and settle", || {
+            repo.has_call("bookmark_create:base-tip") && mutation_settled()
+        });
+
+        cx.update(|_window, app| {
+            view.update(app, |view, cx| {
+                // Empty names never dispatch.
+                view.bookmark_input
+                    .update(cx, |input, cx| input.set_text("", cx));
+                view.create_bookmark(cx);
+                view.delete_bookmark("main", cx);
+            });
+        });
+        wait_until("bookmark delete to run and settle", || {
+            repo.has_call("bookmark_delete:main") && mutation_settled()
+        });
+
+        // A separate gesture: the store serializes mutations per repo (a
+        // gesture while one is pending is dropped, not queued), so each
+        // dispatch waits for the previous one to settle.
+        cx.update(|_window, app| {
+            view.update(app, |view, cx| {
+                view.undo_operation(cx);
+            });
+        });
+        wait_until("op undo to run", || repo.has_call("op_undo"));
     }
 
     /// The describe bar's gestures reach the store as mutations on @:

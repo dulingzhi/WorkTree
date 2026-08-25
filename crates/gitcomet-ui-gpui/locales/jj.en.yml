@@ -23,6 +23,18 @@ jj:
     placeholder: "Filter by revset (empty shows all())…"
   conflicts:
     count: "%{count} conflicted paths"
+  bookmarks:
+    title: Bookmarks
+    count: "%{count}"
+    placeholder: "New bookmark name…"
+    create: Create
+    delete: Delete
+    empty: "No bookmarks."
+  op_log:
+    title: Operation log
+    undo: Undo latest
+    empty: "No operations recorded."
+    unnamed: "(unnamed operation)"
   status:
     degraded_watch: "%{reason}"
     last_command_failed: "Last command failed (%{operation}): %{error}"
