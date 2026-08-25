@@ -16,6 +16,23 @@ fn run_git(repo: &Path, args: &[&str]) {
     assert!(status.success(), "git {:?} failed", args);
 }
 
+/// `run_git`, but capturing stdout (trimmed by the caller).
+fn run_git_capture(repo: &Path, args: &[&str]) -> String {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo)
+        .args(args)
+        .output()
+        .expect("run git command");
+    assert!(
+        output.status.success(),
+        "git {:?} failed: {}",
+        args,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stdout).to_string()
+}
+
 /// `git init` a non-bare repo at `path` with one commit, using an inline
 /// identity so the test does not depend on ambient git config.
 fn init_repo_with_commit(path: &Path) {
@@ -266,6 +283,156 @@ fn jj_status_read_snapshots_working_copy_and_throttles_repeats() {
     assert_eq!(
         after_first, after_second,
         "a second read inside the throttle interval must not re-run jj"
+    );
+}
+
+/// The P1 status semantics on a colocated repo, which plain delegation already
+/// provides: the staged lane is empty (HEAD and the index both sit at `@`'s
+/// parent — jj has no staging area), and the unstaged lane IS the jj
+/// working-copy change (`diff(@^, worktree)` — it reads the worktree directly,
+/// so it is fresh even between snapshots). Covers the full entry spectrum:
+/// a modified tracked file, a brand-new untracked file, and a deleted one.
+#[test]
+fn jj_colocated_status_maps_working_copy_change_to_unstaged_only() {
+    if !jj_available_for_integration_tests() {
+        eprintln!("skipping: jj binary not found in PATH");
+        return;
+    }
+
+    let dir = tempfile::tempdir().expect("create tempdir");
+    let repo = dir.path().join("repo");
+    fs::create_dir_all(&repo).expect("create repo directory");
+    init_repo_with_commit(&repo);
+    fs::write(repo.join("doomed.txt"), "to be removed").expect("write second tracked file");
+    run_git(&repo, &["add", "doomed.txt"]);
+    run_git(
+        &repo,
+        &[
+            "-c",
+            "user.email=test@example.com",
+            "-c",
+            "user.name=Test",
+            "commit",
+            "-m",
+            "second",
+        ],
+    );
+    colocate_with_jj(&repo);
+
+    // The working-copy change under test: modify one tracked file, create an
+    // untracked one, delete another tracked one.
+    fs::write(repo.join("file.txt"), "contents\nedited").expect("modify tracked file");
+    fs::write(repo.join("new.txt"), "brand new").expect("create untracked file");
+    fs::remove_file(repo.join("doomed.txt")).expect("delete tracked file");
+
+    let backend = GixBackend;
+    let opened = backend.open(&repo).expect("open colocated repository");
+
+    let status = opened.status().expect("read status");
+    assert!(
+        status.staged.is_empty(),
+        "jj has no staging area — the staged lane must read empty, got {:?}",
+        status.staged
+    );
+    let kind_of = |path: &str| {
+        status
+            .unstaged
+            .iter()
+            .find(|entry| entry.path == Path::new(path))
+            .map(|entry| entry.kind)
+    };
+    assert_eq!(
+        kind_of("file.txt"),
+        Some(gitcomet_core::domain::FileStatusKind::Modified),
+        "a modified tracked file lands in the unstaged lane: {:?}",
+        status.unstaged
+    );
+    // A brand-new file flips Untracked → Added across a snapshot: jj's
+    // snapshot adds new working-copy files to the git index as intent-to-add
+    // entries (`git status --short` shows the same as ` A`), which gix
+    // classifies in the index→worktree pass — the unstaged lane, exactly
+    // where it belongs. Either way the staged lane above stays empty.
+    assert_eq!(
+        kind_of("new.txt"),
+        Some(gitcomet_core::domain::FileStatusKind::Added),
+        "a brand-new file lands in the unstaged lane: {:?}",
+        status.unstaged
+    );
+    assert_eq!(
+        kind_of("doomed.txt"),
+        Some(gitcomet_core::domain::FileStatusKind::Deleted),
+        "a deleted tracked file lands in the unstaged lane: {:?}",
+        status.unstaged
+    );
+}
+
+/// The detached-HEAD shape jj leaves when `@`'s parent actually moves
+/// (`jj new <older-sha>`): git HEAD detaches at the new parent, the index is
+/// synced, and the worktree is rewritten to match, so status reads clean and
+/// `current_branch` falls back to "HEAD" like any detached git repo — no jj
+/// special-casing needed. (When the parent does NOT move, jj leaves HEAD on
+/// its branch — the detach only happens on a real move.)
+#[test]
+fn jj_colocated_detached_head_after_jj_new_reads_clean() {
+    if !jj_available_for_integration_tests() {
+        eprintln!("skipping: jj binary not found in PATH");
+        return;
+    }
+
+    let dir = tempfile::tempdir().expect("create tempdir");
+    let repo = dir.path().join("repo");
+    fs::create_dir_all(&repo).expect("create repo directory");
+    init_repo_with_commit(&repo);
+    fs::write(repo.join("second.txt"), "second").expect("write second file");
+    run_git(&repo, &["add", "second.txt"]);
+    run_git(
+        &repo,
+        &[
+            "-c",
+            "user.email=test@example.com",
+            "-c",
+            "user.name=Test",
+            "commit",
+            "-m",
+            "second",
+        ],
+    );
+    colocate_with_jj(&repo);
+
+    // Move @'s parent back to the init commit; jj rewrites the working copy
+    // to its tree, detaches git HEAD there, and syncs the index.
+    let init_sha = run_git_capture(&repo, &["rev-parse", "HEAD~1"])
+        .trim()
+        .to_string();
+    let jj_new = std::process::Command::new("jj")
+        .arg("new")
+        .arg(&init_sha)
+        .current_dir(&repo)
+        .output()
+        .expect("run jj new");
+    assert!(
+        jj_new.status.success(),
+        "jj new {init_sha} failed: {}",
+        String::from_utf8_lossy(&jj_new.stderr)
+    );
+
+    let backend = GixBackend;
+    let opened = backend.open(&repo).expect("open colocated repository");
+
+    let status = opened.status().expect("read status");
+    assert!(
+        status.staged.is_empty() && status.unstaged.is_empty(),
+        "jj synced the index to the moved working copy — status must read clean, got {status:?}"
+    );
+    assert_eq!(
+        opened.current_branch().expect("current branch"),
+        "HEAD",
+        "detached HEAD falls back to the generic label"
+    );
+    assert_eq!(
+        opened.head_commit_id().expect("head commit id"),
+        Some(gitcomet_core::domain::CommitId(init_sha.into())),
+        "git HEAD sits at @'s parent after jj new"
     );
 }
 

@@ -24,11 +24,15 @@
 //!
 //! Consequences for this adapter: gix reads never *need* a snapshot to stay
 //! fresh — `status` naturally reads as the jj working-copy change
-//! (diff(`@`'s tree, worktree)) with an empty staged lane. What the snapshot
-//! trigger below buys is jj-side freshness while GitComet is open: edits get
-//! absorbed into `@` periodically, so the user's other jj tooling (terminal
-//! `jj log`, op log) sees current state even if they never run a jj command
-//! themselves. It is rate-limited because a snapshot is a process spawn.
+//! (diff(`@`'s tree, worktree)) with an empty staged lane. One nuance: a
+//! snapshot records brand-new working-copy files in the git index as
+//! intent-to-add entries, so their unstaged classification flips
+//! `Untracked` → `Added` across a snapshot (`git status` shows the same ` A`).
+//! The lane never changes — only the label. What the snapshot trigger below
+//! buys is jj-side freshness while GitComet is open: edits get absorbed into
+//! `@` periodically, so the user's other jj tooling (terminal `jj log`,
+//! op log) sees current state even if they never run a jj command themselves.
+//! It is rate-limited because a snapshot is a process spawn.
 
 use crate::repo::GixRepo;
 use crate::util::bytes_to_text_preserving_utf8;
@@ -236,6 +240,18 @@ impl GitRepository for JjRepository {
         self.inner.list_remote_branches()
     }
 
+    /// jj status semantics, provided by delegation (see module docs):
+    ///
+    /// * staged lane — always empty: HEAD and the index both sit at `@`'s
+    ///   parent and jj has no staging area, so `diff(HEAD, index)` is empty.
+    /// * unstaged lane — the jj working-copy change, `diff(@^, worktree)`:
+    ///   the index keeps `@`'s parent tree while gix diffs it against the
+    ///   worktree directly, so it is fresh even between snapshots (snapshot
+    ///   state only affects what the user's *other* jj tooling sees).
+    ///
+    /// The snapshot beforehand is for jj-side freshness only, never read
+    /// correctness — which is why a throttled or failed snapshot is safe to
+    /// swallow.
     fn status(&self) -> Result<RepoStatus> {
         self.snapshot_if_due("status read");
         self.inner.status()
