@@ -3,9 +3,9 @@
 //! A colocated repo shares the git object database and refs with jj, so every
 //! read keeps working through [`GixRepo`] unchanged. Writes are the problem:
 //! jj snapshots the working copy and syncs the git index/HEAD around every
-//! command, so a git-side write would race it. Until a write is explicitly
-//! routed through the jj CLI (commit → `describe`+`new`, bookmarks, network,
-//! …), the adapter returns [`ErrorKind::Unsupported`] for it — the
+//! command, so a git-side write would race it. Commit is the one write routed
+//! through the jj CLI (`describe` + `new`); every other write returns
+//! [`ErrorKind::Unsupported`] until its routing lands — the
 //! `RepoCapabilities::read_only` flag in the reducer keeps those paths from
 //! being reached in the first place; the Unsupported error is the second lock
 //! on the same door.
@@ -203,9 +203,15 @@ macro_rules! jj_write_unsupported {
 
 impl GitRepository for JjRepository {
     fn capabilities(&self) -> RepoCapabilities {
-        // Delegates to the inner gix repo, which owns the `.jj` detection, so
-        // capability flips for routed writes land in one place.
-        self.inner.capabilities()
+        // The inner gix repo owns the `.jj` detection; commit is the one
+        // write this adapter routes through the jj CLI, so it re-enables
+        // `commits` on top of the detected (read-only) set. `read_only`
+        // stays true — the reducer's write gate treats commit messages as
+        // the only exception, keyed on `commits`.
+        RepoCapabilities {
+            commits: true,
+            ..self.inner.capabilities()
+        }
     }
 
     fn spec(&self) -> &RepoSpec {
@@ -445,8 +451,34 @@ impl GitRepository for JjRepository {
         Err(jj_write_unsupported!("unstage"))
     }
 
-    fn commit(&self, _message: &str) -> Result<()> {
-        Err(jj_write_unsupported!("commit"))
+    /// jj commit = describe the working-copy commit, then open a fresh one.
+    ///
+    /// `jj describe` snapshots the working copy first (every jj command
+    /// does), so the message lands on a change that contains the current
+    /// edits — no pre-write sync needed for the same reason. `jj new` then
+    /// leaves `@` empty and moves git HEAD to the described commit
+    /// (detached), which the watcher → `RepoExternallyChanged` pipeline
+    /// refreshes like any external change. The staged-lane semantics do not
+    /// apply: jj commits the whole working-copy change.
+    fn commit(&self, message: &str) -> Result<()> {
+        let mut describe = self.jj_cmd();
+        describe.arg("describe").arg("-m").arg(message);
+        run_jj_command_with_output(describe, "jj describe")?;
+        let mut new = self.jj_cmd();
+        new.arg("new");
+        run_jj_command_with_output(new, "jj new")?;
+        Ok(())
+    }
+
+    /// GitComet's amend maps to describing the working-copy commit: in jj
+    /// the working copy IS the change under construction, so setting its
+    /// message is the whole operation. No `jj new` — the change stays open
+    /// for further edits, and git HEAD does not move.
+    fn commit_amend(&self, message: &str) -> Result<()> {
+        let mut describe = self.jj_cmd();
+        describe.arg("describe").arg("-m").arg(message);
+        run_jj_command_with_output(describe, "jj describe")?;
+        Ok(())
     }
 
     fn fetch_all(&self) -> Result<()> {

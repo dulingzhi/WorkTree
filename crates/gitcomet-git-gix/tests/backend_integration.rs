@@ -84,7 +84,15 @@ fn gix_backend_open_detects_colocated_jj_repo_as_read_only() {
 
     let backend = GixBackend;
     let opened = backend.open(&repo).expect("open repository");
-    assert_eq!(opened.capabilities(), RepoCapabilities::jj_read_only());
+    // The adapter re-enables `commits` on top of the detected read-only set —
+    // the one write routed through the jj CLI.
+    assert_eq!(
+        opened.capabilities(),
+        RepoCapabilities {
+            commits: true,
+            ..RepoCapabilities::jj_read_only()
+        }
+    );
 }
 
 /// Skips tests that shell out to a real `jj` binary on machines without it
@@ -115,24 +123,34 @@ fn colocate_with_jj(repo: &Path) {
     );
 }
 
-/// The current working-copy commit id (`@`), read straight from jj.
-fn jj_working_copy_commit_id(repo: &Path) -> String {
+/// Run `jj log --no-graph -r @ -T <template>` and return the trimmed output.
+fn jj_log_at_working_copy(repo: &Path, template: &str) -> String {
     let output = std::process::Command::new("jj")
         .arg("log")
         .arg("--no-graph")
         .arg("-r")
         .arg("@")
         .arg("-T")
-        .arg("commit_id")
+        .arg(template)
         .current_dir(repo)
         .output()
         .expect("run jj log");
     assert!(
         output.status.success(),
-        "jj log -r @ failed: {}",
+        "jj log -r @ -T {template} failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
     String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
+
+/// The current working-copy commit id (`@`), read straight from jj.
+fn jj_working_copy_commit_id(repo: &Path) -> String {
+    jj_log_at_working_copy(repo, "commit_id")
+}
+
+/// The current working-copy commit's description, read straight from jj.
+fn jj_working_copy_description(repo: &Path) -> String {
+    jj_log_at_working_copy(repo, "description")
 }
 
 /// The P1 adapter contract, checked without a real jj install: a colocated
@@ -148,7 +166,15 @@ fn jj_adapter_delegates_reads_and_refuses_writes() {
 
     let backend = GixBackend;
     let opened = backend.open(&repo).expect("open repository");
-    assert_eq!(opened.capabilities(), RepoCapabilities::jj_read_only());
+    // The adapter re-enables `commits` (routed describe+new) on top of the
+    // detected read-only set.
+    assert_eq!(
+        opened.capabilities(),
+        RepoCapabilities {
+            commits: true,
+            ..RepoCapabilities::jj_read_only()
+        }
+    );
 
     // Reads still answer through the composed gix repo.
     let page = opened
@@ -172,9 +198,10 @@ fn jj_adapter_delegates_reads_and_refuses_writes() {
     );
 
     // Writes refuse with `Unsupported` — the second lock behind the reducer's
-    // capability gate.
+    // capability gate. Commit is the exception: it is routed through the jj
+    // CLI, so it is covered by the colocated tests below instead of here (a
+    // fake `.jj` marker is not a repo jj can operate on).
     for unsupported in [
-        opened.commit("message").err(),
         opened.stage(&[Path::new("file.txt")]).err(),
         opened.create_branch("topic", &page.commits[0].id).err(),
         opened.fetch_all().err(),
@@ -206,7 +233,15 @@ fn gix_backend_reads_real_colocated_jj_repo() {
 
     let backend = GixBackend;
     let opened = backend.open(&repo).expect("open colocated repository");
-    assert_eq!(opened.capabilities(), RepoCapabilities::jj_read_only());
+    // The adapter re-enables `commits` (routed describe+new) on top of the
+    // detected read-only set.
+    assert_eq!(
+        opened.capabilities(),
+        RepoCapabilities {
+            commits: true,
+            ..RepoCapabilities::jj_read_only()
+        }
+    );
 
     // History reads must keep working: the initial git commit remains
     // reachable through the jj-managed refs.
@@ -433,6 +468,119 @@ fn jj_colocated_detached_head_after_jj_new_reads_clean() {
         opened.head_commit_id().expect("head commit id"),
         Some(gitcomet_core::domain::CommitId(init_sha.into())),
         "git HEAD sits at @'s parent after jj new"
+    );
+}
+
+/// The routed commit: describe the working-copy change, then open a fresh
+/// one. After it the described change is git HEAD (detached) and shows in
+/// the log, the working copy reads clean, and jj has a fresh empty `@` on
+/// top — the exact state the next describe+new cycle starts from.
+#[test]
+fn jj_commit_routes_describe_then_new() {
+    if !jj_available_for_integration_tests() {
+        eprintln!("skipping: jj binary not found in PATH");
+        return;
+    }
+
+    let dir = tempfile::tempdir().expect("create tempdir");
+    let repo = dir.path().join("repo");
+    fs::create_dir_all(&repo).expect("create repo directory");
+    init_repo_with_commit(&repo);
+    colocate_with_jj(&repo);
+    fs::write(repo.join("file.txt"), "contents\nedited").expect("edit tracked file");
+
+    let backend = GixBackend;
+    let opened = backend.open(&repo).expect("open colocated repository");
+    let capabilities = opened.capabilities();
+    assert!(
+        capabilities.is_jj && capabilities.read_only && capabilities.commits,
+        "commit is the one routed write on a read-only jj repo: {capabilities:?}"
+    );
+
+    opened.commit("first jj commit").expect("routed commit");
+
+    // `jj new` moved git HEAD to the described commit; the same handle must
+    // see the move (the app never re-opens for it).
+    let head = run_git_capture(&repo, &["rev-parse", "HEAD"])
+        .trim()
+        .to_string();
+    assert_ne!(head, "", "rev-parse HEAD must answer");
+    assert_eq!(
+        opened.head_commit_id().expect("head commit id"),
+        Some(gitcomet_core::domain::CommitId(head.into())),
+        "git HEAD sits at the described commit after the routed commit"
+    );
+
+    let page = opened
+        .log_head_page(10, None)
+        .expect("log includes the described commit");
+    assert!(
+        page.commits
+            .iter()
+            .any(|commit| commit.summary.contains("first jj commit")),
+        "expected the routed commit in the log, got {:?}",
+        page.commits
+            .iter()
+            .map(|commit| &*commit.summary)
+            .collect::<Vec<_>>()
+    );
+
+    let status = opened.status().expect("read status");
+    assert!(
+        status.staged.is_empty() && status.unstaged.is_empty(),
+        "the fresh @ re-synced index and worktree — status must read clean, got {status:?}"
+    );
+    assert_eq!(
+        jj_working_copy_description(&repo),
+        "",
+        "jj new leaves a fresh, undescribed working-copy commit"
+    );
+}
+
+/// The routed amend: describe only. The working-copy change keeps absorbing
+/// edits (the unstaged lane keeps showing them) and git HEAD does not move.
+#[test]
+fn jj_commit_amend_describes_the_working_copy_change() {
+    if !jj_available_for_integration_tests() {
+        eprintln!("skipping: jj binary not found in PATH");
+        return;
+    }
+
+    let dir = tempfile::tempdir().expect("create tempdir");
+    let repo = dir.path().join("repo");
+    fs::create_dir_all(&repo).expect("create repo directory");
+    init_repo_with_commit(&repo);
+    colocate_with_jj(&repo);
+    fs::write(repo.join("file.txt"), "contents\nedited").expect("edit tracked file");
+
+    let backend = GixBackend;
+    let opened = backend.open(&repo).expect("open colocated repository");
+    let head_before = run_git_capture(&repo, &["rev-parse", "HEAD"])
+        .trim()
+        .to_string();
+
+    opened
+        .commit_amend("amended working change")
+        .expect("routed amend");
+
+    assert_eq!(
+        run_git_capture(&repo, &["rev-parse", "HEAD"]).trim(),
+        head_before,
+        "describe only — git HEAD must not move"
+    );
+    assert_eq!(
+        jj_working_copy_description(&repo),
+        "amended working change",
+        "the message lands on the working-copy commit"
+    );
+    let status = opened.status().expect("read status");
+    assert!(
+        status
+            .unstaged
+            .iter()
+            .any(|entry| entry.path == Path::new("file.txt")),
+        "the edit stays in the unstaged lane (index keeps @'s parent tree): {:?}",
+        status.unstaged
     );
 }
 

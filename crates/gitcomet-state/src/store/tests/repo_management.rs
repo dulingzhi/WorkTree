@@ -495,6 +495,112 @@ fn read_only_repos_drop_write_messages_before_any_effect() {
     );
 }
 
+/// The routed-commit exception to the read-only gate: a jj repo whose
+/// backend routes commits (`capabilities.commits`) accepts commit messages —
+/// effect emitted, in-flight counted — and the finish message clears the
+/// counters and requests the standard primary refresh, exactly like a git
+/// commit.
+#[test]
+fn routed_commit_messages_pass_the_read_only_gate_and_refresh_on_finish() {
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+
+    let repo_id = RepoId(1);
+    let mut repo_state = RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    );
+    repo_state.capabilities = gitcomet_core::services::RepoCapabilities {
+        commits: true,
+        ..gitcomet_core::services::RepoCapabilities::jj_read_only()
+    };
+    repo_state.set_open(Loadable::Ready(()));
+    state.repos.push(repo_state);
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Commit {
+            repo_id,
+            message: "describe me".to_string(),
+            push_after_commit: false,
+        },
+    );
+    assert!(
+        effects.iter().any(|effect| matches!(
+            effect,
+            Effect::Commit {
+                repo_id: id,
+                message,
+                ..
+            } if *id == repo_id && message == "describe me"
+        )),
+        "the routed commit must emit its effect: {effects:?}"
+    );
+    assert_eq!(state.repos[0].commit_in_flight, 1);
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::CommitFinished {
+            repo_id,
+            result: Ok(gitcomet_core::services::CommitOperationOutcome::default()),
+        }),
+    );
+    assert_eq!(state.repos[0].commit_in_flight, 0);
+    assert!(
+        effects
+            .iter()
+            .any(|e| matches!(e, Effect::LoadHeadBranch { repo_id: id } if *id == repo_id)),
+        "commit finish must request the primary refresh: {effects:?}"
+    );
+}
+
+/// Without the `commits` capability the same repo keeps dropping commit
+/// messages — routing one write through must not ungate the rest.
+#[test]
+fn unrouted_commit_messages_still_drop_on_read_only_repos() {
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+
+    let repo_id = RepoId(1);
+    let mut repo_state = RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    );
+    repo_state.capabilities = gitcomet_core::services::RepoCapabilities::jj_read_only();
+    repo_state.set_open(Loadable::Ready(()));
+    state.repos.push(repo_state);
+
+    for msg in [
+        Msg::Commit {
+            repo_id,
+            message: "no routing".to_string(),
+            push_after_commit: false,
+        },
+        Msg::CommitAmend {
+            repo_id,
+            message: "no routing".to_string(),
+            push_after_commit: false,
+        },
+    ] {
+        let effects = reduce(&mut repos, &id_alloc, &mut state, msg);
+        assert!(
+            effects.is_empty(),
+            "unrouted commit messages must stay dropped: {effects:?}"
+        );
+    }
+    assert_eq!(state.repos[0].commit_in_flight, 0);
+}
+
 #[test]
 fn write_messages_still_reach_their_arms_on_full_capability_repos() {
     let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();

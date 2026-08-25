@@ -925,12 +925,15 @@ fn reduce_inner(
     // (colocated Jujutsu during P0) must never receive a write, so drop the
     // message before any effect can run. The UI hides write affordances for
     // such repos; this guard is the enforcement that stays correct even if a
-    // write path slips past the UI.
+    // write path slips past the UI. One exception: backends that route
+    // commits themselves (`capabilities.commits`, the jj adapter's
+    // describe+new) accept commit messages — commit is the single write
+    // which does not touch git state directly, so it cannot race a snapshot.
     if let Some(repo_id) = msg_backend_write_target(&msg)
-        && state
-            .repos
-            .iter()
-            .any(|repo| repo.id == repo_id && repo.capabilities.read_only)
+        && let Some(repo) = state.repos.iter().find(|repo| repo.id == repo_id)
+        && repo.capabilities.read_only
+        && !((matches!(msg, Msg::Commit { .. } | Msg::CommitAmend { .. }))
+            && repo.capabilities.commits)
     {
         return Vec::new();
     }

@@ -49,6 +49,11 @@ pub struct RepoCapabilities {
     /// until jj-aware command routing lands; browsing keeps working because
     /// every read goes through the same git object database.
     pub read_only: bool,
+    /// Committing is available. On colocated Jujutsu repos this is the one
+    /// write routed through the jj CLI (`describe` + `new`), so `read_only`
+    /// and `commits` are true together there: the reducer lets commit
+    /// messages through while every other write stays dropped.
+    pub commits: bool,
     /// A staging area (index) exists, so the staged/unstaged lanes apply.
     pub staging: bool,
     /// Stashing is supported.
@@ -66,6 +71,7 @@ impl Default for RepoCapabilities {
         Self {
             is_jj: false,
             read_only: false,
+            commits: true,
             staging: true,
             stash: true,
             interactive_rebase: true,
@@ -77,11 +83,13 @@ impl Default for RepoCapabilities {
 
 impl RepoCapabilities {
     /// Capabilities of a colocated Jujutsu repository in compatibility
-    /// (read-only) mode.
+    /// (read-only) mode. The gix jj adapter re-enables `commits` on top of
+    /// this — the raw detector has no opinion on command routing.
     pub const fn jj_read_only() -> Self {
         Self {
             is_jj: true,
             read_only: true,
+            commits: false,
             staging: false,
             stash: false,
             interactive_rebase: false,

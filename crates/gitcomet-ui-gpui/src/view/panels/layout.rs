@@ -15,8 +15,8 @@ fn merge_active(repo: Option<&RepoState>) -> bool {
     repo.is_some_and(|r| matches!(&r.merge_commit_message, Loadable::Ready(Some(_))))
 }
 
-fn commit_allowed(is_merge_active: bool, staged_count: usize) -> bool {
-    staged_count > 0 || is_merge_active
+fn commit_allowed(is_merge_active: bool, pending_count: usize) -> bool {
+    pending_count > 0 || is_merge_active
 }
 
 /// Author identity block: avatar + name + muted email, with the authored date
@@ -714,11 +714,19 @@ impl DetailsPaneView {
                 && !matches!(repo.rebase_in_progress, Loadable::Ready(true))
                 && Self::repo_has_head_commit(repo);
         }
-        let staged_count = repo
-            .staged_status_entries()
-            .map_or(0, |entries| entries.len());
+        // jj repos have no staging area (`capabilities.staging` false): the
+        // working-copy change IS what a routed describe+new commit will
+        // contain, so it gates the button instead of the always-empty
+        // staged lane.
+        let pending_count = if repo.capabilities.staging {
+            repo.staged_status_entries()
+                .map_or(0, |entries| entries.len())
+        } else {
+            repo.worktree_status_entries()
+                .map_or(0, |entries| entries.len())
+        };
         let is_merge_active = merge_active(Some(repo));
-        commit_allowed(is_merge_active, staged_count)
+        commit_allowed(is_merge_active, pending_count)
     }
 
     fn submit_commit(&mut self, cx: &mut gpui::Context<Self>) -> bool {
