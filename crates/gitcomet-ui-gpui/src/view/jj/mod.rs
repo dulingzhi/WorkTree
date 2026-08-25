@@ -466,6 +466,27 @@ impl JjRepoView {
         }
         cx.notify();
     }
+
+    /// Fetch every remote (`jj git fetch --all-remotes`) — jj has no pull;
+    /// fetching is pulling. The output lands in the status strip below.
+    fn fetch_all(&mut self, cx: &mut gpui::Context<Self>) {
+        if let Some(repo) = self.state.active_repo() {
+            if repo.pending_command.is_none() {
+                self.store.dispatch(JjMsg::FetchAll { repo_id: repo.id });
+            }
+        }
+        cx.notify();
+    }
+
+    /// Push tracking bookmarks (`jj git push`).
+    fn push(&mut self, cx: &mut gpui::Context<Self>) {
+        if let Some(repo) = self.state.active_repo() {
+            if repo.pending_command.is_none() {
+                self.store.dispatch(JjMsg::Push { repo_id: repo.id });
+            }
+        }
+        cx.notify();
+    }
 }
 
 impl Render for JjRepoView {
@@ -534,6 +555,26 @@ impl Render for JjRepoView {
                     .on_click(theme, cx, |this, _e, _w, cx| {
                         this.start_new_change(cx);
                     });
+                    // Network gestures live here rather than the shared
+                    // action bar: that bar's pull/push are upstream-tracking
+                    // git semantics, while jj fetches all remotes and pushes
+                    // tracking bookmarks (#83).
+                    let fetch_button = components::Button::new(
+                        "jj_fetch_all",
+                        crate::i18n::tr("jj.network.fetch"),
+                    )
+                    .style(components::ButtonStyle::Outlined)
+                    .disabled(busy)
+                    .on_click(theme, cx, |this, _e, _w, cx| {
+                        this.fetch_all(cx);
+                    });
+                    let push_button =
+                        components::Button::new("jj_push", crate::i18n::tr("jj.network.push"))
+                            .style(components::ButtonStyle::Outlined)
+                            .disabled(busy)
+                            .on_click(theme, cx, |this, _e, _w, cx| {
+                                this.push(cx);
+                            });
 
                     card = card.child(
                         div()
@@ -599,7 +640,15 @@ impl Render for JjRepoView {
                                     .flex()
                                     .gap_2()
                                     .child(describe_button)
-                                    .child(new_button),
+                                    .child(new_button)
+                                    .child(
+                                        div()
+                                            .ml_auto()
+                                            .flex()
+                                            .gap_2()
+                                            .child(fetch_button)
+                                            .child(push_button),
+                                    ),
                             ),
                     );
                 }
@@ -690,6 +739,48 @@ impl Render for JjRepoView {
                                 error = error
                             )),
                     );
+                }
+                // The last fetch/push output (jj prints its per-bookmark
+                // transfer summary here); skipped when the command said
+                // nothing, which a quiet fetch often does.
+                if let Some(output) = repo.last_network_output.clone() {
+                    let text = output.combined();
+                    if !text.trim().is_empty() {
+                        // One row per line — gpui wraps rather than
+                        // preserving newlines, so the output keeps its
+                        // shape the same way the diff renderer does.
+                        let mut output_lines = div().flex().flex_col();
+                        for line in truncate_chars(&text, 4000).lines() {
+                            output_lines = output_lines.child(
+                                div()
+                                    .text_xs()
+                                    .text_color(theme.colors.foreground.primary)
+                                    .child(line.to_string()),
+                            );
+                        }
+                        card = card.child(
+                            div()
+                                .id("jj_network_output")
+                                .debug_selector(|| "jj_network_output".to_string())
+                                .rounded(px(theme.radii.panel))
+                                .border_1()
+                                .border_color(theme.colors.stroke.subtle)
+                                .p_2()
+                                .flex()
+                                .flex_col()
+                                .gap_1()
+                                .child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(theme.colors.foreground.secondary)
+                                        .child(crate::i18n::t!(
+                                            "jj.network.output",
+                                            command = output.command
+                                        )),
+                                )
+                                .child(output_lines),
+                        );
+                    }
                 }
 
                 // The change list (working copy pinned above, skipped here),
@@ -1254,6 +1345,16 @@ impl GitCometView {
     }
 }
 
+/// Clamp a command-output block to `max` chars with an ellipsis, so a
+/// chatty fetch cannot flood the status strip.
+fn truncate_chars(text: &str, max: usize) -> String {
+    if text.chars().count() <= max {
+        return text.to_string();
+    }
+    let truncated: String = text.chars().take(max).collect();
+    format!("{truncated}…")
+}
+
 /// Jj-side repos whose workdir no longer exists among the git store's
 /// repos — the set whose tabs were closed and whose jj handles should be
 /// released.
@@ -1514,7 +1615,12 @@ mod tests {
 
         fn fetch_all_with_output(&self) -> Result<CommandOutput> {
             self.record("fetch_all".to_string());
-            Ok(CommandOutput::empty_success("jj git fetch --all-remotes"))
+            Ok(CommandOutput {
+                command: "jj git fetch --all-remotes".to_string(),
+                stdout: "fetched 2 bookmarks\n".to_string(),
+                stderr: String::new(),
+                exit_code: Some(0),
+            })
         }
 
         fn push_tracked_with_output(&self) -> Result<CommandOutput> {
@@ -1973,6 +2079,76 @@ mod tests {
                 .active_repo()
                 .is_some_and(|repo| repo.conflicts.is_empty())
         });
+    }
+
+    /// Fetch/push (#83): both gestures reach the backend through the
+    /// store's serialized mutations, and a fetch that prints something
+    /// lands in the status strip's state (`last_network_output`).
+    #[gpui::test]
+    fn fetch_and_push_gestures_reach_the_backend(cx: &mut gpui::TestAppContext) {
+        let repo = FakeJjRepository::new("/tmp/fake-jj-net");
+        let backend = Arc::new(FakeJjBackend {
+            repo: std::sync::Mutex::new(Some(Arc::clone(&repo))),
+        });
+        let (store, events) = JjStore::new(backend);
+        let store = Arc::new(store);
+        store.dispatch(JjMsg::OpenRepo {
+            workdir: std::path::PathBuf::from("/tmp/fake-jj-net"),
+        });
+        wait_until("repo to load with a working copy", || {
+            store
+                .snapshot()
+                .active_repo()
+                .is_some_and(|repo| repo.working_copy.is_some())
+        });
+
+        let (view, cx) = cx.add_window_view(|window, cx| {
+            JjRepoView::new(
+                Arc::clone(&store),
+                events,
+                AppTheme::gitcomet_light(),
+                window,
+                cx,
+            )
+        });
+        cx.run_until_parked();
+
+        let mutation_settled = || {
+            store
+                .snapshot()
+                .active_repo()
+                .is_some_and(|repo| repo.pending_command.is_none())
+        };
+        cx.update(|_window, app| {
+            view.update(app, |view, cx| view.fetch_all(cx));
+        });
+        wait_until("fetch to run and settle", || {
+            repo.has_call("fetch_all") && mutation_settled()
+        });
+        let snapshot = store.snapshot();
+        let output = snapshot
+            .active_repo()
+            .expect("repo")
+            .last_network_output
+            .as_ref()
+            .expect("fetch output recorded");
+        assert_eq!(output.command, "jj git fetch --all-remotes");
+        assert_eq!(output.stdout.trim(), "fetched 2 bookmarks");
+
+        cx.update(|_window, app| {
+            view.update(app, |view, cx| view.push(cx));
+        });
+        wait_until("push to run and settle", || {
+            repo.has_call("push") && mutation_settled()
+        });
+        let snapshot = store.snapshot();
+        let output = snapshot
+            .active_repo()
+            .expect("repo")
+            .last_network_output
+            .as_ref()
+            .expect("push output recorded");
+        assert_eq!(output.command, "jj git push");
     }
 
     /// The describe bar's gestures reach the store as mutations on @:

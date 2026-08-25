@@ -37,6 +37,10 @@ jj:
     count: "%{count} conflicted paths"
     recheck: Re-check
     copy_hint: "Click a path to copy it."
+  network:
+    fetch: Fetch
+    push: Push
+    output: "Output of %{command}:"
   bookmarks:
     title: Bookmarks
     count: "%{count}"

@@ -38,6 +38,10 @@ jj:
     count: "%{count} 个冲突路径"
     recheck: 重新检查
     copy_hint: "点击路径即可复制。"
+  network:
+    fetch: 获取
+    push: 推送
+    output: "%{command} 的输出："
   bookmarks:
     title: 书签
     count: "%{count}"
