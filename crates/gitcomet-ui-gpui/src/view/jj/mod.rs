@@ -336,9 +336,16 @@ impl JjRepoView {
     }
 
     fn handle_list_key_down(&mut self, event: &gpui::KeyDownEvent, cx: &mut gpui::Context<Self>) {
+        // Vim-style j/k mirror the arrows; c (bare or with the platform
+        // modifier — the keystroke is the same either way) copies the
+        // selected change id; Enter expands the selected change's first
+        // file diff. The handler only fires while the list holds focus, so
+        // bare letters never leak from the text inputs.
         match event.keystroke.key.as_ref() {
-            "up" => self.move_selection(-1, cx),
-            "down" => self.move_selection(1, cx),
+            "up" | "k" => self.move_selection(-1, cx),
+            "down" | "j" => self.move_selection(1, cx),
+            "c" => self.copy_selected_change_id(cx),
+            "enter" => self.toggle_first_file_diff(cx),
             "escape" => {
                 if self.selected_change.take().is_some() {
                     self.selected_file = None;
@@ -347,6 +354,55 @@ impl JjRepoView {
             }
             _ => {}
         }
+    }
+
+    /// Copy the selected change id (`c` / ⌘C on the list, or clicking the
+    /// id in the details header). Change ids are what every jj command
+    /// takes, so they are the thing worth copying.
+    fn copy_selected_change_id(&mut self, cx: &mut gpui::Context<Self>) {
+        if let Some(change) = self.selected_change.clone() {
+            crate::clipboard::write_text(cx, change.0, crate::clipboard::CopySource::JjChangeId);
+        }
+    }
+
+    /// Enter on the list: expand the selected change's first file diff, or
+    /// collapse it when one is already expanded.
+    fn toggle_first_file_diff(&mut self, cx: &mut gpui::Context<Self>) {
+        let Some(repo) = self.state.active_repo() else {
+            return;
+        };
+        let Some(first) = repo.details.files.first() else {
+            return;
+        };
+        if self.selected_file.as_deref() == Some(first.path.as_str()) {
+            self.selected_file = None;
+        } else {
+            self.selected_file = Some(first.path.clone());
+            self.sync_selection_details();
+        }
+        cx.notify();
+    }
+
+    /// Open the repository's working directory in the system file manager.
+    fn open_workdir(&mut self, cx: &mut gpui::Context<Self>) {
+        if let Some(repo) = self.state.active_repo() {
+            if let Err(error) = super::platform_open::open_path(&repo.spec.workdir) {
+                eprintln!("jj: open workdir failed: {error}");
+            }
+        }
+        cx.notify();
+    }
+
+    /// Reveal one of the selected change's files in the system file
+    /// manager.
+    fn reveal_file(&mut self, path: &str, cx: &mut gpui::Context<Self>) {
+        if let Some(repo) = self.state.active_repo() {
+            let full = repo.spec.workdir.join(path);
+            if let Err(error) = super::platform_open::open_file_location(&full) {
+                eprintln!("jj: reveal file failed: {error}");
+            }
+        }
+        cx.notify();
     }
 
     /// Step the selection `delta` rows through the rendered rows (which
@@ -694,6 +750,16 @@ impl Render for JjRepoView {
                             .on_click(theme, cx, |this, _e, _w, cx| {
                                 this.push(cx);
                             });
+                    // Opening the workdir is a shell-out, not a jj command,
+                    // so it stays enabled while a mutation runs (#86).
+                    let open_dir_button = components::Button::new(
+                        "jj_open_workdir",
+                        crate::i18n::tr("jj.working_copy.open_dir"),
+                    )
+                    .style(components::ButtonStyle::Outlined)
+                    .on_click(theme, cx, |this, _e, _w, cx| {
+                        this.open_workdir(cx);
+                    });
 
                     card = card.child(
                         div()
@@ -721,9 +787,22 @@ impl Render for JjRepoView {
                                     )
                                     .child(
                                         div()
+                                            .id("jj_wc_change_id")
                                             .text_sm()
                                             .text_color(theme.colors.foreground.emphasis)
-                                            .child(wc.change_id.0.clone()),
+                                            // Clicking @'s change id copies it (#86),
+                                            // like the details header's id.
+                                            .child(wc.change_id.0.clone())
+                                            .on_click({
+                                                let id = wc.change_id.0.clone();
+                                                move |_e, _w, cx| {
+                                                    crate::clipboard::write_text(
+                                                        cx,
+                                                        id.clone(),
+                                                        crate::clipboard::CopySource::JjChangeId,
+                                                    );
+                                                }
+                                            }),
                                     )
                                     .child(
                                         div()
@@ -766,7 +845,8 @@ impl Render for JjRepoView {
                                             .flex()
                                             .gap_2()
                                             .child(fetch_button)
-                                            .child(push_button),
+                                            .child(push_button)
+                                            .child(open_dir_button),
                                     ),
                             ),
                     );
@@ -985,7 +1065,17 @@ impl Render for JjRepoView {
                         .border_1()
                         .border_color(theme.colors.stroke.default)
                         .overflow_hidden()
-                        .child(list),
+                        .child(list)
+                        // The list's keyboard surface (#86), spelled out
+                        // once under the rows.
+                        .child(
+                            div()
+                                .px_3()
+                                .py_1()
+                                .text_xs()
+                                .text_color(theme.colors.foreground.secondary)
+                                .child(crate::i18n::tr("jj.changes.keyboard_hint")),
+                        ),
                 );
 
                 if repo.next_cursor.is_some() {
@@ -1048,10 +1138,24 @@ impl Render for JjRepoView {
                         for row in &file_rows {
                             let expanded = selected_file.as_deref() == Some(row.path.as_str());
                             let row_path = row.path.clone();
+                            let reveal_path = row.path.clone();
+                            let reveal_button = components::Button::new(
+                                SharedString::from(format!("jj_file_reveal_{}", row.path)),
+                                crate::i18n::tr("jj.details.reveal"),
+                            )
+                            .style(components::ButtonStyle::Transparent)
+                            .on_click(theme, cx, move |this, _e, _w, cx| {
+                                // Keep the row click from also toggling the
+                                // diff expansion.
+                                cx.stop_propagation();
+                                this.reveal_file(&reveal_path, cx);
+                            })
+                            .into_any_element();
                             files_body = files_body.child(render_file_row(
                                 row,
                                 expanded,
                                 theme,
+                                reveal_button,
                                 cx.listener(move |this, _e, _window, cx| {
                                     if this.selected_file.as_deref() == Some(row_path.as_str()) {
                                         // Clicking the expanded file collapses it.
@@ -1228,9 +1332,22 @@ impl Render for JjRepoView {
                                     )
                                     .child(
                                         div()
+                                            .id("jj_details_change_id")
                                             .text_sm()
                                             .text_color(theme.colors.foreground.emphasis)
-                                            .child(selected_change.0.clone()),
+                                            // Clicking the id copies it (#86) — change
+                                            // ids are what every jj command takes.
+                                            .child(selected_change.0.clone())
+                                            .on_click({
+                                                let id = selected_change.0.clone();
+                                                move |_e, _w, cx| {
+                                                    crate::clipboard::write_text(
+                                                        cx,
+                                                        id.clone(),
+                                                        crate::clipboard::CopySource::JjChangeId,
+                                                    );
+                                                }
+                                            }),
                                     )
                                     .child(
                                         div()
@@ -2205,6 +2322,104 @@ mod tests {
         assert_eq!(
             repo_state.details.files[0].path, "modified.txt",
             "the file list order survives the diff expansion"
+        );
+    }
+
+    /// The list's keyboard surface (#86): j/k step the selection like the
+    /// arrows, Enter expands the selected change's first file (and
+    /// collapses it again), and c copies the selected change id to the
+    /// clipboard.
+    #[gpui::test]
+    fn list_keyboard_shortcuts_move_copy_and_expand(cx: &mut gpui::TestAppContext) {
+        let repo = FakeJjRepository::new("/tmp/fake-jj-keys");
+        let backend = Arc::new(FakeJjBackend {
+            repo: std::sync::Mutex::new(Some(Arc::clone(&repo))),
+        });
+        let (store, events) = JjStore::new(backend);
+        let store = Arc::new(store);
+        store.dispatch(JjMsg::OpenRepo {
+            workdir: std::path::PathBuf::from("/tmp/fake-jj-keys"),
+        });
+        wait_until("repo to load with changes", || {
+            store
+                .snapshot()
+                .active_repo()
+                .is_some_and(|repo| repo.changes.len() >= 2)
+        });
+
+        let (view, cx) = cx.add_window_view(|window, cx| {
+            JjRepoView::new(
+                Arc::clone(&store),
+                events,
+                AppTheme::gitcomet_light(),
+                window,
+                cx,
+            )
+        });
+        cx.run_until_parked();
+
+        let key_event = |name: &str| gpui::KeyDownEvent {
+            keystroke: gpui::Keystroke::parse(name).expect("valid keystroke"),
+            is_held: false,
+            prefer_character_input: false,
+        };
+        let press = |name: &str, cx: &mut gpui::VisualTestContext| {
+            let event = key_event(name);
+            cx.update(|_window, app| {
+                view.update(app, |view, cx| view.handle_list_key_down(&event, cx));
+            });
+        };
+
+        // j steps down to the first row; k steps back up (the working copy
+        // is pinned out of the list, so "base" is the only row).
+        press("j", cx);
+        let selected = cx.update(|_window, app| view.read(app).selected_change.clone());
+        assert_eq!(selected.map(|change| change.0), Some("base".to_string()));
+        press("k", cx);
+        let selected = cx.update(|_window, app| view.read(app).selected_change.clone());
+        assert_eq!(
+            selected.map(|change| change.0),
+            Some("base".to_string()),
+            "k clamps at the top row"
+        );
+
+        // The selection reconciles the file list, so Enter has a first
+        // file to expand.
+        wait_until("change files to load", || {
+            repo.has_call("change_files:base")
+        });
+        wait_until("details to hold the file list", || {
+            store
+                .snapshot()
+                .active_repo()
+                .is_some_and(|repo| repo.details.files.len() == 2)
+        });
+        cx.update(|_window, app| {
+            view.update(app, |view, cx| {
+                view.state = store.snapshot();
+                view.handle_list_key_down(&key_event("enter"), cx);
+            });
+        });
+        let expanded = cx.update(|_window, app| view.read(app).selected_file.clone());
+        assert_eq!(
+            expanded.as_deref(),
+            Some("modified.txt"),
+            "Enter expands the first file"
+        );
+        press("enter", cx);
+        let expanded = cx.update(|_window, app| view.read(app).selected_file.clone());
+        assert_eq!(expanded, None, "Enter collapses again");
+
+        // c lands the selected change id in the clipboard (read back
+        // through the crate's clipboard module — the guard test forbids
+        // direct GPUI clipboard calls outside it).
+        press("c", cx);
+        let copied =
+            cx.update(|_window, app| view.update(app, |_view, cx| crate::clipboard::read_text(cx)));
+        assert_eq!(
+            copied.as_deref(),
+            Some("base"),
+            "c copies the selected change id"
         );
     }
 

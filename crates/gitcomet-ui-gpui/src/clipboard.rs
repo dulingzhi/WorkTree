@@ -13,6 +13,7 @@ pub(crate) enum CopySource {
     TerminalProtocol,
     ContextMenu,
     JjConflictPath,
+    JjChangeId,
 }
 
 impl CopySource {
@@ -32,6 +33,7 @@ impl CopySource {
             Self::TerminalProtocol => "terminal-protocol",
             Self::ContextMenu => "context-menu",
             Self::JjConflictPath => "jj-conflict-path",
+            Self::JjChangeId => "jj-change-id",
         }
     }
 }

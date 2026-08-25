@@ -9,11 +9,13 @@ jj:
     empty_description: "(no description set)"
     conflicted: conflicted
     divergent: divergent
+    open_dir: "Open in file explorer"
   changes:
     count: "%{count} changes"
     more_available: more available
     empty: "No changes match the current view."
     load_more: Load more changes
+    keyboard_hint: "j/k or ↑/↓ move · Enter expands a file · c copies the change id"
   describe:
     placeholder: "Describe this change…"
     submit: Describe
@@ -33,6 +35,7 @@ jj:
     diff_loading: Loading diff…
     diff_error: "Could not read the diff: %{error}"
     diff_empty: "This path has no textual changes."
+    reveal: Reveal
   actions:
     new_here: New here
     squash: Squash into @

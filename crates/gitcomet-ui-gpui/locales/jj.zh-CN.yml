@@ -10,11 +10,13 @@ jj:
     empty_description: "（未设置描述）"
     conflicted: 有冲突
     divergent: 已分裂
+    open_dir: 在文件管理器中打开
   changes:
     count: "%{count} 个变更"
     more_available: 还有更多
     empty: "当前视图下没有变更。"
     load_more: 加载更多变更
+    keyboard_hint: "j/k 或 ↑/↓ 移动 · Enter 展开文件 · c 复制变更 id"
   describe:
     placeholder: "描述这个变更…"
     submit: 描述
@@ -34,6 +36,7 @@ jj:
     diff_loading: 正在加载差异…
     diff_error: "无法读取差异：%{error}"
     diff_empty: 此路径没有文本改动。
+    reveal: 显示
   actions:
     new_here: 在此新建
     squash: 并入 @

@@ -66,6 +66,7 @@ pub(super) fn render_file_row(
     row: &FileRowVm,
     expanded: bool,
     theme: AppTheme,
+    reveal_button: gpui::AnyElement,
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
     let (chip_foreground, chip_background) = status_chip_colors(row.status_label, &theme);
@@ -110,6 +111,7 @@ pub(super) fn render_file_row(
                     .child(crate::i18n::t!("jj.details.renamed_from", from = from)),
             )
         })
+        .child(div().ml_auto().flex_none().child(reveal_button))
 }
 
 /// How one diff line is colored. Mirrors the focused-diff window's
