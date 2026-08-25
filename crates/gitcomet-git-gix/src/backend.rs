@@ -41,7 +41,15 @@ impl GixBackend {
             cancellation.check_cancelled()?;
         }
 
-        Ok(Arc::new(GixRepo::new(workdir, repo.into_sync())))
+        let repo = GixRepo::new(workdir, repo.into_sync());
+        // A colocated Jujutsu repo opens through the adapter: reads keep
+        // flowing through gix, writes stay Unsupported until each one is
+        // routed through the jj CLI.
+        if repo.capabilities().is_jj {
+            Ok(Arc::new(crate::jj::JjRepository::new(repo)))
+        } else {
+            Ok(Arc::new(repo))
+        }
     }
 }
 

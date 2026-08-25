@@ -1,0 +1,417 @@
+//! Colocated-Jujutsu adapter over the gix backend (Plan A, P1).
+//!
+//! A colocated repo shares the git object database and refs with jj, so every
+//! read keeps working through [`GixRepo`] unchanged. Writes are the problem:
+//! jj snapshots the working copy and syncs the git index/HEAD around every
+//! command, so a git-side write would race it. Until a write is explicitly
+//! routed through the jj CLI (commit → `describe`+`new`, bookmarks, network,
+//! …), the adapter returns [`ErrorKind::Unsupported`] for it — the
+//! `RepoCapabilities::read_only` flag in the reducer keeps those paths from
+//! being reached in the first place; the Unsupported error is the second lock
+//! on the same door.
+
+use crate::repo::GixRepo;
+use crate::util::bytes_to_text_preserving_utf8;
+use gitcomet_core::domain::{
+    Branch, CommitDetails, CommitFileChange, CommitId, DiffArea, DiffPreviewTextSide, DiffTarget,
+    FileDiffImage, FileDiffText, FileEntry, LogCursor, LogPage, RecentCommitMessage, RefMetadata,
+    ReflogEntry, Remote, RemoteBranch, RemoteTag, RepoSpec, RepoStatus, StashEntry, Submodule,
+    SubmoduleDiffSummary, Tag, UpstreamDivergence, Worktree,
+};
+use gitcomet_core::error::{Error, ErrorKind};
+use gitcomet_core::process::background_command;
+use gitcomet_core::services::{
+    BlameLine, CommandOutput, GitRepository, PullMode, RepoCapabilities, Result,
+    SubmoduleTrustDecision,
+};
+use rustc_hash::FxHashMap;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output};
+
+pub(crate) struct JjRepository {
+    inner: GixRepo,
+}
+
+impl JjRepository {
+    pub(crate) fn new(inner: GixRepo) -> Self {
+        Self { inner }
+    }
+
+    /// The gix-backed reader every read delegates to.
+    #[allow(dead_code)] // snapshot triggers / status mapping hook in later P1 tasks
+    pub(crate) fn gix(&self) -> &GixRepo {
+        &self.inner
+    }
+
+    /// A `jj` command pre-configured with `--repository <workdir>` and the
+    /// background-console treatment. Every jj invocation snapshots the
+    /// working copy and imports git refs first — that is the point of routing
+    /// writes through it.
+    #[allow(dead_code)] // write routing (commit/bookmarks/network) lands in later P1 tasks
+    pub(super) fn jj_cmd(&self) -> Command {
+        jj_workdir_cmd_for(&self.inner.spec().workdir)
+    }
+}
+
+/// Build a `jj --repository <workdir> …` background command.
+pub(crate) fn jj_workdir_cmd_for(workdir: &Path) -> Command {
+    let mut cmd = background_command("jj");
+    cmd.arg("--repository").arg(workdir);
+    cmd
+}
+
+/// Run a prepared jj command and capture its output.
+///
+/// Mirrors `util::run_git_with_output` minus the git-auth plumbing: jj owns
+/// its own credentials, so there is no askpass hook to install. A non-zero
+/// exit becomes a `Backend` error carrying the first non-empty stream, which
+/// the command log and error banners surface verbatim.
+pub(crate) fn run_jj_command_with_output(mut cmd: Command, label: &str) -> Result<CommandOutput> {
+    let output = cmd
+        .output()
+        .map_err(|err| Error::new(ErrorKind::Backend(format!("spawn `{label}`: {err}"))))?;
+    if !output.status.success() {
+        return Err(jj_command_failed_error(label, output));
+    }
+    Ok(CommandOutput {
+        command: label.to_string(),
+        stdout: bytes_to_text_preserving_utf8(&output.stdout),
+        stderr: bytes_to_text_preserving_utf8(&output.stderr),
+        exit_code: output.status.code(),
+    })
+}
+
+fn jj_command_failed_error(label: &str, output: Output) -> Error {
+    let detail = [output.stderr.as_slice(), output.stdout.as_slice()]
+        .into_iter()
+        .map(bytes_to_text_preserving_utf8)
+        .map(|text| text.trim().to_string())
+        .find(|text| !text.is_empty())
+        .unwrap_or_else(|| format!("exited with {}", output.status));
+    Error::new(ErrorKind::Backend(format!("`{label}` failed: {detail}")))
+}
+
+/// `ErrorKind::Unsupported` carries a `&'static str`, so the per-operation
+/// message is stitched at compile time instead of formatted.
+macro_rules! jj_write_unsupported {
+    ($operation:literal) => {
+        Error::new(ErrorKind::Unsupported(concat!(
+            $operation,
+            " is not available in a colocated Jujutsu repository yet; \
+             use the jj CLI for this operation"
+        )))
+    };
+}
+
+impl GitRepository for JjRepository {
+    fn capabilities(&self) -> RepoCapabilities {
+        // Delegates to the inner gix repo, which owns the `.jj` detection, so
+        // capability flips for routed writes land in one place.
+        self.inner.capabilities()
+    }
+
+    fn spec(&self) -> &RepoSpec {
+        self.inner.spec()
+    }
+
+    fn log_head_page(&self, limit: usize, cursor: Option<&LogCursor>) -> Result<LogPage> {
+        self.inner.log_head_page(limit, cursor)
+    }
+
+    fn commit_details(&self, id: &CommitId) -> Result<CommitDetails> {
+        self.inner.commit_details(id)
+    }
+
+    fn reflog_head(&self, limit: usize) -> Result<Vec<ReflogEntry>> {
+        self.inner.reflog_head(limit)
+    }
+
+    fn current_branch(&self) -> Result<String> {
+        self.inner.current_branch()
+    }
+
+    fn list_branches(&self) -> Result<Vec<Branch>> {
+        self.inner.list_branches()
+    }
+
+    fn list_remotes(&self) -> Result<Vec<Remote>> {
+        self.inner.list_remotes()
+    }
+
+    fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
+        self.inner.list_remote_branches()
+    }
+
+    fn status(&self) -> Result<RepoStatus> {
+        self.inner.status()
+    }
+
+    fn diff_unified(&self, target: &DiffTarget) -> Result<String> {
+        self.inner.diff_unified(target)
+    }
+
+    fn stash_list(&self) -> Result<Vec<StashEntry>> {
+        self.inner.stash_list()
+    }
+
+    // Reads whose trait defaults are empty/Unsupported are overridden here so
+    // browsing fidelity on a colocated repo matches a plain git repo: tags,
+    // worktrees, submodules, blame, file history, upstream divergence, author
+    // emails, and the all-branches/filtered log walks all stay live through
+    // gix. Cancellable variants inherit these through their default
+    // delegations in the trait.
+
+    fn log_all_branches_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
+        self.inner.log_all_branches_page(_limit, _cursor)
+    }
+
+    fn log_file_page(
+        &self,
+        _path: &Path,
+        _limit: usize,
+        _cursor: Option<&LogCursor>,
+    ) -> Result<LogPage> {
+        self.inner.log_file_page(_path, _limit, _cursor)
+    }
+
+    fn diff_range_files(
+        &self,
+        _from: &CommitId,
+        _to: Option<&CommitId>,
+    ) -> Result<Vec<CommitFileChange>> {
+        self.inner.diff_range_files(_from, _to)
+    }
+
+    fn topologically_order_commits(&self, ids: &[CommitId]) -> Result<Vec<CommitId>> {
+        self.inner.topologically_order_commits(ids)
+    }
+
+    fn recent_commit_messages(&self, limit: usize) -> Result<Vec<RecentCommitMessage>> {
+        self.inner.recent_commit_messages(limit)
+    }
+
+    fn head_commit_id(&self) -> Result<Option<CommitId>> {
+        self.inner.head_commit_id()
+    }
+
+    fn list_tags(&self) -> Result<Vec<Tag>> {
+        self.inner.list_tags()
+    }
+
+    fn list_remote_tags(&self) -> Result<Vec<RemoteTag>> {
+        self.inner.list_remote_tags()
+    }
+
+    fn staged_diff_unified(&self) -> Result<String> {
+        self.inner.staged_diff_unified()
+    }
+
+    fn diff_file_text(&self, target: &DiffTarget) -> Result<Option<FileDiffText>> {
+        self.inner.diff_file_text(target)
+    }
+
+    fn diff_preview_text_file(
+        &self,
+        target: &DiffTarget,
+        side: DiffPreviewTextSide,
+    ) -> Result<Option<PathBuf>> {
+        self.inner.diff_preview_text_file(target, side)
+    }
+
+    fn diff_file_image(&self, target: &DiffTarget) -> Result<Option<FileDiffImage>> {
+        self.inner.diff_file_image(target)
+    }
+
+    fn blame_file(&self, path: &Path, rev: Option<&str>) -> Result<Vec<BlameLine>> {
+        self.inner.blame_file(path, rev)
+    }
+
+    fn blame_worktree_file(&self, path: &Path, area: DiffArea) -> Result<Vec<BlameLine>> {
+        self.inner.blame_worktree_file(path, area)
+    }
+
+    fn list_worktrees(&self) -> Result<Vec<Worktree>> {
+        self.inner.list_worktrees()
+    }
+
+    fn list_ref_metadata(&self) -> Result<Vec<(String, RefMetadata)>> {
+        self.inner.list_ref_metadata()
+    }
+
+    fn list_submodules(&self) -> Result<Vec<Submodule>> {
+        self.inner.list_submodules()
+    }
+
+    fn list_worktree_files(&self) -> Result<Vec<FileEntry>> {
+        self.inner.list_worktree_files()
+    }
+
+    fn list_tree_files_at_commit(&self, commit_id: &CommitId) -> Result<Vec<FileEntry>> {
+        self.inner.list_tree_files_at_commit(commit_id)
+    }
+
+    fn submodule_diff_summary(&self, target: &DiffTarget) -> Result<SubmoduleDiffSummary> {
+        self.inner.submodule_diff_summary(target)
+    }
+
+    fn upstream_divergence(&self) -> Result<Option<UpstreamDivergence>> {
+        self.inner.upstream_divergence()
+    }
+
+    fn author_email_map(&self) -> Result<FxHashMap<String, String>> {
+        self.inner.author_email_map()
+    }
+
+    fn resolve_file_path_at_commit(
+        &self,
+        path: &Path,
+        commit: &CommitId,
+    ) -> Result<Option<PathBuf>> {
+        self.inner.resolve_file_path_at_commit(path, commit)
+    }
+
+    fn check_submodule_add_trust(&self, url: &str, path: &Path) -> Result<SubmoduleTrustDecision> {
+        self.inner.check_submodule_add_trust(url, path)
+    }
+
+    fn check_submodule_update_trust(&self) -> Result<SubmoduleTrustDecision> {
+        self.inner.check_submodule_update_trust()
+    }
+
+    fn check_submodule_load_trust(&self, path: &Path) -> Result<SubmoduleTrustDecision> {
+        self.inner.check_submodule_load_trust(path)
+    }
+
+    fn squash_message_preview(&self, oldest: &CommitId, head: &CommitId) -> Result<String> {
+        self.inner.squash_message_preview(oldest, head)
+    }
+
+    // Required write methods: every one stays Unsupported until it is routed
+    // through the jj CLI. The optional write methods in the trait default to
+    // Unsupported or funnel into these, so nothing else is needed here.
+
+    fn create_branch(&self, _name: &str, _target: &CommitId) -> Result<()> {
+        Err(jj_write_unsupported!("create_branch"))
+    }
+
+    fn delete_branch(&self, _name: &str) -> Result<()> {
+        Err(jj_write_unsupported!("delete_branch"))
+    }
+
+    fn checkout_branch(&self, _name: &str) -> Result<()> {
+        Err(jj_write_unsupported!("checkout_branch"))
+    }
+
+    fn checkout_commit(&self, _id: &CommitId) -> Result<()> {
+        Err(jj_write_unsupported!("checkout_commit"))
+    }
+
+    fn cherry_pick(&self, _id: &CommitId) -> Result<()> {
+        Err(jj_write_unsupported!("cherry_pick"))
+    }
+
+    fn revert(&self, _id: &CommitId) -> Result<()> {
+        Err(jj_write_unsupported!("revert"))
+    }
+
+    fn stash_create(&self, _message: &str, _include_untracked: bool) -> Result<()> {
+        Err(jj_write_unsupported!("stash_create"))
+    }
+
+    fn stash_apply(&self, _index: usize) -> Result<()> {
+        Err(jj_write_unsupported!("stash_apply"))
+    }
+
+    fn stash_drop(&self, _index: usize) -> Result<()> {
+        Err(jj_write_unsupported!("stash_drop"))
+    }
+
+    fn stage(&self, _paths: &[&Path]) -> Result<()> {
+        Err(jj_write_unsupported!("stage"))
+    }
+
+    fn unstage(&self, _paths: &[&Path]) -> Result<()> {
+        Err(jj_write_unsupported!("unstage"))
+    }
+
+    fn commit(&self, _message: &str) -> Result<()> {
+        Err(jj_write_unsupported!("commit"))
+    }
+
+    fn fetch_all(&self) -> Result<()> {
+        Err(jj_write_unsupported!("fetch_all"))
+    }
+
+    fn pull(&self, _mode: PullMode) -> Result<()> {
+        Err(jj_write_unsupported!("pull"))
+    }
+
+    fn push(&self) -> Result<()> {
+        Err(jj_write_unsupported!("push"))
+    }
+
+    fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
+        Err(jj_write_unsupported!("discard_worktree_changes"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn run_jj_command_with_output_captures_success_output() {
+        // `git` stands in for `jj`: the runner only cares about exit status
+        // and streams, and git is a hard test dependency already.
+        let mut cmd = background_command("git");
+        cmd.arg("--version");
+        let output =
+            run_jj_command_with_output(cmd, "git --version").expect("git --version should succeed");
+        assert_eq!(output.command, "git --version");
+        assert!(output.stdout.contains("git version"), "{output:?}");
+        assert_eq!(output.exit_code, Some(0));
+    }
+
+    #[test]
+    fn run_jj_command_with_output_maps_nonzero_exit_to_backend_error() {
+        let mut cmd = background_command("git");
+        cmd.arg("not-a-real-subcommand");
+        let err = match run_jj_command_with_output(cmd, "git not-a-real-subcommand") {
+            Ok(_) => panic!("expected failure"),
+            Err(err) => err,
+        };
+        assert!(matches!(err.kind(), ErrorKind::Backend(_)), "{err:?}");
+        let text = err.to_string();
+        assert!(text.contains("not-a-real-subcommand"), "{text}");
+    }
+
+    #[test]
+    fn run_jj_command_with_output_maps_spawn_failure_to_backend_error() {
+        let cmd = background_command("gitcomet-jj-test-missing-binary");
+        let err = match run_jj_command_with_output(cmd, "gitcomet-jj-test-missing-binary") {
+            Ok(_) => panic!("expected spawn failure"),
+            Err(err) => err,
+        };
+        assert!(matches!(err.kind(), ErrorKind::Backend(_)), "{err:?}");
+    }
+
+    #[test]
+    fn jj_write_unsupported_mentions_the_operation() {
+        let err = jj_write_unsupported!("commit");
+        assert!(matches!(err.kind(), ErrorKind::Unsupported(_)));
+        assert!(err.to_string().contains("commit"), "{err}");
+    }
+
+    #[test]
+    fn jj_workdir_cmd_targets_the_repository() {
+        let cmd = jj_workdir_cmd_for(Path::new("/tmp/somewhere"));
+        let args: Vec<String> = cmd
+            .get_args()
+            .map(|arg| arg.to_string_lossy().to_string())
+            .collect();
+        assert_eq!(
+            args,
+            vec!["--repository".to_string(), "/tmp/somewhere".to_string()]
+        );
+    }
+}

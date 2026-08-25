@@ -80,6 +80,58 @@ fn jj_available_for_integration_tests() -> bool {
         .unwrap_or(false)
 }
 
+/// The P1 adapter contract, checked without a real jj install: a colocated
+/// repo (fake `.jj` marker) opens through `JjRepository`, every read still
+/// answers through gix, and every write refuses with `Unsupported`.
+#[test]
+fn jj_adapter_delegates_reads_and_refuses_writes() {
+    let dir = tempfile::tempdir().expect("create tempdir");
+    let repo = dir.path().join("repo");
+    fs::create_dir_all(&repo).expect("create repo directory");
+    init_repo_with_commit(&repo);
+    fs::create_dir_all(repo.join(".jj")).expect("create .jj marker directory");
+
+    let backend = GixBackend;
+    let opened = backend.open(&repo).expect("open repository");
+    assert_eq!(opened.capabilities(), RepoCapabilities::jj_read_only());
+
+    // Reads still answer through the composed gix repo.
+    let page = opened
+        .log_head_page(10, None)
+        .expect("adapter delegates log reads");
+    assert!(
+        page.commits
+            .iter()
+            .any(|commit| commit.summary.contains("init"))
+    );
+    let branches = opened.list_branches().expect("list branches");
+    assert_eq!(
+        branches.len(),
+        1,
+        "exactly one branch after init: {branches:?}"
+    );
+    assert_eq!(
+        opened.current_branch().expect("current branch"),
+        branches[0].name,
+        "current branch must match the initial branch regardless of init.defaultBranch"
+    );
+
+    // Writes refuse with `Unsupported` — the second lock behind the reducer's
+    // capability gate.
+    for unsupported in [
+        opened.commit("message").err(),
+        opened.stage(&[Path::new("file.txt")]).err(),
+        opened.create_branch("topic", &page.commits[0].id).err(),
+        opened.fetch_all().err(),
+    ] {
+        let err = unsupported.expect("write must fail");
+        assert!(
+            matches!(err.kind(), gitcomet_core::error::ErrorKind::Unsupported(_)),
+            "expected Unsupported, got {err:?}"
+        );
+    }
+}
+
 /// Opens a genuinely colocated repo (created by `jj git init --colocate`) and
 /// pins the L1 contract end to end: detection reports read-only, reads still
 /// work through gix, and the working copy stays clean because a colocated jj
