@@ -12,8 +12,8 @@ use gitcomet_core::domain::RepoSpec;
 use gitcomet_core::error::{Error, ErrorKind};
 use gitcomet_core::services::{CommandOutput, Result};
 use gitcomet_jj_core::{
-    ChangeId, JjBookmark, JjChange, JjCommitId, JjConflict, JjLogPage, JjLogQuery, JjOp,
-    JjRepository,
+    ChangeId, JjBookmark, JjChange, JjCommitId, JjConflict, JjFileStat, JjFileStatus, JjLogPage,
+    JjLogQuery, JjOp, JjRepository,
 };
 
 use super::backend::JjBackend;
@@ -84,6 +84,27 @@ impl JjRepository for FakeJjRepository {
     fn log(&self, query: &JjLogQuery) -> Result<JjLogPage> {
         self.record(&format!("log:{}", query.revset));
         Ok(log_page())
+    }
+
+    fn change_files(&self, change: &ChangeId) -> Result<Vec<JjFileStat>> {
+        self.record(&format!("change_files:{}", change.0));
+        Ok(vec![
+            JjFileStat {
+                path: "modified.txt".to_string(),
+                status: JjFileStatus::Modified,
+            },
+            JjFileStat {
+                path: "renamed.txt".to_string(),
+                status: JjFileStatus::Renamed {
+                    from: "old.txt".to_string(),
+                },
+            },
+        ])
+    }
+
+    fn file_diff_text(&self, change: &ChangeId, path: &str) -> Result<String> {
+        self.record(&format!("file_diff:{}:{}", change.0, path));
+        Ok(format!("--- a/{path}\n+++ b/{path}\n+{path} line\n"))
     }
 
     fn describe(&self, change: &ChangeId, message: &str) -> Result<()> {
@@ -335,4 +356,148 @@ fn closing_a_repo_removes_it() {
     store.dispatch(JjMsg::CloseRepo { repo_id });
     wait_until(&store, |state| state.repos.is_empty());
     assert!(store.snapshot().active_repo.is_none());
+}
+
+#[test]
+fn change_files_and_file_diff_load_into_the_detail_panels() {
+    let repo = FakeJjRepository::new("/tmp/fake-jj");
+    let (store, _event_rx) = JjStore::new(FakeJjBackend::with(Arc::clone(&repo)));
+    store.dispatch(JjMsg::OpenRepo {
+        workdir: PathBuf::from("/tmp/fake-jj"),
+    });
+    wait_until(&store, |state| {
+        state.repos.first().is_some_and(|r| !r.changes.is_empty())
+    });
+    let repo_id = store.snapshot().repos[0].id;
+    let epoch = store.snapshot().repos[0].refresh_epoch;
+
+    store.dispatch(JjMsg::LoadChangeFiles {
+        repo_id,
+        epoch,
+        change: ChangeId("at".to_string()),
+    });
+    wait_until(&store, |state| {
+        state
+            .repos
+            .first()
+            .is_some_and(|r| !r.details.files.is_empty())
+    });
+    let snapshot = store.snapshot();
+    let repo_state = &snapshot.repos[0];
+    assert_eq!(
+        repo_state.details.change.as_ref().map(|c| c.0.clone()),
+        Some("at".to_string())
+    );
+    assert!(!repo_state.details.loading);
+    assert_eq!(repo_state.details.files.len(), 2);
+
+    store.dispatch(JjMsg::LoadFileDiff {
+        repo_id,
+        epoch,
+        change: ChangeId("at".to_string()),
+        path: "modified.txt".to_string(),
+    });
+    wait_until(&store, |state| {
+        state
+            .repos
+            .first()
+            .is_some_and(|r| r.file_diff.text.is_some())
+    });
+    let snapshot = store.snapshot();
+    let repo_state = &snapshot.repos[0];
+    let text = repo_state.file_diff.text.as_deref().expect("diff text");
+    assert!(text.contains("+++ b/modified.txt"));
+    assert_eq!(repo_state.file_diff.path.as_deref(), Some("modified.txt"));
+    assert!(repo.calls().contains(&"change_files:at".to_string()));
+    assert!(
+        repo.calls()
+            .contains(&"file_diff:at:modified.txt".to_string())
+    );
+}
+
+#[test]
+fn a_refresh_clears_the_detail_panels_and_drops_stale_results() {
+    let repo = FakeJjRepository::new("/tmp/fake-jj");
+    let (store, _event_rx) = JjStore::new(FakeJjBackend::with(Arc::clone(&repo)));
+    store.dispatch(JjMsg::OpenRepo {
+        workdir: PathBuf::from("/tmp/fake-jj"),
+    });
+    wait_until(&store, |state| {
+        state.repos.first().is_some_and(|r| !r.changes.is_empty())
+    });
+    let repo_id = store.snapshot().repos[0].id;
+    let epoch = store.snapshot().repos[0].refresh_epoch;
+
+    store.dispatch(JjMsg::LoadChangeFiles {
+        repo_id,
+        epoch,
+        change: ChangeId("at".to_string()),
+    });
+    wait_until(&store, |state| {
+        state
+            .repos
+            .first()
+            .is_some_and(|r| !r.details.files.is_empty())
+    });
+
+    // A refresh (any mutation or external touch) clears the panel so the
+    // view re-requests it under the bumped epoch; a result from the old
+    // epoch or for a moved selection cannot land afterwards.
+    store.dispatch(JjMsg::RefreshRepo { repo_id });
+    wait_until(&store, |state| {
+        state
+            .repos
+            .first()
+            .is_some_and(|r| r.refresh_epoch == epoch + 1 && r.details.change.is_none())
+    });
+    let snapshot = store.snapshot();
+    let repo_state = &snapshot.repos[0];
+    assert!(repo_state.details.files.is_empty());
+
+    let stale_epoch = epoch;
+    store.dispatch(JjMsg::ChangeFilesLoaded {
+        repo_id,
+        epoch: stale_epoch,
+        change: ChangeId("at".to_string()),
+        files: vec![JjFileStat {
+            path: "stale.txt".to_string(),
+            status: JjFileStatus::Added,
+        }],
+    });
+    let snapshot = store.snapshot();
+    assert!(snapshot.repos[0].details.files.is_empty());
+
+    // A result for a change the user moved away from within the same
+    // epoch is dropped too. The moved-to change's own load is queued
+    // before the stale result, and waiting for its files to land proves
+    // the worker drained past the stale message.
+    let fresh_epoch = store.snapshot().repos[0].refresh_epoch;
+    store.dispatch(JjMsg::LoadChangeFiles {
+        repo_id,
+        epoch: fresh_epoch,
+        change: ChangeId("base".to_string()),
+    });
+    store.dispatch(JjMsg::ChangeFilesLoaded {
+        repo_id,
+        epoch: fresh_epoch,
+        change: ChangeId("at".to_string()),
+        files: vec![JjFileStat {
+            path: "stale-selection.txt".to_string(),
+            status: JjFileStatus::Added,
+        }],
+    });
+    wait_until(&store, |state| {
+        state.repos.first().is_some_and(|r| {
+            r.details.change.as_ref().map(|c| c.0.as_str()) == Some("base")
+                && !r.details.files.is_empty()
+        })
+    });
+    let snapshot = store.snapshot();
+    assert!(
+        snapshot.repos[0]
+            .details
+            .files
+            .iter()
+            .all(|file| file.path != "stale-selection.txt")
+    );
 }

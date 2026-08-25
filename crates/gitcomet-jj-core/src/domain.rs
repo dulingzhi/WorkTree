@@ -140,3 +140,39 @@ pub struct JjOp {
 pub struct JjConflict {
     pub path: String,
 }
+
+/// One path a change touches, from `jj diff --summary`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct JjFileStat {
+    /// The path after the change (the rename target, for renames).
+    pub path: String,
+    pub status: JjFileStatus,
+}
+
+/// The status letter `jj diff --summary` prefixes each path with.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum JjFileStatus {
+    Added,
+    Modified,
+    Removed,
+    /// `R {old => new}` — jj's brace rename notation; `path` carries the
+    /// new name and `from` the old one.
+    Renamed {
+        from: String,
+    },
+    /// A path whose change carries conflict markers (the `C` letter).
+    Conflict,
+}
+
+impl JjFileStatus {
+    /// The single-letter label, as jj spells it.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Added => "A",
+            Self::Modified => "M",
+            Self::Removed => "D",
+            Self::Renamed { .. } => "R",
+            Self::Conflict => "C",
+        }
+    }
+}

@@ -4,7 +4,9 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use gitcomet_jj_core::{ChangeId, JjBookmark, JjConflict, JjLogPage, JjOp, JjRepository};
+use gitcomet_jj_core::{
+    ChangeId, JjBookmark, JjConflict, JjFileStat, JjLogPage, JjOp, JjRepository,
+};
 
 use crate::model::RepoId;
 use crate::msg::{RepoExternalChange, RepoWatchDegradedReason};
@@ -61,6 +63,19 @@ pub enum JjMsg {
         epoch: u64,
         conflicts: Vec<JjConflict>,
     },
+    ChangeFilesLoaded {
+        repo_id: RepoId,
+        epoch: u64,
+        change: ChangeId,
+        files: Vec<JjFileStat>,
+    },
+    FileDiffLoaded {
+        repo_id: RepoId,
+        epoch: u64,
+        change: ChangeId,
+        path: String,
+        text: String,
+    },
     LoadFailed {
         repo_id: RepoId,
         epoch: u64,
@@ -71,6 +86,19 @@ pub enum JjMsg {
     // --- user gestures ---
     LoadMoreLog {
         repo_id: RepoId,
+    },
+    /// Request the selected change's file list (change-detail panel).
+    LoadChangeFiles {
+        repo_id: RepoId,
+        epoch: u64,
+        change: ChangeId,
+    },
+    /// Request one file's diff text within a change.
+    LoadFileDiff {
+        repo_id: RepoId,
+        epoch: u64,
+        change: ChangeId,
+        path: String,
     },
     SetRevset {
         repo_id: RepoId,
@@ -226,6 +254,32 @@ impl std::fmt::Debug for JjMsg {
                 .field("epoch", epoch)
                 .field("len", &conflicts.len())
                 .finish(),
+            ChangeFilesLoaded {
+                repo_id,
+                epoch,
+                change,
+                files,
+            } => f
+                .debug_struct("ChangeFilesLoaded")
+                .field("repo_id", repo_id)
+                .field("epoch", epoch)
+                .field("change", change)
+                .field("len", &files.len())
+                .finish(),
+            FileDiffLoaded {
+                repo_id,
+                epoch,
+                change,
+                path,
+                text,
+            } => f
+                .debug_struct("FileDiffLoaded")
+                .field("repo_id", repo_id)
+                .field("epoch", epoch)
+                .field("change", change)
+                .field("path", path)
+                .field("len", &text.len())
+                .finish(),
             LoadFailed {
                 repo_id,
                 epoch,
@@ -241,6 +295,28 @@ impl std::fmt::Debug for JjMsg {
             LoadMoreLog { repo_id } => f
                 .debug_struct("LoadMoreLog")
                 .field("repo_id", repo_id)
+                .finish(),
+            LoadChangeFiles {
+                repo_id,
+                epoch,
+                change,
+            } => f
+                .debug_struct("LoadChangeFiles")
+                .field("repo_id", repo_id)
+                .field("epoch", epoch)
+                .field("change", change)
+                .finish(),
+            LoadFileDiff {
+                repo_id,
+                epoch,
+                change,
+                path,
+            } => f
+                .debug_struct("LoadFileDiff")
+                .field("repo_id", repo_id)
+                .field("epoch", epoch)
+                .field("change", change)
+                .field("path", path)
                 .finish(),
             SetRevset { repo_id, revset } => f
                 .debug_struct("SetRevset")
@@ -375,8 +451,12 @@ impl JjMsg {
             | BookmarksLoaded { repo_id, .. }
             | OpLogLoaded { repo_id, .. }
             | ConflictsLoaded { repo_id, .. }
+            | ChangeFilesLoaded { repo_id, .. }
+            | FileDiffLoaded { repo_id, .. }
             | LoadFailed { repo_id, .. }
             | LoadMoreLog { repo_id }
+            | LoadChangeFiles { repo_id, .. }
+            | LoadFileDiff { repo_id, .. }
             | SetRevset { repo_id, .. }
             | DescribeChange { repo_id, .. }
             | NewChange { repo_id, .. }
@@ -412,6 +492,8 @@ impl JjMsg {
                 | BookmarksLoaded { .. }
                 | OpLogLoaded { .. }
                 | ConflictsLoaded { .. }
+                | ChangeFilesLoaded { .. }
+                | FileDiffLoaded { .. }
                 | LoadFailed { .. }
                 | CommandFinished { .. }
                 | CommandFailed { .. }
@@ -447,8 +529,12 @@ impl StoreMessage for JjMsg {
             BookmarksLoaded { .. } => "jj_bookmarks_loaded",
             OpLogLoaded { .. } => "jj_op_log_loaded",
             ConflictsLoaded { .. } => "jj_conflicts_loaded",
+            ChangeFilesLoaded { .. } => "jj_change_files_loaded",
+            FileDiffLoaded { .. } => "jj_file_diff_loaded",
             LoadFailed { .. } => "jj_load_failed",
             LoadMoreLog { .. } => "jj_load_more_log",
+            LoadChangeFiles { .. } => "jj_load_change_files",
+            LoadFileDiff { .. } => "jj_load_file_diff",
             SetRevset { .. } => "jj_set_revset",
             DescribeChange { .. } => "jj_describe_change",
             NewChange { .. } => "jj_new_change",
@@ -512,6 +598,17 @@ pub enum JjEffect {
         repo_id: RepoId,
         epoch: u64,
     },
+    LoadChangeFiles {
+        repo_id: RepoId,
+        epoch: u64,
+        change: ChangeId,
+    },
+    LoadFileDiff {
+        repo_id: RepoId,
+        epoch: u64,
+        change: ChangeId,
+        path: String,
+    },
     RunMutation {
         repo_id: RepoId,
         operation: &'static str,
@@ -560,6 +657,28 @@ impl std::fmt::Debug for JjEffect {
                 .debug_struct("LoadConflicts")
                 .field("repo_id", repo_id)
                 .field("epoch", epoch)
+                .finish(),
+            JjEffect::LoadChangeFiles {
+                repo_id,
+                epoch,
+                change,
+            } => f
+                .debug_struct("LoadChangeFiles")
+                .field("repo_id", repo_id)
+                .field("epoch", epoch)
+                .field("change", change)
+                .finish(),
+            JjEffect::LoadFileDiff {
+                repo_id,
+                epoch,
+                change,
+                path,
+            } => f
+                .debug_struct("LoadFileDiff")
+                .field("repo_id", repo_id)
+                .field("epoch", epoch)
+                .field("change", change)
+                .field("path", path)
                 .finish(),
             JjEffect::RunMutation {
                 repo_id, operation, ..

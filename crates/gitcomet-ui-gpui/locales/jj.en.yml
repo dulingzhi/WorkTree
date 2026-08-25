@@ -21,6 +21,18 @@ jj:
     busy: "Running %{operation}…"
   revset:
     placeholder: "Filter by revset (empty shows all())…"
+  details:
+    title: Change
+    files_count: "%{count} paths"
+    loading: Loading change files…
+    error: "Could not read this change: %{error}"
+    empty: "This change touches no paths."
+    diff_hint: "Click a path to show its diff."
+    renamed_from: "from %{from}"
+    truncated: "Diff truncated at %{lines} lines."
+    diff_loading: Loading diff…
+    diff_error: "Could not read the diff: %{error}"
+    diff_empty: "This path has no textual changes."
   conflicts:
     count: "%{count} conflicted paths"
     recheck: Re-check

@@ -2,11 +2,11 @@
 //!
 //! This crate owns the *jj-semantic* surface: revset log walks, changes
 //! (describe/new/abandon/squash), bookmarks (local and remote refs), the
-//! operation log with undo/restore, working-copy snapshots, and conflicts.
-//! It deliberately does not duplicate the read model a colocated repo
-//! already serves through the gix backend — full-text diffs, file lists,
-//! and blame stay there, keyed by commit id, which every [`JjChange`]
-//! carries.
+//! operation log with undo/restore, working-copy snapshots, conflicts, and
+//! the change-detail reads (`change_files`/`file_diff_text`) the native
+//! panels render. Deeper history tooling (blame, image diffs, cross-VCS
+//! diff layout) stays in the git read model, keyed by commit id, which
+//! every [`JjChange`] carries.
 //!
 //! The trait is shaped by jj's model rather than git's (there is no staging
 //! area, the working copy is a change, bookmarks track remotes), so the jj
@@ -22,7 +22,8 @@ pub mod version;
 
 pub use cli::JjCliRepository;
 pub use domain::{
-    ChangeId, JjBookmark, JjChange, JjCommitId, JjConflict, JjLogPage, JjLogQuery, JjOp,
+    ChangeId, JjBookmark, JjChange, JjCommitId, JjConflict, JjFileStat, JjFileStatus, JjLogPage,
+    JjLogQuery, JjOp,
 };
 
 use gitcomet_core::domain::RepoSpec;
@@ -48,6 +49,15 @@ pub trait JjRepository: Send + Sync {
     /// `JjLogQuery::skip` continues after a previous page (see its docs
     /// for why paging is positional rather than ancestry-based).
     fn log(&self, query: &JjLogQuery) -> Result<JjLogPage>;
+
+    /// The paths a change touches, with status letters (`jj diff -r
+    /// <change> --summary`). The empty change yields an empty list.
+    fn change_files(&self, change: &ChangeId) -> Result<Vec<JjFileStat>>;
+
+    /// One file's diff for a change as git-style unified text (`jj diff -r
+    /// <change> --git -- <path>`), verbatim for the caller to render.
+    /// Binary files come back as whatever jj prints for them.
+    fn file_diff_text(&self, change: &ChangeId, path: &str) -> Result<String>;
 
     /// The current working-copy change (`@`).
     fn working_copy(&self) -> Result<JjChange> {

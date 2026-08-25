@@ -332,3 +332,76 @@ fn change_id_newtype_displays_as_its_value() {
     assert_eq!(id.to_string(), "wqnwyzpk");
     assert_eq!(id.as_ref(), "wqnwyzpk");
 }
+
+/// The change-detail reads: `--summary` lists the touched paths with their
+/// status letters (including jj's brace rename notation), `--git` returns
+/// one file's unified diff, and the empty change has no files at all.
+#[test]
+fn change_files_and_file_diff_text_read_a_change() {
+    if !tooling_ready() {
+        return;
+    }
+    let temp = tempfile::tempdir().expect("tempdir");
+    init_colocated_repo(temp.path());
+    let repo = open_repo(temp.path());
+    let root = temp.path().to_path_buf();
+
+    // A rename is only detected against a committed baseline, so the flow
+    // commits the file first, then moves it and adds a second file.
+    std::fs::write(root.join("tracked.txt"), "one\n").expect("write tracked");
+    commit_change(&repo, "baseline");
+    std::fs::write(root.join("added.txt"), "brand new\n").expect("write added");
+    let mut mv = background_command("mv");
+    mv.arg(root.join("tracked.txt")).arg(root.join("moved.txt"));
+    run(mv);
+    let change = repo.working_copy().expect("working copy");
+
+    let files = repo.change_files(&change.change_id).expect("change files");
+    assert_eq!(files.len(), 2, "added + renamed: {files:?}");
+    let added = files
+        .iter()
+        .find(|file| file.path == "added.txt")
+        .expect("added file listed");
+    assert_eq!(added.status, gitcomet_jj_core::JjFileStatus::Added);
+    let renamed = files
+        .iter()
+        .find(|file| file.path == "moved.txt")
+        .expect("rename target listed");
+    assert_eq!(
+        renamed.status,
+        gitcomet_jj_core::JjFileStatus::Renamed {
+            from: "tracked.txt".to_string()
+        }
+    );
+
+    // The added file's unified diff carries its content line.
+    let diff = repo
+        .file_diff_text(&change.change_id, "added.txt")
+        .expect("file diff");
+    assert!(diff.contains("+++ b/added.txt"), "diff header: {diff}");
+    assert!(diff.contains("+brand new"), "diff body: {diff}");
+
+    // A path outside the change reads as an empty diff, not an error.
+    assert_eq!(
+        repo.file_diff_text(&change.change_id, "no-such-file.txt")
+            .expect("empty diff"),
+        ""
+    );
+}
+
+/// The freshly opened working copy has no edits, so its file list is empty.
+#[test]
+fn change_files_empty_on_the_open_change() {
+    if !tooling_ready() {
+        return;
+    }
+    let temp = tempfile::tempdir().expect("tempdir");
+    init_colocated_repo(temp.path());
+    let repo = open_repo(temp.path());
+    let change = repo.working_copy().expect("working copy");
+    assert!(
+        repo.change_files(&change.change_id)
+            .expect("change files")
+            .is_empty()
+    );
+}

@@ -18,7 +18,9 @@
 use gitcomet_core::error::{Error, ErrorKind};
 use gitcomet_core::services::Result;
 
-use crate::domain::{ChangeId, JjBookmark, JjChange, JjCommitId, JjConflict, JjOp};
+use crate::domain::{
+    ChangeId, JjBookmark, JjChange, JjCommitId, JjConflict, JjFileStat, JjFileStatus, JjOp,
+};
 
 const FIELD_SEP: char = '\x1f';
 const RECORD_SEP: char = '\x1e';
@@ -158,6 +160,64 @@ pub(crate) fn parse_conflict_paths(output: &str) -> Vec<JjConflict> {
 /// copy has no conflicts; callers map it to an empty conflict list.
 pub(crate) fn is_no_conflicts_message(detail: &str) -> bool {
     detail.contains("No conflicts found")
+}
+
+/// Parse `jj diff --summary` output: one path per line, prefixed with its
+/// status letter (`A`, `M`, `D`, `C`) or jj's brace rename notation
+/// (`R {old => new}`). Verified against jj 0.44. Like the template
+/// parsers, unknown shapes are errors rather than silently dropped rows.
+pub(crate) fn parse_diff_summary(output: &str) -> Result<Vec<JjFileStat>> {
+    let mut files = Vec::new();
+    for line in output.lines().map(str::trim).filter(|l| !l.is_empty()) {
+        files.push(match line.chars().next() {
+            Some('A') => stat_after_letter(line, "A", JjFileStatus::Added)?,
+            Some('M') => stat_after_letter(line, "M", JjFileStatus::Modified)?,
+            Some('D') => stat_after_letter(line, "D", JjFileStatus::Removed)?,
+            Some('C') => stat_after_letter(line, "C", JjFileStatus::Conflict)?,
+            Some('R') => {
+                // `R {old => new}`: both sides must be present and the
+                // notation exactly spelled, or the row is rejected.
+                let rest = strip_letter(line, "R")?;
+                let (from, to) = rest
+                    .strip_prefix('{')
+                    .and_then(|rest| rest.strip_suffix('}'))
+                    .and_then(|inner| inner.split_once(" => "))
+                    .ok_or_else(|| bad_summary_line(line))?;
+                if from.is_empty() || to.is_empty() {
+                    return Err(bad_summary_line(line));
+                }
+                JjFileStat {
+                    path: to.to_string(),
+                    status: JjFileStatus::Renamed {
+                        from: from.to_string(),
+                    },
+                }
+            }
+            _ => return Err(bad_summary_line(line)),
+        });
+    }
+    Ok(files)
+}
+
+fn stat_after_letter(line: &str, letter: &str, status: JjFileStatus) -> Result<JjFileStat> {
+    let path = strip_letter(line, letter)?;
+    Ok(JjFileStat {
+        path: path.to_string(),
+        status,
+    })
+}
+
+fn strip_letter<'a>(line: &'a str, letter: &str) -> Result<&'a str> {
+    line.strip_prefix(letter)
+        .and_then(|rest| rest.strip_prefix(' '))
+        .filter(|path| !path.is_empty())
+        .ok_or_else(|| bad_summary_line(line))
+}
+
+fn bad_summary_line(line: &str) -> Error {
+    Error::new(ErrorKind::Backend(format!(
+        "jj diff --summary: unrecognized line {line:?}"
+    )))
 }
 
 #[cfg(test)]
@@ -369,5 +429,57 @@ mod tests {
             "Error: No conflicts found at this revision"
         ));
         assert!(!is_no_conflicts_message("some other failure"));
+    }
+
+    #[test]
+    fn parses_every_diff_summary_status() {
+        let output = "M README.md\nA brand-new.txt\nM dir/nested path with spaces.txt\nD gone.txt\nC merged.txt\nR {old name.rs => sub/new name.rs}\n";
+        let files = parse_diff_summary(output).expect("summary parses");
+        assert_eq!(files.len(), 6);
+        assert_eq!(files[0].path, "README.md");
+        assert_eq!(files[0].status, JjFileStatus::Modified);
+        assert_eq!(files[1].status, JjFileStatus::Added);
+        assert_eq!(files[2].path, "dir/nested path with spaces.txt");
+        assert_eq!(files[3].status, JjFileStatus::Removed);
+        assert_eq!(files[4].status, JjFileStatus::Conflict);
+        assert_eq!(
+            files[5].status,
+            JjFileStatus::Renamed {
+                from: "old name.rs".to_string()
+            }
+        );
+        assert_eq!(files[5].path, "sub/new name.rs");
+    }
+
+    #[test]
+    fn empty_diff_summary_yields_no_files() {
+        assert!(parse_diff_summary("").unwrap().is_empty());
+        assert!(parse_diff_summary("\n \n").unwrap().is_empty());
+    }
+
+    #[test]
+    fn malformed_diff_summary_lines_are_errors() {
+        // Unknown status letter, a letter without a path, and a rename
+        // missing either side of the braces are all rejected.
+        assert!(parse_diff_summary("X file.txt").is_err());
+        assert!(parse_diff_summary("A").is_err());
+        assert!(parse_diff_summary("R {only-one-side}").is_err());
+        assert!(parse_diff_summary("R {a => }").is_err());
+        assert!(parse_diff_summary("R a => b").is_err());
+    }
+
+    #[test]
+    fn status_labels_round_trip_the_letters() {
+        assert_eq!(JjFileStatus::Added.label(), "A");
+        assert_eq!(JjFileStatus::Modified.label(), "M");
+        assert_eq!(JjFileStatus::Removed.label(), "D");
+        assert_eq!(
+            JjFileStatus::Renamed {
+                from: String::new()
+            }
+            .label(),
+            "R"
+        );
+        assert_eq!(JjFileStatus::Conflict.label(), "C");
     }
 }

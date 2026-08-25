@@ -155,6 +155,64 @@ pub(crate) fn schedule_effect(ctx: &JjEffectContext<'_>, effect: JjEffect) {
                 msg_tx.send_effect_or_log(msg, "jj resolve --list");
             });
         }
+        JjEffect::LoadChangeFiles {
+            repo_id,
+            epoch,
+            change,
+        } => {
+            let Some(repo) = ctx.repos.get(&repo_id) else {
+                return;
+            };
+            let repo = Arc::clone(repo);
+            let msg_tx = ctx.msg_tx.clone();
+            ctx.metadata_executor.spawn(move || {
+                let msg = match repo.change_files(&change) {
+                    Ok(files) => JjMsg::ChangeFilesLoaded {
+                        repo_id,
+                        epoch,
+                        change,
+                        files,
+                    },
+                    Err(err) => JjMsg::LoadFailed {
+                        repo_id,
+                        epoch,
+                        what: "change files",
+                        error: err.to_string(),
+                    },
+                };
+                msg_tx.send_effect_or_log(msg, "jj diff --summary");
+            });
+        }
+        JjEffect::LoadFileDiff {
+            repo_id,
+            epoch,
+            change,
+            path,
+        } => {
+            let Some(repo) = ctx.repos.get(&repo_id) else {
+                return;
+            };
+            let repo = Arc::clone(repo);
+            let msg_tx = ctx.msg_tx.clone();
+            ctx.metadata_executor.spawn(move || {
+                let msg = match repo.file_diff_text(&change, &path) {
+                    Ok(text) => JjMsg::FileDiffLoaded {
+                        repo_id,
+                        epoch,
+                        change,
+                        path,
+                        text,
+                    },
+                    Err(err) => JjMsg::LoadFailed {
+                        repo_id,
+                        epoch,
+                        what: "file diff",
+                        error: err.to_string(),
+                    },
+                };
+                msg_tx.send_effect_or_log(msg, "jj diff --git");
+            });
+        }
         JjEffect::RunMutation {
             repo_id,
             operation,

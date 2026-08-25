@@ -2,12 +2,39 @@
 
 use gitcomet_core::domain::RepoSpec;
 use gitcomet_core::services::CommandOutput;
-use gitcomet_jj_core::{JjBookmark, JjChange, JjConflict, JjOp};
+use gitcomet_jj_core::{ChangeId, JjBookmark, JjChange, JjConflict, JjFileStat, JjOp};
 
 use crate::model::RepoId;
 
 /// How many changes one log page fetches.
 pub const JJ_LOG_PAGE_SIZE: usize = 100;
+
+/// The change-detail panel's load: which change is selected and the paths
+/// it touches. Keyed by `ChangeId` so the detail survives rewrites (jj
+/// keeps change ids stable across rebases); a refresh clears it and the
+/// view re-requests its selection.
+#[derive(Clone, Debug, Default)]
+pub struct JjChangeDetailsState {
+    /// The change the files were requested for; `None` when nothing is
+    /// selected (or a refresh just cleared the panel).
+    pub change: Option<ChangeId>,
+    pub loading: bool,
+    pub error: Option<String>,
+    pub files: Vec<JjFileStat>,
+}
+
+/// One file's diff text for the selected change, keyed by both the change
+/// and the path so a result for a superseded selection is dropped.
+#[derive(Clone, Debug, Default)]
+pub struct JjFileDiffState {
+    pub change: Option<ChangeId>,
+    pub path: Option<String>,
+    pub loading: bool,
+    pub error: Option<String>,
+    /// The unified diff text verbatim from jj (`--git`), `None` until the
+    /// first load lands.
+    pub text: Option<String>,
+}
 
 /// One open jj repository in the store.
 #[derive(Clone, Debug)]
@@ -48,6 +75,10 @@ pub struct JjRepoState {
     pub last_network_output: Option<CommandOutput>,
     /// Set while the filesystem watcher for this repo is degraded.
     pub watch_degraded: Option<String>,
+    /// The selected change's file list (change-detail panel).
+    pub details: JjChangeDetailsState,
+    /// The selected file's diff text within the selected change.
+    pub file_diff: JjFileDiffState,
 }
 
 impl JjRepoState {
@@ -73,6 +104,8 @@ impl JjRepoState {
             last_command_error: None,
             last_network_output: None,
             watch_degraded: None,
+            details: JjChangeDetailsState::default(),
+            file_diff: JjFileDiffState::default(),
         }
     }
 }

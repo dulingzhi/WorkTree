@@ -163,6 +163,49 @@ pub(crate) fn reduce(
             }
             Vec::new()
         }
+        JjMsg::ChangeFilesLoaded {
+            repo_id,
+            epoch,
+            change,
+            files,
+        } => {
+            let Some(repo_state) = state.repo_mut(repo_id) else {
+                return Vec::new();
+            };
+            // Both guards matter: the epoch drops results superseded by a
+            // refresh (which clears the panel), the change id drops results
+            // for a selection the user already moved away from.
+            if epoch != repo_state.refresh_epoch
+                || repo_state.details.change.as_ref() != Some(&change)
+            {
+                return Vec::new();
+            }
+            repo_state.details.loading = false;
+            repo_state.details.error = None;
+            repo_state.details.files = files;
+            Vec::new()
+        }
+        JjMsg::FileDiffLoaded {
+            repo_id,
+            epoch,
+            change,
+            path,
+            text,
+        } => {
+            let Some(repo_state) = state.repo_mut(repo_id) else {
+                return Vec::new();
+            };
+            if epoch != repo_state.refresh_epoch
+                || repo_state.file_diff.change.as_ref() != Some(&change)
+                || repo_state.file_diff.path.as_deref() != Some(path.as_str())
+            {
+                return Vec::new();
+            }
+            repo_state.file_diff.loading = false;
+            repo_state.file_diff.error = None;
+            repo_state.file_diff.text = Some(text);
+            Vec::new()
+        }
         JjMsg::LoadFailed {
             repo_id,
             epoch,
@@ -182,6 +225,14 @@ pub(crate) fn reduce(
                 }
                 "bookmarks" => repo_state.bookmarks_loading = false,
                 "op log" => repo_state.ops_loading = false,
+                "change files" => {
+                    repo_state.details.loading = false;
+                    repo_state.details.error = Some(error.clone());
+                }
+                "file diff" => {
+                    repo_state.file_diff.loading = false;
+                    repo_state.file_diff.error = Some(error.clone());
+                }
                 _ => {}
             }
             repo_state.load_error = Some((what, error));
@@ -204,6 +255,50 @@ pub(crate) fn reduce(
                 revset: repo_state.log_revset.clone(),
                 skip,
                 limit: JJ_LOG_PAGE_SIZE,
+            }]
+        }
+        JjMsg::LoadChangeFiles {
+            repo_id,
+            epoch,
+            change,
+        } => {
+            let Some(repo_state) = state.repo_mut(repo_id) else {
+                return Vec::new();
+            };
+            if epoch != repo_state.refresh_epoch {
+                return Vec::new();
+            }
+            repo_state.details.change = Some(change.clone());
+            repo_state.details.loading = true;
+            repo_state.details.error = None;
+            vec![JjEffect::LoadChangeFiles {
+                repo_id,
+                epoch,
+                change,
+            }]
+        }
+        JjMsg::LoadFileDiff {
+            repo_id,
+            epoch,
+            change,
+            path,
+        } => {
+            let Some(repo_state) = state.repo_mut(repo_id) else {
+                return Vec::new();
+            };
+            if epoch != repo_state.refresh_epoch {
+                return Vec::new();
+            }
+            repo_state.file_diff.change = Some(change.clone());
+            repo_state.file_diff.path = Some(path.clone());
+            repo_state.file_diff.loading = true;
+            repo_state.file_diff.error = None;
+            repo_state.file_diff.text = None;
+            vec![JjEffect::LoadFileDiff {
+                repo_id,
+                epoch,
+                change,
+                path,
             }]
         }
         JjMsg::SetRevset { repo_id, revset } => {
@@ -336,6 +431,12 @@ fn refresh(state: &mut JjAppState, repo_id: RepoId) -> Vec<JjEffect> {
     repo_state.log_loading = true;
     repo_state.bookmarks_loading = true;
     repo_state.ops_loading = true;
+    // Mutations and external touches can change a change's contents, so
+    // the detail panels are dropped too; the view notices its selection no
+    // longer matches `details.change`/`file_diff` and re-requests them
+    // under the new epoch.
+    repo_state.details = Default::default();
+    repo_state.file_diff = Default::default();
     let epoch = repo_state.refresh_epoch;
     let revset = repo_state.log_revset.clone();
     vec![

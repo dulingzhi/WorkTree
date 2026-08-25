@@ -2,11 +2,10 @@
 //!
 //! Every operation shells out to `jj --repository <workdir> …` — the same
 //! invocation layer the P1 colocated adapter validated against jj 0.44 —
-//! and parses strict `-T` templates (see [`crate::parse`]). Reads that a
-//! colocated repo already serves through the gix read model (full-text
-//! diffs, file lists, blame) intentionally do *not* live here; this crate
+//! and parses strict `-T` templates (see [`crate::parse`]). This crate
 //! covers the jj-semantic surface: revsets, changes, bookmarks, the
-//! operation log, snapshots, and conflicts.
+//! operation log, snapshots, conflicts, and the change-detail reads
+//! (`jj diff --summary` / `jj diff --git`) the native panels render.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -20,7 +19,9 @@ use gitcomet_core::process::background_command;
 use gitcomet_core::services::{CommandOutput, Result};
 
 use crate::JjRepository;
-use crate::domain::{ChangeId, JjBookmark, JjChange, JjConflict, JjLogPage, JjLogQuery, JjOp};
+use crate::domain::{
+    ChangeId, JjBookmark, JjChange, JjConflict, JjFileStat, JjLogPage, JjLogQuery, JjOp,
+};
 use crate::parse;
 use crate::version::{self, JjVersionSupport, MAX_TESTED_JJ_VERSION, MIN_SUPPORTED_JJ_VERSION};
 
@@ -94,12 +95,18 @@ impl JjCliRepository {
         self.version
     }
 
-    /// A `jj` command with `--repository <workdir>` and the bridged
-    /// identity config. Every invocation snapshots the working copy and
-    /// imports git refs first — that is inherent to running jj.
+    /// A `jj` command with `--repository <workdir>`, the working directory
+    /// pinned to the workdir, and the bridged identity config. Every
+    /// invocation snapshots the working copy and imports git refs first —
+    /// that is inherent to running jj. Pinning the cwd matters beyond
+    /// tidiness: jj prints diff paths and parses fileset patterns relative
+    /// to the *process* cwd (not `--repository`), so running from anywhere
+    /// else would turn `jj diff --summary` paths cwd-relative and make
+    /// repo-relative `-- <path>` arguments unresolvable.
     fn jj_cmd(&self) -> Command {
         let mut cmd = background_command("jj");
         cmd.arg("--repository").arg(&self.spec.workdir);
+        cmd.current_dir(&self.spec.workdir);
         for config in self.identity_config_args() {
             cmd.arg("--config").arg(config);
         }
@@ -246,6 +253,18 @@ fn safe_arg<'a>(value: &'a str, what: &str) -> Result<&'a str> {
     Ok(value)
 }
 
+/// The path-shaped guard: paths come from jj's own `--summary` output and
+/// travel inside a quoted fileset expression, so a leading `-` is harmless
+/// and only emptiness and control characters are refused.
+fn safe_path<'a>(value: &'a str) -> Result<&'a str> {
+    if value.is_empty() || value.contains(|ch: char| ch.is_control()) {
+        return Err(Error::new(ErrorKind::Backend(format!(
+            "invalid file path {value:?}"
+        ))));
+    }
+    Ok(value)
+}
+
 /// The base revset for a log query, defaulting an empty one to `all()`.
 fn log_revset(base: &str) -> String {
     let base = base.trim();
@@ -320,6 +339,33 @@ impl crate::JjRepository for JjCliRepository {
         let output = self.run(cmd, "jj log")?;
         let fetched = parse::parse_log_records(&output.stdout)?;
         Ok(page_from_fetched(fetched, query.skip, query.limit))
+    }
+
+    fn change_files(&self, change: &ChangeId) -> Result<Vec<JjFileStat>> {
+        safe_arg(&change.0, "change id")?;
+        let mut cmd = self.jj_cmd();
+        cmd.arg("diff").arg("-r").arg(&change.0).arg("--summary");
+        let output = self.run(cmd, "jj diff --summary")?;
+        parse::parse_diff_summary(&output.stdout)
+    }
+
+    fn file_diff_text(&self, change: &ChangeId, path: &str) -> Result<String> {
+        safe_arg(&change.0, "change id")?;
+        safe_path(path)?;
+        // The `root:"…"` fileset form pins the path to repo-relative
+        // (verified against jj 0.44): a bare word would be split on spaces,
+        // and quoting escapes the two characters a path can inject into
+        // the expression.
+        let escaped = path.replace('\\', "\\\\").replace('"', "\\\"");
+        let pattern = format!("root:\"{escaped}\"");
+        let mut cmd = self.jj_cmd();
+        cmd.arg("diff")
+            .arg("-r")
+            .arg(&change.0)
+            .arg("--git")
+            .arg(&pattern);
+        let output = self.run(cmd, "jj diff --git")?;
+        Ok(output.stdout)
     }
 
     fn describe(&self, change: &ChangeId, message: &str) -> Result<()> {
@@ -566,5 +612,14 @@ mod tests {
         assert!(safe_arg("--exec", "change id").is_err());
         assert!(safe_arg("a\nb", "bookmark name").is_err());
         assert!(safe_arg("a\u{1f}b", "change id").is_err());
+    }
+
+    #[test]
+    fn safe_path_allows_leading_dashes_but_refuses_controls() {
+        assert!(safe_path("src/main.rs").is_ok());
+        assert!(safe_path("-weird-but-real.txt").is_ok());
+        assert!(safe_path("").is_err());
+        assert!(safe_path("a\nb").is_err());
+        assert!(safe_path("a\u{1f}b").is_err());
     }
 }

@@ -17,9 +17,11 @@
 use super::*;
 
 mod change_list;
+mod details;
 mod panels;
 
 use change_list::{change_row_vms, render_change_row};
+use details::{file_row_vms, render_file_diff, render_file_row};
 use gitcomet_jj_core::ChangeId;
 use gitcomet_state::jj_store::{JjAppState, JjMsg, JjStore};
 use gitcomet_state::msg::StoreEvent;
@@ -44,6 +46,9 @@ pub(crate) struct JjRepoView {
     /// Selected list row, keyed by `ChangeId` (stable across rewrites,
     /// unlike commit ids) so paging never reselects a different change.
     selected_change: Option<ChangeId>,
+    /// The selected change's file whose diff is expanded in the details
+    /// card; cleared whenever the selection moves.
+    selected_file: Option<String>,
     /// The revset filter bar's input. Enter applies it as the list's
     /// revset — `SetRevset` reloads from the top under a fresh epoch.
     revset_input: Entity<components::TextInput>,
@@ -142,6 +147,7 @@ impl JjRepoView {
                 _describe_input_subscription,
                 describe_synced_change: None,
                 selected_change: None,
+                selected_file: None,
                 revset_input,
                 _revset_input_subscription,
                 revset_synced: None,
@@ -175,6 +181,7 @@ impl JjRepoView {
                     this.state = snapshot;
                     this.sync_describe_input(cx);
                     this.sync_revset_input(cx);
+                    this.sync_selection_details();
                     cx.notify();
                 });
             }
@@ -188,6 +195,7 @@ impl JjRepoView {
             _describe_input_subscription,
             describe_synced_change: None,
             selected_change: None,
+            selected_file: None,
             revset_input,
             _revset_input_subscription,
             revset_synced: None,
@@ -323,6 +331,7 @@ impl JjRepoView {
             "down" => self.move_selection(1, cx),
             "escape" => {
                 if self.selected_change.take().is_some() {
+                    self.selected_file = None;
                     cx.notify();
                 }
             }
@@ -345,8 +354,50 @@ impl JjRepoView {
             .map(|change| change.change_id.clone())
             .collect();
         if let Some(next) = next_selected_change(&ids, self.selected_change.as_ref(), delta) {
+            if self.selected_change.as_ref() != Some(&next) {
+                self.selected_file = None;
+            }
             self.selected_change = Some(next);
+            self.sync_selection_details();
             cx.notify();
+        }
+    }
+
+    /// Reconcile the store's detail panels with the view's selection:
+    /// dispatch the loads the state is missing. Called after every state
+    /// sync (refreshes clear both panels — the re-request is the self-heal
+    /// path) and whenever the selection or expanded file changes. The
+    /// reducer's own guards (epoch, change, path) make repeat dispatches
+    /// for an already-loaded target no-ops at the state layer, and this
+    /// check keeps them from spawning CLI processes at all.
+    fn sync_selection_details(&mut self) {
+        let Some(repo) = self.state.active_repo() else {
+            return;
+        };
+        let repo_id = repo.id;
+        let epoch = repo.refresh_epoch;
+        if let Some(change) = self.selected_change.clone() {
+            if repo.details.change.as_ref() != Some(&change) {
+                self.store.dispatch(JjMsg::LoadChangeFiles {
+                    repo_id,
+                    epoch,
+                    change,
+                });
+            }
+        }
+        if let (Some(change), Some(path)) =
+            (self.selected_change.clone(), self.selected_file.clone())
+        {
+            if repo.file_diff.change.as_ref() != Some(&change)
+                || repo.file_diff.path.as_deref() != Some(path.as_str())
+            {
+                self.store.dispatch(JjMsg::LoadFileDiff {
+                    repo_id,
+                    epoch,
+                    change,
+                    path,
+                });
+            }
         }
     }
 
@@ -679,7 +730,11 @@ impl Render for JjRepoView {
                         is_selected,
                         theme,
                         cx.listener(move |this, _e, window, cx| {
+                            if this.selected_change.as_ref() != Some(&row_change) {
+                                this.selected_file = None;
+                            }
                             this.selected_change = Some(row_change.clone());
+                            this.sync_selection_details();
                             // Clicking a row also puts the list in keyboard
                             // focus so ↑/↓ work immediately after.
                             window.focus(&this.list_focus, cx);
@@ -734,6 +789,176 @@ impl Render for JjRepoView {
                         .on_click(theme, cx, |this, _e, _w, cx| {
                             this.load_more(cx);
                         }),
+                    );
+                }
+
+                // The selected change's details (#82): file list below the
+                // change list, and the clicked file's unified diff inline.
+                // The loads are reconciled by `sync_selection_details`, so
+                // this card renders whatever the store currently holds.
+                if let Some(selected_change) = selected.clone() {
+                    let selected_file = self.selected_file.clone();
+                    let file_rows = file_row_vms(repo);
+                    let header_side = if repo.details.files.is_empty() {
+                        crate::i18n::tr("jj.details.diff_hint").to_string()
+                    } else {
+                        crate::i18n::t!("jj.details.files_count", count = repo.details.files.len())
+                            .to_string()
+                    };
+
+                    let mut files_body = div().flex().flex_col();
+                    if repo.details.loading {
+                        files_body = files_body.child(
+                            div()
+                                .px_3()
+                                .py_2()
+                                .text_sm()
+                                .text_color(theme.colors.foreground.secondary)
+                                .child(crate::i18n::tr("jj.details.loading")),
+                        );
+                    } else if let Some(error) = repo.details.error.clone() {
+                        files_body = files_body.child(
+                            div()
+                                .px_3()
+                                .py_2()
+                                .text_xs()
+                                .text_color(theme.colors.status.danger.foreground)
+                                .child(crate::i18n::t!("jj.details.error", error = error)),
+                        );
+                    } else if file_rows.is_empty() {
+                        files_body = files_body.child(
+                            div()
+                                .px_3()
+                                .py_2()
+                                .text_sm()
+                                .text_color(theme.colors.foreground.secondary)
+                                .child(crate::i18n::tr("jj.details.empty")),
+                        );
+                    } else {
+                        for row in &file_rows {
+                            let expanded = selected_file.as_deref() == Some(row.path.as_str());
+                            let row_path = row.path.clone();
+                            files_body = files_body.child(render_file_row(
+                                row,
+                                expanded,
+                                theme,
+                                cx.listener(move |this, _e, _window, cx| {
+                                    if this.selected_file.as_deref() == Some(row_path.as_str()) {
+                                        // Clicking the expanded file collapses it.
+                                        this.selected_file = None;
+                                    } else {
+                                        this.selected_file = Some(row_path.clone());
+                                        this.sync_selection_details();
+                                    }
+                                    cx.notify();
+                                }),
+                            ));
+                        }
+                    }
+
+                    let mut diff_body: Option<gpui::AnyElement> = None;
+                    if let Some(selected_file) = selected_file.clone() {
+                        let mut diff = div()
+                            .id("jj_file_diff")
+                            .debug_selector(|| "jj_file_diff".to_string())
+                            .mx_3()
+                            .my_2()
+                            .rounded(px(theme.radii.control))
+                            .border_1()
+                            .border_color(theme.colors.stroke.subtle)
+                            .flex()
+                            .flex_col()
+                            .overflow_x_scroll();
+                        if repo.file_diff.loading {
+                            diff = diff.child(
+                                div()
+                                    .px_2()
+                                    .py_1()
+                                    .text_xs()
+                                    .text_color(theme.colors.foreground.secondary)
+                                    .child(crate::i18n::tr("jj.details.diff_loading")),
+                            );
+                        } else if let Some(error) = repo.file_diff.error.clone() {
+                            diff = diff.child(
+                                div()
+                                    .px_2()
+                                    .py_1()
+                                    .text_xs()
+                                    .text_color(theme.colors.status.danger.foreground)
+                                    .child(crate::i18n::t!("jj.details.diff_error", error = error)),
+                            );
+                        } else if repo.file_diff.change.as_ref() == Some(&selected_change)
+                            && repo.file_diff.path.as_deref() == Some(selected_file.as_str())
+                        {
+                            let text = repo.file_diff.text.clone().unwrap_or_default();
+                            if text.is_empty() {
+                                diff = diff.child(
+                                    div()
+                                        .px_2()
+                                        .py_1()
+                                        .text_xs()
+                                        .text_color(theme.colors.foreground.secondary)
+                                        .child(crate::i18n::tr("jj.details.diff_empty")),
+                                );
+                            } else {
+                                diff = diff.child(render_file_diff(&text, theme));
+                            }
+                        } else {
+                            // The diff for this file has not landed yet (or a
+                            // refresh just cleared it); reconcile already
+                            // re-requested it, so show the loading state.
+                            diff = diff.child(
+                                div()
+                                    .px_2()
+                                    .py_1()
+                                    .text_xs()
+                                    .text_color(theme.colors.foreground.secondary)
+                                    .child(crate::i18n::tr("jj.details.diff_loading")),
+                            );
+                        }
+                        diff_body = Some(diff.into_any_element());
+                    }
+
+                    card = card.child(
+                        div()
+                            .id("jj_change_details")
+                            .debug_selector(|| "jj_change_details".to_string())
+                            .rounded(px(theme.radii.panel))
+                            .border_1()
+                            .border_color(theme.colors.stroke.default)
+                            .bg(theme.colors.surface.raised)
+                            .flex()
+                            .flex_col()
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_baseline()
+                                    .gap_2()
+                                    .p_3()
+                                    .child(
+                                        div()
+                                            .text_xs()
+                                            .font_weight(FontWeight::BOLD)
+                                            .text_color(theme.colors.foreground.secondary)
+                                            .child(crate::i18n::tr("jj.details.title")),
+                                    )
+                                    .child(
+                                        div()
+                                            .text_sm()
+                                            .text_color(theme.colors.foreground.emphasis)
+                                            .child(selected_change.0.clone()),
+                                    )
+                                    .child(
+                                        div()
+                                            .ml_auto()
+                                            .flex_none()
+                                            .text_xs()
+                                            .text_color(theme.colors.foreground.secondary)
+                                            .child(header_side),
+                                    ),
+                            )
+                            .child(files_body)
+                            .when_some(diff_body, |d, diff| d.child(diff)),
                     );
                 }
 
@@ -1086,6 +1311,8 @@ fn test_jj_repo_state(id: u64, path: &str) -> gitcomet_state::jj_store::JjRepoSt
         last_command_error: None,
         last_network_output: None,
         watch_degraded: None,
+        details: Default::default(),
+        file_diff: Default::default(),
     }
 }
 
@@ -1177,6 +1404,29 @@ mod tests {
                 changes: vec![change("at", true), change("base", false)],
                 next_cursor: None,
             })
+        }
+
+        fn change_files(&self, change: &ChangeId) -> Result<Vec<gitcomet_jj_core::JjFileStat>> {
+            self.record(format!("change_files:{}", change.0));
+            Ok(vec![
+                gitcomet_jj_core::JjFileStat {
+                    path: "modified.txt".to_string(),
+                    status: gitcomet_jj_core::JjFileStatus::Modified,
+                },
+                gitcomet_jj_core::JjFileStat {
+                    path: "renamed.txt".to_string(),
+                    status: gitcomet_jj_core::JjFileStatus::Renamed {
+                        from: "old.txt".to_string(),
+                    },
+                },
+            ])
+        }
+
+        fn file_diff_text(&self, change: &ChangeId, path: &str) -> Result<String> {
+            self.record(format!("file_diff:{}:{path}", change.0));
+            Ok(format!(
+                "--- a/{path}\n+++ b/{path}\n@@ -1,1 +1,2 @@\n context\n+{path} line\n"
+            ))
         }
 
         fn describe(&self, change: &ChangeId, message: &str) -> Result<()> {
@@ -1476,6 +1726,103 @@ mod tests {
         cx.update(|_window, app| {
             assert_eq!(view.read(app).selected_change, None);
         });
+    }
+
+    /// The details flow (#82): selecting a change loads its file list,
+    /// expanding a file loads its diff, and a reconcile with nothing
+    /// missing dispatches nothing new. Each step syncs a fresh snapshot
+    /// first, which is what the live poller does after every state sync.
+    #[gpui::test]
+    fn selecting_a_change_loads_files_and_a_file_expands_its_diff(cx: &mut gpui::TestAppContext) {
+        let repo = FakeJjRepository::new("/tmp/fake-jj-details");
+        let backend = Arc::new(FakeJjBackend {
+            repo: std::sync::Mutex::new(Some(Arc::clone(&repo))),
+        });
+        let (store, events) = JjStore::new(backend);
+        let store = Arc::new(store);
+        store.dispatch(JjMsg::OpenRepo {
+            workdir: std::path::PathBuf::from("/tmp/fake-jj-details"),
+        });
+        wait_until("repo to load with changes", || {
+            store
+                .snapshot()
+                .active_repo()
+                .is_some_and(|repo| repo.changes.len() >= 2)
+        });
+
+        let (view, cx) = cx.add_window_view(|window, cx| {
+            JjRepoView::new(
+                Arc::clone(&store),
+                events,
+                AppTheme::gitcomet_light(),
+                window,
+                cx,
+            )
+        });
+        cx.run_until_parked();
+
+        // Select "base" and reconcile: the file list loads into the
+        // details panel.
+        cx.update(|_window, app| {
+            view.update(app, |view, _cx| {
+                view.selected_change = Some(ChangeId("base".to_string()));
+                view.state = store.snapshot();
+                view.sync_selection_details();
+            });
+        });
+        wait_until("change files to load", || {
+            repo.has_call("change_files:base")
+        });
+        wait_until("details to hold the file list", || {
+            store
+                .snapshot()
+                .active_repo()
+                .is_some_and(|repo| repo.details.files.len() == 2)
+        });
+
+        // A reconcile with the target already loaded dispatches nothing:
+        // the fake runs in microseconds, so any stray spawn shows up.
+        let file_loads = || {
+            repo.calls()
+                .iter()
+                .filter(|call| call.starts_with("change_files:"))
+                .count()
+        };
+        let before = file_loads();
+        cx.update(|_window, app| {
+            view.update(app, |view, _cx| {
+                view.state = store.snapshot();
+                view.sync_selection_details();
+            });
+        });
+        std::thread::sleep(Duration::from_millis(50));
+        assert_eq!(file_loads(), before, "repeat reconcile re-dispatched");
+
+        // Expanding a file loads its unified diff into the diff panel.
+        cx.update(|_window, app| {
+            view.update(app, |view, _cx| {
+                view.selected_file = Some("modified.txt".to_string());
+                view.state = store.snapshot();
+                view.sync_selection_details();
+            });
+        });
+        wait_until("file diff to load", || {
+            repo.has_call("file_diff:base:modified.txt")
+        });
+        wait_until("diff text to land", || {
+            store
+                .snapshot()
+                .active_repo()
+                .is_some_and(|repo| repo.file_diff.text.is_some())
+        });
+        let snapshot = store.snapshot();
+        let repo_state = snapshot.active_repo().expect("repo");
+        let text = repo_state.file_diff.text.as_deref().expect("diff text");
+        assert!(text.contains("+++ b/modified.txt"));
+        assert_eq!(
+            repo_state.details.files[0].path, "modified.txt",
+            "the file list order survives the diff expansion"
+        );
     }
 
     /// Bookmark create/delete and operation undo reach the backend:

@@ -21,7 +21,7 @@ mod msg;
 mod reducer;
 
 pub use backend::{CliJjBackend, JjBackend};
-pub use model::{JJ_LOG_PAGE_SIZE, JjAppState, JjRepoState};
+pub use model::{JJ_LOG_PAGE_SIZE, JjAppState, JjChangeDetailsState, JjFileDiffState, JjRepoState};
 pub use msg::{JjEffect, JjMsg, JjMutation};
 
 use std::collections::VecDeque;

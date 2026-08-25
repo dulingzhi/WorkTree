@@ -22,6 +22,18 @@ jj:
     busy: "正在执行 %{operation}…"
   revset:
     placeholder: "按 revset 过滤（留空显示全部）…"
+  details:
+    title: 变更
+    files_count: "%{count} 个路径"
+    loading: 正在加载变更文件…
+    error: "无法读取此变更：%{error}"
+    empty: 此变更未改动任何路径。
+    diff_hint: 点击路径即可查看差异。
+    renamed_from: 原名 %{from}
+    truncated: 差异已截断至 %{lines} 行。
+    diff_loading: 正在加载差异…
+    diff_error: "无法读取差异：%{error}"
+    diff_empty: 此路径没有文本改动。
   conflicts:
     count: "%{count} 个冲突路径"
     recheck: 重新检查
