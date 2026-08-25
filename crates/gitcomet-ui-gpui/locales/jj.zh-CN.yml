@@ -53,6 +53,10 @@ jj:
     placeholder: "新书签名称…"
     create: 创建
     delete: 删除
+    rename: 重命名
+    rename_banner: "正在重命名 %{name} — 输入新名称。"
+    cancel: 取消
+    track: 跟踪
     empty: "暂无书签。"
   op_log:
     title: 操作日志

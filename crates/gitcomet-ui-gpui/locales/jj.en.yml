@@ -52,6 +52,10 @@ jj:
     placeholder: "New bookmark name…"
     create: Create
     delete: Delete
+    rename: Rename
+    rename_banner: "Renaming %{name} — type the new name."
+    cancel: Cancel
+    track: Track
     empty: "No bookmarks."
   op_log:
     title: Operation log

@@ -9,18 +9,35 @@ use super::*;
 use crate::view::date_time::format_relative_time;
 use gitcomet_jj_core::{JjBookmark, JjOp};
 
+/// One remote half of a bookmark pair, rendered as a chip on the local row.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct BookmarkRemoteVm {
+    pub remote: String,
+    pub target_commit_id: String,
+    /// The remote ref points at the same commit as the local ref.
+    pub synced: bool,
+    pub conflicted: bool,
+}
+
 /// One rendered bookmark row.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct BookmarkRowVm {
     /// The bare bookmark name, as mutation messages spell it.
     pub name: String,
-    /// jj's rendering: `main` locally, `main@origin` for remote refs.
+    /// jj's rendering: `main` locally, `main@origin` for remote-only rows.
     pub display_name: String,
-    /// The local half of a local/remote pair — the only half deletable
-    /// from this workspace.
+    /// The local half of a local/remote pair — the only half this workspace
+    /// renames or deletes.
     pub is_local: bool,
+    /// A remote ref with no local counterpart — its only affordance is
+    /// Track, which creates the local half pointing at it.
+    pub remote_only: bool,
+    /// The remote this row belongs to on remote-only rows.
+    pub remote: Option<String>,
     pub target_commit_id: String,
     pub conflicted: bool,
+    /// The local row's remote halves, rendered as chips.
+    pub remotes: Vec<BookmarkRemoteVm>,
 }
 
 pub(super) fn bookmark_row_vm(bookmark: &JjBookmark) -> BookmarkRowVm {
@@ -31,13 +48,46 @@ pub(super) fn bookmark_row_vm(bookmark: &JjBookmark) -> BookmarkRowVm {
             Some(remote) => format!("{}@{remote}", bookmark.name),
         },
         is_local: bookmark.is_local(),
+        remote_only: !bookmark.is_local(),
+        remote: bookmark.remote.clone(),
         target_commit_id: bookmark.target_commit_id.0.clone(),
         conflicted: bookmark.conflicted,
+        remotes: Vec::new(),
     }
 }
 
+/// One row per bare name (#85): a bookmark's remote halves fold into chips
+/// on its local row, and remote refs with no local half become standalone
+/// rows whose only affordance is Track.
 pub(super) fn bookmark_row_vms(repo: &gitcomet_state::jj_store::JjRepoState) -> Vec<BookmarkRowVm> {
-    repo.bookmarks.iter().map(bookmark_row_vm).collect()
+    let mut rows: Vec<BookmarkRowVm> = repo
+        .bookmarks
+        .iter()
+        .filter(|bookmark| bookmark.is_local())
+        .map(|local| {
+            let remotes: Vec<BookmarkRemoteVm> = repo
+                .bookmarks
+                .iter()
+                .filter(|other| other.name == local.name && !other.is_local())
+                .map(|other| BookmarkRemoteVm {
+                    remote: other.remote.clone().unwrap_or_default(),
+                    synced: other.target_commit_id == local.target_commit_id,
+                    target_commit_id: other.target_commit_id.0.clone(),
+                    conflicted: other.conflicted,
+                })
+                .collect();
+            let mut vm = bookmark_row_vm(local);
+            vm.remotes = remotes;
+            vm
+        })
+        .collect();
+    for bookmark in &repo.bookmarks {
+        if bookmark.is_local() || rows.iter().any(|row| row.name == bookmark.name) {
+            continue;
+        }
+        rows.push(bookmark_row_vm(bookmark));
+    }
+    rows
 }
 
 /// One rendered operation row.
@@ -65,13 +115,51 @@ pub(super) fn op_row_vms(
     repo.ops.iter().map(|op| op_row_vm(op, now)).collect()
 }
 
-/// One bookmark row: display name, target commit, a conflicted chip, and
-/// the caller-supplied delete affordance (local bookmarks only). The
-/// button arrives as a rendered element because `Button` is generic over
-/// the view its click listener mutates.
+/// The remote chips for a local row: `@origin` per remote, dim while the
+/// remote points at the local target, warning while it diverged, danger
+/// while the ref itself conflicts.
+fn remote_chips(row: &BookmarkRowVm, theme: AppTheme) -> Vec<impl IntoElement> {
+    row.remotes
+        .iter()
+        .map(|remote| {
+            let (border, foreground) = if remote.conflicted {
+                (
+                    theme.colors.status.danger.border,
+                    theme.colors.status.danger.foreground,
+                )
+            } else if remote.synced {
+                (
+                    theme.colors.stroke.subtle,
+                    theme.colors.foreground.secondary,
+                )
+            } else {
+                (
+                    theme.colors.status.warning.border,
+                    theme.colors.status.warning.foreground,
+                )
+            };
+            div()
+                .text_xs()
+                .rounded(px(theme.radii.control))
+                .border_1()
+                .border_color(border)
+                .px_1()
+                .text_color(foreground)
+                .child(format!("@{}", remote.remote))
+        })
+        .collect()
+}
+
+/// One bookmark row: display name, target commit, remote chips, a
+/// conflicted chip, and the caller-supplied affordances — rename and
+/// delete on local rows, track on remote-only rows. The buttons arrive as
+/// rendered elements because `Button` is generic over the view its click
+/// listener mutates.
 pub(super) fn render_bookmark_row(
     row: &BookmarkRowVm,
     theme: AppTheme,
+    rename_button: Option<AnyElement>,
+    track_button: Option<AnyElement>,
     delete_button: Option<AnyElement>,
 ) -> impl IntoElement {
     div()
@@ -99,6 +187,16 @@ pub(super) fn render_bookmark_row(
                 .text_color(theme.colors.foreground.secondary)
                 .child(row.target_commit_id.clone()),
         )
+        .when(!row.remotes.is_empty(), |d| {
+            d.child(
+                div()
+                    .flex()
+                    .flex_none()
+                    .items_center()
+                    .gap_1()
+                    .children(remote_chips(row, theme)),
+            )
+        })
         .when(row.conflicted, |d| {
             d.child(
                 div()
@@ -111,7 +209,17 @@ pub(super) fn render_bookmark_row(
                     .child(crate::i18n::tr("jj.working_copy.conflicted")),
             )
         })
-        .child(div().ml_auto().flex_none().children(delete_button))
+        .child(
+            div()
+                .ml_auto()
+                .flex_none()
+                .flex()
+                .items_center()
+                .gap_1()
+                .children(rename_button)
+                .children(track_button)
+                .children(delete_button),
+        )
 }
 
 /// One operation row: description, user, relative time.
@@ -178,15 +286,77 @@ mod tests {
         let local_vm = bookmark_row_vm(&local);
         assert_eq!(local_vm.display_name, "main");
         assert!(local_vm.is_local);
+        assert!(!local_vm.remote_only);
         assert_eq!(local_vm.name, "main");
 
         let remote_vm = bookmark_row_vm(&remote);
         assert_eq!(remote_vm.display_name, "main@origin");
         assert!(!remote_vm.is_local);
+        assert!(remote_vm.remote_only);
+        assert_eq!(remote_vm.remote.as_deref(), Some("origin"));
         // The bare name is what mutation messages spell, remote or not.
         assert_eq!(remote_vm.name, "main");
         assert!(remote_vm.conflicted);
         assert_eq!(remote_vm.target_commit_id, "cbbbb");
+    }
+
+    /// The grouped view (#85): a paired remote folds into a chip on the
+    /// local row (flagging divergence), and a remote-only ref stays its own
+    /// row.
+    #[test]
+    fn bookmark_rows_fold_paired_remotes_into_local_rows() {
+        let mut repo = super::super::test_jj_repo_state(1, "/tmp/jj-bookmarks");
+        repo.bookmarks = vec![
+            JjBookmark {
+                name: "main".to_string(),
+                remote: None,
+                target_commit_id: JjCommitId("caaaa".to_string()),
+                conflicted: false,
+            },
+            JjBookmark {
+                name: "main".to_string(),
+                remote: Some("origin".to_string()),
+                target_commit_id: JjCommitId("caaaa".to_string()),
+                conflicted: false,
+            },
+            JjBookmark {
+                name: "feature".to_string(),
+                remote: None,
+                target_commit_id: JjCommitId("ccccc".to_string()),
+                conflicted: false,
+            },
+            JjBookmark {
+                name: "feature".to_string(),
+                remote: Some("origin".to_string()),
+                target_commit_id: JjCommitId("cdddd".to_string()),
+                conflicted: false,
+            },
+            JjBookmark {
+                name: "solo".to_string(),
+                remote: Some("upstream".to_string()),
+                target_commit_id: JjCommitId("ceeee".to_string()),
+                conflicted: false,
+            },
+        ];
+
+        let rows = bookmark_row_vms(&repo);
+        assert_eq!(rows.len(), 3, "one row per bare name: {rows:?}");
+
+        let main = &rows[0];
+        assert_eq!(main.name, "main");
+        assert!(main.is_local);
+        assert_eq!(main.remotes.len(), 1);
+        assert!(main.remotes[0].synced, "origin points at the local target");
+
+        let feature = &rows[1];
+        assert_eq!(feature.remotes.len(), 1);
+        assert!(!feature.remotes[0].synced, "origin diverged from local");
+        assert_eq!(feature.remotes[0].target_commit_id, "cdddd");
+
+        let solo = &rows[2];
+        assert!(solo.remote_only);
+        assert_eq!(solo.display_name, "solo@upstream");
+        assert!(solo.remotes.is_empty());
     }
 
     #[test]

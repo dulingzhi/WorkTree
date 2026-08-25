@@ -62,9 +62,13 @@ pub(crate) struct JjRepoView {
     /// a click.
     list_focus: gpui::FocusHandle,
     /// The bookmark creation bar's input. Enter creates a bookmark from
-    /// the name, targeting the selected change (or @).
+    /// the name, targeting the selected change (or @) — or, while
+    /// `rename_target` is set, commits the rename instead.
     bookmark_input: Entity<components::TextInput>,
     _bookmark_input_subscription: gpui::Subscription,
+    /// The local bookmark being renamed, when the creation bar is flipped
+    /// into rename mode (#85).
+    rename_target: Option<String>,
     _poller: gpui::Task<()>,
     /// Held (not drained) under the test runtime, mirroring `Poller`.
     _held_events: Option<smol::channel::Receiver<StoreEvent>>,
@@ -124,7 +128,11 @@ impl JjRepoView {
         let _bookmark_input_subscription = cx.observe(&bookmark_input, |this, input, cx| {
             let enter_pressed = input.update(cx, |input, _| input.take_enter_pressed());
             if enter_pressed {
-                this.create_bookmark(cx);
+                if this.rename_target.is_some() {
+                    this.submit_bookmark_rename(cx);
+                } else {
+                    this.create_bookmark(cx);
+                }
             }
         });
         let list_focus = cx.focus_handle();
@@ -154,6 +162,7 @@ impl JjRepoView {
                 list_focus,
                 bookmark_input,
                 _bookmark_input_subscription,
+                rename_target: None,
                 _poller: gpui::Task::ready(()),
                 _held_events: Some(events),
             };
@@ -202,6 +211,7 @@ impl JjRepoView {
             list_focus,
             bookmark_input,
             _bookmark_input_subscription,
+            rename_target: None,
             _poller,
             _held_events: None,
         };
@@ -437,6 +447,72 @@ impl JjRepoView {
                 self.store.dispatch(JjMsg::BookmarkDelete {
                     repo_id: repo.id,
                     name: name.to_string(),
+                });
+            }
+        }
+        cx.notify();
+    }
+
+    /// Flip the bookmark bar into rename mode (#85): the input prefills
+    /// with the current name and Enter/Rename submits `jj bookmark rename`.
+    fn start_bookmark_rename(
+        &mut self,
+        name: &str,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.rename_target = Some(name.to_string());
+        let name = name.to_string();
+        self.bookmark_input
+            .update(cx, |input, cx| input.set_text(name, cx));
+        let focus = self.bookmark_input.read(cx).focus_handle();
+        focus.focus(window, cx);
+        cx.notify();
+    }
+
+    /// Enter / Rename button while the bar is in rename mode.
+    fn submit_bookmark_rename(&mut self, cx: &mut gpui::Context<Self>) {
+        let Some(repo) = self.state.active_repo() else {
+            return;
+        };
+        if repo.pending_command.is_some() {
+            return;
+        }
+        let Some(old_name) = self.rename_target.clone() else {
+            return;
+        };
+        let new_name = self.bookmark_input.read(cx).text().trim().to_string();
+        if new_name.is_empty() || new_name == old_name {
+            return;
+        }
+        self.store.dispatch(JjMsg::BookmarkRename {
+            repo_id: repo.id,
+            old_name,
+            new_name,
+        });
+        self.rename_target = None;
+        self.bookmark_input
+            .update(cx, |input, cx| input.set_text("", cx));
+        cx.notify();
+    }
+
+    /// Leave rename mode without touching the bookmark.
+    fn cancel_bookmark_rename(&mut self, cx: &mut gpui::Context<Self>) {
+        self.rename_target = None;
+        self.bookmark_input
+            .update(cx, |input, cx| input.set_text("", cx));
+        cx.notify();
+    }
+
+    /// Track a remote-only bookmark's ref (`jj bookmark track name@remote`)
+    /// so fetches move it and push pushes it (#85).
+    fn track_bookmark(&mut self, name: &str, remote: &str, cx: &mut gpui::Context<Self>) {
+        if let Some(repo) = self.state.active_repo() {
+            if repo.pending_command.is_none() {
+                self.store.dispatch(JjMsg::BookmarkTrack {
+                    repo_id: repo.id,
+                    name: name.to_string(),
+                    remote: Some(remote.to_string()),
                 });
             }
         }
@@ -1171,9 +1247,10 @@ impl Render for JjRepoView {
                     );
                 }
 
-                // Bookmarks: a create bar (targeting the selection, or @)
-                // and one row per bookmark; only local bookmarks carry a
-                // delete affordance — remote refs belong to their remote.
+                // Bookmarks (#85): a create bar (targeting the selection, or
+                // @) that flips into a rename bar, and one row per bare
+                // name — local rows carry rename/delete and their remote
+                // halves as chips, remote-only rows carry Track.
                 let busy = pending_command.is_some();
                 let bookmark_rows = bookmark_row_vms(repo);
                 let mut bookmark_list = div().flex().flex_col();
@@ -1191,8 +1268,42 @@ impl Render for JjRepoView {
                         })
                         .into_any_element()
                     });
-                    bookmark_list =
-                        bookmark_list.child(render_bookmark_row(row, theme, delete_button));
+                    let rename_name = row.name.clone();
+                    let rename_button = row.is_local.then(|| {
+                        components::Button::new(
+                            SharedString::from(format!("jj_bookmark_rename_{}", row.display_name)),
+                            crate::i18n::tr("jj.bookmarks.rename"),
+                        )
+                        .style(components::ButtonStyle::Transparent)
+                        .disabled(busy)
+                        .on_click(theme, cx, move |this, _e, window, cx| {
+                            this.start_bookmark_rename(&rename_name, window, cx);
+                        })
+                        .into_any_element()
+                    });
+                    let track_name = row.name.clone();
+                    let track_remote = row.remote.clone();
+                    let track_button = row.remote_only.then(|| {
+                        components::Button::new(
+                            SharedString::from(format!("jj_bookmark_track_{}", row.display_name)),
+                            crate::i18n::tr("jj.bookmarks.track"),
+                        )
+                        .style(components::ButtonStyle::Outlined)
+                        .disabled(busy)
+                        .on_click(theme, cx, move |this, _e, _w, cx| {
+                            if let Some(remote) = track_remote.as_deref() {
+                                this.track_bookmark(&track_name, remote, cx);
+                            }
+                        })
+                        .into_any_element()
+                    });
+                    bookmark_list = bookmark_list.child(render_bookmark_row(
+                        row,
+                        theme,
+                        rename_button,
+                        track_button,
+                        delete_button,
+                    ));
                 }
                 if bookmark_rows.is_empty() {
                     bookmark_list = bookmark_list.child(
@@ -1203,15 +1314,58 @@ impl Render for JjRepoView {
                             .child(crate::i18n::tr("jj.bookmarks.empty")),
                     );
                 }
-                let create_button = components::Button::new(
-                    "jj_bookmark_create",
-                    crate::i18n::tr("jj.bookmarks.create"),
-                )
-                .style(components::ButtonStyle::Filled)
-                .disabled(busy)
-                .on_click(theme, cx, |this, _e, _w, cx| {
-                    this.create_bookmark(cx);
-                });
+                // The bar's submit side depends on the mode: Create, or
+                // Rename + Cancel while renaming.
+                let renaming_from = self.rename_target.clone();
+                let bar_button: gpui::AnyElement = if let Some(old_name) = renaming_from.clone() {
+                    let rename_banner = div()
+                        .px_3()
+                        .pb_1()
+                        .text_xs()
+                        .text_color(theme.colors.foreground.secondary)
+                        .child(crate::i18n::t!(
+                            "jj.bookmarks.rename_banner",
+                            name = old_name
+                        ));
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .child(
+                            components::Button::new(
+                                "jj_bookmark_rename_go",
+                                crate::i18n::tr("jj.bookmarks.rename"),
+                            )
+                            .style(components::ButtonStyle::Filled)
+                            .disabled(busy)
+                            .on_click(theme, cx, |this, _e, _w, cx| {
+                                this.submit_bookmark_rename(cx);
+                            }),
+                        )
+                        .child(
+                            components::Button::new(
+                                "jj_bookmark_rename_cancel",
+                                crate::i18n::tr("jj.bookmarks.cancel"),
+                            )
+                            .style(components::ButtonStyle::Transparent)
+                            .on_click(theme, cx, |this, _e, _w, cx| {
+                                this.cancel_bookmark_rename(cx);
+                            }),
+                        )
+                        .child(rename_banner)
+                        .into_any_element()
+                } else {
+                    components::Button::new(
+                        "jj_bookmark_create",
+                        crate::i18n::tr("jj.bookmarks.create"),
+                    )
+                    .style(components::ButtonStyle::Filled)
+                    .disabled(busy)
+                    .on_click(theme, cx, |this, _e, _w, cx| {
+                        this.create_bookmark(cx);
+                    })
+                    .into_any_element()
+                };
                 card = card.child(
                     div()
                         .id("jj_bookmarks_card")
@@ -1254,7 +1408,7 @@ impl Render for JjRepoView {
                                 .px_3()
                                 .pb_2()
                                 .child(self.bookmark_input.clone())
-                                .child(create_button),
+                                .child(bar_button),
                         )
                         .child(bookmark_list),
                 );
@@ -2338,6 +2492,88 @@ mod tests {
         });
         wait_until("abandon to run and settle", || {
             repo.has_call("abandon:base") && mutation_settled()
+        });
+    }
+
+    /// Bookmark rename/track (#85): the create bar flips into rename mode
+    /// (prefilled, Enter submits) and back out on cancel, and a remote-only
+    /// row's Track dispatches against that remote.
+    #[gpui::test]
+    fn bookmark_rename_and_track_gestures_reach_the_backend(cx: &mut gpui::TestAppContext) {
+        let repo = FakeJjRepository::new("/tmp/fake-jj-bookmarks");
+        let backend = Arc::new(FakeJjBackend {
+            repo: std::sync::Mutex::new(Some(Arc::clone(&repo))),
+        });
+        let (store, events) = JjStore::new(backend);
+        let store = Arc::new(store);
+        store.dispatch(JjMsg::OpenRepo {
+            workdir: std::path::PathBuf::from("/tmp/fake-jj-bookmarks"),
+        });
+        wait_until("repo to load with a working copy", || {
+            store
+                .snapshot()
+                .active_repo()
+                .is_some_and(|repo| repo.working_copy.is_some())
+        });
+
+        let (view, cx) = cx.add_window_view(|window, cx| {
+            JjRepoView::new(
+                Arc::clone(&store),
+                events,
+                AppTheme::gitcomet_light(),
+                window,
+                cx,
+            )
+        });
+        cx.run_until_parked();
+
+        let mutation_settled = || {
+            store
+                .snapshot()
+                .active_repo()
+                .is_some_and(|repo| repo.pending_command.is_none())
+        };
+
+        // Rename mode: the bar prefills with the old name, a same-name
+        // submit is a no-op, and the real one reaches the backend.
+        cx.update(|window, app| {
+            view.update(app, |view, cx| {
+                view.start_bookmark_rename("main", window, cx);
+            });
+        });
+        cx.update(|_window, app| {
+            view.update(app, |view, cx| {
+                assert_eq!(view.rename_target.as_deref(), Some("main"));
+                assert_eq!(view.bookmark_input.read(cx).text(), "main");
+                // Same name: nothing dispatches, mode stays.
+                view.submit_bookmark_rename(cx);
+                assert_eq!(view.rename_target.as_deref(), Some("main"));
+                view.bookmark_input
+                    .update(cx, |input, cx| input.set_text("renamed", cx));
+                view.submit_bookmark_rename(cx);
+            });
+        });
+        wait_until("rename to run and settle", || {
+            repo.has_call("bookmark_rename:main:renamed") && mutation_settled()
+        });
+
+        // Cancel leaves rename mode without touching the backend.
+        cx.update(|window, app| {
+            view.update(app, |view, cx| {
+                view.start_bookmark_rename("main", window, cx);
+                view.cancel_bookmark_rename(cx);
+                assert_eq!(view.rename_target, None);
+            });
+        });
+
+        // Track: the remote-only row's gesture names the remote.
+        cx.update(|_window, app| {
+            view.update(app, |view, cx| {
+                view.track_bookmark("solo", "upstream", cx);
+            });
+        });
+        wait_until("track to run and settle", || {
+            repo.has_call("bookmark_track:solo:Some(\"upstream\")") && mutation_settled()
         });
     }
 
