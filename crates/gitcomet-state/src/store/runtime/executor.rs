@@ -1,4 +1,4 @@
-use super::send_diagnostics::{SendFailureKind, send_or_log};
+use crate::store::send_diagnostics::{SendFailureKind, send_or_log};
 use gitcomet_core::mergetool_trace;
 use std::panic::{self, AssertUnwindSafe};
 #[cfg(any(test, feature = "test-support"))]
@@ -8,30 +8,30 @@ use std::thread;
 
 type Task = Box<dyn FnOnce() + Send + 'static>;
 
-pub(super) fn default_worker_threads() -> usize {
+pub(in crate::store) fn default_worker_threads() -> usize {
     std::thread::available_parallelism()
         .map(|n| n.get().clamp(1, 8))
         .unwrap_or(2)
 }
 
-pub(super) fn repo_load_worker_threads() -> usize {
+pub(in crate::store) fn repo_load_worker_threads() -> usize {
     default_worker_threads().saturating_sub(1).clamp(1, 2)
 }
 
-pub(super) fn metadata_worker_threads() -> usize {
+pub(in crate::store) fn metadata_worker_threads() -> usize {
     2
 }
 
 #[cfg(any(test, feature = "test-support"))]
 #[derive(Clone, Copy)]
-pub(super) enum StoreExecutorPool {
+pub(in crate::store) enum StoreExecutorPool {
     Primary,
     RepoLoad,
     Metadata,
     SessionPersist,
 }
 
-pub(super) struct TaskExecutor {
+pub(in crate::store) struct TaskExecutor {
     tx: mpsc::Sender<Task>,
     _threads: Vec<thread::JoinHandle<()>>,
 }
@@ -57,7 +57,7 @@ fn worker_loop(rx: Arc<std::sync::Mutex<mpsc::Receiver<Task>>>, catch_panics: bo
 
 impl TaskExecutor {
     #[cfg_attr(feature = "test-support", allow(dead_code))]
-    pub(super) fn new(threads: usize) -> Self {
+    pub(in crate::store) fn new(threads: usize) -> Self {
         let (tx, rx) = mpsc::channel::<Task>();
         let rx = Arc::new(std::sync::Mutex::new(rx));
 
@@ -74,7 +74,7 @@ impl TaskExecutor {
     }
 
     #[cfg(any(test, feature = "test-support"))]
-    pub(super) fn shared_for_store(pool: StoreExecutorPool, threads: usize) -> Self {
+    pub(in crate::store) fn shared_for_store(pool: StoreExecutorPool, threads: usize) -> Self {
         fn sender_for(
             cell: &'static OnceLock<mpsc::Sender<Task>>,
             thread_name: &'static str,
@@ -122,7 +122,7 @@ impl TaskExecutor {
         }
     }
 
-    pub(super) fn spawn(&self, task: impl FnOnce() + Send + 'static) {
+    pub(in crate::store) fn spawn(&self, task: impl FnOnce() + Send + 'static) {
         let mergetool_trace_context = mergetool_trace::current_capture_context();
         send_or_log(
             &self.tx,

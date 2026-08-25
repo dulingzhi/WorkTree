@@ -12,13 +12,18 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 mod effects;
-mod executor;
 mod reducer;
 mod reducer_diagnostics;
 mod repo_load_trace;
-mod repo_monitor;
+mod runtime;
 mod send_diagnostics;
 mod worker_channel;
+
+// The extracted runtime's submodules stay bound under their historical names
+// so existing intra-store paths (`super::executor::…`, the tests'
+// `super::super::repo_monitor`) are untouched by the extraction.
+use runtime::executor;
+use runtime::repo_monitor;
 
 /// Minimum spacing between the automatic "fetch all" runs that follow
 /// repository activation. The activation refresh itself is throttled to a few
@@ -26,7 +31,6 @@ mod worker_channel;
 /// round-trip on every alt-tab.
 const AUTO_ACTIVATION_FETCH_INTERVAL: Duration = Duration::from_secs(60);
 
-use effects::RepoTaskToken;
 use effects::{EffectExecutors, schedule_effect};
 #[cfg(any(test, feature = "test-support"))]
 use executor::StoreExecutorPool;
@@ -41,6 +45,7 @@ use reducer::{
     reset_conflict_resolutions_inline, set_conflict_region_choice_inline,
 };
 use repo_monitor::RepoMonitorManager;
+use runtime::worker::{RepoTaskToken, recv_next_worker_command};
 use send_diagnostics::try_send_state_changed_or_log;
 use worker_channel::{StoreInstanceId, StoreWorkerCommand, StoreWorkerSender};
 
@@ -72,96 +77,6 @@ fn make_mut_state_with_diagnostics(state: &mut Arc<AppState>) -> &mut AppState {
     } else {
         Arc::make_mut(state)
     }
-}
-
-fn is_control_msg(msg: &Msg) -> bool {
-    matches!(
-        msg,
-        Msg::OpenRepo(_)
-            | Msg::CloseRepo { .. }
-            | Msg::CloseRepos { .. }
-            | Msg::SetActiveRepo { .. }
-            | Msg::ReorderRepoTabs { .. }
-    )
-}
-
-fn is_control_command(command: &StoreWorkerCommand) -> bool {
-    match command {
-        StoreWorkerCommand::Msg(msg) => is_control_msg(msg),
-        StoreWorkerCommand::Shutdown => true,
-        #[cfg(any(test, feature = "test-support"))]
-        StoreWorkerCommand::InsertRepoForTest { .. } => true,
-    }
-}
-
-fn can_control_command_overtake(command: &StoreWorkerCommand) -> bool {
-    matches!(
-        command,
-        StoreWorkerCommand::Msg(msg) if matches!(msg.as_ref(), Msg::Internal(_))
-    )
-}
-
-fn first_control_command_before_order_barrier(
-    deferred: &VecDeque<StoreWorkerCommand>,
-) -> Option<usize> {
-    for (ix, command) in deferred.iter().enumerate() {
-        if is_control_command(command) {
-            return Some(ix);
-        }
-        if !can_control_command_overtake(command) {
-            return None;
-        }
-    }
-    None
-}
-
-fn has_order_barrier_before_control(deferred: &VecDeque<StoreWorkerCommand>) -> bool {
-    for command in deferred {
-        if is_control_command(command) {
-            return false;
-        }
-        if !can_control_command_overtake(command) {
-            return true;
-        }
-    }
-    false
-}
-
-fn recv_next_worker_command(
-    command_rx: &mpsc::Receiver<StoreWorkerCommand>,
-    deferred: &mut VecDeque<StoreWorkerCommand>,
-) -> Result<StoreWorkerCommand, mpsc::RecvError> {
-    if let Some(ix) = first_control_command_before_order_barrier(deferred) {
-        return Ok(deferred.remove(ix).expect("deferred command exists"));
-    }
-
-    let first = match deferred.pop_front() {
-        Some(command) => command,
-        None => command_rx.recv()?,
-    };
-    if is_control_command(&first) {
-        return Ok(first);
-    }
-    if !can_control_command_overtake(&first) {
-        return Ok(first);
-    }
-    if has_order_barrier_before_control(deferred) {
-        return Ok(first);
-    }
-
-    while let Ok(command) = command_rx.try_recv() {
-        if is_control_command(&command) {
-            deferred.push_front(first);
-            return Ok(command);
-        }
-        if !can_control_command_overtake(&command) {
-            deferred.push_back(command);
-            break;
-        }
-        deferred.push_back(command);
-    }
-
-    Ok(first)
 }
 
 struct ReducerEffectsContext<'a> {

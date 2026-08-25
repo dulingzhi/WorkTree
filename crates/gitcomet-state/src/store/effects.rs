@@ -17,56 +17,13 @@ use gitcomet_core::error::{Error, ErrorKind};
 use gitcomet_core::process::GitRuntimeState;
 use gitcomet_core::services::{CancellationToken, GitBackend, GitRepository};
 use rustc_hash::FxHashMap;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 
 use super::RepoId;
 use super::executor::TaskExecutor;
 use super::repo_load_trace;
+use super::runtime::worker::RepoTaskToken;
 use super::worker_channel::StoreWorkerSender;
-
-#[derive(Clone)]
-pub(super) struct RepoTaskToken {
-    pub(super) load_epoch: u64,
-    pub(super) cancellation: CancellationToken,
-    /// Cancellation for the *current* log walk alone. An author-filtered walk
-    /// on a large repository runs for tens of seconds and the repo-load pool
-    /// has one or two threads, so a superseded walk has to be stopped for its
-    /// replacement to start at all — but stopping it must not disturb the
-    /// repository's other loads, which share [`Self::cancellation`].
-    log_cancellation: Arc<Mutex<CancellationToken>>,
-}
-
-impl RepoTaskToken {
-    fn new(load_epoch: u64) -> Self {
-        Self {
-            load_epoch,
-            cancellation: CancellationToken::new(),
-            log_cancellation: Arc::new(Mutex::new(CancellationToken::new())),
-        }
-    }
-
-    /// Cancels the log walk in flight, if any, and hands out the token for the
-    /// walk that replaces it.
-    fn take_over_log(&self) -> CancellationToken {
-        let mut slot = self
-            .log_cancellation
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        slot.cancel();
-        let next = CancellationToken::new();
-        *slot = next.clone();
-        next
-    }
-
-    /// Cancels every task running under this token, log walks included.
-    pub(super) fn cancel(&self) {
-        self.cancellation.cancel();
-        self.log_cancellation
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .cancel();
-    }
-}
 
 #[derive(Clone, Copy)]
 pub(super) struct EffectExecutors<'a> {

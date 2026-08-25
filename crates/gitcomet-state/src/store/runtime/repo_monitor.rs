@@ -1,5 +1,5 @@
 use crate::model::RepoId;
-use crate::msg::{Msg, RepoExternalChange, RepoWatchDegradedReason};
+use crate::msg::{RepoExternalChange, RepoWatchDegradedReason};
 use gix::index::entry::Mode as GitIndexMode;
 use notify::event::{AccessKind, AccessMode, EventKindMask};
 use notify::{Config as NotifyConfig, RecommendedWatcher, RecursiveMode, Watcher};
@@ -13,9 +13,9 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use super::repo_load_trace;
-use super::send_diagnostics::{SendFailureKind, send_or_log};
-use super::worker_channel::StoreWorkerSender;
+use super::worker::{StoreMessage, WorkerSender};
+use crate::store::repo_load_trace;
+use crate::store::send_diagnostics::{SendFailureKind, send_or_log};
 
 enum MonitorMsg {
     Event(notify::Result<notify::Event>),
@@ -23,7 +23,7 @@ enum MonitorMsg {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum MonitorFailureKind {
+pub(in crate::store) enum MonitorFailureKind {
     Start,
     Stop,
     Join,
@@ -132,7 +132,7 @@ fn panic_payload_to_string(payload: Box<dyn Any + Send + 'static>) -> String {
     }
 }
 
-pub(super) fn join_monitor_or_log(
+pub(in crate::store) fn join_monitor_or_log(
     join: thread::JoinHandle<()>,
     repo_id: RepoId,
     context: &'static str,
@@ -173,23 +173,23 @@ fn spawn_monitor_join(repo_id: RepoId, join: thread::JoinHandle<()>, context: &'
 }
 
 #[cfg(test)]
-pub(super) fn monitor_failure_count(kind: MonitorFailureKind) -> u64 {
+pub(in crate::store) fn monitor_failure_count(kind: MonitorFailureKind) -> u64 {
     monitor_failure_counter(kind).load(Ordering::Relaxed)
 }
 
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(super) struct RepoMonitorIgnoreLookupStats {
-    pub(super) request_count: u64,
-    pub(super) cache_hits: u64,
-    pub(super) cache_misses: u64,
-    pub(super) fallback_count: u64,
-    pub(super) average_lookup_nanos: u64,
-    pub(super) max_lookup_nanos: u64,
+pub(in crate::store) struct RepoMonitorIgnoreLookupStats {
+    pub(in crate::store) request_count: u64,
+    pub(in crate::store) cache_hits: u64,
+    pub(in crate::store) cache_misses: u64,
+    pub(in crate::store) fallback_count: u64,
+    pub(in crate::store) average_lookup_nanos: u64,
+    pub(in crate::store) max_lookup_nanos: u64,
 }
 
 #[cfg(test)]
-pub(super) fn repo_monitor_ignore_lookup_stats() -> RepoMonitorIgnoreLookupStats {
+pub(in crate::store) fn repo_monitor_ignore_lookup_stats() -> RepoMonitorIgnoreLookupStats {
     let request_count = REPO_MONITOR_IGNORE_LOOKUP_REQUESTS.load(Ordering::Relaxed);
     let cache_hits = REPO_MONITOR_IGNORE_LOOKUP_CACHE_HITS.load(Ordering::Relaxed);
     let cache_misses = REPO_MONITOR_IGNORE_LOOKUP_CACHE_MISSES.load(Ordering::Relaxed);
@@ -209,7 +209,7 @@ pub(super) fn repo_monitor_ignore_lookup_stats() -> RepoMonitorIgnoreLookupStats
 }
 
 #[cfg(test)]
-pub(super) fn record_stop_send_failure(repo_id: RepoId, context: &'static str) {
+pub(in crate::store) fn record_stop_send_failure(repo_id: RepoId, context: &'static str) {
     let (tx, rx) = mpsc::channel::<MonitorMsg>();
     drop(rx);
     send_stop_or_log(&tx, repo_id, context);
@@ -283,45 +283,45 @@ impl DebouncedChange {
     }
 }
 
-pub(super) struct RepoMonitorManager {
+pub(in crate::store) struct RepoMonitorManager {
     handles: FxHashMap<RepoId, RepoMonitorHandle>,
 }
 
 impl RepoMonitorManager {
-    pub(super) fn new() -> Self {
+    pub(in crate::store) fn new() -> Self {
         Self {
             handles: FxHashMap::default(),
         }
     }
 
-    pub(super) fn stop_all(&mut self) {
+    pub(in crate::store) fn stop_all(&mut self) {
         for (repo_id, handle) in self.handles.drain() {
             stop_monitor_handle(repo_id, handle, "RepoMonitorManager::stop_all");
         }
     }
 
-    pub(super) fn stop(&mut self, repo_id: RepoId) {
+    pub(in crate::store) fn stop(&mut self, repo_id: RepoId) {
         let Some(handle) = self.handles.remove(&repo_id) else {
             return;
         };
         stop_monitor_handle(repo_id, handle, "RepoMonitorManager::stop");
     }
 
-    pub(super) fn running_repo_ids(&self) -> Vec<RepoId> {
+    pub(in crate::store) fn running_repo_ids(&self) -> Vec<RepoId> {
         self.handles.keys().copied().collect()
     }
 
-    pub(super) fn is_running(&self, repo_id: RepoId) -> bool {
+    pub(in crate::store) fn is_running(&self, repo_id: RepoId) -> bool {
         self.handles
             .get(&repo_id)
             .is_some_and(|handle| handle.monitor_enabled.load(Ordering::Relaxed))
     }
 
-    pub(super) fn start(
+    pub(in crate::store) fn start<M: StoreMessage>(
         &mut self,
         repo_id: RepoId,
         workdir: PathBuf,
-        msg_tx: StoreWorkerSender,
+        msg_tx: WorkerSender<M>,
         active_repo_id: Arc<AtomicU64>,
     ) {
         let std::collections::hash_map::Entry::Vacant(entry) = self.handles.entry(repo_id) else {
@@ -350,7 +350,7 @@ impl RepoMonitorManager {
     }
 
     #[cfg(test)]
-    pub(super) fn insert_blocked_monitor_for_test(
+    pub(in crate::store) fn insert_blocked_monitor_for_test(
         &mut self,
         repo_id: RepoId,
         release_rx: mpsc::Receiver<()>,
@@ -739,15 +739,15 @@ fn watch_degraded_transition(
 
 /// Surfaces the degraded-watch warning to the user when the worktree setup transitions into a
 /// degraded state, and clears the flag when it recovers.
-fn note_watch_outcome(
-    msg_tx: &StoreWorkerSender,
+fn note_watch_outcome<M: StoreMessage>(
+    msg_tx: &WorkerSender<M>,
     repo_id: RepoId,
     previously_degraded: &mut bool,
     outcome: WatchSetupOutcome,
 ) {
     if let Some(reason) = watch_degraded_transition(previously_degraded, outcome) {
         msg_tx.send_repo_monitor_or_log(
-            Msg::RepoWatchDegraded { repo_id, reason },
+            M::repo_watch_degraded(repo_id, reason),
             "repo monitor watch degraded",
         );
     }
@@ -830,16 +830,16 @@ fn attempt_degraded_watch_recovery(
     None
 }
 
-fn repo_monitor_thread(
+fn repo_monitor_thread<M: StoreMessage>(
     repo_id: RepoId,
     workdir: PathBuf,
-    msg_tx: StoreWorkerSender,
+    msg_tx: WorkerSender<M>,
     monitor_rx: mpsc::Receiver<MonitorMsg>,
     monitor_tx: mpsc::Sender<MonitorMsg>,
     active_repo_id: Arc<AtomicU64>,
     monitor_enabled: Arc<AtomicBool>,
 ) {
-    let workdir = super::canonicalize_path(workdir);
+    let workdir = crate::store::canonicalize_path(workdir);
     if !monitor_enabled.load(Ordering::Relaxed) {
         repo_load_trace::trace!("repo_monitor_exit_before_start repo_id={:?}", repo_id);
         return;
@@ -883,7 +883,7 @@ fn repo_monitor_thread(
         if active == repo_id.0 {
             trace_repo_monitor_flush("flush", repo_id, change, active);
             msg_tx.send_repo_monitor_or_log(
-                Msg::RepoExternallyChanged { repo_id, change },
+                M::repo_externally_changed(repo_id, change),
                 "repo monitor flush",
             );
         } else {
@@ -904,7 +904,7 @@ fn repo_monitor_thread(
         if active == repo_id.0 {
             trace_repo_monitor_flush("flush_if_active", repo_id, change, active);
             msg_tx.send_repo_monitor_or_log(
-                Msg::RepoExternallyChanged { repo_id, change },
+                M::repo_externally_changed(repo_id, change),
                 "repo monitor flush_if_active",
             );
         } else {
@@ -3159,8 +3159,8 @@ mod tests {
 
     #[test]
     fn watcher_callback_send_records_failure_when_gate_is_open() {
-        let before = super::super::send_diagnostics::send_failure_count(
-            super::super::send_diagnostics::SendFailureKind::RepoMonitorMessage,
+        let before = super::super::super::send_diagnostics::send_failure_count(
+            super::super::super::send_diagnostics::SendFailureKind::RepoMonitorMessage,
         );
 
         let (tx, rx) = mpsc::channel::<MonitorMsg>();
@@ -3182,8 +3182,8 @@ mod tests {
             "callback should attempt sends while monitor is active"
         );
 
-        let after = super::super::send_diagnostics::send_failure_count(
-            super::super::send_diagnostics::SendFailureKind::RepoMonitorMessage,
+        let after = super::super::super::send_diagnostics::send_failure_count(
+            super::super::super::send_diagnostics::SendFailureKind::RepoMonitorMessage,
         );
         assert!(after > before);
     }
