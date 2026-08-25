@@ -5,6 +5,7 @@ members = [
   "crates/gitcomet-core",
   "crates/gitcomet-git",
   "crates/gitcomet-git-gix",
+  "crates/gitcomet-jj-core",
   "crates/gitcomet-state",
   "crates/gitcomet-tree-sitter-alloc",
   "crates/gitcomet-ui-gpui",
@@ -16,6 +17,7 @@ default-members = [
   "crates/gitcomet-core",
   "crates/gitcomet-git",
   "crates/gitcomet-git-gix",
+  "crates/gitcomet-jj-core",
   "crates/gitcomet-state",
   "crates/gitcomet-ui-gpui",
 ]
@@ -33,6 +35,7 @@ rust-version = "1.98.0"
 gitcomet-core = { path = "crates/gitcomet-core" }
 gitcomet-git = { path = "crates/gitcomet-git" }
 gitcomet-git-gix = { path = "crates/gitcomet-git-gix" }
+gitcomet-jj-core = { path = "crates/gitcomet-jj-core" }
 gitcomet-state = { path = "crates/gitcomet-state" }
 gitcomet-ui-gpui = { path = "crates/gitcomet-ui-gpui", default-features = false }
 

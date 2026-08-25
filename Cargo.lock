@@ -2356,6 +2356,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "gitcomet-jj-core"
+version = "0.2.1"
+dependencies = [
+ "gitcomet-core",
+ "tempfile",
+]
+
+[[package]]
 name = "gitcomet-state"
 version = "0.2.1"
 dependencies = [
