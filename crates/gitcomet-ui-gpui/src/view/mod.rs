@@ -4051,6 +4051,54 @@ impl Render for GitCometView {
             );
         }
 
+        // L1 read-only protection surfaces here: colocated Jujutsu repos are
+        // opened with `capabilities.read_only`, the reducer drops every write
+        // message for them, and this banner tells the user why the write
+        // affordances are gone. Informational, so unlike the error banner it
+        // has no dismiss button — it leaves when the repo does.
+        if let Some(repo) = self.active_repo()
+            && repo.capabilities.read_only
+        {
+            let jj_unavailable_hint = match gitcomet_core::jj::current_jj_runtime() {
+                Some(runtime) if runtime.is_available() => None,
+                Some(_) => Some(crate::i18n::tr("chrome.readonly_banner.jj_unavailable")),
+                // Probe still warming (it starts when the repo opens); the
+                // title line stands alone until it lands.
+                None => None,
+            };
+            body = body.child(
+                div()
+                    .px_2()
+                    .py_1()
+                    .bg(with_alpha(
+                        theme.colors.status.warning.foreground,
+                        if theme.is_dark { 0.12 } else { 0.08 },
+                    ))
+                    .border_1()
+                    .border_color(with_alpha(theme.colors.status.warning.border, 0.5))
+                    .rounded(px(theme.radii.panel))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .child(crate::i18n::tr("chrome.readonly_banner.title")),
+                            )
+                            .when_some(jj_unavailable_hint, |this, hint| {
+                                this.child(
+                                    div()
+                                        .text_xs()
+                                        .text_color(theme.colors.foreground.secondary)
+                                        .child(hint),
+                                )
+                            }),
+                    ),
+            );
+        }
+
         let mut root = div()
             .size_full()
             .cursor(cursor)

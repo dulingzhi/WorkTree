@@ -1,6 +1,6 @@
 use gitcomet_core::error::ErrorKind;
 use gitcomet_core::path_utils::canonicalize_or_original;
-use gitcomet_core::services::GitBackend;
+use gitcomet_core::services::{GitBackend, RepoCapabilities};
 use gitcomet_git_gix::GixBackend;
 use std::fs;
 use std::path::Path;
@@ -50,6 +50,90 @@ fn gix_backend_open_succeeds_for_git_repository() {
     assert_eq!(
         opened.spec().workdir,
         canonicalize_or_original(repo.clone())
+    );
+    assert_eq!(opened.capabilities(), RepoCapabilities::default());
+}
+
+#[test]
+fn gix_backend_open_detects_colocated_jj_repo_as_read_only() {
+    let dir = tempfile::tempdir().expect("create tempdir");
+    let repo = dir.path().join("repo");
+    fs::create_dir_all(&repo).expect("create repo directory");
+
+    run_git(&repo, &["init"]);
+    // A colocated Jujutsu repo is a git repo with a `.jj` directory beside
+    // `.git`; the marker alone decides detection, no jj binary is involved.
+    fs::create_dir_all(repo.join(".jj")).expect("create .jj marker directory");
+
+    let backend = GixBackend;
+    let opened = backend.open(&repo).expect("open repository");
+    assert_eq!(opened.capabilities(), RepoCapabilities::jj_read_only());
+}
+
+/// Skips tests that shell out to a real `jj` binary on machines without it
+/// (the fake-`.jj`-marker test above still runs everywhere).
+fn jj_available_for_integration_tests() -> bool {
+    std::process::Command::new("jj")
+        .arg("--version")
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
+/// Opens a genuinely colocated repo (created by `jj git init --colocate`) and
+/// pins the L1 contract end to end: detection reports read-only, reads still
+/// work through gix, and the working copy stays clean because a colocated jj
+/// repo syncs the git index.
+#[test]
+fn gix_backend_reads_real_colocated_jj_repo() {
+    if !jj_available_for_integration_tests() {
+        eprintln!("skipping: jj binary not found in PATH");
+        return;
+    }
+
+    let dir = tempfile::tempdir().expect("create tempdir");
+    let repo = dir.path().join("repo");
+    fs::create_dir_all(&repo).expect("create repo directory");
+    init_repo_with_commit(&repo);
+
+    let colocate = std::process::Command::new("jj")
+        .arg("git")
+        .arg("init")
+        .arg("--colocate")
+        .current_dir(&repo)
+        .output()
+        .expect("run jj git init --colocate");
+    assert!(
+        colocate.status.success(),
+        "jj git init --colocate failed: {}{}",
+        String::from_utf8_lossy(&colocate.stdout),
+        String::from_utf8_lossy(&colocate.stderr),
+    );
+
+    let backend = GixBackend;
+    let opened = backend.open(&repo).expect("open colocated repository");
+    assert_eq!(opened.capabilities(), RepoCapabilities::jj_read_only());
+
+    // History reads must keep working: the initial git commit remains
+    // reachable through the jj-managed refs.
+    let page = opened.log_head_page(10, None).expect("read log head page");
+    assert!(
+        page.commits
+            .iter()
+            .any(|commit| commit.summary.contains("init")),
+        "expected the git init commit in the log, got {:?}",
+        page.commits
+            .iter()
+            .map(|commit| &*commit.summary)
+            .collect::<Vec<_>>()
+    );
+
+    // A colocated repo exports the working-copy state to the git index, so
+    // plain-git status reads as clean — no phantom modifications.
+    let status = opened.status().expect("read status");
+    assert!(
+        status.staged.is_empty() && status.unstaged.is_empty(),
+        "colocated working copy should read clean, got {status:?}"
     );
 }
 

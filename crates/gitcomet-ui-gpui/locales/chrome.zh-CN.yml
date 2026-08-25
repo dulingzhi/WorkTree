@@ -31,6 +31,10 @@ chrome:
     cancel: 取消
   error_banner:
     scroll_hint: 滚动查看完整输出
+  readonly_banner:
+    title: Jujutsu 仓库已以只读模式打开。提交、暂存、推送等 Git 写操作已禁用，以免与
+      jj 冲突。
+    jj_unavailable: 未在系统上找到 jj 命令行工具。安装 jj 后可完整支持此类仓库。
   editor:
     no_active_repo: 没有可在代码编辑器中打开的活动仓库。
     path_not_found: "路径不存在：%{path}"

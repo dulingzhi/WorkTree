@@ -7,8 +7,8 @@ use gitcomet_core::conflict_session::{
 use gitcomet_core::domain::*;
 use gitcomet_core::process::GitRuntimeState;
 use gitcomet_core::services::{
-    BlameLine, ForcePushLease, InteractiveRebaseEntry, SafePushAfterCommitContext, SequencerState,
-    SubmoduleTrustTarget,
+    BlameLine, ForcePushLease, InteractiveRebaseEntry, RepoCapabilities,
+    SafePushAfterCommitContext, SequencerState, SubmoduleTrustTarget,
 };
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
@@ -1161,6 +1161,12 @@ pub struct RepoState {
     pub commit_in_flight: u32,
 
     pub open: Loadable<()>,
+    /// What the backend for this repository supports. Copied from the
+    /// backend handle when the repo finishes opening; until then it is the
+    /// full Git set, which only ever over-promises for the brief opening
+    /// window of a colocated Jujutsu repo (writes are also gated on
+    /// `open == Ready`).
+    pub capabilities: RepoCapabilities,
     pub history_state: HistoryState,
     /// Author name → email for recent commits, for per-email author avatars
     /// (Gravatar-style). Populated best-effort; empty means initials.
@@ -1291,6 +1297,7 @@ impl RepoState {
             local_actions_in_flight: 0,
             commit_in_flight: 0,
             open: Loadable::Loading,
+            capabilities: RepoCapabilities::default(),
             history_state: HistoryState::default(),
             author_emails: FxHashMap::default(),
             fetch_prune_deleted_remote_tracking_branches: true,

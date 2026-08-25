@@ -212,6 +212,101 @@ pub(crate) fn msg_requires_available_git(msg: &Msg) -> bool {
     )
 }
 
+/// Messages whose reduction mutates the repository through the backend (or
+/// writes files inside the worktree), paired with the repository they target.
+/// Read-only backends (colocated Jujutsu during P0) drop these in
+/// [`reduce_inner`] before any effect can run, so GitComet can never race a
+/// `jj` snapshot with a git-side write.
+///
+/// Pure session/UI state is deliberately excluded: conflict-resolution
+/// editing and interactive-rebase setup dialogs never reach disk except via
+/// one of the messages listed here (`SaveWorktreeFile`, `SquashCommits`, …).
+/// Keep this in sync with [`msg_requires_available_git`], which covers the
+/// same surface plus reads.
+pub(crate) fn msg_backend_write_target(msg: &Msg) -> Option<RepoId> {
+    let repo_id = match msg {
+        Msg::StageHunk { repo_id, .. }
+        | Msg::UnstageHunk { repo_id, .. }
+        | Msg::ApplyWorktreePatch { repo_id, .. }
+        | Msg::CheckoutBranch { repo_id, .. }
+        | Msg::CheckoutRemoteBranch { repo_id, .. }
+        | Msg::CheckoutCommit { repo_id, .. }
+        | Msg::CherryPickCommit { repo_id, .. }
+        | Msg::RevertCommit { repo_id, .. }
+        | Msg::CreateBranch { repo_id, .. }
+        | Msg::CreateBranchAndCheckout { repo_id, .. }
+        | Msg::RenameBranch { repo_id, .. }
+        | Msg::DeleteBranch { repo_id, .. }
+        | Msg::ForceDeleteBranch { repo_id, .. }
+        | Msg::DeleteBranches { repo_id, .. }
+        | Msg::ApplyPatch { repo_id, .. }
+        | Msg::AddWorktree { repo_id, .. }
+        | Msg::RemoveWorktree { repo_id, .. }
+        | Msg::ForceRemoveWorktree { repo_id, .. }
+        | Msg::AddSubmodule { repo_id, .. }
+        | Msg::AddSubmoduleTrusted { repo_id, .. }
+        | Msg::UpdateSubmodules { repo_id }
+        | Msg::UpdateSubmodulesTrusted { repo_id, .. }
+        | Msg::ChangeSubmodulePointer { repo_id, .. }
+        | Msg::RemoveSubmodule { repo_id, .. }
+        | Msg::StagePath { repo_id, .. }
+        | Msg::StagePaths { repo_id, .. }
+        | Msg::UnstagePath { repo_id, .. }
+        | Msg::UnstagePaths { repo_id, .. }
+        | Msg::DiscardWorktreeChangesPath { repo_id, .. }
+        | Msg::DiscardWorktreeChangesPaths { repo_id, .. }
+        | Msg::SaveWorktreeFile { repo_id, .. }
+        | Msg::AppendGitignorePatterns { repo_id, .. }
+        | Msg::Commit { repo_id, .. }
+        | Msg::CommitAmend { repo_id, .. }
+        | Msg::SafePushAfterCommit { repo_id, .. }
+        | Msg::FetchAll { repo_id }
+        | Msg::AutoFetchAll { repo_id }
+        | Msg::PruneMergedBranches { repo_id, .. }
+        | Msg::PruneLocalTags { repo_id, .. }
+        | Msg::Pull { repo_id, .. }
+        | Msg::PullBranch { repo_id, .. }
+        | Msg::MergeRef { repo_id, .. }
+        | Msg::SquashRef { repo_id, .. }
+        | Msg::Push { repo_id, .. }
+        | Msg::PushAfterCommit { repo_id, .. }
+        | Msg::ForcePush { repo_id, .. }
+        | Msg::ForcePushWithLease { repo_id, .. }
+        | Msg::PushSetUpstream { repo_id, .. }
+        | Msg::SetUpstreamBranch { repo_id, .. }
+        | Msg::UnsetUpstreamBranch { repo_id, .. }
+        | Msg::FastForwardBranch { repo_id, .. }
+        | Msg::DeleteRemoteBranch { repo_id, .. }
+        | Msg::DeleteRemoteBranches { repo_id, .. }
+        | Msg::Reset { repo_id, .. }
+        | Msg::PrepareSquash { repo_id }
+        | Msg::SquashCommits { repo_id, .. }
+        | Msg::Rebase { repo_id, .. }
+        | Msg::RebaseContinue { repo_id }
+        | Msg::RebaseAbort { repo_id }
+        | Msg::InteractiveRebase { repo_id, .. }
+        | Msg::InteractiveCherryPick { repo_id, .. }
+        | Msg::MergeAbort { repo_id }
+        | Msg::CreateTag { repo_id, .. }
+        | Msg::DeleteTag { repo_id, .. }
+        | Msg::PushTag { repo_id, .. }
+        | Msg::DeleteRemoteTag { repo_id, .. }
+        | Msg::AddRemote { repo_id, .. }
+        | Msg::RemoveRemote { repo_id, .. }
+        | Msg::SetRemoteUrl { repo_id, .. }
+        | Msg::CheckoutConflictSide { repo_id, .. }
+        | Msg::AcceptConflictDeletion { repo_id, .. }
+        | Msg::CheckoutConflictBase { repo_id, .. }
+        | Msg::LaunchMergetool { repo_id, .. }
+        | Msg::Stash { repo_id, .. }
+        | Msg::ApplyStash { repo_id, .. }
+        | Msg::PopStash { repo_id, .. }
+        | Msg::DropStash { repo_id, .. } => *repo_id,
+        _ => return None,
+    };
+    Some(repo_id)
+}
+
 #[cfg(test)]
 pub(super) fn push_diagnostic(
     repo_state: &mut crate::model::RepoState,
@@ -823,6 +918,20 @@ fn reduce_inner(
     msg: Msg,
 ) -> Vec<Effect> {
     if msg_requires_available_git(&msg) && !state.git_runtime.is_available() {
+        return Vec::new();
+    }
+
+    // L1 read-only protection: a backend that reports reduced capabilities
+    // (colocated Jujutsu during P0) must never receive a write, so drop the
+    // message before any effect can run. The UI hides write affordances for
+    // such repos; this guard is the enforcement that stays correct even if a
+    // write path slips past the UI.
+    if let Some(repo_id) = msg_backend_write_target(&msg)
+        && state
+            .repos
+            .iter()
+            .any(|repo| repo.id == repo_id && repo.capabilities.read_only)
+    {
         return Vec::new();
     }
 

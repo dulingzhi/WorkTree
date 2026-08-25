@@ -1107,6 +1107,17 @@ pub(super) fn repo_opened_ok(
         repo_state.set_spec(spec);
         repo_state.set_open(Loadable::Ready(()));
         repo_state.missing_on_disk = false;
+        repo_state.capabilities = repos
+            .get(&repo_id)
+            .map(|repo| repo.capabilities())
+            .unwrap_or_default();
+        if repo_state.capabilities.is_jj {
+            // Kick off the (background, TTL-cached) `jj --version` probe now
+            // so the read-only banner's availability hint is ready by the
+            // time the user reads it. Fire-and-forget: no state mutation, no
+            // blocking while the store lock is held.
+            gitcomet_core::jj::warm_jj_runtime();
+        }
         if !should_refresh_worktrees {
             clear_cancelled_repo_loading(repo_state);
             repo_state.last_error = None;

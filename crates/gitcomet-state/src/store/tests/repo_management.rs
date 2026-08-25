@@ -415,6 +415,149 @@ fn open_repo_ready(
     repo_id
 }
 
+#[test]
+fn repo_opened_ok_copies_backend_capabilities_into_repo_state() {
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+
+    let repo_id = RepoId(1);
+    state.repos.push(RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    ));
+    assert_eq!(
+        state.repos[0].capabilities,
+        gitcomet_core::services::RepoCapabilities::default()
+    );
+
+    // A colocated-Jujutsu backend handle reports reduced capabilities; the
+    // reducer must surface them on the repo state the UI reads.
+    let repo = Arc::new(DummyRepo::with_capabilities(
+        "/tmp/repo",
+        gitcomet_core::services::RepoCapabilities::jj_read_only(),
+    ));
+    repos.insert(repo_id, repo.clone());
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::RepoOpenedOk {
+            repo_id,
+            spec: RepoSpec {
+                workdir: PathBuf::from("/tmp/repo"),
+            },
+            repo,
+        }),
+    );
+    assert_eq!(
+        state.repos[0].capabilities,
+        gitcomet_core::services::RepoCapabilities::jj_read_only()
+    );
+}
+
+#[test]
+fn read_only_repos_drop_write_messages_before_any_effect() {
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+
+    let repo_id = RepoId(1);
+    let mut repo_state = RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    );
+    repo_state.capabilities = gitcomet_core::services::RepoCapabilities::jj_read_only();
+    repo_state.set_open(Loadable::Ready(()));
+    state.repos.push(repo_state);
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::StagePath {
+            repo_id,
+            path: PathBuf::from("/tmp/repo/file.txt"),
+        },
+    );
+
+    assert!(
+        effects.is_empty(),
+        "write messages on a read-only repo must not emit effects"
+    );
+    assert_eq!(
+        state.repos[0].local_actions_in_flight, 0,
+        "the guard must run before the arm can mark an action in flight"
+    );
+}
+
+#[test]
+fn write_messages_still_reach_their_arms_on_full_capability_repos() {
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+
+    let repo_id = RepoId(1);
+    let mut repo_state = RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    );
+    repo_state.set_open(Loadable::Ready(()));
+    state.repos.push(repo_state);
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::StagePath {
+            repo_id,
+            path: PathBuf::from("/tmp/repo/file.txt"),
+        },
+    );
+
+    assert!(
+        !effects.is_empty(),
+        "the read-only guard must not swallow writes on plain Git repos"
+    );
+    assert_eq!(state.repos[0].local_actions_in_flight, 1);
+}
+
+#[test]
+fn read_only_repos_keep_serving_read_messages() {
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+
+    let repo_id = RepoId(1);
+    let mut repo_state = RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    );
+    repo_state.capabilities = gitcomet_core::services::RepoCapabilities::jj_read_only();
+    repo_state.set_open(Loadable::Ready(()));
+    state.repos.push(repo_state);
+
+    let effects = reduce(&mut repos, &id_alloc, &mut state, Msg::LoadTags { repo_id });
+
+    assert!(
+        effects.iter().any(|effect| matches!(
+            effect,
+            Effect::LoadTags {
+                repo_id: candidate
+            } if *candidate == repo_id
+        )),
+        "reads must keep flowing on read-only repos: {effects:?}"
+    );
+}
+
 fn assert_open_repo_history_mode_resolution(
     seed_session: impl FnOnce(&Path, &Path),
     expected: LogScope,

@@ -11,8 +11,9 @@ use gitcomet_core::git_ops_trace::{self, GitOpTraceKind};
 use gitcomet_core::services::{
     BlameLine, CancellationToken, CommandOutput, CommitOperationOutcome, ConflictFileStages,
     ConflictSide, ForcePushLease, GitRepository, InteractiveRebaseEntry, MergetoolResult, PullMode,
-    RemoteUrlKind, ResetMode, Result, SafePushAfterCommitContext, SafePushAfterCommitDecision,
-    SafePushAfterCommitTarget, SequencerState, SubmoduleTrustDecision, SubmoduleTrustTarget,
+    RemoteUrlKind, RepoCapabilities, ResetMode, Result, SafePushAfterCommitContext,
+    SafePushAfterCommitDecision, SafePushAfterCommitTarget, SequencerState, SubmoduleTrustDecision,
+    SubmoduleTrustTarget,
 };
 use rustc_hash::FxHashMap;
 use std::path::{Path, PathBuf};
@@ -217,6 +218,7 @@ const LOG_PAGED_WALK_CACHE_LIMIT: usize = 32;
 pub(crate) struct GixRepo {
     spec: RepoSpec,
     _repo: gix::ThreadSafeRepository,
+    capabilities: RepoCapabilities,
     gitlink_status_capability: std::sync::Mutex<Option<GitlinkStatusCapabilityCacheEntry>>,
     branch_tracking_config: std::sync::Mutex<Option<BranchTrackingConfigCacheEntry>>,
     tree_index_cache: std::sync::Mutex<Option<TreeIndexCacheEntry>>,
@@ -227,9 +229,19 @@ pub(crate) struct GixRepo {
 
 impl GixRepo {
     pub(crate) fn new(workdir: PathBuf, repo: gix::ThreadSafeRepository) -> Self {
+        // A `.jj` directory marks a colocated Jujutsu repository: reads keep
+        // working through the same git object database, but writes and the
+        // index/stash-centric features must not run until jj-aware routing
+        // exists, so the repo opens with reduced capabilities.
+        let capabilities = if workdir.join(".jj").exists() {
+            RepoCapabilities::jj_read_only()
+        } else {
+            RepoCapabilities::default()
+        };
         Self {
             spec: RepoSpec { workdir },
             _repo: repo,
+            capabilities,
             gitlink_status_capability: std::sync::Mutex::new(None),
             branch_tracking_config: std::sync::Mutex::new(None),
             tree_index_cache: std::sync::Mutex::new(None),
@@ -260,6 +272,10 @@ pub(crate) fn allow_test_repo_local_mergetool_command(workdir: &Path, tool_name:
 impl GitRepository for GixRepo {
     fn spec(&self) -> &RepoSpec {
         &self.spec
+    }
+
+    fn capabilities(&self) -> RepoCapabilities {
+        self.capabilities
     }
 
     fn log_history_mode_page(

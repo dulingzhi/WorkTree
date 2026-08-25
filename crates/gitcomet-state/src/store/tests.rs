@@ -21,6 +21,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 pub(in crate::store) struct DummyRepo {
     spec: RepoSpec,
+    capabilities: gitcomet_core::services::RepoCapabilities,
 }
 
 impl DummyRepo {
@@ -29,6 +30,19 @@ impl DummyRepo {
             spec: RepoSpec {
                 workdir: PathBuf::from(path),
             },
+            capabilities: gitcomet_core::services::RepoCapabilities::default(),
+        }
+    }
+
+    /// A mock reporting reduced capabilities, e.g. for colocated-Jujutsu
+    /// reducer tests.
+    pub(in crate::store) fn with_capabilities(
+        path: &str,
+        capabilities: gitcomet_core::services::RepoCapabilities,
+    ) -> Self {
+        Self {
+            capabilities,
+            ..Self::new(path)
         }
     }
 }
@@ -36,6 +50,10 @@ impl DummyRepo {
 impl GitRepository for DummyRepo {
     fn spec(&self) -> &RepoSpec {
         &self.spec
+    }
+
+    fn capabilities(&self) -> gitcomet_core::services::RepoCapabilities {
+        self.capabilities
     }
 
     fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {

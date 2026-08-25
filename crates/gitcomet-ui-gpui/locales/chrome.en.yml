@@ -41,6 +41,12 @@ chrome:
     cancel: Cancel
   error_banner:
     scroll_hint: Scroll for full output
+  readonly_banner:
+    title: Jujutsu repository opened in read-only mode. Committing, staging,
+      pushing, and other Git write actions are disabled so GitComet cannot
+      conflict with jj.
+    jj_unavailable: The jj command-line tool was not found on this system.
+      Install jj for full support of colocated repositories.
   editor:
     no_active_repo: "No active repository to open in code editor."
     path_not_found: "Path not found: %{path}"

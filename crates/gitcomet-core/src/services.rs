@@ -36,6 +36,61 @@ impl CancellationToken {
     }
 }
 
+/// What a repository's backend supports. Plain Git repositories get the full
+/// set (the default); a colocated Jujutsu repository (a `.jj` directory next
+/// to `.git`) is surfaced with reduced capabilities — in this compatibility
+/// phase it is read-only, and the staging/stash-centric features have no
+/// equivalent under jj's snapshot model.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RepoCapabilities {
+    /// Jujutsu colocated repository (`.jj` directory present).
+    pub is_jj: bool,
+    /// All mutating commands are refused. Jujutsu repositories stay read-only
+    /// until jj-aware command routing lands; browsing keeps working because
+    /// every read goes through the same git object database.
+    pub read_only: bool,
+    /// A staging area (index) exists, so the staged/unstaged lanes apply.
+    pub staging: bool,
+    /// Stashing is supported.
+    pub stash: bool,
+    /// Interactive rebase is supported.
+    pub interactive_rebase: bool,
+    /// Managing linked worktrees is supported.
+    pub worktrees: bool,
+    /// Submodule operations are supported.
+    pub submodules: bool,
+}
+
+impl Default for RepoCapabilities {
+    fn default() -> Self {
+        Self {
+            is_jj: false,
+            read_only: false,
+            staging: true,
+            stash: true,
+            interactive_rebase: true,
+            worktrees: true,
+            submodules: true,
+        }
+    }
+}
+
+impl RepoCapabilities {
+    /// Capabilities of a colocated Jujutsu repository in compatibility
+    /// (read-only) mode.
+    pub const fn jj_read_only() -> Self {
+        Self {
+            is_jj: true,
+            read_only: true,
+            staging: false,
+            stash: false,
+            interactive_rebase: false,
+            worktrees: false,
+            submodules: false,
+        }
+    }
+}
+
 /// A partially built log page, reported while a walk is still running.
 ///
 /// `commits` is the page so far — every chunk is a prefix of the next one and
@@ -300,6 +355,14 @@ pub enum SafePushAfterCommitDecision {
 
 pub trait GitRepository: Send + Sync {
     fn spec(&self) -> &RepoSpec;
+
+    /// What this repository supports. The default is the full Git feature
+    /// set, so mock implementations and plain Git repositories need to do
+    /// nothing; backends that detect a different VCS (e.g. colocated
+    /// Jujutsu) override it.
+    fn capabilities(&self) -> RepoCapabilities {
+        RepoCapabilities::default()
+    }
 
     fn log_history_mode_page(
         &self,
