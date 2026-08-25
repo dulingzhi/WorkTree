@@ -2245,9 +2245,18 @@ impl SidebarPaneView {
                                         workspace_path.as_deref(),
                                     ) {
                                         LocalBranchDoubleClickAction::CheckoutBranch { name } => {
-                                            this.store
-                                                .dispatch(Msg::CheckoutBranch { repo_id, name });
-                                            this.rebuild_diff_cache(cx);
+                                            // jj compat: checkout has no jj routing — skip the
+                                            // dispatch instead of double-clicking into nothing.
+                                            if this
+                                                .active_repo()
+                                                .is_none_or(|repo| !repo.capabilities.read_only)
+                                            {
+                                                this.store.dispatch(Msg::CheckoutBranch {
+                                                    repo_id,
+                                                    name,
+                                                });
+                                                this.rebuild_diff_cache(cx);
+                                            }
                                             cx.notify();
                                         }
                                         LocalBranchDoubleClickAction::OpenWorkspace { path } => {
@@ -2257,8 +2266,13 @@ impl SidebarPaneView {
                                     }
                                 }
                                 BranchSection::Remote => {
-                                    if let Some((remote, branch)) =
-                                        full_name_for_checkout.as_ref().split_once('/')
+                                    // Same read-only gate: the remote checkout
+                                    // prompt's confirm would be dropped.
+                                    if this
+                                        .active_repo()
+                                        .is_none_or(|repo| !repo.capabilities.read_only)
+                                        && let Some((remote, branch)) =
+                                            full_name_for_checkout.as_ref().split_once('/')
                                     {
                                         this.open_popover_at(
                                             PopoverKind::CheckoutRemoteBranchPrompt {

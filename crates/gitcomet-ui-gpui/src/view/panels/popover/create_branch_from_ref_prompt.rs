@@ -58,12 +58,25 @@ fn checkout_toggle(
 
 pub(super) fn panel(
     this: &mut PopoverHost,
-    _repo_id: RepoId,
+    repo_id: RepoId,
     target: String,
     source_selectable: bool,
     window: &Window,
     cx: &mut gpui::Context<PopoverHost>,
 ) -> gpui::Div {
+    // jj compat: creating a branch is routed through `jj bookmark create`,
+    // but "checkout after create" is not — the toggle is forced off and
+    // hidden on read-only repos instead of submitting a dropped message.
+    let checkout_supported = this
+        .state
+        .repos
+        .iter()
+        .find(|repo| repo.id == repo_id)
+        .map(|repo| !repo.capabilities.read_only)
+        .unwrap_or(true);
+    if !checkout_supported {
+        this.create_branch_checkout_enabled = false;
+    }
     let theme = this.theme;
     let can_create = this.can_submit_create_branch(cx);
     let ui_scale_percent = super::popover_ui_scale_percent(cx);
@@ -176,18 +189,20 @@ pub(super) fn panel(
                 .min_w(px(0.0))
                 .child(this.create_branch_input.clone()),
         )
-        .child(
-            checkout_toggle(
-                theme,
-                this.create_branch_checkout_enabled,
-                &this.create_branch_from_ref_checkout_focus_handle,
-                cx,
+        .when(checkout_supported, |d| {
+            d.child(
+                checkout_toggle(
+                    theme,
+                    this.create_branch_checkout_enabled,
+                    &this.create_branch_from_ref_checkout_focus_handle,
+                    cx,
+                )
+                .on_click(cx.listener(|this, _e: &ClickEvent, _w, cx| {
+                    this.create_branch_checkout_enabled = !this.create_branch_checkout_enabled;
+                    cx.notify();
+                })),
             )
-            .on_click(cx.listener(|this, _e: &ClickEvent, _w, cx| {
-                this.create_branch_checkout_enabled = !this.create_branch_checkout_enabled;
-                cx.notify();
-            })),
-        )
+        })
         .child(div().border_t_1().border_color(theme.colors.stroke.default))
         .child(
             div()

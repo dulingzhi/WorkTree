@@ -46,7 +46,7 @@ fn model_for_state(
 ) -> ContextMenuModel {
     let check = |enabled: bool| enabled.then_some("icons/check.svg".into());
 
-    ContextMenuModel::new(vec![
+    let mut items = vec![
         ContextMenuItem::Header("Commit options".into()),
         ContextMenuItem::Separator,
         ContextMenuItem::Entry {
@@ -58,7 +58,11 @@ fn model_for_state(
                 enabled: !commit_amend_enabled,
             }),
         },
-        ContextMenuItem::Entry {
+    ];
+    // jj: a routed commit does not move any bookmark, so "push after commit"
+    // would always find nothing to push — the option is hidden entirely.
+    if repo.is_none_or(|repo| !repo.capabilities.is_jj) {
+        items.push(ContextMenuItem::Entry {
             label: "Push after commit".into(),
             icon: check(commit_push_after_enabled),
             shortcut: Some("P".into()),
@@ -66,8 +70,9 @@ fn model_for_state(
             action: Box::new(ContextMenuAction::SetCommitPushAfterEnabled {
                 enabled: !commit_push_after_enabled,
             }),
-        },
-    ])
+        });
+    }
+    ContextMenuModel::new(items)
 }
 
 #[cfg(test)]
@@ -121,6 +126,26 @@ mod tests {
             } if matches!(action.as_ref(), ContextMenuAction::UseCommitMessage { .. })
         )));
         assert_eq!(model.items.len(), 4);
+    }
+
+    #[test]
+    fn jj_repos_hide_the_push_after_commit_option() {
+        let mut repo = repo_state();
+        repo.capabilities = gitcomet_core::services::RepoCapabilities::jj_read_only();
+
+        let model = model_for_state(Some(&repo), false, true);
+
+        assert!(!model.items.iter().any(|item| matches!(
+            item,
+            ContextMenuItem::Entry {
+                action,
+                ..
+            } if matches!(
+                action.as_ref(),
+                ContextMenuAction::SetCommitPushAfterEnabled { .. }
+            )
+        )));
+        assert_eq!(model.items.len(), 3);
     }
 
     #[test]

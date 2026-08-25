@@ -55,10 +55,12 @@ layout:
     no_repository_selected: "No repository selected."
   commit_box:
     commit: Commit
+    finish_change: Finish Current Change
     commit_and_push: Commit changes and Push
     amend_previous: Amend Previous Commit
     amend_and_push: Amend and Push Safely
     tooltip_commit: Commit staged changes
+    tooltip_finish_change: Describe the working-copy change and start a new one (Jujutsu)
     tooltip_commit_and_push: Commit staged changes and push
     tooltip_amend: Amend the previous commit
     tooltip_amend_and_push: "Amend the previous commit; published amends require explicit force push with lease"

@@ -1154,126 +1154,135 @@ pub(super) fn branch_sidebar_rows(
         }
     }
 
-    rows.push(BranchSidebarRow::SectionSpacer);
+    // jj compat: the worktree, submodule, and stash sections only offer
+    // git-only writes (the reducer drops them on read-only repos), so the
+    // sections are hidden instead of listing rows whose actions do nothing.
+    if repo.capabilities.worktrees {
+        rows.push(BranchSidebarRow::SectionSpacer);
 
-    rows.push(BranchSidebarRow::WorktreesHeader {
-        top_border: true,
-        collapsed: worktrees_collapsed,
-        collapse_key: worktrees_section_storage_key().into(),
-    });
+        rows.push(BranchSidebarRow::WorktreesHeader {
+            top_border: true,
+            collapsed: worktrees_collapsed,
+            collapse_key: worktrees_section_storage_key().into(),
+        });
 
-    if !worktrees_collapsed {
-        match &repo.worktrees {
-            Loadable::Ready(worktrees) => {
-                let mut any = false;
-                for worktree in worktrees.iter() {
-                    any = true;
-                    rows.push(BranchSidebarRow::WorktreeItem {
-                        path: worktree.path.clone(),
-                        branch: worktree
-                            .branch
-                            .as_ref()
-                            .map(|branch| SharedString::new(branch.as_str())),
-                        detached: worktree.detached,
-                        is_active: worktree.path == repo.spec.workdir,
-                    });
+        if !worktrees_collapsed {
+            match &repo.worktrees {
+                Loadable::Ready(worktrees) => {
+                    let mut any = false;
+                    for worktree in worktrees.iter() {
+                        any = true;
+                        rows.push(BranchSidebarRow::WorktreeItem {
+                            path: worktree.path.clone(),
+                            branch: worktree
+                                .branch
+                                .as_ref()
+                                .map(|branch| SharedString::new(branch.as_str())),
+                            detached: worktree.detached,
+                            is_active: worktree.path == repo.spec.workdir,
+                        });
+                    }
+                    if !any {
+                        rows.push(BranchSidebarRow::WorktreePlaceholder {
+                            message: crate::i18n::tr("ui.picker.worktree.empty"),
+                        });
+                    }
                 }
-                if !any {
-                    rows.push(BranchSidebarRow::WorktreePlaceholder {
-                        message: crate::i18n::tr("ui.picker.worktree.empty"),
-                    });
-                }
+                Loadable::Loading => rows.push(BranchSidebarRow::WorktreePlaceholder {
+                    message: crate::i18n::tr("ui.common.loading"),
+                }),
+                Loadable::NotLoaded => rows.push(BranchSidebarRow::WorktreePlaceholder {
+                    message: crate::i18n::tr("ui.common.loading"),
+                }),
+                Loadable::Error(error) => rows.push(BranchSidebarRow::WorktreePlaceholder {
+                    message: error.clone().into(),
+                }),
             }
-            Loadable::Loading => rows.push(BranchSidebarRow::WorktreePlaceholder {
-                message: crate::i18n::tr("ui.common.loading"),
-            }),
-            Loadable::NotLoaded => rows.push(BranchSidebarRow::WorktreePlaceholder {
-                message: crate::i18n::tr("ui.common.loading"),
-            }),
-            Loadable::Error(error) => rows.push(BranchSidebarRow::WorktreePlaceholder {
-                message: error.clone().into(),
-            }),
         }
     }
 
-    rows.push(BranchSidebarRow::SectionSpacer);
+    if repo.capabilities.submodules {
+        rows.push(BranchSidebarRow::SectionSpacer);
 
-    rows.push(BranchSidebarRow::SubmodulesHeader {
-        top_border: true,
-        collapsed: submodules_collapsed,
-        collapse_key: submodules_section_storage_key().into(),
-    });
+        rows.push(BranchSidebarRow::SubmodulesHeader {
+            top_border: true,
+            collapsed: submodules_collapsed,
+            collapse_key: submodules_section_storage_key().into(),
+        });
 
-    if !submodules_collapsed {
-        match &repo.submodules {
-            Loadable::Ready(submodules) if submodules.is_empty() => {
-                rows.push(BranchSidebarRow::SubmodulePlaceholder {
-                    message: crate::i18n::tr("ui.picker.submodule.empty"),
+        if !submodules_collapsed {
+            match &repo.submodules {
+                Loadable::Ready(submodules) if submodules.is_empty() => {
+                    rows.push(BranchSidebarRow::SubmodulePlaceholder {
+                        message: crate::i18n::tr("ui.picker.submodule.empty"),
+                        can_load: false,
+                    });
+                }
+                Loadable::Ready(submodules) => {
+                    for submodule in submodules.iter() {
+                        rows.push(BranchSidebarRow::SubmoduleItem {
+                            path: submodule.path.clone(),
+                        });
+                    }
+                }
+                Loadable::Loading => rows.push(BranchSidebarRow::SubmodulePlaceholder {
+                    message: crate::i18n::tr("ui.common.loading"),
                     can_load: false,
-                });
+                }),
+                Loadable::NotLoaded => rows.push(BranchSidebarRow::SubmodulePlaceholder {
+                    message: crate::i18n::tr("ui.common.not_loaded"),
+                    can_load: true,
+                }),
+                Loadable::Error(error) => rows.push(BranchSidebarRow::SubmodulePlaceholder {
+                    message: error.clone().into(),
+                    can_load: true,
+                }),
             }
-            Loadable::Ready(submodules) => {
-                for submodule in submodules.iter() {
-                    rows.push(BranchSidebarRow::SubmoduleItem {
-                        path: submodule.path.clone(),
-                    });
-                }
-            }
-            Loadable::Loading => rows.push(BranchSidebarRow::SubmodulePlaceholder {
-                message: crate::i18n::tr("ui.common.loading"),
-                can_load: false,
-            }),
-            Loadable::NotLoaded => rows.push(BranchSidebarRow::SubmodulePlaceholder {
-                message: crate::i18n::tr("ui.common.not_loaded"),
-                can_load: true,
-            }),
-            Loadable::Error(error) => rows.push(BranchSidebarRow::SubmodulePlaceholder {
-                message: error.clone().into(),
-                can_load: true,
-            }),
         }
     }
 
-    rows.push(BranchSidebarRow::SectionSpacer);
+    if repo.capabilities.stash {
+        rows.push(BranchSidebarRow::SectionSpacer);
 
-    rows.push(BranchSidebarRow::StashHeader {
-        top_border: true,
-        collapsed: stash_collapsed,
-        collapse_key: stash_section_storage_key().into(),
-    });
+        rows.push(BranchSidebarRow::StashHeader {
+            top_border: true,
+            collapsed: stash_collapsed,
+            collapse_key: stash_section_storage_key().into(),
+        });
 
-    if !stash_collapsed {
-        match &repo.stashes {
-            Loadable::Ready(stashes) if stashes.is_empty() => {
-                rows.push(BranchSidebarRow::StashPlaceholder {
-                    message: crate::i18n::tr("ui.picker.stash.empty"),
-                });
-            }
-            Loadable::Ready(stashes) => {
-                for stash in stashes.iter() {
-                    let message: SharedString = stash.message.clone().into();
-                    let tooltip: SharedString = if stash.message.is_empty() {
-                        crate::i18n::tr("panels.action_bar.stash")
-                    } else {
-                        message.clone()
-                    };
-                    rows.push(BranchSidebarRow::StashItem {
-                        index: stash.index,
-                        message,
-                        tooltip,
-                        created_at: stash.created_at,
+        if !stash_collapsed {
+            match &repo.stashes {
+                Loadable::Ready(stashes) if stashes.is_empty() => {
+                    rows.push(BranchSidebarRow::StashPlaceholder {
+                        message: crate::i18n::tr("ui.picker.stash.empty"),
                     });
                 }
+                Loadable::Ready(stashes) => {
+                    for stash in stashes.iter() {
+                        let message: SharedString = stash.message.clone().into();
+                        let tooltip: SharedString = if stash.message.is_empty() {
+                            crate::i18n::tr("panels.action_bar.stash")
+                        } else {
+                            message.clone()
+                        };
+                        rows.push(BranchSidebarRow::StashItem {
+                            index: stash.index,
+                            message,
+                            tooltip,
+                            created_at: stash.created_at,
+                        });
+                    }
+                }
+                Loadable::Loading => rows.push(BranchSidebarRow::StashPlaceholder {
+                    message: crate::i18n::tr("ui.common.loading"),
+                }),
+                Loadable::NotLoaded => rows.push(BranchSidebarRow::StashPlaceholder {
+                    message: crate::i18n::tr("ui.common.loading"),
+                }),
+                Loadable::Error(error) => rows.push(BranchSidebarRow::StashPlaceholder {
+                    message: error.clone().into(),
+                }),
             }
-            Loadable::Loading => rows.push(BranchSidebarRow::StashPlaceholder {
-                message: crate::i18n::tr("ui.common.loading"),
-            }),
-            Loadable::NotLoaded => rows.push(BranchSidebarRow::StashPlaceholder {
-                message: crate::i18n::tr("ui.common.loading"),
-            }),
-            Loadable::Error(error) => rows.push(BranchSidebarRow::StashPlaceholder {
-                message: error.clone().into(),
-            }),
         }
     }
 

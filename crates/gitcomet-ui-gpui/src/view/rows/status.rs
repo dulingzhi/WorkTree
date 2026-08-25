@@ -396,6 +396,9 @@ fn render_status_rows_for_section(
     let selected = repo.diff_state.diff_target.as_ref();
     let selected_paths = this.status_selected_paths_for_area(repo.id, section.diff_area());
     let multi_select_active = !selected_paths.is_empty();
+    // jj compat: the hover button stages/unstages (or opens conflict
+    // resolution) — all unrouted writes, so it is hidden when staging is off.
+    let stage_button_supported = repo.capabilities.staging;
     let submodule_statuses = submodule_status_lookup(repo);
     let theme = this.theme;
     let ui_scale = this.ui_scale();
@@ -432,6 +435,7 @@ fn render_status_rows_for_section(
                 section,
                 repo.id,
                 is_selected,
+                stage_button_supported,
                 this.tooltip_host.clone(),
                 path_alignment_group.clone(),
                 this.active_context_menu_invoker.as_ref(),
@@ -453,6 +457,7 @@ fn status_row(
     section: StatusSection,
     repo_id: RepoId,
     selected: bool,
+    stage_button_supported: bool,
     tooltip_host: WeakEntity<TooltipHost>,
     path_alignment_group: components::PathTruncationAlignmentGroup,
     active_context_menu_invoker: Option<&SharedString>,
@@ -684,7 +689,7 @@ fn status_row(
                 .invisible()
                 .group_hover(row_group.clone(), |d| d.visible())
                 .gap(scaled_px(4.0))
-                .child(stage_button),
+                .when(stage_button_supported, |d| d.child(stage_button)),
         )
         .on_click(cx.listener(move |this, _e: &ClickEvent, window, cx| {
             let modifiers = _e.modifiers();

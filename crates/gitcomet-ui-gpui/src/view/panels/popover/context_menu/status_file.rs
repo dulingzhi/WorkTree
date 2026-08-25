@@ -109,6 +109,17 @@ pub(super) fn model(
         .add_to_gitignore_target(repo_id, area, &path.to_path_buf(), cx)
         .is_some();
 
+    // jj compat: staging moves, worktree discards, conflict resolution, and
+    // .gitignore edits are all unrouted writes — their entries are hidden on
+    // repos whose reducer would drop the dispatched messages.
+    let (staging_supported, worktree_writes_supported) = this
+        .state
+        .repos
+        .iter()
+        .find(|repo| repo.id == repo_id)
+        .map(|repo| (repo.capabilities.staging, !repo.capabilities.read_only))
+        .unwrap_or((true, true));
+
     // Keep context menu opening fast. Validate precisely when the action runs instead.
     let can_discard_worktree_changes = if is_conflicted {
         false
@@ -223,7 +234,7 @@ pub(super) fn model(
             },
         }),
     });
-    if is_conflicted {
+    if is_conflicted && worktree_writes_supported {
         items.push(ContextMenuItem::Separator);
         let n = selected_count;
         items.push(ContextMenuItem::Entry {
@@ -295,7 +306,7 @@ pub(super) fn model(
                 }),
             });
         }
-    } else {
+    } else if staging_supported {
         match area {
             DiffArea::Unstaged => items.push(ContextMenuItem::Entry {
                 label: if use_selection {
@@ -334,7 +345,8 @@ pub(super) fn model(
         };
     }
 
-    let show_discard_changes = !(is_conflicted && area == DiffArea::Staged);
+    let show_discard_changes =
+        worktree_writes_supported && !(is_conflicted && area == DiffArea::Staged);
     if show_discard_changes {
         items.push(ContextMenuItem::Entry {
             label: if use_selection {
@@ -359,7 +371,7 @@ pub(super) fn model(
     // the index, so offering this for a tracked file would write a line that
     // changes nothing and leave the row exactly where it was. Hidden rather
     // than disabled — there is no action to explain.
-    if can_add_to_gitignore {
+    if can_add_to_gitignore && worktree_writes_supported {
         items.push(ContextMenuItem::Entry {
             label: if use_selection {
                 crate::i18n::t!("cm.status.add_gitignore_count", count = selected_count)
@@ -453,6 +465,23 @@ fn submodule_status_model(
     is_staged_added: bool,
     submodule_menu_state: submodule::SubmoduleMenuState,
 ) -> ContextMenuModel {
+    // jj compat: same gating as the plain status menu, plus the submodule
+    // pointer writes (change pointer / remove), which follow the submodules
+    // capability.
+    let (staging_supported, worktree_writes_supported, submodule_writes_supported) = this
+        .state
+        .repos
+        .iter()
+        .find(|repo| repo.id == repo_id)
+        .map(|repo| {
+            (
+                repo.capabilities.staging,
+                !repo.capabilities.read_only,
+                repo.capabilities.submodules,
+            )
+        })
+        .unwrap_or((true, true, true));
+
     let mut items = vec![ContextMenuItem::Header("Submodule".into())];
     items.push(ContextMenuItem::Label(path.display().to_string().into()));
     if let Some(status_label) = submodule::status_label(submodule_menu_state.status) {
@@ -493,36 +522,38 @@ fn submodule_status_model(
             }),
         });
     }
-    items.push(ContextMenuItem::Entry {
-        label: "Change pointer…".into(),
-        icon: Some("icons/swap.svg".into()),
-        shortcut: None,
-        disabled: !submodule_menu_state.can_change_pointer,
-        action: Box::new(ContextMenuAction::OpenPopover {
-            kind: PopoverKind::submodule(
-                repo_id,
-                SubmodulePopoverKind::ChangePointerPrompt {
-                    path: path.to_path_buf(),
-                },
-            ),
-        }),
-    });
-    items.push(ContextMenuItem::Entry {
-        label: "Remove…".into(),
-        icon: Some("icons/trash.svg".into()),
-        shortcut: None,
-        disabled: false,
-        action: Box::new(ContextMenuAction::OpenPopover {
-            kind: PopoverKind::submodule(
-                repo_id,
-                SubmodulePopoverKind::RemoveConfirm {
-                    path: path.to_path_buf(),
-                },
-            ),
-        }),
-    });
+    if submodule_writes_supported {
+        items.push(ContextMenuItem::Entry {
+            label: "Change pointer…".into(),
+            icon: Some("icons/swap.svg".into()),
+            shortcut: None,
+            disabled: !submodule_menu_state.can_change_pointer,
+            action: Box::new(ContextMenuAction::OpenPopover {
+                kind: PopoverKind::submodule(
+                    repo_id,
+                    SubmodulePopoverKind::ChangePointerPrompt {
+                        path: path.to_path_buf(),
+                    },
+                ),
+            }),
+        });
+        items.push(ContextMenuItem::Entry {
+            label: "Remove…".into(),
+            icon: Some("icons/trash.svg".into()),
+            shortcut: None,
+            disabled: false,
+            action: Box::new(ContextMenuAction::OpenPopover {
+                kind: PopoverKind::submodule(
+                    repo_id,
+                    SubmodulePopoverKind::RemoveConfirm {
+                        path: path.to_path_buf(),
+                    },
+                ),
+            }),
+        });
+    }
 
-    if !is_conflicted {
+    if !is_conflicted && staging_supported {
         items.push(ContextMenuItem::Separator);
         match area {
             DiffArea::Unstaged => items.push(ContextMenuItem::Entry {
@@ -570,7 +601,7 @@ fn submodule_status_model(
             DiffArea::Staged => has_unstaged_for_path || is_staged_added,
         }
     };
-    if !(is_conflicted && area == DiffArea::Staged) {
+    if worktree_writes_supported && !(is_conflicted && area == DiffArea::Staged) {
         items.push(ContextMenuItem::Entry {
             label: if use_selection {
                 crate::i18n::t!("cm.status.discard_count", count = selected_count)

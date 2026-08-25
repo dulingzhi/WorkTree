@@ -378,14 +378,18 @@ impl Render for ActionBarView {
             head_branch_has_tracking_upstream(&repo.head_branch, &repo.branches)
         });
 
+        // jj compat: stashing is unrouted, so the toolbar button follows the
+        // stash capability rather than only the presence of changes.
         let can_stash = self
             .active_repo()
             .map(|repo| {
-                repo.worktree_status_entries()
-                    .is_some_and(|entries| !entries.is_empty())
-                    || repo
-                        .staged_status_entries()
+                repo.capabilities.stash
+                    && (repo
+                        .worktree_status_entries()
                         .is_some_and(|entries| !entries.is_empty())
+                        || repo
+                            .staged_status_entries()
+                            .is_some_and(|entries| !entries.is_empty()))
             })
             .unwrap_or(false);
 
@@ -454,79 +458,90 @@ impl Render for ActionBarView {
 
         // Workspace (worktree) and branch badges: current state at a glance,
         // each opening a filterable picker. Both sit right after the nav arrows.
-        let workspace_badge = self.active_repo().map(|repo| {
-            let repo_id = repo.id;
-            let label = truncate_badge_label(&crate::view::path_display::repo_path_name(
-                &repo.spec.workdir,
-            ));
-            let workdir = repo.spec.workdir.display().to_string();
-            let invoker: SharedString = "workspace_badge".into();
-            let is_active = active_invoker
-                .as_ref()
-                .is_some_and(|id| id.as_ref() == invoker.as_ref());
-            components::Button::new("workspace_badge", label.clone())
-                .start_slot(icon("icons/git_worktree.svg", icon_primary))
-                .style(components::ButtonStyle::Subtle)
-                .selected(is_active)
-                .selected_bg(menu_selected_bg)
-                .on_click_with_bounds(theme, cx, move |this, _e, bounds, window, cx| {
-                    this.activate_context_menu_invoker(invoker.clone(), cx);
-                    this.open_popover_for_bounds(
-                        PopoverKind::worktree(repo_id, WorktreePopoverKind::BadgePicker),
-                        bounds,
-                        window,
-                        cx,
-                    );
-                })
-                .debug_selector(|| "workspace_badge".to_string())
-                .gitcomet_tooltip(
-                    theme,
-                    crate::i18n::t!("panels.action_bar.switch_worktree", workdir = workdir).into(),
-                )
-        });
-
-        let branch_badge = self.active_repo().and_then(|repo| {
-            let Loadable::Ready(head) = &repo.head_branch else {
-                return None;
-            };
-            // Detached HEAD surfaces as the literal "HEAD"; label it as such
-            // rather than pretending it is a branch.
-            let detached = head == "HEAD";
-            let label: SharedString = if detached {
-                crate::i18n::tr("panels.action_bar.detached_label")
-            } else {
-                truncate_badge_label(head)
-            };
-            let invoker: SharedString = "branch_badge".into();
-            let is_active = active_invoker
-                .as_ref()
-                .is_some_and(|id| id.as_ref() == invoker.as_ref());
-            let tooltip: SharedString = if detached {
-                crate::i18n::tr("panels.action_bar.detached_tooltip")
-            } else {
-                crate::i18n::t!("panels.action_bar.on_branch_tooltip", branch = head).into()
-            };
-            Some(
-                components::Button::new("branch_badge", label)
-                    .start_slot(icon("icons/git_branch.svg", icon_primary))
+        // jj compat: both pickers dispatch unrouted writes (worktree switching,
+        // branch checkout), so the badges stay hidden when those are off.
+        let workspace_badge = self
+            .active_repo()
+            .filter(|repo| repo.capabilities.worktrees)
+            .map(|repo| {
+                let repo_id = repo.id;
+                let label = truncate_badge_label(&crate::view::path_display::repo_path_name(
+                    &repo.spec.workdir,
+                ));
+                let workdir = repo.spec.workdir.display().to_string();
+                let invoker: SharedString = "workspace_badge".into();
+                let is_active = active_invoker
+                    .as_ref()
+                    .is_some_and(|id| id.as_ref() == invoker.as_ref());
+                components::Button::new("workspace_badge", label.clone())
+                    .start_slot(icon("icons/git_worktree.svg", icon_primary))
                     .style(components::ButtonStyle::Subtle)
                     .selected(is_active)
                     .selected_bg(menu_selected_bg)
                     .on_click_with_bounds(theme, cx, move |this, _e, bounds, window, cx| {
                         this.activate_context_menu_invoker(invoker.clone(), cx);
                         this.open_popover_for_bounds(
-                            PopoverKind::BranchPicker {
-                                purpose: BranchPickerPurpose::Checkout,
-                            },
+                            PopoverKind::worktree(repo_id, WorktreePopoverKind::BadgePicker),
                             bounds,
                             window,
                             cx,
                         );
                     })
-                    .debug_selector(|| "branch_badge".to_string())
-                    .gitcomet_tooltip(theme, tooltip),
-            )
-        });
+                    .debug_selector(|| "workspace_badge".to_string())
+                    .gitcomet_tooltip(
+                        theme,
+                        crate::i18n::t!("panels.action_bar.switch_worktree", workdir = workdir)
+                            .into(),
+                    )
+            });
+
+        let branch_badge = self
+            .active_repo()
+            // The badge's picker only checks branches out, which has no jj
+            // routing — hide it rather than opening a dead picker.
+            .filter(|repo| !repo.capabilities.read_only)
+            .and_then(|repo| {
+                let Loadable::Ready(head) = &repo.head_branch else {
+                    return None;
+                };
+                // Detached HEAD surfaces as the literal "HEAD"; label it as such
+                // rather than pretending it is a branch.
+                let detached = head == "HEAD";
+                let label: SharedString = if detached {
+                    crate::i18n::tr("panels.action_bar.detached_label")
+                } else {
+                    truncate_badge_label(head)
+                };
+                let invoker: SharedString = "branch_badge".into();
+                let is_active = active_invoker
+                    .as_ref()
+                    .is_some_and(|id| id.as_ref() == invoker.as_ref());
+                let tooltip: SharedString = if detached {
+                    crate::i18n::tr("panels.action_bar.detached_tooltip")
+                } else {
+                    crate::i18n::t!("panels.action_bar.on_branch_tooltip", branch = head).into()
+                };
+                Some(
+                    components::Button::new("branch_badge", label)
+                        .start_slot(icon("icons/git_branch.svg", icon_primary))
+                        .style(components::ButtonStyle::Subtle)
+                        .selected(is_active)
+                        .selected_bg(menu_selected_bg)
+                        .on_click_with_bounds(theme, cx, move |this, _e, bounds, window, cx| {
+                            this.activate_context_menu_invoker(invoker.clone(), cx);
+                            this.open_popover_for_bounds(
+                                PopoverKind::BranchPicker {
+                                    purpose: BranchPickerPurpose::Checkout,
+                                },
+                                bounds,
+                                window,
+                                cx,
+                            );
+                        })
+                        .debug_selector(|| "branch_badge".to_string())
+                        .gitcomet_tooltip(theme, tooltip),
+                )
+            });
 
         let pull_color = if pull_count > 0 {
             theme.colors.status.warning.foreground
@@ -668,6 +683,14 @@ impl Render for ActionBarView {
                             return;
                         };
                         let repo_id = repo.id;
+                        // jj push routes through `jj git push`, which tracks its
+                        // bookmarks itself — the git set-upstream flow has no jj
+                        // equivalent (its confirm would be dropped), so push
+                        // directly and let jj decide what to publish.
+                        if repo.capabilities.is_jj {
+                            this.store.dispatch(Msg::Push { repo_id });
+                            return;
+                        }
                         let head = match &repo.head_branch {
                             Loadable::Ready(head) => head.clone(),
                             _ => {

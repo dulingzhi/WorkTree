@@ -11,6 +11,15 @@ impl MainPaneView {
     /// commit-range diffs have no index to move lines to, and the preview,
     /// conflict and submodule modes render something other than a patch.
     pub(in crate::view) fn diff_stage_gutter_area(&self) -> Option<DiffArea> {
+        // jj compat: without a staging area there is nowhere for the line to
+        // go — the gutter button is hidden rather than dispatching writes the
+        // adapter drops.
+        if self
+            .active_repo()
+            .is_some_and(|repo| !repo.capabilities.staging)
+        {
+            return None;
+        }
         // Cheap check first: this runs once per rendered frame, and the preview
         // probes below stat the filesystem.
         let area = match self.rendered_diff_target()? {

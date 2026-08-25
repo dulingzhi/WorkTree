@@ -192,6 +192,18 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
         .filter(|repo| repo.id == repo_id)
         .is_some_and(|repo| repo.history_rewrite_busy());
 
+    // jj compat: history rewrites (squash, cherry-pick, revert, rebase, merge,
+    // reset), detached checkout, and tag creation have no jj routing — the
+    // reducer drops them on read-only repos, so the entries are hidden.
+    let repo_capabilities = this
+        .state
+        .repos
+        .iter()
+        .find(|repo| repo.id == repo_id)
+        .map(|repo| repo.capabilities);
+    let git_only_writes = repo_capabilities.is_none_or(|caps| !caps.read_only);
+    let interactive_rebase_supported = repo_capabilities.is_none_or(|caps| caps.interactive_rebase);
+
     // "Squash N commits" appears only when the right-clicked commit is part
     // of the active multi-selection and the whole selection passes the squash
     // criteria (contiguous linear first-parent chain, non-root base). The
@@ -210,7 +222,7 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
             let head = repo.head_commit_id()?;
             gitcomet_core::squash::squash_eligibility(&page.commits, &selection.commits, &head)
         });
-    if let Some(plan) = squash_plan {
+    if let Some(plan) = squash_plan.filter(|_| git_only_writes) {
         let label = crate::i18n::t!("cm.commit.squash", count = plan.commit_count)
             .to_string()
             .into();
@@ -223,7 +235,9 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
         });
         items.push(ContextMenuItem::Separator);
     }
-    if !is_head_commit && let Some((entries, source_colors)) = multi_cherry_pick_plan {
+    if !is_head_commit
+        && let Some((entries, source_colors)) = multi_cherry_pick_plan.filter(|_| git_only_writes)
+    {
         let label = crate::i18n::t!("cm.commit.cherry_pick", count = entries.len())
             .to_string()
             .into();
@@ -347,28 +361,30 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
             commit_id: commit_id.clone(),
         }),
     });
-    items.push(ContextMenuItem::Entry {
-        label: "Add tag…".into(),
-        icon: Some("icons/tag.svg".into()),
-        shortcut: Some("T".into()),
-        disabled: false,
-        action: Box::new(ContextMenuAction::OpenPopover {
-            kind: PopoverKind::CreateTagPrompt {
+    if git_only_writes {
+        items.push(ContextMenuItem::Entry {
+            label: "Add tag…".into(),
+            icon: Some("icons/tag.svg".into()),
+            shortcut: Some("T".into()),
+            disabled: false,
+            action: Box::new(ContextMenuAction::OpenPopover {
+                kind: PopoverKind::CreateTagPrompt {
+                    repo_id,
+                    target: sha.clone(),
+                },
+            }),
+        });
+        items.push(ContextMenuItem::Entry {
+            label: "Checkout (detached)".into(),
+            icon: Some("icons/git_branch.svg".into()),
+            shortcut: Some("D".into()),
+            disabled: false,
+            action: Box::new(ContextMenuAction::CheckoutCommit {
                 repo_id,
-                target: sha.clone(),
-            },
-        }),
-    });
-    items.push(ContextMenuItem::Entry {
-        label: "Checkout (detached)".into(),
-        icon: Some("icons/git_branch.svg".into()),
-        shortcut: Some("D".into()),
-        disabled: false,
-        action: Box::new(ContextMenuAction::CheckoutCommit {
-            repo_id,
-            commit_id: commit_id.clone(),
-        }),
-    });
+                commit_id: commit_id.clone(),
+            }),
+        });
+    }
     items.push(ContextMenuItem::Entry {
         label: "Create branch from this commit".into(),
         icon: Some("icons/git_branch.svg".into()),
@@ -383,7 +399,7 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
             },
         }),
     });
-    if !has_multi_cherry_pick && !is_head_commit {
+    if !has_multi_cherry_pick && !is_head_commit && git_only_writes {
         items.push(ContextMenuItem::Entry {
             label: "Cherry-pick".into(),
             icon: Some("icons/arrow_up.svg".into()),
@@ -395,16 +411,18 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
             }),
         });
     }
-    items.push(ContextMenuItem::Entry {
-        label: "Revert".into(),
-        icon: Some("icons/undo.svg".into()),
-        shortcut: Some("R".into()),
-        disabled: history_rewrite_disabled,
-        action: Box::new(ContextMenuAction::RevertCommit {
-            repo_id,
-            commit_id: commit_id.clone(),
-        }),
-    });
+    if git_only_writes {
+        items.push(ContextMenuItem::Entry {
+            label: "Revert".into(),
+            icon: Some("icons/undo.svg".into()),
+            shortcut: Some("R".into()),
+            disabled: history_rewrite_disabled,
+            action: Box::new(ContextMenuAction::RevertCommit {
+                repo_id,
+                commit_id: commit_id.clone(),
+            }),
+        });
+    }
     let current_branch: SharedString = this
         .active_repo()
         .and_then(|r| match &r.head_branch {
@@ -428,24 +446,26 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
             .unwrap_or(&short)
             .into();
         let onto_ref = branch_names.first().cloned().unwrap_or_else(|| sha.clone());
-        items.push(ContextMenuItem::Entry {
-            label: crate::i18n::t!(
-                "cm.rebase_onto",
-                current = current_branch,
-                target = target_label
-            )
-            .to_string()
-            .into(),
-            icon: Some("icons/arrow_up.svg".into()),
-            shortcut: Some("B".into()),
-            disabled: history_rewrite_disabled,
-            action: Box::new(ContextMenuAction::OpenPopover {
-                kind: PopoverKind::RebaseOntoConfirm {
-                    repo_id,
-                    onto: onto_ref,
-                },
-            }),
-        });
+        if git_only_writes {
+            items.push(ContextMenuItem::Entry {
+                label: crate::i18n::t!(
+                    "cm.rebase_onto",
+                    current = current_branch,
+                    target = target_label
+                )
+                .to_string()
+                .into(),
+                icon: Some("icons/arrow_up.svg".into()),
+                shortcut: Some("B".into()),
+                disabled: history_rewrite_disabled,
+                action: Box::new(ContextMenuAction::OpenPopover {
+                    kind: PopoverKind::RebaseOntoConfirm {
+                        repo_id,
+                        onto: onto_ref,
+                    },
+                }),
+            });
+        }
         // Count the commits the interactive rebase will rewrite (`this..HEAD`).
         // The count is only exact on a strictly linear chain — merges pull in
         // side-branch commits — so fall back to the onto-style label, which
@@ -489,16 +509,18 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
             .to_string()
             .into(),
         };
-        items.push(ContextMenuItem::Entry {
-            label: irebase_label,
-            icon: Some("icons/refresh.svg".into()),
-            shortcut: Some("I".into()),
-            disabled: history_rewrite_disabled,
-            action: Box::new(ContextMenuAction::LoadInteractiveRebaseSetup {
-                repo_id,
-                base: sha.clone(),
-            }),
-        });
+        if interactive_rebase_supported {
+            items.push(ContextMenuItem::Entry {
+                label: irebase_label,
+                icon: Some("icons/refresh.svg".into()),
+                shortcut: Some("I".into()),
+                disabled: history_rewrite_disabled,
+                action: Box::new(ContextMenuAction::LoadInteractiveRebaseSetup {
+                    repo_id,
+                    base: sha.clone(),
+                }),
+            });
+        }
     }
 
     // "Merge into current" merges the right-clicked commit into the checked-out
@@ -506,50 +528,54 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
     // is already part of HEAD's history (including HEAD itself), so it is
     // disabled rather than letting git reject it as "Already up to date".
     let merge_into_current_disabled = commit_is_ancestor_of_head(this, repo_id, commit_id);
-    items.push(ContextMenuItem::Entry {
-        label: format!("Merge {short} into {current_branch}").into(),
-        icon: Some("icons/swap.svg".into()),
-        shortcut: Some("M".into()),
-        disabled: merge_into_current_disabled,
-        action: Box::new(ContextMenuAction::OpenPopover {
-            kind: PopoverKind::MergeCommitConfirm {
-                repo_id,
-                commit_id: commit_id.clone(),
-            },
-        }),
-    });
-
-    items.push(ContextMenuItem::Separator);
-    for (label, icon, mode) in [
-        (
-            "Reset (--soft) to here",
-            "icons/refresh.svg",
-            ResetMode::Soft,
-        ),
-        (
-            "Reset (--mixed) to here",
-            "icons/refresh.svg",
-            ResetMode::Mixed,
-        ),
-        (
-            "Reset (--hard) to here",
-            "icons/refresh.svg",
-            ResetMode::Hard,
-        ),
-    ] {
+    if git_only_writes {
         items.push(ContextMenuItem::Entry {
-            label: label.into(),
-            icon: Some(icon.into()),
-            shortcut: None,
-            disabled: false,
+            label: format!("Merge {short} into {current_branch}").into(),
+            icon: Some("icons/swap.svg".into()),
+            shortcut: Some("M".into()),
+            disabled: merge_into_current_disabled,
             action: Box::new(ContextMenuAction::OpenPopover {
-                kind: PopoverKind::ResetPrompt {
+                kind: PopoverKind::MergeCommitConfirm {
                     repo_id,
-                    target: sha.clone(),
-                    mode,
+                    commit_id: commit_id.clone(),
                 },
             }),
         });
+    }
+
+    items.push(ContextMenuItem::Separator);
+    if git_only_writes {
+        for (label, icon, mode) in [
+            (
+                "Reset (--soft) to here",
+                "icons/refresh.svg",
+                ResetMode::Soft,
+            ),
+            (
+                "Reset (--mixed) to here",
+                "icons/refresh.svg",
+                ResetMode::Mixed,
+            ),
+            (
+                "Reset (--hard) to here",
+                "icons/refresh.svg",
+                ResetMode::Hard,
+            ),
+        ] {
+            items.push(ContextMenuItem::Entry {
+                label: label.into(),
+                icon: Some(icon.into()),
+                shortcut: None,
+                disabled: false,
+                action: Box::new(ContextMenuAction::OpenPopover {
+                    kind: PopoverKind::ResetPrompt {
+                        repo_id,
+                        target: sha.clone(),
+                        mode,
+                    },
+                }),
+            });
+        }
     }
 
     ContextMenuModel::new(items)

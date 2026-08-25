@@ -4,6 +4,7 @@ use crate::view::shortcut_labels::secondary_shortcut;
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn model(
+    this: &PopoverHost,
     repo_id: RepoId,
     area: DiffArea,
     path: &Option<std::path::PathBuf>,
@@ -15,6 +16,17 @@ pub(super) fn model(
     copy_text: &Option<String>,
     copy_target: Option<(usize, DiffTextRegion)>,
 ) -> ContextMenuModel {
+    // jj compat: the four write entries (stage/unstage line and hunks,
+    // discard line/hunks) are unrouted on read-only repos; the read entries
+    // (open/copy) below stay.
+    let (staging_supported, worktree_writes_supported) = this
+        .state
+        .repos
+        .iter()
+        .find(|repo| repo.id == repo_id)
+        .map(|repo| (repo.capabilities.staging, !repo.capabilities.read_only))
+        .unwrap_or((true, true));
+
     let title: SharedString = path
         .as_ref()
         .and_then(|p| {
@@ -36,23 +48,25 @@ pub(super) fn model(
         DiffArea::Unstaged => ("Stage line", "icons/plus.svg", Some("S"), false),
         DiffArea::Staged => ("Unstage line", "icons/minus.svg", Some("U"), true),
     };
-    items.push(ContextMenuItem::Entry {
-        label: if lines_count > 1 {
-            format!("{line_label}s ({lines_count})").into()
-        } else {
-            line_label.into()
-        },
-        icon: Some(line_icon.into()),
-        shortcut: line_shortcut.map(Into::into),
-        disabled: lines_patch.is_none(),
-        action: Box::new(ContextMenuAction::ApplyIndexPatch {
-            repo_id,
-            patch: lines_patch.clone().unwrap_or_default(),
-            reverse: line_reverse,
-        }),
-    });
+    if staging_supported {
+        items.push(ContextMenuItem::Entry {
+            label: if lines_count > 1 {
+                format!("{line_label}s ({lines_count})").into()
+            } else {
+                line_label.into()
+            },
+            icon: Some(line_icon.into()),
+            shortcut: line_shortcut.map(Into::into),
+            disabled: lines_patch.is_none(),
+            action: Box::new(ContextMenuAction::ApplyIndexPatch {
+                repo_id,
+                patch: lines_patch.clone().unwrap_or_default(),
+                reverse: line_reverse,
+            }),
+        });
+    }
 
-    if area == DiffArea::Unstaged {
+    if area == DiffArea::Unstaged && worktree_writes_supported {
         items.push(ContextMenuItem::Entry {
             label: if lines_count > 1 {
                 crate::i18n::t!("cm.diff.discard_lines_count", count = lines_count)
@@ -78,31 +92,35 @@ pub(super) fn model(
         DiffArea::Unstaged => ("Stage hunk", "icons/plus.svg", false),
         DiffArea::Staged => ("Unstage hunk", "icons/minus.svg", true),
     };
-    items.push(ContextMenuItem::Entry {
-        label: if hunks_count > 1 {
-            match area {
-                DiffArea::Unstaged => {
-                    crate::i18n::t!("cm.diff.stage_hunks_count", count = hunks_count).into_owned()
+    if staging_supported {
+        items.push(ContextMenuItem::Entry {
+            label: if hunks_count > 1 {
+                match area {
+                    DiffArea::Unstaged => {
+                        crate::i18n::t!("cm.diff.stage_hunks_count", count = hunks_count)
+                            .into_owned()
+                    }
+                    DiffArea::Staged => {
+                        crate::i18n::t!("cm.diff.unstage_hunks_count", count = hunks_count)
+                            .into_owned()
+                    }
                 }
-                DiffArea::Staged => {
-                    crate::i18n::t!("cm.diff.unstage_hunks_count", count = hunks_count).into_owned()
-                }
-            }
-            .into()
-        } else {
-            hunk_label.into()
-        },
-        icon: Some(hunk_icon.into()),
-        shortcut: None,
-        disabled: hunk_patch.is_none(),
-        action: Box::new(ContextMenuAction::ApplyIndexPatch {
-            repo_id,
-            patch: hunk_patch.clone().unwrap_or_default(),
-            reverse: hunk_reverse,
-        }),
-    });
+                .into()
+            } else {
+                hunk_label.into()
+            },
+            icon: Some(hunk_icon.into()),
+            shortcut: None,
+            disabled: hunk_patch.is_none(),
+            action: Box::new(ContextMenuAction::ApplyIndexPatch {
+                repo_id,
+                patch: hunk_patch.clone().unwrap_or_default(),
+                reverse: hunk_reverse,
+            }),
+        });
+    }
 
-    if area == DiffArea::Unstaged {
+    if area == DiffArea::Unstaged && worktree_writes_supported {
         items.push(ContextMenuItem::Entry {
             label: if hunks_count > 1 {
                 crate::i18n::t!("cm.diff.discard_hunks_count", count = hunks_count)

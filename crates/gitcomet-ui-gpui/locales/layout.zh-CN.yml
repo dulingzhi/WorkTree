@@ -54,10 +54,12 @@ layout:
     no_repository_selected: "未选择仓库。"
   commit_box:
     commit: 提交
+    finish_change: 完成当前更改
     commit_and_push: 提交并推送
     amend_previous: 修补上一次提交
     amend_and_push: 安全修补并推送
     tooltip_commit: 提交已暂存的更改
+    tooltip_finish_change: 为工作区更改写入描述并开始新更改（Jujutsu）
     tooltip_commit_and_push: 提交已暂存的更改并推送
     tooltip_amend: 修补上一次提交
     tooltip_amend_and_push: "修补上一次提交；已发布的修补需要显式使用带租约的强制推送"

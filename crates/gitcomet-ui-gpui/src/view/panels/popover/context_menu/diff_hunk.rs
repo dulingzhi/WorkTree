@@ -42,21 +42,23 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, src_ix: usize) -> Conte
     let mut items = vec![ContextMenuItem::Header("Hunk".into())];
     items.push(ContextMenuItem::Separator);
 
-    let diff_target = this
-        .state
-        .repos
-        .iter()
-        .find(|r| r.id == repo_id)
-        .and_then(|r| r.diff_state.diff_target.as_ref());
+    // jj compat: both entries are unrouted writes (index move, worktree
+    // discard) — hidden on repos whose reducer drops them.
+    let repo = this.state.repos.iter().find(|r| r.id == repo_id);
+    let staging_supported = repo.map(|r| r.capabilities.staging).unwrap_or(true);
+    let worktree_writes_supported = repo.map(|r| !r.capabilities.read_only).unwrap_or(true);
+    let diff_target = repo.and_then(|r| r.diff_state.diff_target.as_ref());
     let (disabled, label, icon, shortcut) = diff_hunk_primary_metadata(diff_target);
 
-    items.push(ContextMenuItem::Entry {
-        label: label.into(),
-        icon: Some(icon.into()),
-        shortcut: shortcut.map(Into::into),
-        disabled,
-        action: Box::new(diff_hunk_primary_action(repo_id, src_ix, diff_target)),
-    });
+    if staging_supported {
+        items.push(ContextMenuItem::Entry {
+            label: label.into(),
+            icon: Some(icon.into()),
+            shortcut: shortcut.map(Into::into),
+            disabled,
+            action: Box::new(diff_hunk_primary_action(repo_id, src_ix, diff_target)),
+        });
+    }
 
     let is_unstaged = this
         .state
@@ -75,17 +77,19 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, src_ix: usize) -> Conte
         });
     let patch = this.build_unified_patch_for_hunk_src_ix(repo_id, src_ix);
 
-    items.push(ContextMenuItem::Entry {
-        label: "Discard hunk".into(),
-        icon: Some("icons/refresh.svg".into()),
-        shortcut: Some(secondary_shortcut("D").into()),
-        disabled: !is_unstaged || patch.is_none(),
-        action: Box::new(ContextMenuAction::ApplyWorktreePatch {
-            repo_id,
-            patch: patch.unwrap_or_default(),
-            reverse: true,
-        }),
-    });
+    if worktree_writes_supported {
+        items.push(ContextMenuItem::Entry {
+            label: "Discard hunk".into(),
+            icon: Some("icons/refresh.svg".into()),
+            shortcut: Some(secondary_shortcut("D").into()),
+            disabled: !is_unstaged || patch.is_none(),
+            action: Box::new(ContextMenuAction::ApplyWorktreePatch {
+                repo_id,
+                patch: patch.unwrap_or_default(),
+                reverse: true,
+            }),
+        });
+    }
 
     ContextMenuModel::new(items)
 }

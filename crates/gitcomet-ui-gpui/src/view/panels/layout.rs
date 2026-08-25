@@ -740,19 +740,25 @@ impl DetailsPaneView {
         if !Self::can_submit_commit(self.active_repo(), &message, amend) {
             return false;
         }
+        // jj: push-after-commit is unroutable (a describe+new commit moves no
+        // bookmark), so the flag never reaches the dispatched message.
+        let push_after_commit = self.commit_push_after_enabled
+            && self
+                .active_repo()
+                .is_none_or(|repo| !repo.capabilities.is_jj);
 
         if amend {
             self.mark_pending_commit_amend(repo_id);
             self.store.dispatch(Msg::CommitAmend {
                 repo_id,
                 message: message.trim().to_string(),
-                push_after_commit: self.commit_push_after_enabled,
+                push_after_commit,
             });
         } else {
             self.store.dispatch(Msg::Commit {
                 repo_id,
                 message: message.trim().to_string(),
-                push_after_commit: self.commit_push_after_enabled,
+                push_after_commit,
             });
         }
         self.commit_message_programmatic_change = true;
@@ -2044,6 +2050,14 @@ impl DetailsPaneView {
             .active_repo()
             .map(|r| r.local_actions_in_flight > 0)
             .unwrap_or(false);
+        // jj repos have no staging area, and neither stage/unstage nor
+        // discard writes are routed through the jj CLI yet — hiding their
+        // affordances (and the staged section) leaves no dead buttons. Only
+        // the commit box stays: its message becomes "finish the change".
+        let staging_supported = self
+            .active_repo()
+            .map(|repo| repo.capabilities.staging)
+            .unwrap_or(true);
         let (staged_count, unstaged_count, untracked_count, split_unstaged_count) = self
             .active_repo()
             .map(|repo| {
@@ -2648,10 +2662,13 @@ impl DetailsPaneView {
                     .into_any_element(),
                 );
             }
-            if selected_combined_unstaged > 0 {
-                actions = actions.child(stage_selected).child(discard_selected);
+            if staging_supported {
+                if selected_combined_unstaged > 0 {
+                    actions = actions.child(stage_selected).child(discard_selected);
+                }
+                actions = actions.child(stage_all);
             }
-            actions.child(stage_all).into_any_element()
+            actions.into_any_element()
         };
 
         let untracked_actions = {
@@ -2668,12 +2685,15 @@ impl DetailsPaneView {
                     .into_any_element(),
                 );
             }
-            if selected_untracked > 0 {
-                actions = actions
-                    .child(stage_selected_untracked)
-                    .child(discard_selected_untracked);
+            if staging_supported {
+                if selected_untracked > 0 {
+                    actions = actions
+                        .child(stage_selected_untracked)
+                        .child(discard_selected_untracked);
+                }
+                actions = actions.child(stage_all_untracked);
             }
-            actions.child(stage_all_untracked).into_any_element()
+            actions.into_any_element()
         };
 
         let split_unstaged_actions = {
@@ -2690,12 +2710,15 @@ impl DetailsPaneView {
                     .into_any_element(),
                 );
             }
-            if selected_split_unstaged > 0 {
-                actions = actions
-                    .child(stage_selected_split_unstaged)
-                    .child(discard_selected_split_unstaged);
+            if staging_supported {
+                if selected_split_unstaged > 0 {
+                    actions = actions
+                        .child(stage_selected_split_unstaged)
+                        .child(discard_selected_split_unstaged);
+                }
+                actions = actions.child(stage_all_split_unstaged);
             }
-            actions.child(stage_all_split_unstaged).into_any_element()
+            actions.into_any_element()
         };
 
         let staged_actions = {
@@ -2712,10 +2735,13 @@ impl DetailsPaneView {
                     .into_any_element(),
                 );
             }
-            if selected_staged > 0 {
-                actions = actions.child(unstage_selected);
+            if staging_supported {
+                if selected_staged > 0 {
+                    actions = actions.child(unstage_selected);
+                }
+                actions = actions.child(unstage_all);
             }
-            actions.child(unstage_all).into_any_element()
+            actions.into_any_element()
         };
 
         let unstaged_body = if unstaged_loading {
@@ -3064,24 +3090,6 @@ impl DetailsPaneView {
         } else {
             unstaged_section
         };
-        let (change_tracking_grow, staged_grow) = change_tracking_heights
-            .map(|(top_height, bottom_height)| (px_to_grow(top_height), px_to_grow(bottom_height)))
-            .unwrap_or((1.0, 1.0));
-        let change_tracking_section = with_split_sizing(
-            change_tracking_section,
-            change_tracking_heights.map(|(top_height, _)| top_height),
-            change_tracking_grow,
-            min_change_tracking_stack_height(split_change_tracking, resize_handle_h),
-        );
-        let staged_section = with_split_sizing(
-            staged_section,
-            change_tracking_heights.map(|(_, bottom_height)| bottom_height),
-            staged_grow,
-            section_min_h,
-        );
-        let change_tracking_section =
-            change_tracking_section.debug_selector(|| "status_change_tracking_wrapper".to_string());
-        let staged_section = staged_section.debug_selector(|| "status_staged_wrapper".to_string());
         let status_sections_bounds_for_prepaint =
             std::rc::Rc::clone(&self.status_sections_bounds_ref);
         let status_sections_container = div()
@@ -3101,16 +3109,54 @@ impl DetailsPaneView {
                     window.refresh();
                 }
             });
-        let status_sections = status_sections_container
-            .child(visible_bounds_probe())
-            .flex()
-            .flex_col()
-            .child(change_tracking_section)
-            .child(build_status_resize_handle(
-                "status_resize_change_tracking_staged",
-                StatusSectionResizeHandle::ChangeTrackingAndStaged,
-            ))
-            .child(staged_section);
+        let status_sections = if staging_supported {
+            let (change_tracking_grow, staged_grow) = change_tracking_heights
+                .map(|(top_height, bottom_height)| {
+                    (px_to_grow(top_height), px_to_grow(bottom_height))
+                })
+                .unwrap_or((1.0, 1.0));
+            let change_tracking_section = with_split_sizing(
+                change_tracking_section,
+                change_tracking_heights.map(|(top_height, _)| top_height),
+                change_tracking_grow,
+                min_change_tracking_stack_height(split_change_tracking, resize_handle_h),
+            );
+            let staged_section = with_split_sizing(
+                staged_section,
+                change_tracking_heights.map(|(_, bottom_height)| bottom_height),
+                staged_grow,
+                section_min_h,
+            );
+            let change_tracking_section = change_tracking_section
+                .debug_selector(|| "status_change_tracking_wrapper".to_string());
+            let staged_section =
+                staged_section.debug_selector(|| "status_staged_wrapper".to_string());
+            status_sections_container
+                .child(visible_bounds_probe())
+                .flex()
+                .flex_col()
+                .child(change_tracking_section)
+                .child(build_status_resize_handle(
+                    "status_resize_change_tracking_staged",
+                    StatusSectionResizeHandle::ChangeTrackingAndStaged,
+                ))
+                .child(staged_section)
+        } else {
+            // jj repos have no staged lane: the change-tracking stack takes
+            // the full height and no divider handle is needed.
+            let change_tracking_section = with_split_sizing(
+                change_tracking_section,
+                None,
+                1.0,
+                min_change_tracking_stack_height(split_change_tracking, resize_handle_h),
+            )
+            .debug_selector(|| "status_change_tracking_wrapper".to_string());
+            status_sections_container
+                .child(visible_bounds_probe())
+                .flex()
+                .flex_col()
+                .child(change_tracking_section)
+        };
 
         div()
             .flex()
@@ -3320,13 +3366,24 @@ impl DetailsPaneView {
         let icon_color = theme.colors.accent.foreground;
         let icon = |path: &'static str| svg_icon(path, icon_color, px(14.0));
         let spinner = |id: (&'static str, u64)| svg_spinner(id, icon_color, px(14.0));
-        let commit_label = match (self.commit_amend_enabled, self.commit_push_after_enabled) {
+        // jj: a routed commit (describe + new) does not move any bookmark, so
+        // "commit and push" has nothing to push — the option is masked off
+        // here and hidden from the options menu. The button label also
+        // changes: there is no staging area to commit, the message describes
+        // the working-copy change and finishes it.
+        let jj_mode = self
+            .active_repo()
+            .is_some_and(|repo| repo.capabilities.is_jj);
+        let commit_push_after_enabled = self.commit_push_after_enabled && !jj_mode;
+        let commit_label = match (self.commit_amend_enabled, commit_push_after_enabled) {
+            (false, false) if jj_mode => tr_str("layout.commit_box.finish_change"),
             (false, false) => tr_str("layout.commit_box.commit"),
             (false, true) => tr_str("layout.commit_box.commit_and_push"),
             (true, false) => tr_str("layout.commit_box.amend_previous"),
             (true, true) => tr_str("layout.commit_box.amend_and_push"),
         };
-        let commit_tooltip = match (self.commit_amend_enabled, self.commit_push_after_enabled) {
+        let commit_tooltip = match (self.commit_amend_enabled, commit_push_after_enabled) {
+            (false, false) if jj_mode => tr_str("layout.commit_box.tooltip_finish_change"),
             (false, false) => tr_str("layout.commit_box.tooltip_commit"),
             (false, true) => tr_str("layout.commit_box.tooltip_commit_and_push"),
             (true, false) => tr_str("layout.commit_box.tooltip_amend"),

@@ -16,6 +16,11 @@ pub(super) fn model(
 
     let repo = this.state.repos.iter().find(|r| r.id == repo_id);
 
+    // jj compat: checkout, fast-forward, upstream pairing, history rewrites,
+    // remote-ref deletion, and prune sweeps have no jj routing — the reducer
+    // drops them on read-only repos, so their entries are hidden.
+    let git_only_writes = repo.is_none_or(|r| !r.capabilities.read_only);
+
     let active_branch_name = repo.and_then(|r| match &r.head_branch {
         Loadable::Ready(branch) => Some(branch.clone()),
         _ => None,
@@ -46,34 +51,36 @@ pub(super) fn model(
     // of letting the click surface that refusal.
     let history_rewrite_disabled = repo.is_some_and(|r| r.history_rewrite_busy());
 
-    items.push(ContextMenuItem::Entry {
-        label: "Checkout".into(),
-        icon: Some("icons/git_branch.svg".into()),
-        shortcut: None,
-        disabled: false,
-        action: Box::new(match section {
-            BranchSection::Local => ContextMenuAction::CheckoutBranch {
-                repo_id,
-                name: name.clone(),
-            },
-            BranchSection::Remote => {
-                if let Some((remote, branch)) = name.split_once('/') {
-                    ContextMenuAction::OpenPopover {
-                        kind: PopoverKind::CheckoutRemoteBranchPrompt {
+    if git_only_writes {
+        items.push(ContextMenuItem::Entry {
+            label: "Checkout".into(),
+            icon: Some("icons/git_branch.svg".into()),
+            shortcut: None,
+            disabled: false,
+            action: Box::new(match section {
+                BranchSection::Local => ContextMenuAction::CheckoutBranch {
+                    repo_id,
+                    name: name.clone(),
+                },
+                BranchSection::Remote => {
+                    if let Some((remote, branch)) = name.split_once('/') {
+                        ContextMenuAction::OpenPopover {
+                            kind: PopoverKind::CheckoutRemoteBranchPrompt {
+                                repo_id,
+                                remote: remote.to_string(),
+                                branch: branch.to_string(),
+                            },
+                        }
+                    } else {
+                        ContextMenuAction::CheckoutBranch {
                             repo_id,
-                            remote: remote.to_string(),
-                            branch: branch.to_string(),
-                        },
-                    }
-                } else {
-                    ContextMenuAction::CheckoutBranch {
-                        repo_id,
-                        name: name.clone(),
+                            name: name.clone(),
+                        }
                     }
                 }
-            }
-        }),
-    });
+            }),
+        });
+    }
     items.push(ContextMenuItem::Entry {
         label: "Create branch".into(),
         icon: Some("icons/plus.svg".into()),
@@ -204,7 +211,7 @@ pub(super) fn model(
                 .map(|upstream| format!("{}/{}", upstream.remote, upstream.branch)),
             _ => None,
         });
-        if let Some(upstream) = branch_upstream_full {
+        if let Some(upstream) = branch_upstream_full.filter(|_| git_only_writes) {
             items.push(ContextMenuItem::Entry {
                 label: crate::i18n::t!("cm.branch.fast_forward_to", upstream = upstream.as_str())
                     .to_string()
@@ -220,18 +227,20 @@ pub(super) fn model(
                 }),
             });
         }
-        items.push(ContextMenuItem::Entry {
-            label: "Change tracking upstream…".into(),
-            icon: Some("icons/link.svg".into()),
-            shortcut: None,
-            disabled: false,
-            action: Box::new(ContextMenuAction::OpenPopover {
-                kind: PopoverKind::UpstreamPicker {
-                    repo_id,
-                    branch: name.clone(),
-                },
-            }),
-        });
+        if git_only_writes {
+            items.push(ContextMenuItem::Entry {
+                label: "Change tracking upstream…".into(),
+                icon: Some("icons/link.svg".into()),
+                shortcut: None,
+                disabled: false,
+                action: Box::new(ContextMenuAction::OpenPopover {
+                    kind: PopoverKind::UpstreamPicker {
+                        repo_id,
+                        branch: name.clone(),
+                    },
+                }),
+            });
+        }
         items.push(ContextMenuItem::Separator);
         if !is_current_branch {
             items.push(ContextMenuItem::Entry {
@@ -245,44 +254,46 @@ pub(super) fn model(
                     branch: name.clone(),
                 }),
             });
-            items.push(ContextMenuItem::Entry {
-                label: "Merge into current".into(),
-                icon: Some("icons/swap.svg".into()),
-                shortcut: Some("M".into()),
-                disabled: false,
-                action: Box::new(ContextMenuAction::MergeRef {
-                    repo_id,
-                    reference: name.clone(),
-                }),
-            });
-            items.push(ContextMenuItem::Entry {
-                label: "Squash into current".into(),
-                icon: Some("icons/arrow_right.svg".into()),
-                shortcut: Some("S".into()),
-                disabled: false,
-                action: Box::new(ContextMenuAction::SquashRef {
-                    repo_id,
-                    reference: name.clone(),
-                }),
-            });
-            items.push(ContextMenuItem::Entry {
-                label: crate::i18n::t!(
-                    "cm.rebase_onto",
-                    current = current_branch_label,
-                    target = name
-                )
-                .to_string()
-                .into(),
-                icon: Some("icons/arrow_up.svg".into()),
-                shortcut: Some("B".into()),
-                disabled: history_rewrite_disabled,
-                action: Box::new(ContextMenuAction::OpenPopover {
-                    kind: PopoverKind::RebaseOntoConfirm {
+            if git_only_writes {
+                items.push(ContextMenuItem::Entry {
+                    label: "Merge into current".into(),
+                    icon: Some("icons/swap.svg".into()),
+                    shortcut: Some("M".into()),
+                    disabled: false,
+                    action: Box::new(ContextMenuAction::MergeRef {
                         repo_id,
-                        onto: name.clone(),
-                    },
-                }),
-            });
+                        reference: name.clone(),
+                    }),
+                });
+                items.push(ContextMenuItem::Entry {
+                    label: "Squash into current".into(),
+                    icon: Some("icons/arrow_right.svg".into()),
+                    shortcut: Some("S".into()),
+                    disabled: false,
+                    action: Box::new(ContextMenuAction::SquashRef {
+                        repo_id,
+                        reference: name.clone(),
+                    }),
+                });
+                items.push(ContextMenuItem::Entry {
+                    label: crate::i18n::t!(
+                        "cm.rebase_onto",
+                        current = current_branch_label,
+                        target = name
+                    )
+                    .to_string()
+                    .into(),
+                    icon: Some("icons/arrow_up.svg".into()),
+                    shortcut: Some("B".into()),
+                    disabled: history_rewrite_disabled,
+                    action: Box::new(ContextMenuAction::OpenPopover {
+                        kind: PopoverKind::RebaseOntoConfirm {
+                            repo_id,
+                            onto: name.clone(),
+                        },
+                    }),
+                });
+            }
         }
         items.push(ContextMenuItem::Entry {
             label: "Delete branch".into(),
@@ -310,87 +321,89 @@ pub(super) fn model(
                     branch: branch.to_string(),
                 }),
             });
-            items.push(ContextMenuItem::Entry {
-                label: "Merge into current".into(),
-                icon: Some("icons/swap.svg".into()),
-                shortcut: Some("M".into()),
-                disabled: false,
-                action: Box::new(ContextMenuAction::MergeRef {
-                    repo_id,
-                    reference: name.clone(),
-                }),
-            });
-            items.push(ContextMenuItem::Entry {
-                label: "Squash into current".into(),
-                icon: Some("icons/arrow_right.svg".into()),
-                shortcut: Some("S".into()),
-                disabled: false,
-                action: Box::new(ContextMenuAction::SquashRef {
-                    repo_id,
-                    reference: name.clone(),
-                }),
-            });
-            items.push(ContextMenuItem::Entry {
-                label: crate::i18n::t!(
-                    "cm.rebase_onto",
-                    current = current_branch_label,
-                    target = name
-                )
-                .to_string()
-                .into(),
-                icon: Some("icons/arrow_up.svg".into()),
-                shortcut: Some("B".into()),
-                disabled: history_rewrite_disabled,
-                action: Box::new(ContextMenuAction::OpenPopover {
-                    kind: PopoverKind::RebaseOntoConfirm {
-                        repo_id,
-                        onto: name.clone(),
-                    },
-                }),
-            });
-            items.push(ContextMenuItem::Separator);
-            items.push(ContextMenuItem::Entry {
-                label: "Delete remote branch…".into(),
-                icon: Some("icons/trash.svg".into()),
-                shortcut: None,
-                disabled: false,
-                action: Box::new(ContextMenuAction::OpenPopover {
-                    kind: PopoverKind::remote(
-                        repo_id,
-                        RemotePopoverKind::DeleteBranchConfirm {
-                            remote: remote.to_string(),
-                            branch: branch.to_string(),
-                        },
-                    ),
-                }),
-            });
-            if active_branch_has_no_upstream
-                && let Some(active_branch_name) = active_branch_name.clone()
-                && name.split_once('/').is_some()
-            {
+            if git_only_writes {
                 items.push(ContextMenuItem::Entry {
-                    label: "Set as tracking upstream".into(),
-                    icon: Some("icons/link.svg".into()),
+                    label: "Merge into current".into(),
+                    icon: Some("icons/swap.svg".into()),
+                    shortcut: Some("M".into()),
+                    disabled: false,
+                    action: Box::new(ContextMenuAction::MergeRef {
+                        repo_id,
+                        reference: name.clone(),
+                    }),
+                });
+                items.push(ContextMenuItem::Entry {
+                    label: "Squash into current".into(),
+                    icon: Some("icons/arrow_right.svg".into()),
+                    shortcut: Some("S".into()),
+                    disabled: false,
+                    action: Box::new(ContextMenuAction::SquashRef {
+                        repo_id,
+                        reference: name.clone(),
+                    }),
+                });
+                items.push(ContextMenuItem::Entry {
+                    label: crate::i18n::t!(
+                        "cm.rebase_onto",
+                        current = current_branch_label,
+                        target = name
+                    )
+                    .to_string()
+                    .into(),
+                    icon: Some("icons/arrow_up.svg".into()),
+                    shortcut: Some("B".into()),
+                    disabled: history_rewrite_disabled,
+                    action: Box::new(ContextMenuAction::OpenPopover {
+                        kind: PopoverKind::RebaseOntoConfirm {
+                            repo_id,
+                            onto: name.clone(),
+                        },
+                    }),
+                });
+                items.push(ContextMenuItem::Separator);
+                items.push(ContextMenuItem::Entry {
+                    label: "Delete remote branch…".into(),
+                    icon: Some("icons/trash.svg".into()),
                     shortcut: None,
                     disabled: false,
-                    action: Box::new(ContextMenuAction::SetUpstreamBranch {
-                        repo_id,
-                        branch: active_branch_name,
-                        upstream: name.clone(),
+                    action: Box::new(ContextMenuAction::OpenPopover {
+                        kind: PopoverKind::remote(
+                            repo_id,
+                            RemotePopoverKind::DeleteBranchConfirm {
+                                remote: remote.to_string(),
+                                branch: branch.to_string(),
+                            },
+                        ),
                     }),
                 });
-            }
-            if active_upstream_full.is_some() {
-                items.push(ContextMenuItem::Entry {
-                    label: "Unlink upstream branch".into(),
-                    icon: Some("icons/unlink.svg".into()),
-                    shortcut: None,
-                    disabled: active_upstream_full.as_deref() != Some(name.as_str()),
-                    action: Box::new(ContextMenuAction::UnsetUpstreamBranch {
-                        repo_id,
-                        branch: active_branch_name.unwrap_or_default(),
-                    }),
-                });
+                if active_branch_has_no_upstream
+                    && let Some(active_branch_name) = active_branch_name.clone()
+                    && name.split_once('/').is_some()
+                {
+                    items.push(ContextMenuItem::Entry {
+                        label: "Set as tracking upstream".into(),
+                        icon: Some("icons/link.svg".into()),
+                        shortcut: None,
+                        disabled: false,
+                        action: Box::new(ContextMenuAction::SetUpstreamBranch {
+                            repo_id,
+                            branch: active_branch_name,
+                            upstream: name.clone(),
+                        }),
+                    });
+                }
+                if active_upstream_full.is_some() {
+                    items.push(ContextMenuItem::Entry {
+                        label: "Unlink upstream branch".into(),
+                        icon: Some("icons/unlink.svg".into()),
+                        shortcut: None,
+                        disabled: active_upstream_full.as_deref() != Some(name.as_str()),
+                        action: Box::new(ContextMenuAction::UnsetUpstreamBranch {
+                            repo_id,
+                            branch: active_branch_name.unwrap_or_default(),
+                        }),
+                    });
+                }
             }
             items.push(ContextMenuItem::Separator);
         }
@@ -401,20 +414,22 @@ pub(super) fn model(
             disabled: false,
             action: Box::new(ContextMenuAction::FetchAll { repo_id }),
         });
-        items.push(ContextMenuItem::Entry {
-            label: "Prune merged branches".into(),
-            icon: Some("icons/broom.svg".into()),
-            shortcut: None,
-            disabled: false,
-            action: Box::new(ContextMenuAction::PruneMergedBranches { repo_id }),
-        });
-        items.push(ContextMenuItem::Entry {
-            label: "Prune local tags".into(),
-            icon: Some("icons/tag.svg".into()),
-            shortcut: None,
-            disabled: false,
-            action: Box::new(ContextMenuAction::PruneLocalTags { repo_id }),
-        });
+        if git_only_writes {
+            items.push(ContextMenuItem::Entry {
+                label: "Prune merged branches".into(),
+                icon: Some("icons/broom.svg".into()),
+                shortcut: None,
+                disabled: false,
+                action: Box::new(ContextMenuAction::PruneMergedBranches { repo_id }),
+            });
+            items.push(ContextMenuItem::Entry {
+                label: "Prune local tags".into(),
+                icon: Some("icons/tag.svg".into()),
+                shortcut: None,
+                disabled: false,
+                action: Box::new(ContextMenuAction::PruneLocalTags { repo_id }),
+            });
+        }
     }
 
     ContextMenuModel::new(items)

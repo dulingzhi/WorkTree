@@ -47,6 +47,8 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
         .cloned()
         .unwrap_or_else(|| short.to_string());
     let comparison_mark = comparison_mark_pair(repo);
+    // jj compat: tag deletion and tag pushes have no jj routing.
+    let tag_writes_supported = repo.is_none_or(|repo| !repo.capabilities.read_only);
 
     tag_names_model(
         repo_id,
@@ -59,6 +61,7 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
         commit_id,
         compare_label,
         comparison_mark,
+        tag_writes_supported,
     )
 }
 
@@ -73,6 +76,7 @@ pub(super) fn model_for_tag(
     let repo = this.state.repos.iter().find(|r| r.id == repo_id);
     let (remote_names, remote_tags) = remote_tag_context(repo);
     let comparison_mark = comparison_mark_pair(repo);
+    let tag_writes_supported = repo.is_none_or(|repo| !repo.capabilities.read_only);
     tag_names_model(
         repo_id,
         crate::i18n::t!("cm.tag.create_on", name = name, short = short)
@@ -84,6 +88,7 @@ pub(super) fn model_for_tag(
         commit_id,
         name.clone(),
         comparison_mark,
+        tag_writes_supported,
     )
 }
 
@@ -124,6 +129,7 @@ fn remote_tag_context(repo: Option<&RepoState>) -> (Vec<String>, FxHashSet<(&str
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 fn tag_names_model(
     repo_id: RepoId,
     title: SharedString,
@@ -133,6 +139,7 @@ fn tag_names_model(
     commit_id: &CommitId,
     compare_label: String,
     comparison_mark: Option<(CommitId, String)>,
+    tag_writes_supported: bool,
 ) -> ContextMenuModel {
     let mut items = vec![ContextMenuItem::Header(title.into())];
     if tag_names.is_empty() {
@@ -190,6 +197,9 @@ fn tag_names_model(
             disabled: false,
             action: Box::new(ContextMenuAction::ClearComparisonMark { repo_id }),
         });
+    }
+    if !tag_writes_supported {
+        return ContextMenuModel::new(items);
     }
     items.push(ContextMenuItem::Separator);
     for (tag_ix, name) in tag_names.into_iter().enumerate() {

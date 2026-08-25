@@ -2,6 +2,7 @@ use crate::i18n::{tr, tr_str};
 use crate::kit::{Scrollbar, ScrollbarAxis};
 use crate::theme::AppTheme;
 use crate::ui_scale;
+use gitcomet_core::services::RepoCapabilities;
 use gpui::prelude::*;
 use gpui::{
     AnyElement, CursorStyle, Entity, FocusHandle, FontWeight, MouseButton, MouseDownEvent,
@@ -481,10 +482,57 @@ impl std::ops::Deref for CommandMatch {
 const KEYWORD_MATCH_PENALTY: i32 = 100_000;
 
 pub(crate) fn filtered_commands(has_active_repo: bool, query: &str) -> Vec<CommandMatch> {
-    let available = COMMANDS
-        .iter()
-        .filter(|cmd| !cmd.requires_repo || has_active_repo);
+    filtered_commands_impl(
+        COMMANDS
+            .iter()
+            .filter(|cmd| !cmd.requires_repo || has_active_repo),
+        query,
+    )
+}
 
+/// Capability-aware variant used by the live palette: commands whose write is
+/// not routed through the active repo's adapter are hidden, because the
+/// reducer would silently drop them. `None` (no repo open) keeps everything
+/// that does not require a repo.
+pub(crate) fn filtered_commands_for(
+    has_active_repo: bool,
+    capabilities: Option<RepoCapabilities>,
+    query: &str,
+) -> Vec<CommandMatch> {
+    filtered_commands_impl(
+        COMMANDS.iter().filter(|cmd| {
+            (!cmd.requires_repo || has_active_repo) && command_supported_on(cmd, capabilities)
+        }),
+        query,
+    )
+}
+
+/// jj compat gate for palette entries, keyed by command id. Entries whose
+/// write has a dedicated capability bit follow it; the rest (checkout, force
+/// push, history rewrites, tag/remote writes) follow `read_only`, which every
+/// repo without full routing sets.
+fn command_supported_on(entry: &CommandEntry, capabilities: Option<RepoCapabilities>) -> bool {
+    let Some(capabilities) = capabilities else {
+        return true;
+    };
+    match entry.id {
+        // The commit prompt is driven by staged entries, which only exist
+        // when a staging area does — jj repos use the commit box instead.
+        "commit" | "stage-all" | "unstage-all" => capabilities.staging,
+        "stash" | "stash-pop" | "stash-apply" | "stash-drop" => capabilities.stash,
+        "add-worktree" => capabilities.worktrees,
+        "add-submodule" | "update-submodules" => capabilities.submodules,
+        "checkout-branch" | "force-push" | "rebase" | "create-tag" | "add-remote" => {
+            !capabilities.read_only
+        }
+        _ => true,
+    }
+}
+
+fn filtered_commands_impl(
+    available: impl Iterator<Item = &'static CommandEntry>,
+    query: &str,
+) -> Vec<CommandMatch> {
     if query.is_empty() {
         return available
             .map(|entry| CommandMatch {
@@ -565,6 +613,9 @@ pub(crate) struct CommandPaletteView {
     root_view: WeakEntity<GitCometView>,
     theme: AppTheme,
     has_active_repo: bool,
+    /// Capabilities of the repo that was active when the palette opened;
+    /// `None` when no repo is open.
+    capabilities: Option<RepoCapabilities>,
     open: bool,
     query: SharedString,
     matches: Vec<CommandMatch>,
@@ -607,6 +658,7 @@ impl CommandPaletteView {
             root_view,
             theme,
             has_active_repo,
+            capabilities: None,
             open: false,
             query: SharedString::default(),
             matches: Vec::new(),
@@ -646,6 +698,7 @@ impl CommandPaletteView {
         restore_focus: Option<FocusHandle>,
         fallback_focus: FocusHandle,
         has_active_repo: bool,
+        capabilities: Option<RepoCapabilities>,
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
@@ -653,6 +706,7 @@ impl CommandPaletteView {
         self.restore_focus = restore_focus;
         self.fallback_focus = Some(fallback_focus);
         self.has_active_repo = has_active_repo;
+        self.capabilities = capabilities;
         self.query = SharedString::default();
         self.selected_index = None;
         self.rebuild_cached_results();
@@ -689,7 +743,7 @@ impl CommandPaletteView {
     }
 
     fn rebuild_cached_results(&mut self) {
-        self.matches = filtered_commands(self.has_active_repo, self.query.as_ref());
+        self.matches = filtered_commands_for(self.has_active_repo, self.capabilities, &self.query);
         self.rows.clear();
         self.command_row_indices.clear();
 
@@ -1182,6 +1236,52 @@ mod tests {
             matches.iter().any(|m| tr_str(m.label) == "Force Push"),
             "substring hits elsewhere in the label must still be included"
         );
+    }
+
+    #[test]
+    fn jj_repos_hide_unrouted_commands() {
+        let matches = filtered_commands_for(
+            true,
+            Some(gitcomet_core::services::RepoCapabilities::jj_read_only()),
+            "",
+        );
+        let ids: Vec<&str> = matches.iter().map(|m| m.id).collect();
+
+        // Unrouted writes disappear: staging, stash, commit prompt (needs
+        // staged entries), checkout, force push, history rewrites, tag and
+        // remote writes, worktree and submodule management.
+        for gone in [
+            "commit",
+            "stage-all",
+            "unstage-all",
+            "stash",
+            "stash-pop",
+            "stash-apply",
+            "stash-drop",
+            "checkout-branch",
+            "force-push",
+            "rebase",
+            "create-tag",
+            "add-remote",
+            "add-worktree",
+            "add-submodule",
+            "update-submodules",
+        ] {
+            assert!(!ids.contains(&gone), "expected `{gone}` to be hidden");
+        }
+        // Routed writes and repo-independent commands stay.
+        for kept in [
+            "push",
+            "pull",
+            "fetch-all",
+            "create-branch",
+            "delete-branch",
+            "rename-branch",
+            "open-repository",
+            "open-settings",
+        ] {
+            assert!(ids.contains(&kept), "expected `{kept}` to stay available");
+        }
     }
 
     #[test]

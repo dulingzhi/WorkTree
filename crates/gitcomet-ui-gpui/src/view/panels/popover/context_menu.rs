@@ -403,7 +403,24 @@ impl PopoverHost {
                 repo_id,
                 target,
                 selector,
-            } => Some(reflog_entry::model(*repo_id, selector, target)),
+            } => {
+                // jj compat: resets have no jj routing — read-only repos hide
+                // the entries instead of dispatching messages the reducer
+                // drops.
+                let resets_supported = self
+                    .state
+                    .repos
+                    .iter()
+                    .find(|repo| repo.id == *repo_id)
+                    .map(|repo| !repo.capabilities.read_only)
+                    .unwrap_or(true);
+                Some(reflog_entry::model(
+                    *repo_id,
+                    selector,
+                    target,
+                    resets_supported,
+                ))
+            }
             PopoverKind::TagMenu { repo_id, commit_id } => {
                 Some(tag::model(self, *repo_id, commit_id))
             }
@@ -509,6 +526,7 @@ impl PopoverHost {
                 copy_text,
                 copy_target,
             } => Some(diff_editor::model(
+                self,
                 *repo_id,
                 *area,
                 path,

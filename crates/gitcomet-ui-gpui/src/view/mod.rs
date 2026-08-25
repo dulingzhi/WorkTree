@@ -708,8 +708,16 @@ impl GitCometView {
             .or_else(|| self.pre_palette_focus.clone());
         let fallback_focus = self.main_pane.read(cx).diff_panel_focus_handle.clone();
         let has_active_repo = self.active_repo_id().is_some();
+        let capabilities = self.active_repo().map(|repo| repo.capabilities);
         self.command_palette.update(cx, |palette, cx| {
-            palette.open(restore_focus, fallback_focus, has_active_repo, window, cx);
+            palette.open(
+                restore_focus,
+                fallback_focus,
+                has_active_repo,
+                capabilities,
+                window,
+                cx,
+            );
         });
     }
 

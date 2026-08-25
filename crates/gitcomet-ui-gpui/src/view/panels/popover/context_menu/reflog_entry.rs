@@ -3,10 +3,13 @@ use super::*;
 /// The reflog panel's right-click menu: the same three reset actions the
 /// history log's commit context menu offers (see `commit.rs`), targeting the
 /// commit the clicked reflog entry points at rather than a history row.
+/// `resets_supported` carries the repo's capability gate (resets have no jj
+/// routing, so the entries are hidden on read-only repos).
 pub(super) fn model(
     repo_id: RepoId,
     selector: &SharedString,
     target: &CommitId,
+    resets_supported: bool,
 ) -> ContextMenuModel {
     let sha = target.as_ref().to_string();
     let short: SharedString = sha.get(0..8).unwrap_or(&sha).to_string().into();
@@ -14,8 +17,11 @@ pub(super) fn model(
     let mut items = vec![
         ContextMenuItem::Header(components::ContextMenuText::new(selector.clone())),
         ContextMenuItem::Label(components::ContextMenuText::new(format!("commit {short}"))),
-        ContextMenuItem::Separator,
     ];
+    if !resets_supported {
+        return ContextMenuModel::new(items);
+    }
+    items.push(ContextMenuItem::Separator);
 
     for (label, icon, mode) in [
         (
@@ -71,7 +77,7 @@ mod tests {
     fn model_offers_the_three_reset_modes() {
         let commit_id = CommitId("deadbeefcafe".into());
         let selector: SharedString = "HEAD@{2}".into();
-        let model = model(RepoId(1), &selector, &commit_id);
+        let model = model(RepoId(1), &selector, &commit_id, true);
 
         assert_eq!(
             entry_labels(&model),
@@ -87,7 +93,7 @@ mod tests {
     fn each_entry_targets_the_reflog_entrys_commit() {
         let commit_id = CommitId("deadbeefcafe".into());
         let selector: SharedString = "HEAD@{2}".into();
-        let model = model(RepoId(1), &selector, &commit_id);
+        let model = model(RepoId(1), &selector, &commit_id, true);
 
         let modes: Vec<ResetMode> = model
             .items

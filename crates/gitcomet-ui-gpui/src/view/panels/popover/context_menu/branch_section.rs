@@ -1,42 +1,59 @@
 use super::*;
 
 pub(super) fn model(
-    _this: &PopoverHost,
+    this: &PopoverHost,
     repo_id: RepoId,
     section: BranchSection,
 ) -> ContextMenuModel {
-    model_for_section(repo_id, section)
+    // jj compat: checkout (the branch picker) and prune sweeps have no jj
+    // routing — hidden on read-only repos; fetch stays.
+    let git_only_writes = this
+        .state
+        .repos
+        .iter()
+        .find(|repo| repo.id == repo_id)
+        .map(|repo| !repo.capabilities.read_only)
+        .unwrap_or(true);
+    model_for_section(repo_id, section, git_only_writes)
 }
 
-fn model_for_section(repo_id: RepoId, section: BranchSection) -> ContextMenuModel {
+fn model_for_section(
+    repo_id: RepoId,
+    section: BranchSection,
+    git_only_writes: bool,
+) -> ContextMenuModel {
     let header: SharedString = match section {
         BranchSection::Local => "Local".into(),
         BranchSection::Remote => "Remote".into(),
     };
     let mut items = vec![ContextMenuItem::Header(header.into())];
     items.push(ContextMenuItem::Separator);
-    items.push(ContextMenuItem::Entry {
-        label: "Switch branch".into(),
-        icon: Some("icons/git_branch.svg".into()),
-        shortcut: None,
-        disabled: false,
-        action: Box::new(ContextMenuAction::OpenPopover {
-            kind: PopoverKind::BranchPicker {
-                purpose: BranchPickerPurpose::Checkout,
-            },
-        }),
-    });
-
-    if section == BranchSection::Remote {
+    if git_only_writes {
         items.push(ContextMenuItem::Entry {
-            label: "Add remote…".into(),
-            icon: Some("icons/plus.svg".into()),
+            label: "Switch branch".into(),
+            icon: Some("icons/git_branch.svg".into()),
             shortcut: None,
             disabled: false,
             action: Box::new(ContextMenuAction::OpenPopover {
-                kind: PopoverKind::remote(repo_id, RemotePopoverKind::AddPrompt),
+                kind: PopoverKind::BranchPicker {
+                    purpose: BranchPickerPurpose::Checkout,
+                },
             }),
         });
+    }
+
+    if section == BranchSection::Remote {
+        if git_only_writes {
+            items.push(ContextMenuItem::Entry {
+                label: "Add remote…".into(),
+                icon: Some("icons/plus.svg".into()),
+                shortcut: None,
+                disabled: false,
+                action: Box::new(ContextMenuAction::OpenPopover {
+                    kind: PopoverKind::remote(repo_id, RemotePopoverKind::AddPrompt),
+                }),
+            });
+        }
         items.push(ContextMenuItem::Entry {
             label: "Fetch all".into(),
             icon: Some("icons/arrow_down.svg".into()),
@@ -44,20 +61,22 @@ fn model_for_section(repo_id: RepoId, section: BranchSection) -> ContextMenuMode
             disabled: false,
             action: Box::new(ContextMenuAction::FetchAll { repo_id }),
         });
-        items.push(ContextMenuItem::Entry {
-            label: "Prune merged branches".into(),
-            icon: Some("icons/broom.svg".into()),
-            shortcut: None,
-            disabled: false,
-            action: Box::new(ContextMenuAction::PruneMergedBranches { repo_id }),
-        });
-        items.push(ContextMenuItem::Entry {
-            label: "Prune local tags".into(),
-            icon: Some("icons/tag.svg".into()),
-            shortcut: None,
-            disabled: false,
-            action: Box::new(ContextMenuAction::PruneLocalTags { repo_id }),
-        });
+        if git_only_writes {
+            items.push(ContextMenuItem::Entry {
+                label: "Prune merged branches".into(),
+                icon: Some("icons/broom.svg".into()),
+                shortcut: None,
+                disabled: false,
+                action: Box::new(ContextMenuAction::PruneMergedBranches { repo_id }),
+            });
+            items.push(ContextMenuItem::Entry {
+                label: "Prune local tags".into(),
+                icon: Some("icons/tag.svg".into()),
+                shortcut: None,
+                disabled: false,
+                action: Box::new(ContextMenuAction::PruneLocalTags { repo_id }),
+            });
+        }
     }
 
     ContextMenuModel::new(items)
@@ -70,7 +89,7 @@ mod tests {
     #[test]
     fn remote_section_header_omits_remote_specific_actions() {
         let repo_id = RepoId(7);
-        let model = super::model_for_section(repo_id, BranchSection::Remote);
+        let model = super::model_for_section(repo_id, BranchSection::Remote, true);
 
         let labels: Vec<&str> = model
             .items
