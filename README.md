@@ -128,6 +128,29 @@ cargo build -p gitcomet --features ui-gpui,gix
 cargo run -p gitcomet --features ui-gpui,gix -- /path/to/repo
 ```
 
+### Jujutsu support
+
+GitComet ships two levels of [Jujutsu](https://jj-vcs.github.io/jj/) (jj)
+support for colocated repositories (a git repo with a `.jj` directory):
+
+- **Default builds** open jj repositories in read-only compat browsing:
+  history, diffs, and blame keep working through the git object database,
+  the working-copy snapshot keeps jj-side state fresh, and every write is
+  refused so GitComet can never race jj.
+- **The `jj` feature** adds the native Jujutsu workspace: when the active
+  repository is a jj repo, the content area swaps to a describe-as-you-go
+  change list (the working copy `@` pinned above its ancestors), a revset
+  filter bar, bookmark and operation-log panels with undo, and a conflict
+  card with re-check and click-to-copy paths. Mutations run through the
+  `jj` CLI via `gitcomet-jj-core`.
+
+```bash
+cargo build -p gitcomet --features gix,jj
+```
+
+The feature requires a `jj` binary on the system for mutations; browsing
+works without one.
+
 ### Contributing
 
 Developer setup, workspace layout, testing, and coverage docs live in `CONTRIBUTING.md`.

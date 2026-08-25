@@ -42,12 +42,26 @@ Run (opens the repo passed as the first arg, or falls back to the current direct
 cargo run -p gitcomet --features ui-gpui,gix -- /path/to/repo
 ```
 
+To build with the native Jujutsu workspace (see the README's Jujutsu
+section):
+
+```bash
+cargo build -p gitcomet --features gix,jj
+```
+
 ### Testing
 
 Full headless test suite (CI mode):
 
 ```bash
 cargo test --workspace --no-default-features --features gix
+```
+
+With the Jujutsu panels compiled in (jj integration tests skip
+themselves when no `jj` binary is on PATH):
+
+```bash
+cargo test --workspace --no-default-features --features gix,jj
 ```
 
 Clippy (CI mode):
