@@ -13,7 +13,7 @@ on:
       package_base_url:
         required: false
         type: string
-        default: "https://apt.gitcomet.dev/windows"
+        default: "https://apt.repositorytree.dev/windows"
       product_id:
         required: false
         type: string
@@ -56,7 +56,7 @@ on:
       package_base_url:
         description: "Public base URL used for the hosted MSIs. The workflow appends both x64 and arm64 MSI file names to this base URL."
         required: false
-        default: "https://apt.gitcomet.dev/windows"
+        default: "https://apt.repositorytree.dev/windows"
         type: string
       product_id:
         description: "Microsoft Store product id. Defaults to repository variable MICROSOFT_STORE_PRODUCT_ID when omitted."
@@ -129,7 +129,7 @@ jobs:
 
           tag="${INPUT_TAG:-${DISPATCH_TAG:-}}"
           version="${INPUT_VERSION:-${DISPATCH_VERSION:-}}"
-          package_base_url="${INPUT_PACKAGE_BASE_URL:-${DISPATCH_PACKAGE_BASE_URL:-${VAR_PACKAGE_BASE_URL:-https://apt.gitcomet.dev/windows}}}"
+          package_base_url="${INPUT_PACKAGE_BASE_URL:-${DISPATCH_PACKAGE_BASE_URL:-${VAR_PACKAGE_BASE_URL:-https://apt.repositorytree.dev/windows}}}"
           product_id="${INPUT_PRODUCT_ID:-${DISPATCH_PRODUCT_ID:-${VAR_PRODUCT_ID:-}}}"
           package_languages="${INPUT_PACKAGE_LANGUAGES:-${DISPATCH_PACKAGE_LANGUAGES:-${VAR_PACKAGE_LANGUAGES:-en}}}"
           store_listing_languages="${INPUT_STORE_LISTING_LANGUAGES:-${DISPATCH_STORE_LISTING_LANGUAGES:-${VAR_STORE_LISTING_LANGUAGES:-en}}}"
@@ -203,8 +203,8 @@ jobs:
             exit 1
           fi
 
-          x64_installer_name="gitcomet-v${version}-windows-x86_64.msi"
-          arm64_installer_name="gitcomet-v${version}-windows-arm64.msi"
+          x64_installer_name="repositorytree-v${version}-windows-x86_64.msi"
+          arm64_installer_name="repositorytree-v${version}-windows-arm64.msi"
           x64_package_url="${package_base_url}/${x64_installer_name}"
           arm64_package_url="${package_base_url}/${arm64_installer_name}"
 
@@ -324,7 +324,7 @@ jobs:
           release_notes="$(printf '%s' "$release_notes" | tr -d '\r')"
 
           if [ -z "$release_notes" ]; then
-            release_notes="GitComet v${{ steps.norm.outputs.version }}"
+            release_notes="RepositoryTree v${{ steps.norm.outputs.version }}"
           fi
 
           printf '%s' "$release_notes" > dist/microsoft-store-release-notes.txt
@@ -435,7 +435,7 @@ jobs:
 
           eval "$(dbus-launch --sh-syntax)"
 
-          keyring_password="gitcomet-ci-keyring"
+          keyring_password="repositorytree-ci-keyring"
           keyring_env="$(printf '%s' "$keyring_password" | gnome-keyring-daemon --unlock)"
           if [ -n "$keyring_env" ]; then
             eval "$keyring_env"

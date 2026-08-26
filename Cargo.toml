@@ -1,23 +1,23 @@
 [workspace]
 resolver = "3"
 members = [
-  "crates/gitcomet",
-  "crates/gitcomet-core",
-  "crates/gitcomet-git",
-  "crates/gitcomet-git-gix",
-  "crates/gitcomet-state",
-  "crates/gitcomet-tree-sitter-alloc",
-  "crates/gitcomet-ui-gpui",
+  "crates/repositorytree",
+  "crates/repositorytree-core",
+  "crates/repositorytree-git",
+  "crates/repositorytree-git-gix",
+  "crates/repositorytree-state",
+  "crates/repositorytree-tree-sitter-alloc",
+  "crates/repositorytree-ui-gpui",
 ]
 exclude = ["crates/win32-window-utils", "vendor/tree-sitter-vue"]
 
 default-members = [
-  "crates/gitcomet",
-  "crates/gitcomet-core",
-  "crates/gitcomet-git",
-  "crates/gitcomet-git-gix",
-  "crates/gitcomet-state",
-  "crates/gitcomet-ui-gpui",
+  "crates/repositorytree",
+  "crates/repositorytree-core",
+  "crates/repositorytree-git",
+  "crates/repositorytree-git-gix",
+  "crates/repositorytree-state",
+  "crates/repositorytree-ui-gpui",
 ]
 
 [workspace.package]
@@ -25,16 +25,16 @@ version = "0.2.1"
 edition = "2024"
 license = "AGPL-3.0-only"
 authors = ["AutoExplore Oy <info@autoexplore.ai>"]
-repository = "https://github.com/Auto-Explore/GitComet"
+repository = "https://github.com/RepositoryTree/RepositoryTree"
 rust-version = "1.98.0"
 
 [workspace.dependencies]
 # Internal crates
-gitcomet-core = { path = "crates/gitcomet-core" }
-gitcomet-git = { path = "crates/gitcomet-git" }
-gitcomet-git-gix = { path = "crates/gitcomet-git-gix" }
-gitcomet-state = { path = "crates/gitcomet-state" }
-gitcomet-ui-gpui = { path = "crates/gitcomet-ui-gpui", default-features = false }
+repositorytree-core = { path = "crates/repositorytree-core" }
+repositorytree-git = { path = "crates/repositorytree-git" }
+repositorytree-git-gix = { path = "crates/repositorytree-git-gix" }
+repositorytree-state = { path = "crates/repositorytree-state" }
+repositorytree-ui-gpui = { path = "crates/repositorytree-ui-gpui", default-features = false }
 
 # External crates
 alacritty_terminal = "0.26"

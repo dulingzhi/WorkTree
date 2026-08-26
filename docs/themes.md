@@ -1,24 +1,24 @@
-# GitComet Themes
+# RepositoryTree Themes
 
-GitComet supports built-in themes and user-provided custom themes.
+RepositoryTree supports built-in themes and user-provided custom themes.
 
-Built-in themes are embedded in the GitComet binary.
+Built-in themes are embedded in the RepositoryTree binary.
 
-GitComet loads custom themes from JSON bundle files in your per-user themes directory.
+RepositoryTree loads custom themes from JSON bundle files in your per-user themes directory.
 
 ## Theme File Location
 
-GitComet creates the user themes directory on startup and only loads custom `.json` files from that location:
+RepositoryTree creates the user themes directory on startup and only loads custom `.json` files from that location:
 
 | Platform | Themes directory |
 | --- | --- |
-| Linux | `$XDG_DATA_HOME/gitcomet/themes` or `~/.local/share/gitcomet/themes` |
-| macOS | `~/Library/Application Support/gitcomet/themes` |
-| Windows | `%LOCALAPPDATA%\\gitcomet\\themes` or `%APPDATA%\\gitcomet\\themes` |
+| Linux | `$XDG_DATA_HOME/repositorytree/themes` or `~/.local/share/repositorytree/themes` |
+| macOS | `~/Library/Application Support/repositorytree/themes` |
+| Windows | `%LOCALAPPDATA%\\repositorytree\\themes` or `%APPDATA%\\repositorytree\\themes` |
 
 ## JSON Schema
 
-Disclaimer: The theme JSON format may change as GitComet's UI is still actively being developed.
+Disclaimer: The theme JSON format may change as RepositoryTree's UI is still actively being developed.
 
 Each theme file is a bundle with a bundle name and one or more themes. The example below includes every currently supported field:
 
@@ -198,7 +198,7 @@ The bundle root supports:
 
 Theme schema v2 uses semantic groups. Define every group and field below: a token
 your file leaves out falls back to the bundled theme matching your `appearance`
-(`gitcomet_dark` or `gitcomet_light`), which keeps older theme files loading when
+(`repositorytree_dark` or `repositorytree_light`), which keeps older theme files loading when
 new tokens are added but means the omitted token is not yours to control. A token
 you misspell is still an error — the file is rejected rather than half-applied.
 
@@ -232,7 +232,7 @@ Most color fields accept either:
 - a hex RGBA string such as `#0d1016ff`
 - an object with `hex` plus `alpha`, for example `{ "hex": "#5ac1feff", "alpha": 0.60 }`
 
-Use `graph_lane_palette` for an explicit list of colors, or `graph_lane_hues` for a list of hue values that GitComet turns into graph lane colors automatically.
+Use `graph_lane_palette` for an explicit list of colors, or `graph_lane_hues` for a list of hue values that RepositoryTree turns into graph lane colors automatically.
 
 Syntax colors, graph lanes, and the documented radius extensions have fallbacks of
 their own — omitting `graph_lane_palette` and `graph_lane_hues` generates lane
@@ -268,10 +268,10 @@ These values are numeric and control the corner radius used by major UI elements
 
 ## Overrides And Validation Behavior
 
-- Built-in system themes stay embedded in the GitComet binary and are not loaded from the custom themes directory.
-- GitComet loads custom `.json` files from the themes directory, but ignores files whose basename matches a bundled system theme file such as `gitcomet.json`.
+- Built-in system themes stay embedded in the RepositoryTree binary and are not loaded from the custom themes directory.
+- RepositoryTree loads custom `.json` files from the themes directory, but ignores files whose basename matches a bundled system theme file such as `repositorytree.json`.
 - Custom themes can add new theme keys, but they cannot override built-in system theme keys. Any runtime theme entry that reuses a built-in key is ignored.
 - A file that cannot be read or parsed is ignored and reported with its path and reason.
-- GitComet validates the structure and types of custom themes, but does not
+- RepositoryTree validates the structure and types of custom themes, but does not
   measure, warn about, reject, or alter their colors based on contrast.
-- GitComet does not expose a separate machine-readable JSON Schema file today; the implementation in [`crates/gitcomet-ui-gpui/src/theme.rs`](crates/gitcomet-ui-gpui/src/theme.rs) is the source of truth.
+- RepositoryTree does not expose a separate machine-readable JSON Schema file today; the implementation in [`crates/repositorytree-ui-gpui/src/theme.rs`](crates/repositorytree-ui-gpui/src/theme.rs) is the source of truth.

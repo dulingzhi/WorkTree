@@ -5,10 +5,10 @@ usage() {
   cat <<'EOF'
 Usage: scripts/macos-cargo-config.sh <arch> [release|debug]
 
-Prints extra Cargo CLI args for GitComet macOS builds, one argument per line.
+Prints extra Cargo CLI args for RepositoryTree macOS builds, one argument per line.
 
 Environment:
-  GITCOMET_MACOS_X86_RELEASE_LTO
+  REPOSITORYTREE_MACOS_X86_RELEASE_LTO
     Release LTO override for Intel macOS builds.
     Supported: thin, fat, false, off, inherit
     Default: thin
@@ -52,7 +52,7 @@ if [[ "$mode" != "release" || "$arch" != "x86_64" ]]; then
   exit 0
 fi
 
-lto_mode="${GITCOMET_MACOS_X86_RELEASE_LTO:-thin}"
+lto_mode="${REPOSITORYTREE_MACOS_X86_RELEASE_LTO:-thin}"
 
 case "$lto_mode" in
   ""|inherit)
@@ -64,7 +64,7 @@ case "$lto_mode" in
     printf '%s\n' --config "profile.release.lto=false"
     ;;
   *)
-    echo "Unsupported GITCOMET_MACOS_X86_RELEASE_LTO value: $lto_mode" >&2
+    echo "Unsupported REPOSITORYTREE_MACOS_X86_RELEASE_LTO value: $lto_mode" >&2
     exit 2
     ;;
 esac

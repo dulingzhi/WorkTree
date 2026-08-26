@@ -32,9 +32,9 @@ require_tool() {
 repo_dir=""
 distribution="stable"
 component="main"
-origin="GitComet"
-label="GitComet"
-description="GitComet APT repository"
+origin="RepositoryTree"
+label="RepositoryTree"
+description="RepositoryTree APT repository"
 signing_key=""
 gpg_passphrase=""
 repo_url=""
@@ -275,31 +275,31 @@ run_gpg() {
 run_gpg --armor --detach-sign --output "${dist_dir}/Release.gpg" "$release_file"
 run_gpg --clearsign --output "${dist_dir}/InRelease" "$release_file"
 
-gpg --batch --yes --export-options export-minimal --output "${repo_dir}/gitcomet-archive-keyring.gpg" --export "$signing_key"
-gpg --batch --yes --armor --export-options export-minimal --output "${repo_dir}/gitcomet-archive-keyring.asc" --export "$signing_key"
+gpg --batch --yes --export-options export-minimal --output "${repo_dir}/repositorytree-archive-keyring.gpg" --export "$signing_key"
+gpg --batch --yes --armor --export-options export-minimal --output "${repo_dir}/repositorytree-archive-keyring.asc" --export "$signing_key"
 
 if [[ -n "$repo_url" ]]; then
-  cat > "${repo_dir}/gitcomet.sources" <<EOF
+  cat > "${repo_dir}/repositorytree.sources" <<EOF
 Types: deb
 URIs: ${repo_url}
 Suites: ${distribution}
 Components: ${component}
 Architectures: ${architectures_release}
-Signed-By: /usr/share/keyrings/gitcomet-archive-keyring.gpg
+Signed-By: /usr/share/keyrings/repositorytree-archive-keyring.gpg
 EOF
 
-  cat > "${repo_dir}/gitcomet.list" <<EOF
-deb [arch=${architectures_csv} signed-by=/usr/share/keyrings/gitcomet-archive-keyring.gpg] ${repo_url} ${distribution} ${component}
+  cat > "${repo_dir}/repositorytree.list" <<EOF
+deb [arch=${architectures_csv} signed-by=/usr/share/keyrings/repositorytree-archive-keyring.gpg] ${repo_url} ${distribution} ${component}
 EOF
 
   cat > "${repo_dir}/README.txt" <<EOF
-GitComet APT repository
+RepositoryTree APT repository
 
 Install:
-  curl -fsSL ${repo_url}/gitcomet-archive-keyring.gpg | sudo tee /usr/share/keyrings/gitcomet-archive-keyring.gpg >/dev/null
-  curl -fsSL ${repo_url}/gitcomet.sources | sudo tee /etc/apt/sources.list.d/gitcomet.sources >/dev/null
+  curl -fsSL ${repo_url}/repositorytree-archive-keyring.gpg | sudo tee /usr/share/keyrings/repositorytree-archive-keyring.gpg >/dev/null
+  curl -fsSL ${repo_url}/repositorytree.sources | sudo tee /etc/apt/sources.list.d/repositorytree.sources >/dev/null
   sudo apt-get update
-  sudo apt-get install gitcomet
+  sudo apt-get install repositorytree
 EOF
 fi
 
@@ -309,4 +309,4 @@ for architecture in "${architectures[@]}"; do
   echo "  ${dist_dir}/${component}/binary-${architecture}/Packages"
 done
 echo "  ${dist_dir}/InRelease"
-echo "  ${repo_dir}/gitcomet-archive-keyring.gpg"
+echo "  ${repo_dir}/repositorytree-archive-keyring.gpg"

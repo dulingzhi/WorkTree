@@ -6,16 +6,16 @@ usage() {
 Usage: scripts/package-macos.sh --version VERSION [--arch arm64|x86_64] [--release|--debug] [--no-build] [--skip-dmg] [--out-dir PATH] [--codesign-identity NAME] [--codesign-keychain PATH]
 
 Builds a macOS app bundle and release artifacts:
-  - gitcomet-v<VERSION>-macos-<ARCH>.tar.gz
-  - gitcomet-v<VERSION>-macos-<ARCH>.dmg
+  - repositorytree-v<VERSION>-macos-<ARCH>.tar.gz
+  - repositorytree-v<VERSION>-macos-<ARCH>.dmg
 
 Defaults:
   --release, build if needed, output to ./dist
 
 Environment:
-  GITCOMET_MACOS_X86_RELEASE_LTO=thin|fat|false|off|inherit
+  REPOSITORYTREE_MACOS_X86_RELEASE_LTO=thin|fat|false|off|inherit
     Overrides release LTO for Intel macOS builds. Default: thin.
-  GITCOMET_MACOS_PACKAGE_CLEAN_TARGET=1
+  REPOSITORYTREE_MACOS_PACKAGE_CLEAN_TARGET=1
     Deletes Cargo release build intermediates after staging artifacts. Intended
     for disk-constrained CI runners.
 USAGE
@@ -111,7 +111,7 @@ if [[ "$arch" != "$host_arch" ]]; then
 fi
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-bin_src="${repo_root}/target/${mode}/gitcomet"
+bin_src="${repo_root}/target/${mode}/repositorytree"
 
 if [[ $build -eq 1 && ! -x "$bin_src" ]]; then
   cargo_config_output=""
@@ -127,7 +127,7 @@ if [[ $build -eq 1 && ! -x "$bin_src" ]]; then
     if [[ "$mode" == "release" ]]; then
       set -- "$@" --release
     fi
-    set -- "$@" -p gitcomet --locked --features ui-gpui,gix --bin gitcomet
+    set -- "$@" -p repositorytree --locked --features ui-gpui,gix --bin repositorytree
     cargo build "$@"
   )
 fi
@@ -181,7 +181,7 @@ dmg_size_for_source() {
 }
 
 clean_target_intermediates_for_ci() {
-  if [[ "${GITCOMET_MACOS_PACKAGE_CLEAN_TARGET:-0}" != "1" ]]; then
+  if [[ "${REPOSITORYTREE_MACOS_PACKAGE_CLEAN_TARGET:-0}" != "1" ]]; then
     return
   fi
 
@@ -205,9 +205,9 @@ clean_target_intermediates_for_ci() {
 }
 
 stage_root="${out_abs}/stage"
-release_root="gitcomet-v${version}-macos-${arch}"
+release_root="repositorytree-v${version}-macos-${arch}"
 release_dir="${stage_root}/${release_root}"
-app_bundle="${release_dir}/GitComet.app"
+app_bundle="${release_dir}/RepositoryTree.app"
 contents_dir="${app_bundle}/Contents"
 macos_dir="${contents_dir}/MacOS"
 resources_dir="${contents_dir}/Resources"
@@ -215,14 +215,14 @@ resources_dir="${contents_dir}/Resources"
 rm -rf "$release_dir"
 mkdir -p "$macos_dir" "$resources_dir"
 
-install -m755 "$bin_src" "${macos_dir}/gitcomet"
-install -m755 "$bin_src" "${release_dir}/gitcomet"
+install -m755 "$bin_src" "${macos_dir}/repositorytree"
+install -m755 "$bin_src" "${release_dir}/repositorytree"
 install -m644 "${repo_root}/README.md" "${release_dir}/README.md"
 install -m644 "${repo_root}/LICENSE-AGPL-3.0" "${release_dir}/LICENSE-AGPL-3.0"
 install -m644 "${repo_root}/NOTICE" "${release_dir}/NOTICE"
 
-icon_png="${repo_root}/assets/gitcomet-512.png"
-icon_icns="${resources_dir}/GitComet.icns"
+icon_png="${repo_root}/assets/repositorytree-512.png"
+icon_icns="${resources_dir}/RepositoryTree.icns"
 
 if [[ ! -f "$icon_png" ]]; then
   echo "Missing macOS icon source: $icon_png" >&2
@@ -242,17 +242,17 @@ cat > "${contents_dir}/Info.plist" <<PLIST
   <key>CFBundleDevelopmentRegion</key>
   <string>en</string>
   <key>CFBundleDisplayName</key>
-  <string>GitComet</string>
+  <string>RepositoryTree</string>
   <key>CFBundleExecutable</key>
-  <string>gitcomet</string>
+  <string>repositorytree</string>
   <key>CFBundleIdentifier</key>
-  <string>ai.autoexplore.gitcomet</string>
+  <string>ai.autoexplore.repositorytree</string>
   <key>CFBundleIconFile</key>
-  <string>GitComet.icns</string>
+  <string>RepositoryTree.icns</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>GitComet</string>
+  <string>RepositoryTree</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
@@ -279,15 +279,15 @@ if [[ -n "$codesign_identity" ]]; then
   fi
 
   echo "Signing macOS artifacts with identity: $codesign_identity"
-  codesign "${sign_args[@]}" "${macos_dir}/gitcomet"
-  codesign "${sign_args[@]}" "${release_dir}/gitcomet"
+  codesign "${sign_args[@]}" "${macos_dir}/repositorytree"
+  codesign "${sign_args[@]}" "${release_dir}/repositorytree"
   codesign "${sign_args[@]}" "$app_bundle"
 
-  codesign --verify --strict --verbose=2 "${release_dir}/gitcomet"
+  codesign --verify --strict --verbose=2 "${release_dir}/repositorytree"
   codesign --verify --strict --verbose=2 "$app_bundle"
 fi
 
-if [[ "${GITCOMET_MACOS_PACKAGE_CLEAN_TARGET:-0}" == "1" ]]; then
+if [[ "${REPOSITORYTREE_MACOS_PACKAGE_CLEAN_TARGET:-0}" == "1" ]]; then
   show_disk_usage "before target cleanup"
   clean_target_intermediates_for_ci
   show_disk_usage "after target cleanup"
@@ -304,7 +304,7 @@ if [[ $create_dmg -eq 1 ]]; then
   dmg_stage="${out_abs}/dmg-stage-${arch}"
   rm -rf "$dmg_stage"
   mkdir -p "$dmg_stage"
-  cp -R "$app_bundle" "${dmg_stage}/GitComet.app"
+  cp -R "$app_bundle" "${dmg_stage}/RepositoryTree.app"
   ln -s /Applications "${dmg_stage}/Applications"
   dmg_size_mib="$(dmg_size_for_source "$dmg_stage")"
   echo "Creating macOS DMG with ${dmg_size_mib} MiB filesystem."
@@ -312,7 +312,7 @@ if [[ $create_dmg -eq 1 ]]; then
   # Preserve compatibility with older macOS tooling.
   rm -f "$dmg_path"
   hdiutil create \
-    -volname "GitComet" \
+    -volname "RepositoryTree" \
     -srcfolder "$dmg_stage" \
     -fs HFS+ \
     -size "${dmg_size_mib}m" \

@@ -69,8 +69,8 @@ fi
 
 pkgbuild="${aur_dir}/PKGBUILD"
 srcinfo="${aur_dir}/.SRCINFO"
-expected_binary_name="gitcomet-v${version}-linux-x86_64.tar.gz"
-expected_source_name="gitcomet-source-v${version}.tar.gz"
+expected_binary_name="repositorytree-v${version}-linux-x86_64.tar.gz"
+expected_source_name="repositorytree-source-v${version}.tar.gz"
 
 if [[ ! -f "$pkgbuild" ]]; then
   echo "PKGBUILD not found: $pkgbuild" >&2
@@ -105,13 +105,13 @@ sha256_file() {
 binary_sha="$(sha256_file "$binary_tar")"
 source_sha="$(sha256_file "$source_tar")"
 
-GITCOMET_PKGVER="$version" \
-GITCOMET_BIN_SHA="$binary_sha" \
-GITCOMET_SRC_SHA="$source_sha" \
+REPOSITORYTREE_PKGVER="$version" \
+REPOSITORYTREE_BIN_SHA="$binary_sha" \
+REPOSITORYTREE_SRC_SHA="$source_sha" \
 perl -0pi -e '
-  my $pkgver = $ENV{GITCOMET_PKGVER};
-  my $bin_sha = $ENV{GITCOMET_BIN_SHA};
-  my $src_sha = $ENV{GITCOMET_SRC_SHA};
+  my $pkgver = $ENV{REPOSITORYTREE_PKGVER};
+  my $bin_sha = $ENV{REPOSITORYTREE_BIN_SHA};
+  my $src_sha = $ENV{REPOSITORYTREE_SRC_SHA};
 
   s/^pkgver=.*/pkgver=$pkgver/m
     or die "Failed to update pkgver\n";

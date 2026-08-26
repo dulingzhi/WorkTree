@@ -36,15 +36,15 @@ on:
       repo_origin:
         required: false
         type: string
-        default: "GitComet"
+        default: "RepositoryTree"
       repo_label:
         required: false
         type: string
-        default: "GitComet"
+        default: "RepositoryTree"
       repo_description:
         required: false
         type: string
-        default: "GitComet APT repository."
+        default: "RepositoryTree APT repository."
       container_public_access:
         required: false
         type: string
@@ -103,17 +103,17 @@ on:
       repo_origin:
         description: "Origin metadata in Release file. Defaults to APT_REPO_ORIGIN when omitted."
         required: false
-        default: "GitComet"
+        default: "RepositoryTree"
         type: string
       repo_label:
         description: "Label metadata in Release file. Defaults to APT_REPO_LABEL when omitted."
         required: false
-        default: "GitComet"
+        default: "RepositoryTree"
         type: string
       repo_description:
         description: "Description metadata in Release file. Defaults to APT_REPO_DESCRIPTION when omitted."
         required: false
-        default: "GitComet APT repository."
+        default: "RepositoryTree APT repository."
         type: string
       container_public_access:
         description: "Public access used only when the blob container must be created. Defaults to APT_STORAGE_PUBLIC_ACCESS when omitted."
@@ -196,9 +196,9 @@ jobs:
           distribution="${INPUT_DISTRIBUTION:-${DISPATCH_DISTRIBUTION:-${VAR_DISTRIBUTION:-stable}}}"
           component="${INPUT_COMPONENT:-${DISPATCH_COMPONENT:-${VAR_COMPONENT:-main}}}"
           architecture_input="${INPUT_ARCHITECTURE:-${DISPATCH_ARCHITECTURE:-amd64,arm64}}"
-          repo_origin="${INPUT_REPO_ORIGIN:-${DISPATCH_REPO_ORIGIN:-${VAR_REPO_ORIGIN:-GitComet}}}"
-          repo_label="${INPUT_REPO_LABEL:-${DISPATCH_REPO_LABEL:-${VAR_REPO_LABEL:-GitComet}}}"
-          repo_description="${INPUT_REPO_DESCRIPTION:-${DISPATCH_REPO_DESCRIPTION:-${VAR_REPO_DESCRIPTION:-GitComet APT repository.}}}"
+          repo_origin="${INPUT_REPO_ORIGIN:-${DISPATCH_REPO_ORIGIN:-${VAR_REPO_ORIGIN:-RepositoryTree}}}"
+          repo_label="${INPUT_REPO_LABEL:-${DISPATCH_REPO_LABEL:-${VAR_REPO_LABEL:-RepositoryTree}}}"
+          repo_description="${INPUT_REPO_DESCRIPTION:-${DISPATCH_REPO_DESCRIPTION:-${VAR_REPO_DESCRIPTION:-RepositoryTree APT repository.}}}"
           container_public_access="${INPUT_CONTAINER_PUBLIC_ACCESS:-${DISPATCH_CONTAINER_PUBLIC_ACCESS:-${VAR_CONTAINER_PUBLIC_ACCESS:-blob}}}"
           dry_run="${INPUT_DRY_RUN:-${DISPATCH_DRY_RUN:-false}}"
 
@@ -345,11 +345,11 @@ jobs:
           for architecture in "${architectures[@]}"; do
             gh release download "${{ steps.norm.outputs.tag }}" \
               --repo "$GITHUB_REPOSITORY" \
-              --pattern "gitcomet_*_${architecture}.deb" \
+              --pattern "repositorytree_*_${architecture}.deb" \
               --dir dist/apt-release \
               --clobber
 
-            mapfile -t debs < <(find dist/apt-release -maxdepth 1 -type f -name "gitcomet_*_${architecture}.deb" | LC_ALL=C sort)
+            mapfile -t debs < <(find dist/apt-release -maxdepth 1 -type f -name "repositorytree_*_${architecture}.deb" | LC_ALL=C sort)
             if [ "${#debs[@]}" -ne 1 ]; then
               echo "::error title=Unexpected .deb asset count::Expected exactly one Debian package for architecture '${architecture}'."
               ls -lah dist/apt-release >&2 || true
@@ -386,7 +386,7 @@ jobs:
             {
               echo "Key-Type: RSA"
               echo "Key-Length: 3072"
-              echo "Name-Real: GitComet APT Dry Run"
+              echo "Name-Real: RepositoryTree APT Dry Run"
               echo "Name-Email: ci@autoexplore.ai"
               echo "Expire-Date: 0"
               echo "%no-protection"
@@ -492,7 +492,7 @@ jobs:
             --label "${{ steps.norm.outputs.repo_label }}"
             --description "${{ steps.norm.outputs.repo_description }}"
             --signing-key "${{ steps.gpg.outputs.signing_key }}"
-            --repo-url "https://apt.gitcomet.dev"
+            --repo-url "https://apt.repositorytree.dev"
           )
 
           IFS=',' read -r -a architectures <<< "${{ steps.norm.outputs.architectures }}"
@@ -550,7 +550,7 @@ jobs:
               --output none
             )
 
-            if [[ "$rel_path" == dists/* || "$rel_path" == "gitcomet.sources" || "$rel_path" == "gitcomet.list" || "$rel_path" == "gitcomet-archive-keyring.gpg" || "$rel_path" == "gitcomet-archive-keyring.asc" || "$rel_path" == "README.txt" ]]; then
+            if [[ "$rel_path" == dists/* || "$rel_path" == "repositorytree.sources" || "$rel_path" == "repositorytree.list" || "$rel_path" == "repositorytree-archive-keyring.gpg" || "$rel_path" == "repositorytree-archive-keyring.asc" || "$rel_path" == "README.txt" ]]; then
               upload_args+=(--content-cache-control "$metadata_cache_control")
             elif [[ "$rel_path" == pool/* ]]; then
               upload_args+=(--content-cache-control "$package_cache_control")

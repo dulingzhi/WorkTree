@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=RepositoryTree
+Comment=Git UI built with GPUI
+Exec=repositorytree
+Icon=repositorytree
+StartupWMClass=repositorytree
+Terminal=false
+Categories=Development;RevisionControl;

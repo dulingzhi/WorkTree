@@ -37,7 +37,7 @@ on:
         required: false
         type: string
       aur_repo:
-        description: "AUR Git remote URL. Defaults to AUR_GIT_REPOSITORY or ssh://aur@aur.archlinux.org/gitcomet.git."
+        description: "AUR Git remote URL. Defaults to AUR_GIT_REPOSITORY or ssh://aur@aur.archlinux.org/repositorytree.git."
         required: false
         default: ""
         type: string
@@ -129,7 +129,7 @@ jobs:
           fi
 
           if [ -z "$aur_repo" ]; then
-            aur_repo="ssh://aur@aur.archlinux.org/gitcomet.git"
+            aur_repo="ssh://aur@aur.archlinux.org/repositorytree.git"
           fi
 
           case "$aur_repo" in
@@ -143,7 +143,7 @@ jobs:
               aur_repo_path="${aur_repo#aur@aur.archlinux.org:}"
               ;;
             *)
-              echo "::error title=Invalid AUR remote::aur_repo must be an AUR Git URL like ssh://aur@aur.archlinux.org/gitcomet.git."
+              echo "::error title=Invalid AUR remote::aur_repo must be an AUR Git URL like ssh://aur@aur.archlinux.org/repositorytree.git."
               exit 1
               ;;
           esac
@@ -186,8 +186,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist/aur
-          binary_name="gitcomet-v${VERSION}-linux-x86_64.tar.gz"
-          source_name="gitcomet-source-v${VERSION}.tar.gz"
+          binary_name="repositorytree-v${VERSION}-linux-x86_64.tar.gz"
+          source_name="repositorytree-source-v${VERSION}.tar.gz"
 
           curl -fL --retry 3 --retry-all-errors \
             "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${binary_name}" \
@@ -215,8 +215,8 @@ jobs:
           su builder -c "cd '$GITHUB_WORKSPACE' && scripts/update-aur.sh \
             --aur-dir '$GITHUB_WORKSPACE/aur-repo' \
             --version '$VERSION' \
-            --binary-tar '$GITHUB_WORKSPACE/dist/aur/gitcomet-v${VERSION}-linux-x86_64.tar.gz' \
-            --source-tar '$GITHUB_WORKSPACE/dist/aur/gitcomet-source-v${VERSION}.tar.gz' \
+            --binary-tar '$GITHUB_WORKSPACE/dist/aur/repositorytree-v${VERSION}-linux-x86_64.tar.gz' \
+            --source-tar '$GITHUB_WORKSPACE/dist/aur/repositorytree-source-v${VERSION}.tar.gz' \
             --verify-source"
 
       - name: Emit dry-run summary
@@ -269,7 +269,7 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "gitcomet ${TAG}"
+          git commit -m "repositorytree ${TAG}"
 
           install -d -m 700 "$HOME/.ssh"
           key_path="$HOME/.ssh/aur"

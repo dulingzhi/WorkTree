@@ -18,13 +18,13 @@ appdir="${XDG_DATA_HOME:-${HOME}/.local/share}/applications"
 iconsroot="${XDG_DATA_HOME:-${HOME}/.local/share}/icons/hicolor"
 icon_sizes=(32 48 128 256 512)
 
-rm -f "${bindir}/gitcomet"
-rm -f "${appdir}/gitcomet.desktop"
+rm -f "${bindir}/repositorytree"
+rm -f "${appdir}/repositorytree.desktop"
 for size in "${icon_sizes[@]}"; do
-  rm -f "${iconsroot}/${size}x${size}/apps/gitcomet.png"
+  rm -f "${iconsroot}/${size}x${size}/apps/repositorytree.png"
 done
 
 command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$appdir" >/dev/null 2>&1 || true
 command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache "${iconsroot}" >/dev/null 2>&1 || true
 
-echo "Uninstalled GitComet desktop integration from ${prefix} and ~/.local/share."
+echo "Uninstalled RepositoryTree desktop integration from ${prefix} and ~/.local/share."

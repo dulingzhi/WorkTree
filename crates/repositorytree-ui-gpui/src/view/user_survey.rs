@@ -1,0 +1,31 @@
+use super::*;
+
+pub(super) const SURVEY_ID: &str = "repositorytree_user_survey_2026_04";
+pub(super) const SURVEY_URL: &str = "https://docs.google.com/forms/d/e/1FAIpQLSd8DKIl222UomSXrpv1q9rWodRlBSQo9pJDD62GbZEANTgD1A/viewform";
+pub(super) const SURVEY_POSTPONE_SECONDS: u64 = 60 * 60 * 24 * 7;
+
+impl RepositoryTreeView {
+    pub(in crate::view) fn maybe_show_user_survey_on_startup(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self.view_mode != RepositoryTreeViewMode::Normal
+            || !session::should_show_survey_prompt(SURVEY_ID)
+        {
+            return;
+        }
+
+        self.toast_host.update(cx, |host, cx| {
+            host.push_survey_toast(
+                SURVEY_ID,
+                crate::i18n::tr_str("misc.survey.name"),
+                crate::i18n::tr_str("misc.survey.message"),
+                SURVEY_URL,
+                crate::i18n::tr_str("misc.survey.open"),
+                crate::i18n::tr_str("misc.survey.postpone"),
+                SURVEY_POSTPONE_SECONDS,
+                cx,
+            );
+        });
+    }
+}

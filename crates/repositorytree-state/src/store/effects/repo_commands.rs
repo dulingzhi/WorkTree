@@ -1,0 +1,1411 @@
+use crate::msg::{Msg, RepoCommandKind};
+use repositorytree_core::auth::{
+    StagedGitAuth, clear_staged_git_auth, stage_git_auth_for_current_thread,
+};
+use repositorytree_core::error::{Error, ErrorKind};
+use repositorytree_core::services::{
+    CommandOutput, ConflictSide, ForcePushLease, GitRepository, InteractiveRebaseEntry, PullMode,
+    RemoteUrlKind, ResetMode, SafePushAfterCommitContext, SafePushAfterCommitTarget,
+    SubmoduleTrustTarget,
+};
+use std::path::{Component, Path, PathBuf};
+use std::sync::Arc;
+
+use super::super::{RepoId, executor::TaskExecutor, worker_channel::StoreWorkerSender};
+use super::util::{RepoMap, send_or_log, spawn_with_repo};
+
+const GITIGNORE_FILE_NAME: &str = repositorytree_core::gitignore::FILE_NAME;
+
+fn schedule_repo_command<F>(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    command: RepoCommandKind,
+    run: F,
+) where
+    F: FnOnce(Arc<dyn GitRepository>) -> Result<CommandOutput, Error> + Send + 'static,
+{
+    spawn_with_repo(executor, repos, repo_id, msg_tx, move |repo, msg_tx| {
+        let result = run(repo);
+        send_or_log(
+            &msg_tx,
+            Msg::Internal(crate::msg::InternalMsg::RepoCommandFinished {
+                repo_id,
+                command,
+                result,
+            }),
+        );
+    });
+}
+
+fn normalize_worktree_relative_path(path: &Path) -> Result<PathBuf, Error> {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::Normal(part) => normalized.push(part),
+            Component::ParentDir => {
+                if !normalized.pop() {
+                    return Err(Error::new(ErrorKind::Backend(
+                        rust_i18n::t!("store.effects.outside_workdir_error").to_string(),
+                    )));
+                }
+            }
+            Component::RootDir | Component::Prefix(_) => {
+                return Err(Error::new(ErrorKind::Backend(
+                    rust_i18n::t!("store.effects.outside_workdir_error").to_string(),
+                )));
+            }
+        }
+    }
+    if normalized.as_os_str().is_empty() {
+        return Err(Error::new(ErrorKind::Backend(
+            rust_i18n::t!("store.effects.worktree_path_empty").to_string(),
+        )));
+    }
+    Ok(normalized)
+}
+
+fn run_with_git_auth<R>(
+    auth: Option<StagedGitAuth>,
+    run: impl FnOnce() -> Result<R, Error>,
+) -> Result<R, Error> {
+    if let Some(auth) = auth {
+        stage_git_auth_for_current_thread(auth);
+        let result = run();
+        clear_staged_git_auth();
+        result
+    } else {
+        run()
+    }
+}
+
+pub(super) struct AddSubmoduleRequest {
+    pub(super) url: String,
+    pub(super) path: PathBuf,
+    pub(super) branch: Option<String>,
+    pub(super) name: Option<String>,
+    pub(super) force: bool,
+    pub(super) approved_sources: Vec<SubmoduleTrustTarget>,
+    pub(super) auth: Option<StagedGitAuth>,
+}
+
+pub(super) fn schedule_save_worktree_file(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    path: PathBuf,
+    contents: String,
+    stage: bool,
+) {
+    let command_path = path.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::SaveWorktreeFile {
+            path: command_path,
+            stage,
+        },
+        move |repo| {
+            let relative_path = normalize_worktree_relative_path(&path)?;
+            let full = repo.spec().workdir.join(&relative_path);
+            if let Some(parent) = full.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| Error::new(ErrorKind::Io(e.kind())))?;
+            }
+            std::fs::write(&full, contents.as_bytes())
+                .map_err(|e| Error::new(ErrorKind::Io(e.kind())))?;
+            if stage {
+                let path_ref: &Path = &relative_path;
+                repo.stage(&[path_ref])?;
+            }
+            Ok(CommandOutput {
+                command: if stage {
+                    rust_i18n::t!(
+                        "store.effects.save_worktree_file_staged_label",
+                        path = relative_path.display()
+                    )
+                    .to_string()
+                } else {
+                    rust_i18n::t!(
+                        "store.effects.save_worktree_file_label",
+                        path = relative_path.display()
+                    )
+                    .to_string()
+                },
+                stdout: String::new(),
+                stderr: String::new(),
+                exit_code: Some(0),
+            })
+        },
+    );
+}
+
+/// Append patterns to the repository-root `.gitignore`.
+///
+/// The read and the write happen in the same worker closure on purpose. Doing
+/// the read in the UI would mean holding the file's contents across a
+/// user-visible dialog and then writing the whole thing back, clobbering any
+/// competing edit from the file editor, an external editor, or another window.
+pub(super) fn schedule_append_gitignore_patterns(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    patterns: Vec<String>,
+) {
+    let command_patterns = patterns.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::AppendGitignorePatterns {
+            patterns: command_patterns,
+        },
+        move |repo| {
+            // Routed through the same guard as every other worktree write, even
+            // though the name is a constant, so the invariant holds by
+            // construction rather than by reading this function.
+            let relative_path = normalize_worktree_relative_path(Path::new(GITIGNORE_FILE_NAME))?;
+            let full = repo.spec().workdir.join(&relative_path);
+
+            // Read bytes and convert explicitly: `read_to_string` would report a
+            // Latin-1 `.gitignore` as a bare `InvalidData` I/O error, which tells
+            // the user nothing about what to do next. Never rewrite it lossily.
+            let existing = match std::fs::read(&full) {
+                Ok(bytes) => String::from_utf8(bytes).map_err(|_| {
+                    Error::new(ErrorKind::Backend(
+                        rust_i18n::t!(
+                            "store.effects.gitignore_not_utf8",
+                            file = GITIGNORE_FILE_NAME
+                        )
+                        .to_string(),
+                    ))
+                })?,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+                Err(e) => return Err(Error::new(ErrorKind::Io(e.kind()))),
+            };
+
+            let Some(updated) = repositorytree_core::gitignore::append_patterns(&existing, &patterns)
+            else {
+                return Ok(CommandOutput {
+                    command: rust_i18n::t!(
+                        "store.effects.update_gitignore_label",
+                        file = GITIGNORE_FILE_NAME
+                    )
+                    .to_string(),
+                    stdout: repositorytree_core::gitignore::NOTHING_TO_ADD.to_string(),
+                    stderr: String::new(),
+                    exit_code: Some(0),
+                });
+            };
+
+            std::fs::write(&full, updated.as_bytes())
+                .map_err(|e| Error::new(ErrorKind::Io(e.kind())))?;
+
+            Ok(CommandOutput {
+                command: rust_i18n::t!(
+                    "store.effects.update_gitignore_label",
+                    file = GITIGNORE_FILE_NAME
+                )
+                .to_string(),
+                stdout: String::new(),
+                stderr: String::new(),
+                exit_code: Some(0),
+            })
+        },
+    );
+}
+
+pub(super) fn schedule_export_patch(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    commit_id: repositorytree_core::domain::CommitId,
+    dest: PathBuf,
+) {
+    let command_commit_id = commit_id.clone();
+    let command_dest = dest.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::ExportPatch {
+            commit_id: command_commit_id,
+            dest: command_dest,
+        },
+        move |repo| repo.export_patch_with_output(&commit_id, &dest),
+    );
+}
+
+pub(super) fn schedule_apply_patch(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    patch: PathBuf,
+) {
+    let command_patch = patch.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::ApplyPatch {
+            patch: command_patch,
+        },
+        move |repo| repo.apply_patch_with_output(&patch),
+    );
+}
+
+pub(super) fn schedule_add_worktree(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    path: PathBuf,
+    reference: Option<String>,
+) {
+    let command_path = path.clone();
+    let command_reference = reference.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::AddWorktree {
+            path: command_path,
+            reference: command_reference,
+        },
+        move |repo| repo.add_worktree_with_output(&path, reference.as_deref()),
+    );
+}
+
+pub(super) fn schedule_remove_worktree(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    path: PathBuf,
+) {
+    let command_path = path.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::RemoveWorktree { path: command_path },
+        move |repo| repo.remove_worktree_with_output(&path),
+    );
+}
+
+pub(super) fn schedule_force_remove_worktree(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    path: PathBuf,
+) {
+    let command_path = path.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::ForceRemoveWorktree { path: command_path },
+        move |repo| repo.force_remove_worktree_with_output(&path),
+    );
+}
+
+pub(super) fn schedule_add_submodule(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    request: AddSubmoduleRequest,
+) {
+    let AddSubmoduleRequest {
+        url,
+        path,
+        branch,
+        name,
+        force,
+        approved_sources,
+        auth,
+    } = request;
+    let command_url = url.clone();
+    let command_path = path.clone();
+    let command_branch = branch.clone();
+    let command_name = name.clone();
+    let command_sources = approved_sources.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::AddSubmodule {
+            url: command_url,
+            path: command_path,
+            branch: command_branch,
+            name: command_name,
+            force,
+            approved_sources: command_sources,
+        },
+        move |repo| {
+            run_with_git_auth(auth, || {
+                repo.add_submodule_with_output(
+                    &url,
+                    &path,
+                    branch.as_deref(),
+                    name.as_deref(),
+                    force,
+                    &approved_sources,
+                )
+            })
+        },
+    );
+}
+
+pub(super) fn schedule_update_submodules(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    approved_sources: Vec<SubmoduleTrustTarget>,
+    auth: Option<StagedGitAuth>,
+) {
+    let command_sources = approved_sources.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::UpdateSubmodules {
+            approved_sources: command_sources,
+        },
+        move |repo| {
+            run_with_git_auth(auth, || {
+                repo.update_submodules_with_output(&approved_sources)
+            })
+        },
+    );
+}
+
+pub(super) fn schedule_check_submodule_add_trust(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    url: String,
+    path: PathBuf,
+    branch: Option<String>,
+    name: Option<String>,
+    force: bool,
+) {
+    spawn_with_repo(executor, repos, repo_id, msg_tx, move |repo, msg_tx| {
+        let result = repo.check_submodule_add_trust(&url, &path);
+        send_or_log(
+            &msg_tx,
+            Msg::Internal(crate::msg::InternalMsg::SubmoduleAddTrustChecked {
+                repo_id,
+                url,
+                path,
+                branch,
+                name,
+                force,
+                result,
+            }),
+        );
+    });
+}
+
+pub(super) fn schedule_check_submodule_update_trust(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+) {
+    spawn_with_repo(executor, repos, repo_id, msg_tx, move |repo, msg_tx| {
+        let result = repo.check_submodule_update_trust();
+        send_or_log(
+            &msg_tx,
+            Msg::Internal(crate::msg::InternalMsg::SubmoduleUpdateTrustChecked { repo_id, result }),
+        );
+    });
+}
+
+pub(super) fn schedule_check_submodule_load_trust(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    path: PathBuf,
+) {
+    spawn_with_repo(executor, repos, repo_id, msg_tx, move |repo, msg_tx| {
+        let result = repo.check_submodule_load_trust(&path);
+        send_or_log(
+            &msg_tx,
+            Msg::Internal(crate::msg::InternalMsg::SubmoduleLoadTrustChecked {
+                repo_id,
+                path,
+                result,
+            }),
+        );
+    });
+}
+
+pub(super) fn schedule_load_submodule(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    path: PathBuf,
+    approved_sources: Vec<SubmoduleTrustTarget>,
+    auth: Option<StagedGitAuth>,
+) {
+    let command_path = path.clone();
+    let command_sources = approved_sources.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::LoadSubmodule {
+            path: command_path,
+            approved_sources: command_sources,
+        },
+        move |repo| {
+            run_with_git_auth(auth, || {
+                repo.load_submodule_with_output(&path, &approved_sources)
+            })
+        },
+    );
+}
+
+pub(super) fn schedule_change_submodule_pointer(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    path: PathBuf,
+    reference: String,
+) {
+    let command_path = path.clone();
+    let command_reference = reference.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::ChangeSubmodulePointer {
+            path: command_path,
+            reference: command_reference,
+        },
+        move |repo| repo.change_submodule_pointer_with_output(&path, &reference),
+    );
+}
+
+pub(super) fn schedule_remove_submodule(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    path: PathBuf,
+) {
+    let command_path = path.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::RemoveSubmodule { path: command_path },
+        move |repo| repo.remove_submodule_with_output(&path),
+    );
+}
+
+pub(super) fn schedule_stage_hunk(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    patch: String,
+) {
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::StageHunk,
+        move |repo| repo.apply_unified_patch_to_index_with_output(&patch, false),
+    );
+}
+
+pub(super) fn schedule_unstage_hunk(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    patch: String,
+) {
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::UnstageHunk,
+        move |repo| repo.apply_unified_patch_to_index_with_output(&patch, true),
+    );
+}
+
+pub(super) fn schedule_apply_worktree_patch(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    patch: String,
+    reverse: bool,
+) {
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::ApplyWorktreePatch { reverse },
+        move |repo| repo.apply_unified_patch_to_worktree_with_output(&patch, reverse),
+    );
+}
+
+pub(super) fn schedule_fetch_all(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    prune: bool,
+    auth: Option<StagedGitAuth>,
+    kind: RepoCommandKind,
+) {
+    schedule_repo_command(executor, repos, msg_tx, repo_id, kind, move |repo| {
+        run_with_git_auth(auth, || repo.fetch_all_with_output_prune(prune))
+    });
+}
+
+pub(super) fn schedule_prune_merged_branches(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+) {
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::PruneMergedBranches,
+        |repo| repo.prune_merged_branches_with_output(),
+    );
+}
+
+pub(super) fn schedule_prune_local_tags(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+) {
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::PruneLocalTags,
+        |repo| repo.prune_local_tags_with_output(),
+    );
+}
+
+pub(super) fn schedule_pull(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    mode: PullMode,
+    auth: Option<StagedGitAuth>,
+) {
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::Pull { mode },
+        move |repo| run_with_git_auth(auth, || repo.pull_with_output(mode)),
+    );
+}
+
+pub(super) fn schedule_pull_branch(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    remote: String,
+    branch: String,
+    auth: Option<StagedGitAuth>,
+) {
+    let command_remote = remote.clone();
+    let command_branch = branch.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::PullBranch {
+            remote: command_remote,
+            branch: command_branch,
+        },
+        move |repo| run_with_git_auth(auth, || repo.pull_branch_with_output(&remote, &branch)),
+    );
+}
+
+pub(super) fn schedule_merge_ref(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    reference: String,
+) {
+    let command_reference = reference.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::MergeRef {
+            reference: command_reference,
+        },
+        move |repo| repo.merge_ref_with_output(&reference),
+    );
+}
+
+pub(super) fn schedule_squash_ref(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    reference: String,
+) {
+    let command_reference = reference.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::SquashRef {
+            reference: command_reference,
+        },
+        move |repo| repo.squash_ref_with_output(&reference),
+    );
+}
+
+pub(super) fn schedule_push(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    auth: Option<StagedGitAuth>,
+) {
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::Push,
+        move |repo| run_with_git_auth(auth, || repo.push_with_output()),
+    );
+}
+
+pub(super) fn schedule_push_after_commit(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    target: SafePushAfterCommitTarget,
+    set_upstream: bool,
+    auth: Option<StagedGitAuth>,
+) {
+    let command_target = target.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::PushAfterCommit {
+            target: command_target,
+            set_upstream,
+        },
+        move |repo| {
+            run_with_git_auth(auth, || {
+                if set_upstream {
+                    repo.push_after_commit_set_upstream_with_output(&target)
+                } else {
+                    repo.push_after_commit_with_output(&target)
+                }
+            })
+        },
+    );
+}
+
+pub(super) fn schedule_safe_push_after_commit(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    context: SafePushAfterCommitContext,
+    auth: Option<StagedGitAuth>,
+) {
+    let finish_context = context.clone();
+    let follow_up_auth = auth.clone();
+    spawn_with_repo(executor, repos, repo_id, msg_tx, move |repo, msg_tx| {
+        let result = run_with_git_auth(auth, || repo.safe_push_after_commit(&context));
+        send_or_log(
+            &msg_tx,
+            Msg::Internal(crate::msg::InternalMsg::SafePushAfterCommitFinished {
+                repo_id,
+                context: finish_context,
+                auth: follow_up_auth,
+                result,
+            }),
+        );
+    });
+}
+
+pub(super) fn schedule_force_push(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    auth: Option<StagedGitAuth>,
+) {
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::ForcePush,
+        move |repo| run_with_git_auth(auth, || repo.push_force_with_output()),
+    );
+}
+
+pub(super) fn schedule_force_push_with_lease(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    lease: ForcePushLease,
+    auth: Option<StagedGitAuth>,
+) {
+    let command_lease = lease.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::ForcePushWithLease {
+            lease: command_lease,
+        },
+        move |repo| run_with_git_auth(auth, || repo.push_force_with_lease_with_output(&lease)),
+    );
+}
+
+pub(super) fn schedule_push_set_upstream(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    remote: String,
+    branch: String,
+    auth: Option<StagedGitAuth>,
+) {
+    let command_remote = remote.clone();
+    let command_branch = branch.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::PushSetUpstream {
+            remote: command_remote,
+            branch: command_branch,
+        },
+        move |repo| {
+            run_with_git_auth(auth, || {
+                repo.push_set_upstream_with_output(&remote, &branch)
+            })
+        },
+    );
+}
+
+pub(super) fn schedule_set_upstream_branch(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    branch: String,
+    upstream: String,
+) {
+    let command_branch = branch.clone();
+    let command_upstream = upstream.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::SetUpstreamBranch {
+            branch: command_branch,
+            upstream: command_upstream,
+        },
+        move |repo| repo.set_upstream_branch_with_output(&branch, &upstream),
+    );
+}
+
+pub(super) fn schedule_unset_upstream_branch(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    branch: String,
+) {
+    let command_branch = branch.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::UnsetUpstreamBranch {
+            branch: command_branch,
+        },
+        move |repo| repo.unset_upstream_branch_with_output(&branch),
+    );
+}
+
+pub(super) fn schedule_fast_forward_branch(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    branch: String,
+) {
+    let command_branch = branch.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::FastForwardBranch {
+            branch: command_branch,
+        },
+        move |repo| repo.fast_forward_branch_to_upstream_with_output(&branch),
+    );
+}
+
+pub(super) fn schedule_delete_remote_branch(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    remote: String,
+    branch: String,
+    auth: Option<StagedGitAuth>,
+) {
+    let command_remote = remote.clone();
+    let command_branch = branch.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::DeleteRemoteBranch {
+            remote: command_remote,
+            branch: command_branch,
+        },
+        move |repo| {
+            run_with_git_auth(auth, || {
+                repo.delete_remote_branch_with_output(&remote, &branch)
+            })
+        },
+    );
+}
+
+pub(super) fn schedule_delete_remote_branches(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    remote: String,
+    branches: Vec<String>,
+    auth: Option<StagedGitAuth>,
+) {
+    let command_remote = remote.clone();
+    let command_branches = branches.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::DeleteRemoteBranches {
+            remote: command_remote,
+            branches: command_branches,
+        },
+        move |repo| {
+            run_with_git_auth(auth, || {
+                repo.delete_remote_branches_with_output(&remote, &branches)
+            })
+        },
+    );
+}
+
+pub(super) fn schedule_reset(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    target: String,
+    mode: ResetMode,
+) {
+    let command_target = target.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::Reset {
+            mode,
+            target: command_target,
+        },
+        move |repo| repo.reset_with_output(&target, mode),
+    );
+}
+
+pub(super) fn schedule_squash_commits(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    oldest: repositorytree_core::domain::CommitId,
+    expected_head: repositorytree_core::domain::CommitId,
+    message: String,
+    count: usize,
+) {
+    let command = RepoCommandKind::SquashCommits {
+        oldest: oldest.clone(),
+        expected_head: expected_head.clone(),
+        message: message.clone(),
+        count,
+    };
+    schedule_repo_command(executor, repos, msg_tx, repo_id, command, move |repo| {
+        repo.squash_commits_with_output(&oldest, &expected_head, &message)
+    });
+}
+
+pub(super) fn schedule_rebase(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    onto: String,
+) {
+    let command_onto = onto.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::Rebase { onto: command_onto },
+        move |repo| repo.rebase_with_output(&onto),
+    );
+}
+
+pub(super) fn schedule_rebase_continue(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    auth: Option<StagedGitAuth>,
+) {
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::RebaseContinue,
+        move |repo| run_with_git_auth(auth, || repo.rebase_continue_with_output()),
+    );
+}
+
+pub(super) fn schedule_rebase_abort(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+) {
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::RebaseAbort,
+        |repo| repo.rebase_abort_with_output(),
+    );
+}
+
+pub(super) fn schedule_interactive_rebase(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    base: String,
+    entries: Vec<InteractiveRebaseEntry>,
+    interactive: bool,
+) {
+    let base_for_cmd = base.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::InteractiveRebase {
+            base: base_for_cmd,
+            interactive,
+        },
+        move |repo| repo.interactive_rebase_with_output(&base, &entries),
+    );
+}
+
+pub(super) fn schedule_interactive_cherry_pick(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    entries: Vec<InteractiveRebaseEntry>,
+) {
+    let command_entries = entries.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::InteractiveCherryPick {
+            entries: command_entries,
+        },
+        move |repo| repo.interactive_cherry_pick_with_output(&entries),
+    );
+}
+
+pub(super) fn schedule_cherry_pick_commit(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    commit_id: repositorytree_core::domain::CommitId,
+    commit: bool,
+    mainline: Option<usize>,
+    summary: String,
+) {
+    let command_commit_id = commit_id.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::CherryPick {
+            commit_id: command_commit_id,
+            commit,
+            mainline,
+            summary,
+        },
+        move |repo| repo.cherry_pick_with_output(&commit_id, commit, mainline),
+    );
+}
+
+pub(super) fn schedule_merge_abort(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+) {
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::MergeAbort,
+        |repo| repo.merge_abort_with_output(),
+    );
+}
+
+pub(super) fn schedule_create_tag(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    name: String,
+    target: String,
+    message: Option<String>,
+    annotated: bool,
+) {
+    let command_name = name.clone();
+    let command_target = target.clone();
+    let command_message = message.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::CreateTag {
+            name: command_name,
+            target: command_target,
+            message: command_message,
+            annotated,
+        },
+        move |repo| repo.create_tag_with_output(&name, &target, message.as_deref(), annotated),
+    );
+}
+
+pub(super) fn schedule_delete_tag(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    name: String,
+) {
+    let command_name = name.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::DeleteTag { name: command_name },
+        move |repo| repo.delete_tag_with_output(&name),
+    );
+}
+
+pub(super) fn schedule_push_tag(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    remote: String,
+    name: String,
+    auth: Option<StagedGitAuth>,
+) {
+    let command_remote = remote.clone();
+    let command_name = name.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::PushTag {
+            remote: command_remote,
+            name: command_name,
+        },
+        move |repo| run_with_git_auth(auth, || repo.push_tag_with_output(&remote, &name)),
+    );
+}
+
+pub(super) fn schedule_delete_remote_tag(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    remote: String,
+    name: String,
+    auth: Option<StagedGitAuth>,
+) {
+    let command_remote = remote.clone();
+    let command_name = name.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::DeleteRemoteTag {
+            remote: command_remote,
+            name: command_name,
+        },
+        move |repo| run_with_git_auth(auth, || repo.delete_remote_tag_with_output(&remote, &name)),
+    );
+}
+
+pub(super) fn schedule_add_remote(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    name: String,
+    url: String,
+) {
+    let command_name = name.clone();
+    let command_url = url.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::AddRemote {
+            name: command_name,
+            url: command_url,
+        },
+        move |repo| repo.add_remote_with_output(&name, &url),
+    );
+}
+
+pub(super) fn schedule_remove_remote(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    name: String,
+) {
+    let command_name = name.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::RemoveRemote { name: command_name },
+        move |repo| repo.remove_remote_with_output(&name),
+    );
+}
+
+pub(super) fn schedule_set_remote_url(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    name: String,
+    url: String,
+    kind: RemoteUrlKind,
+) {
+    let command_name = name.clone();
+    let command_url = url.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::SetRemoteUrl {
+            name: command_name,
+            url: command_url,
+            kind,
+        },
+        move |repo| repo.set_remote_url_with_output(&name, &url, kind),
+    );
+}
+
+pub(super) fn schedule_checkout_conflict_side(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    path: PathBuf,
+    side: ConflictSide,
+) {
+    let command_path = path.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::CheckoutConflict {
+            path: command_path,
+            side,
+        },
+        move |repo| repo.checkout_conflict_side(&path, side),
+    );
+}
+
+pub(super) fn schedule_checkout_conflict_base(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    path: PathBuf,
+) {
+    let command_path = path.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::CheckoutConflictBase { path: command_path },
+        move |repo| repo.checkout_conflict_base(&path),
+    );
+}
+
+pub(super) fn schedule_accept_conflict_deletion(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    path: PathBuf,
+) {
+    let command_path = path.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::AcceptConflictDeletion { path: command_path },
+        move |repo| repo.accept_conflict_deletion(&path),
+    );
+}
+
+pub(super) fn schedule_launch_mergetool(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    path: PathBuf,
+) {
+    let command_path = path.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::LaunchMergetool { path: command_path },
+        move |repo| {
+            let result = repo.launch_mergetool(&path);
+            match result {
+                Ok(mergetool_result) => {
+                    if mergetool_result.success {
+                        Ok(CommandOutput {
+                            command: rust_i18n::t!(
+                                "store.effects.mergetool_label",
+                                tool = mergetool_result.tool_name
+                            )
+                            .to_string(),
+                            stdout: mergetool_result.output.stdout,
+                            stderr: mergetool_result.output.stderr,
+                            exit_code: mergetool_result.output.exit_code,
+                        })
+                    } else {
+                        Err(repositorytree_core::error::Error::new(
+                            repositorytree_core::error::ErrorKind::Backend(
+                                rust_i18n::t!(
+                                    "store.effects.mergetool_failed",
+                                    tool = mergetool_result.tool_name
+                                )
+                                .to_string(),
+                            ),
+                        ))
+                    }
+                }
+                Err(e) => Err(e),
+            }
+        },
+    );
+}

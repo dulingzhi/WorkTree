@@ -1,13 +1,13 @@
-# GitComet Shortcuts
+# RepositoryTree Shortcuts
 
 This file documents the keyboard shortcuts currently wired in the GPUI application.
 
 Source of truth:
-- `crates/gitcomet-ui-gpui/src/app.rs`
-- `crates/gitcomet-ui-gpui/src/focused_diff.rs`
-- `crates/gitcomet-ui-gpui/src/view/terminal_panel.rs`
-- `crates/gitcomet-ui-gpui/src/view/panels/main/diff_view.rs`
-- `crates/gitcomet-ui-gpui/src/view/conflict_resolver.rs`
+- `crates/repositorytree-ui-gpui/src/app.rs`
+- `crates/repositorytree-ui-gpui/src/focused_diff.rs`
+- `crates/repositorytree-ui-gpui/src/view/terminal_panel.rs`
+- `crates/repositorytree-ui-gpui/src/view/panels/main/diff_view.rs`
+- `crates/repositorytree-ui-gpui/src/view/conflict_resolver.rs`
 
 Notes:
 - `Cmd` and `Option` are the macOS names. `Ctrl` and `Alt` are the Windows/Linux equivalents.
@@ -16,7 +16,7 @@ Notes:
 
 ## App window shortcuts
 
-These shortcuts apply in the normal GitComet window.
+These shortcuts apply in the normal RepositoryTree window.
 
 | Action | macOS | Windows / Linux | Notes |
 | --- | --- | --- | --- |
@@ -31,16 +31,16 @@ These shortcuts apply in the normal GitComet window.
 | Previous repository tab | `Cmd-PageUp`, `Cmd-{`, `Option-Cmd-Left` | `Ctrl-PageUp`, `Ctrl-Shift-Tab` | |
 | Next repository tab | `Cmd-PageDown`, `Cmd-}`, `Option-Cmd-Right` | `Ctrl-PageDown`, `Ctrl-Tab` | |
 | Toggle full screen | `Ctrl-Cmd-F` | `F11` | |
-| Quit GitComet | `Cmd-Q` | `Ctrl-Q` | |
+| Quit RepositoryTree | `Cmd-Q` | `Ctrl-Q` | |
 
 macOS-only window-management shortcuts:
 - `Cmd-M`: Minimize the active window.
-- `Cmd-H`: Hide GitComet.
+- `Cmd-H`: Hide RepositoryTree.
 - `Option-Cmd-H`: Hide other applications.
 
 ## Text input shortcuts
 
-These shortcuts apply when a GitComet text input has focus.
+These shortcuts apply when a RepositoryTree text input has focus.
 
 ### Editing
 
@@ -74,8 +74,8 @@ These shortcuts apply when a GitComet text input has focus.
 | Delete word to the left / right | `Option-Backspace`, `Option-Delete` | `Ctrl-Backspace`, `Ctrl-Delete` | |
 
 Compatibility note:
-- GitComet also keeps the opposite modifier family wired in text inputs where practical, so `Alt`-based word movement and `Ctrl`-based editing aliases remain available as portability fallbacks.
-- Diff-navigation fallbacks stay active from focused GitComet text inputs for `F1`, `F4`, `F2`, `F3`, `F7`, `Shift-F7`, `Alt-Up`, and `Alt-Down` when the input does not handle those keys itself.
+- RepositoryTree also keeps the opposite modifier family wired in text inputs where practical, so `Alt`-based word movement and `Ctrl`-based editing aliases remain available as portability fallbacks.
+- Diff-navigation fallbacks stay active from focused RepositoryTree text inputs for `F1`, `F4`, `F2`, `F3`, `F7`, `Shift-F7`, `Alt-Up`, and `Alt-Down` when the input does not handle those keys itself.
 
 ### Commit composer
 
@@ -95,7 +95,7 @@ These shortcuts apply when the embedded terminal has focus.
 | Scroll terminal history | `Shift-PageUp`, `Shift-PageDown`, `Shift-Home`, `Shift-End` | `Shift-PageUp`, `Shift-PageDown`, `Shift-Home`, `Shift-End` | Only in the normal screen buffer. |
 
 Shell-input note:
-- Plain `Ctrl-C`, `Ctrl-V`, and `Ctrl-A` keep going to the shell instead of GitComet clipboard handling.
+- Plain `Ctrl-C`, `Ctrl-V`, and `Ctrl-A` keep going to the shell instead of RepositoryTree clipboard handling.
 
 Mouse and menu behavior:
 - Left-drag selects visible terminal text.
@@ -109,7 +109,7 @@ These shortcuts apply in the main diff panel, including conflict resolution view
 
 | Action | macOS | Windows / Linux | Scope / notes |
 | --- | --- | --- | --- |
-| Search the current diff | `Cmd-F` | `Ctrl-F` | If rendered markdown preview is open, GitComet switches back to source mode before opening search. |
+| Search the current diff | `Cmd-F` | `Ctrl-F` | If rendered markdown preview is open, RepositoryTree switches back to source mode before opening search. |
 | Insert a newline in diff search | `Shift-Enter` | `Shift-Enter` | Diff search only. The search box also has Match Case, Whole Word, and Regex toggles. |
 | Previous search match | `F2` | `F2` | While diff search is open. |
 | Next search match | `F3` | `F3` | While diff search is open. |
@@ -135,7 +135,7 @@ These shortcuts apply in the main diff panel, including conflict resolution view
 
 Preview-mode note:
 - Rendered markdown preview hides the raw diff navigation controls and ignores the raw-diff-only view toggles, whitespace toggle, and conflict navigation hotkeys until you return to source mode.
-- The diff navigation keys above still work while a GitComet text input has focus, but search activation, `Escape`, view toggles, and staging `Space` remain tied to the active diff surface rather than text inputs.
+- The diff navigation keys above still work while a RepositoryTree text input has focus, but search activation, `Escape`, view toggles, and staging `Space` remain tied to the active diff surface rather than text inputs.
 
 ## Context menu shortcuts
 

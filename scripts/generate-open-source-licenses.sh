@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OUT_FILE="$ROOT_DIR/crates/gitcomet-ui-gpui/assets/open_source_licenses.tsv"
+OUT_FILE="$ROOT_DIR/crates/repositorytree-ui-gpui/assets/open_source_licenses.tsv"
 TMP_FILE="$(mktemp)"
 
 # Bundled assets that are not crates at all. These head the file, ahead of the

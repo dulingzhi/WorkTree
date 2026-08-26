@@ -1,0 +1,81 @@
+# 简体中文目录，键结构与 confirm.en.yml 一一对应；`%{name}` 占位符保留。
+confirm:
+  common:
+    quit_title: "退出 RepositoryTree？"
+    close_window_title: "关闭窗口？"
+  merge_abort:
+    title_merge: "中止合并？"
+    body_merge: "这将中止当前的合并并恢复到合并前的状态。已解决的冲突将会丢失。"
+    title_rebase_or_apply: "中止应用/变基？"
+    body_rebase_or_apply: "这将中止进行中的补丁应用或变基并恢复到之前的状态。已解决的冲突将会丢失。"
+    title_cherry_pick: "中止拣选？"
+    body_cherry_pick: "这将中止当前的拣选并恢复到之前的状态。已解决的冲突将会丢失。"
+    go_cherry_pick: "中止拣选"
+  pull_reconcile:
+    title: "拉取：选择策略"
+    body: "无法快进合并。请选择合并还是变基。"
+    command_merge: "合并：git pull --no-rebase"
+    command_rebase: "变基：git pull --rebase"
+    merge: "合并"
+    rebase: "变基"
+  stash_drop:
+    title: "丢弃贮藏？"
+    body: "这将永久移除此贮藏条目。"
+    drop: "丢弃"
+  delete_remote_branch:
+    title: "删除远程分支？"
+    body: "这将永久删除远程仓库上的该分支。"
+    delete: "删除"
+  force_delete_branch:
+    title: "仍要删除分支？"
+    body: "这将永久删除该本地分支，即使它尚未完全合并。"
+    delete_anyway: "仍然删除"
+  force_remove_worktree:
+    title_with_branch: "仍要删除工作树和分支？"
+    title: "仍要删除工作树？"
+    body_with_branch: "此工作树包含已修改或未跟踪的文件。RepositoryTree 将强制移除它，然后删除本地分支“%{branch}”。"
+    body: "此工作树包含已修改或未跟踪的文件。"
+    delete_anyway: "仍然删除"
+  submodule_remove:
+    title: "移除子模块"
+    remove: "移除"
+  remote_remove:
+    title: "移除远程仓库"
+    remote_line: "远程仓库：%{name}"
+    remove: "移除"
+  worktree_remove:
+    title_with_branch: "移除工作树和分支"
+    title: "移除工作树"
+    body_with_branch: "这将移除工作树文件夹并删除本地分支“%{branch}”。"
+    remove: "移除"
+  stage_conflict_markers:
+    title: "暂存未解决的冲突"
+    lead_one: "此文件仍包含合并冲突标记："
+    lead_many: "%{count} 个文件仍包含合并冲突标记："
+    more: "…另有 %{count} 个"
+    body: "暂存会将冲突标记为已解决，因此这些标记将作为文件内容被提交。"
+    stage_anyway: "仍然暂存"
+  force_push:
+    title: "强制推送"
+    body_lease: "仅当 %{remote}/%{branch} 仍指向 %{expected}，且 %{local_branch} 的检出提交仍为 %{local_head} 时，才会执行更新。"
+    body: "如果您的分支已经分叉，这将覆盖远程历史。"
+    go_lease: "带租约强制推送"
+    go: "强制推送"
+  unsaved_file_edits:
+    text_one: "1 个已编辑的文件尚未保存。请保存，或放弃这些更改。"
+    text_many: "%{count} 个已编辑的文件尚未保存。请保存，或放弃这些更改。"
+    discard_and_close: "放弃并关闭"
+    discard_and_quit: "放弃并退出"
+    save_all: "全部保存"
+  terminal_shutdown:
+    title: "关闭终端？"
+    terminal_one: "终端"
+    terminal_many: "%{count} 个终端"
+    text_one: "仍有 1 个命令正在%{label}中运行。取消可保持终端开启，也可终止它以继续。"
+    text_many: "仍有 %{count} 个命令正在%{label}中运行。取消可保持终端开启，也可终止它以继续。"
+    terminate_and_quit: "终止并退出"
+    terminate_and_close: "终止并关闭"
+  rebase_onto:
+    title: "变基"
+    note: "这会改写提交历史。请避免对已推送到共享分支的提交进行变基。"
+    go: "变基"

@@ -1,0 +1,143 @@
+[package]
+name = "repositorytree-ui-gpui"
+build = "build.rs"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+benchmarks = [
+    "repositorytree-core/benchmarks",
+    "repositorytree-state/benchmarks",
+    "repositorytree-git-gix/benchmarks",
+    "dep:repositorytree-git-gix",
+    "gpui/test-support",
+]
+
+[dependencies]
+alacritty_terminal = { workspace = true }
+dekobon-tree-sitter-groovy = { workspace = true }
+fontdb = { workspace = true }
+futures = { workspace = true }
+repositorytree-core = { workspace = true }
+repositorytree-tree-sitter-alloc = { path = "../repositorytree-tree-sitter-alloc" }
+repositorytree-git-gix = { workspace = true, optional = true }
+repositorytree-state = { workspace = true }
+gpui = { workspace = true }
+gpui_platform = { workspace = true }
+image = { workspace = true }
+jiff = { workspace = true }
+lru = { workspace = true }
+md-5 = { workspace = true }
+memchr = { workspace = true }
+mimalloc = { workspace = true }
+palette = { workspace = true }
+pulldown-cmark = { workspace = true }
+regex = { workspace = true }
+rust-i18n = { workspace = true }
+rustc-hash = { workspace = true }
+resvg = { workspace = true }
+semver = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+smallvec = { workspace = true }
+smol = { workspace = true }
+stats_alloc = { workspace = true }
+sys-locale = { workspace = true }
+sysinfo = { workspace = true }
+tempfile = { workspace = true }
+tree-sitter = { workspace = true }
+tree-sitter-asm = { workspace = true }
+tree-sitter-bash = { workspace = true }
+tree-sitter-bicep = { workspace = true }
+tree-sitter-c = { workspace = true }
+tree-sitter-c-sharp = { workspace = true }
+tree-sitter-clojure-orchard = { workspace = true }
+tree-sitter-cpp = { workspace = true }
+tree-sitter-css = { workspace = true }
+tree-sitter-dart = { workspace = true }
+tree-sitter-diff = { workspace = true }
+tree-sitter-elixir = { workspace = true }
+tree-sitter-erlang = { workspace = true }
+tree-sitter-fsharp = { workspace = true }
+tree-sitter-gitcommit = { workspace = true }
+tree-sitter-go = { workspace = true }
+tree-sitter-gomod = { workspace = true }
+tree-sitter-gowork = { workspace = true }
+tree-sitter-haskell = { workspace = true }
+tree-sitter-html = { workspace = true }
+tree-sitter-jinja-dialects = { workspace = true }
+tree-sitter-javascript = { workspace = true }
+tree-sitter-java = { workspace = true }
+tree-sitter-jsdoc = { workspace = true }
+tree-sitter-json = { workspace = true }
+tree-sitter-julia = { workspace = true }
+tree-sitter-kotlin-sg = { workspace = true }
+tree-sitter-lua = { workspace = true }
+tree-sitter-make = { workspace = true }
+tree-sitter-md = { workspace = true }
+tree-sitter-nix = { workspace = true }
+tree-sitter-objc = { workspace = true }
+tree-sitter-ocaml = { workspace = true }
+tree-sitter-php = { workspace = true }
+tree-sitter-powershell = { workspace = true }
+tree-sitter-python = { workspace = true }
+tree-sitter-r = { workspace = true }
+tree-sitter-regex = { workspace = true }
+tree-sitter-ruby = { workspace = true }
+tree-sitter-rust = { workspace = true }
+tree-sitter-scala = { workspace = true }
+tree-sitter-sequel = { workspace = true }
+tree-sitter-solidity = { workspace = true }
+tree-sitter-svelte-ng = { workspace = true }
+tree-sitter-swift = { workspace = true }
+tree-sitter-toml-ng = { workspace = true }
+tree-sitter-typescript = { workspace = true }
+tree-sitter-vue = { workspace = true }
+tree-sitter-xml = { workspace = true }
+tree-sitter-yaml = { workspace = true }
+tree-sitter-zig = { workspace = true }
+unicode-segmentation = { workspace = true }
+url = { workspace = true }
+ureq = { workspace = true }
+anyhow = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+# Used to SIGTERM the terminal child process group on Linux and macOS.
+rustix = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+x11-clipboard = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+metal = "0.33"
+# Only the macOS menu types derive `JsonSchema`; gpui pulls schemars in on every
+# platform regardless, so this gate documents the use rather than saving a build.
+schemars = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+repositorytree-win32-window-utils = { path = "../win32-window-utils" }
+raw-window-handle = { workspace = true }
+
+[dev-dependencies]
+# Only entries that add features over `[dependencies]` belong here — a plain
+# restatement is dead weight, since tests already see every regular dependency.
+repositorytree-core = { workspace = true, features = ["test-support"] }
+repositorytree-state = { workspace = true, features = ["test-support"] }
+gpui = { workspace = true, features = ["test-support"] }
+criterion = { workspace = true }
+
+[build-dependencies]
+resvg = { workspace = true }
+
+[[bench]]
+name = "performance"
+harness = false
+required-features = ["benchmarks"]

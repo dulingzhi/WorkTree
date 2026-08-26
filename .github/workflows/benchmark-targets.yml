@@ -73,10 +73,10 @@ jobs:
         run: rustc -vV
 
       - name: Compile Criterion performance bench
-        run: cargo bench -p gitcomet-ui-gpui --features benchmarks --bench performance --no-run --locked
+        run: cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance --no-run --locked
 
       - name: Compile UI performance support binaries
-        run: cargo build -p gitcomet-ui-gpui --features benchmarks --bin perf_budget_report --bin perf_idle_resource --locked
+        run: cargo build -p repositorytree-ui-gpui --features benchmarks --bin perf_budget_report --bin perf_idle_resource --locked
 
       - name: Compile app launch performance harness
-        run: cargo build -p gitcomet --bin perf-app-launch --locked
+        run: cargo build -p repositorytree --bin perf-app-launch --locked

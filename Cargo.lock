@@ -2299,192 +2299,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e629b9b98ef3dd8afe6ca2bd0f89306cec16d43d907889945bc5d6687f2f13c7"
 
 [[package]]
-name = "gitcomet"
-version = "0.2.1"
-dependencies = [
- "clap",
- "embed-resource",
- "gitcomet-core",
- "gitcomet-git",
- "gitcomet-git-gix",
- "gitcomet-state",
- "gitcomet-ui-gpui",
- "gitcomet-win32-window-utils",
- "log",
- "mimalloc",
- "rustc-hash 2.1.3",
- "serde",
- "serde_json",
- "signal-hook",
- "sysinfo",
- "tempfile",
- "wayland-client",
-]
-
-[[package]]
-name = "gitcomet-core"
-version = "0.2.1"
-dependencies = [
- "chardetng",
- "encoding_rs",
- "memchr",
- "regex",
- "rustc-hash 2.1.3",
- "smallvec",
- "strsim",
- "tempfile",
- "thiserror 2.0.20",
-]
-
-[[package]]
-name = "gitcomet-git"
-version = "0.2.1"
-dependencies = [
- "gitcomet-core",
-]
-
-[[package]]
-name = "gitcomet-git-gix"
-version = "0.2.1"
-dependencies = [
- "gitcomet-core",
- "gix",
- "rust-i18n",
- "rustc-hash 2.1.3",
- "syn 3.0.3",
- "tempfile",
-]
-
-[[package]]
-name = "gitcomet-state"
-version = "0.2.1"
-dependencies = [
- "gitcomet-core",
- "gix",
- "notify",
- "rust-i18n",
- "rustc-hash 2.1.3",
- "serde",
- "serde_json",
- "smallvec",
- "smol",
- "tempfile",
-]
-
-[[package]]
-name = "gitcomet-tree-sitter-alloc"
-version = "0.2.1"
-dependencies = [
- "tree-sitter",
-]
-
-[[package]]
-name = "gitcomet-ui-gpui"
-version = "0.2.1"
-dependencies = [
- "alacritty_terminal",
- "anyhow",
- "criterion",
- "dekobon-tree-sitter-groovy",
- "fontdb 0.24.0",
- "futures",
- "gitcomet-core",
- "gitcomet-git-gix",
- "gitcomet-state",
- "gitcomet-tree-sitter-alloc",
- "gitcomet-win32-window-utils",
- "gpui",
- "gpui_platform",
- "image",
- "jiff",
- "lru",
- "md-5",
- "memchr",
- "metal",
- "mimalloc",
- "palette",
- "pulldown-cmark",
- "raw-window-handle",
- "regex",
- "resvg",
- "rust-i18n",
- "rustc-hash 2.1.3",
- "rustix",
- "schemars",
- "semver",
- "serde",
- "serde_json",
- "smallvec",
- "smol",
- "stats_alloc",
- "sys-locale",
- "sysinfo",
- "tempfile",
- "tree-sitter",
- "tree-sitter-asm",
- "tree-sitter-bash",
- "tree-sitter-bicep",
- "tree-sitter-c",
- "tree-sitter-c-sharp",
- "tree-sitter-clojure-orchard",
- "tree-sitter-cpp",
- "tree-sitter-css",
- "tree-sitter-dart",
- "tree-sitter-diff",
- "tree-sitter-elixir",
- "tree-sitter-erlang",
- "tree-sitter-fsharp",
- "tree-sitter-gitcommit",
- "tree-sitter-go",
- "tree-sitter-gomod",
- "tree-sitter-gowork",
- "tree-sitter-haskell",
- "tree-sitter-html",
- "tree-sitter-java",
- "tree-sitter-javascript",
- "tree-sitter-jinja-dialects",
- "tree-sitter-jsdoc",
- "tree-sitter-json",
- "tree-sitter-julia",
- "tree-sitter-kotlin-sg",
- "tree-sitter-lua",
- "tree-sitter-make",
- "tree-sitter-md",
- "tree-sitter-nix",
- "tree-sitter-objc",
- "tree-sitter-ocaml",
- "tree-sitter-php",
- "tree-sitter-powershell",
- "tree-sitter-python",
- "tree-sitter-r",
- "tree-sitter-regex",
- "tree-sitter-ruby",
- "tree-sitter-rust",
- "tree-sitter-scala",
- "tree-sitter-sequel",
- "tree-sitter-solidity",
- "tree-sitter-svelte-ng",
- "tree-sitter-swift",
- "tree-sitter-toml-ng",
- "tree-sitter-typescript",
- "tree-sitter-vue",
- "tree-sitter-xml",
- "tree-sitter-yaml",
- "tree-sitter-zig",
- "unicode-segmentation",
- "ureq",
- "url",
- "x11-clipboard",
-]
-
-[[package]]
-name = "gitcomet-win32-window-utils"
-version = "0.1.7"
-dependencies = [
- "windows-sys 0.61.2",
-]
-
-[[package]]
 name = "gix"
 version = "0.86.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6199,6 +6013,192 @@ name = "renderdoc-sys"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19b30a45b0cd0bcca8037f3d0dc3421eaf95327a17cad11964fb8179b4fc4832"
+
+[[package]]
+name = "repositorytree"
+version = "0.2.1"
+dependencies = [
+ "clap",
+ "embed-resource",
+ "log",
+ "mimalloc",
+ "repositorytree-core",
+ "repositorytree-git",
+ "repositorytree-git-gix",
+ "repositorytree-state",
+ "repositorytree-ui-gpui",
+ "repositorytree-win32-window-utils",
+ "rustc-hash 2.1.3",
+ "serde",
+ "serde_json",
+ "signal-hook",
+ "sysinfo",
+ "tempfile",
+ "wayland-client",
+]
+
+[[package]]
+name = "repositorytree-core"
+version = "0.2.1"
+dependencies = [
+ "chardetng",
+ "encoding_rs",
+ "memchr",
+ "regex",
+ "rustc-hash 2.1.3",
+ "smallvec",
+ "strsim",
+ "tempfile",
+ "thiserror 2.0.20",
+]
+
+[[package]]
+name = "repositorytree-git"
+version = "0.2.1"
+dependencies = [
+ "repositorytree-core",
+]
+
+[[package]]
+name = "repositorytree-git-gix"
+version = "0.2.1"
+dependencies = [
+ "gix",
+ "repositorytree-core",
+ "rust-i18n",
+ "rustc-hash 2.1.3",
+ "syn 3.0.3",
+ "tempfile",
+]
+
+[[package]]
+name = "repositorytree-state"
+version = "0.2.1"
+dependencies = [
+ "gix",
+ "notify",
+ "repositorytree-core",
+ "rust-i18n",
+ "rustc-hash 2.1.3",
+ "serde",
+ "serde_json",
+ "smallvec",
+ "smol",
+ "tempfile",
+]
+
+[[package]]
+name = "repositorytree-tree-sitter-alloc"
+version = "0.2.1"
+dependencies = [
+ "tree-sitter",
+]
+
+[[package]]
+name = "repositorytree-ui-gpui"
+version = "0.2.1"
+dependencies = [
+ "alacritty_terminal",
+ "anyhow",
+ "criterion",
+ "dekobon-tree-sitter-groovy",
+ "fontdb 0.24.0",
+ "futures",
+ "gpui",
+ "gpui_platform",
+ "image",
+ "jiff",
+ "lru",
+ "md-5",
+ "memchr",
+ "metal",
+ "mimalloc",
+ "palette",
+ "pulldown-cmark",
+ "raw-window-handle",
+ "regex",
+ "repositorytree-core",
+ "repositorytree-git-gix",
+ "repositorytree-state",
+ "repositorytree-tree-sitter-alloc",
+ "repositorytree-win32-window-utils",
+ "resvg",
+ "rust-i18n",
+ "rustc-hash 2.1.3",
+ "rustix",
+ "schemars",
+ "semver",
+ "serde",
+ "serde_json",
+ "smallvec",
+ "smol",
+ "stats_alloc",
+ "sys-locale",
+ "sysinfo",
+ "tempfile",
+ "tree-sitter",
+ "tree-sitter-asm",
+ "tree-sitter-bash",
+ "tree-sitter-bicep",
+ "tree-sitter-c",
+ "tree-sitter-c-sharp",
+ "tree-sitter-clojure-orchard",
+ "tree-sitter-cpp",
+ "tree-sitter-css",
+ "tree-sitter-dart",
+ "tree-sitter-diff",
+ "tree-sitter-elixir",
+ "tree-sitter-erlang",
+ "tree-sitter-fsharp",
+ "tree-sitter-gitcommit",
+ "tree-sitter-go",
+ "tree-sitter-gomod",
+ "tree-sitter-gowork",
+ "tree-sitter-haskell",
+ "tree-sitter-html",
+ "tree-sitter-java",
+ "tree-sitter-javascript",
+ "tree-sitter-jinja-dialects",
+ "tree-sitter-jsdoc",
+ "tree-sitter-json",
+ "tree-sitter-julia",
+ "tree-sitter-kotlin-sg",
+ "tree-sitter-lua",
+ "tree-sitter-make",
+ "tree-sitter-md",
+ "tree-sitter-nix",
+ "tree-sitter-objc",
+ "tree-sitter-ocaml",
+ "tree-sitter-php",
+ "tree-sitter-powershell",
+ "tree-sitter-python",
+ "tree-sitter-r",
+ "tree-sitter-regex",
+ "tree-sitter-ruby",
+ "tree-sitter-rust",
+ "tree-sitter-scala",
+ "tree-sitter-sequel",
+ "tree-sitter-solidity",
+ "tree-sitter-svelte-ng",
+ "tree-sitter-swift",
+ "tree-sitter-toml-ng",
+ "tree-sitter-typescript",
+ "tree-sitter-vue",
+ "tree-sitter-xml",
+ "tree-sitter-yaml",
+ "tree-sitter-zig",
+ "unicode-segmentation",
+ "ureq",
+ "url",
+ "x11-clipboard",
+]
+
+[[package]]
+name = "repositorytree-win32-window-utils"
+version = "0.1.7"
+dependencies = [
+ "windows-sys 0.61.2",
+]
 
 [[package]]
 name = "resvg"

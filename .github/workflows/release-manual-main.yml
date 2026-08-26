@@ -124,7 +124,7 @@ jobs:
           tag="${{ needs.validate.outputs.tag }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$tag" -m "GitComet $tag"
+          git tag -a "$tag" -m "RepositoryTree $tag"
           git push origin "$tag"
 
       - name: Create draft GitHub release
@@ -136,7 +136,7 @@ jobs:
           tag="${{ needs.validate.outputs.tag }}"
           prerelease="${{ needs.validate.outputs.prerelease }}"
 
-          args=(release create "$tag" --repo "$GITHUB_REPOSITORY" --title "GitComet $tag" --target "$GITHUB_SHA" --generate-notes --draft)
+          args=(release create "$tag" --repo "$GITHUB_REPOSITORY" --title "RepositoryTree $tag" --target "$GITHUB_SHA" --generate-notes --draft)
           if [ "$prerelease" = "true" ]; then
             args+=(--prerelease)
           fi
@@ -243,7 +243,7 @@ jobs:
     with:
       tag: ${{ needs.validate.outputs.tag }}
       version: ${{ needs.validate.outputs.version }}
-      package_base_url: "https://apt.gitcomet.dev/windows"
+      package_base_url: "https://apt.repositorytree.dev/windows"
       product_id: ${{ vars.MICROSOFT_STORE_PRODUCT_ID }}
       package_languages: ${{ vars.MICROSOFT_STORE_PACKAGE_LANGUAGES }}
       store_listing_languages: ${{ vars.MICROSOFT_STORE_LISTING_LANGUAGES }}
@@ -259,7 +259,7 @@ jobs:
     with:
       tag: ${{ needs.validate.outputs.tag }}
       version: ${{ needs.validate.outputs.version }}
-      package_base_url: "https://apt.gitcomet.dev/windows"
+      package_base_url: "https://apt.repositorytree.dev/windows"
       product_id: ${{ vars.MICROSOFT_STORE_PRODUCT_ID }}
       package_languages: ${{ vars.MICROSOFT_STORE_PACKAGE_LANGUAGES }}
       store_listing_languages: ${{ vars.MICROSOFT_STORE_LISTING_LANGUAGES }}

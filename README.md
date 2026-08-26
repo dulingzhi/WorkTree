@@ -1,29 +1,29 @@
-## <img alt="GitComet logo" src="assets/gitcomet_logo.svg" width="26" /> GitComet
+## <img alt="RepositoryTree logo" src="assets/repositorytree_logo.svg" width="26" /> RepositoryTree
 
-[![Build Status](https://github.com/Auto-Explore/GitComet/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/Auto-Explore/GitComet/actions/workflows/rust.yml)
+[![Build Status](https://github.com/RepositoryTree/RepositoryTree/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/RepositoryTree/RepositoryTree/actions/workflows/rust.yml)
 [![Discord](https://img.shields.io/badge/Discord-Join%20chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/2ufDGP8RnA)
-[![Website](https://img.shields.io/badge/Website-gitcomet.dev-0A66C2?logo=googlechrome&logoColor=white)](https://gitcomet.dev)
+[![Website](https://img.shields.io/badge/Website-repositorytree.dev-0A66C2?logo=googlechrome&logoColor=white)](https://repositorytree.dev)
 [![AutoExplore](https://img.shields.io/badge/AutoExplore-autoexplore.ai-0B7A75?logo=safari&logoColor=white)](https://autoexplore.ai)
-[![license](https://img.shields.io/github/license/Auto-Explore/gitcomet.svg)](LICENSE)
-[![latest](https://img.shields.io/github/v/release/Auto-Explore/gitcomet.svg)](https://github.com/Auto-Explore/gitcomet/releases/latest)
-[![downloads](https://img.shields.io/github/downloads/Auto-Explore/gitcomet/total)](https://github.com/Auto-Explore/gitcomet/releases)
+[![license](https://img.shields.io/github/license/RepositoryTree/RepositoryTree.svg)](LICENSE)
+[![latest](https://img.shields.io/github/v/release/RepositoryTree/RepositoryTree.svg)](https://github.com/RepositoryTree/RepositoryTree/releases/latest)
+[![downloads](https://img.shields.io/github/downloads/RepositoryTree/RepositoryTree/total)](https://github.com/RepositoryTree/RepositoryTree/releases)
 
 **Fastest Open Source Git GUI**
 
-GitComet is built for teams that want fast Git operations with local-first privacy, familiar workflows, and open source freedom.
+RepositoryTree is built for teams that want fast Git operations with local-first privacy, familiar workflows, and open source freedom.
 
 Available for Linux, Windows, and macOS.
 
-<img alt="GitComet demo" src="assets/gitcomet-0.2.0.gif"/>
+<img alt="RepositoryTree demo" src="assets/repositorytree-0.2.0.gif"/>
 
 ### Download
 
-Download the latest prebuilt binaries/installers from [GitHub Releases](https://github.com/Auto-Explore/GitComet/releases).
+Download the latest prebuilt binaries/installers from [GitHub Releases](https://github.com/RepositoryTree/RepositoryTree/releases).
 
 <details>
 <summary>Windows</summary>
 
-Download the latest Windows installer or portable binary from [GitHub Releases](https://github.com/Auto-Explore/GitComet/releases).
+Download the latest Windows installer or portable binary from [GitHub Releases](https://github.com/RepositoryTree/RepositoryTree/releases).
 
 Install from the Microsoft Store:
 
@@ -36,10 +36,10 @@ Install from the Microsoft Store:
 <details>
 <summary>Homebrew (macOS / Linux)</summary>
 
-App and `gitcomet` command from tap:
+App and `repositorytree` command from tap:
 
 ```bash
-brew install --cask gitcomet
+brew install --cask repositorytree
 ```
 
 On Linux, the cask installs the AppImage build. If your system cannot launch AppImages, use the APT repo, AUR package, release tarball, or `.deb` instead.
@@ -50,8 +50,8 @@ On Linux, the cask installs the AppImage build. If your system cannot launch App
 <summary>AUR (Arch Linux)</summary>
 
 ```bash
-git clone https://aur.archlinux.org/gitcomet.git
-cd gitcomet && makepkg -si
+git clone https://aur.archlinux.org/repositorytree.git
+cd repositorytree && makepkg -si
 ```
 
 </details>
@@ -60,7 +60,7 @@ cd gitcomet && makepkg -si
 <summary>GURU (Gentoo Linux)</summary>
 
 ```bash
-emerge --ask dev-vcs/gitcomet
+emerge --ask dev-vcs/repositorytree
 ```
 
 </details>
@@ -69,10 +69,10 @@ emerge --ask dev-vcs/gitcomet
 <summary>apt (Debian/Ubuntu)</summary>
 
 ```bash
-curl -fsSL https://apt.gitcomet.dev/gitcomet-archive-keyring.gpg | sudo tee /usr/share/keyrings/gitcomet-archive-keyring.gpg >/dev/null
-curl -fsSL https://apt.gitcomet.dev/gitcomet.sources | sudo tee /etc/apt/sources.list.d/gitcomet.sources >/dev/null
+curl -fsSL https://apt.repositorytree.dev/repositorytree-archive-keyring.gpg | sudo tee /usr/share/keyrings/repositorytree-archive-keyring.gpg >/dev/null
+curl -fsSL https://apt.repositorytree.dev/repositorytree.sources | sudo tee /etc/apt/sources.list.d/repositorytree.sources >/dev/null
 sudo apt update
-sudo apt install gitcomet
+sudo apt install repositorytree
 ```
 
 If you install a Linux tarball or Homebrew binary on Debian, Ubuntu, or WSLg instead of the official `apt` package, install the GUI runtime libraries separately:
@@ -85,17 +85,17 @@ sudo apt install libxcb1 libxkbcommon0 libxkbcommon-x11-0
 
 ### Requirements
 
-GitComet requires a local Git installation of `2.50` or newer.
+RepositoryTree requires a local Git installation of `2.50` or newer.
 
-### GitComet User Survey
+### RepositoryTree User Survey
 
 We’re running this short survey to better understand how people use our Git GUI client in their daily work. Your feedback will help us improve the product and prioritize the features that matter most.
 
 https://docs.google.com/forms/d/e/1FAIpQLSd8DKIl222UomSXrpv1q9rWodRlBSQo9pJDD62GbZEANTgD1A/viewform?usp=dialog
 
-### Why GitComet
+### Why RepositoryTree
 
-GitComet started from frustration with existing tools on huge codebases like Chromium. We could not find a product that stays responsive and functional when browsing large repositories and file diffs.
+RepositoryTree started from frustration with existing tools on huge codebases like Chromium. We could not find a product that stays responsive and functional when browsing large repositories and file diffs.
 
 ### Editions (planned)
 
@@ -119,13 +119,13 @@ GitComet started from frustration with existing tools on huge codebases like Chr
   - Code test coverage workflows
   - GitHub and Azure DevOps integrations
   - Priority improvements during early access
-- Join waitlist: [gitcomet.dev/#editions](https://gitcomet.dev/#editions)
+- Join waitlist: [repositorytree.dev/#editions](https://repositorytree.dev/#editions)
 
 ### Build from source
 
 ```bash
-cargo build -p gitcomet --features ui-gpui,gix
-cargo run -p gitcomet --features ui-gpui,gix -- /path/to/repo
+cargo build -p repositorytree --features ui-gpui,gix
+cargo run -p repositorytree --features ui-gpui,gix -- /path/to/repo
 ```
 
 ### Contributing
@@ -134,16 +134,16 @@ Developer setup, workspace layout, testing, and coverage docs live in `CONTRIBUT
 
 ### Using as a Git difftool / mergetool
 
-GitComet can be used as a standalone diff and merge tool invoked by `git difftool` and `git mergetool`. It supports both headless (algorithm-only) and GUI (interactive GPUI window) modes.
+RepositoryTree can be used as a standalone diff and merge tool invoked by `git difftool` and `git mergetool`. It supports both headless (algorithm-only) and GUI (interactive GPUI window) modes.
 
 #### Setup / uninstall (recommended)
 
 ```bash
-# Configure Git globally to use GitComet for both difftool + mergetool
-gitcomet setup
+# Configure Git globally to use RepositoryTree for both difftool + mergetool
+repositorytree setup
 
-# Remove GitComet integration safely
-gitcomet uninstall
+# Remove RepositoryTree integration safely
+repositorytree uninstall
 ```
 
 - Use `--local` to target only the current repository instead of global config.
@@ -158,41 +158,41 @@ This setup registers both headless and GUI variants with `guiDefault=auto`, so G
 Built-in `setup` writes these Git config entries:
 
 ```bash
-GITCOMET_BIN="/absolute/path/to/gitcomet"
+REPOSITORYTREE_BIN="/absolute/path/to/repositorytree"
 
 # Headless tool: algorithm-only merge/diff for CI, scripts, and no-display environments
-git config --global merge.tool gitcomet
-git config --global mergetool.gitcomet.cmd \
-  "'$GITCOMET_BIN' mergetool --base \"\$BASE\" --local \"\$LOCAL\" --remote \"\$REMOTE\" --merged \"\$MERGED\""
+git config --global merge.tool repositorytree
+git config --global mergetool.repositorytree.cmd \
+  "'$REPOSITORYTREE_BIN' mergetool --base \"\$BASE\" --local \"\$LOCAL\" --remote \"\$REMOTE\" --merged \"\$MERGED\""
 git config --global mergetool.trustExitCode true
-git config --global mergetool.gitcomet.trustExitCode true
+git config --global mergetool.repositorytree.trustExitCode true
 git config --global mergetool.prompt false
 
-git config --global diff.tool gitcomet
-git config --global difftool.gitcomet.cmd \
-  "'$GITCOMET_BIN' difftool --local \"\$LOCAL\" --remote \"\$REMOTE\" --path \"\$MERGED\""
+git config --global diff.tool repositorytree
+git config --global difftool.repositorytree.cmd \
+  "'$REPOSITORYTREE_BIN' difftool --local \"\$LOCAL\" --remote \"\$REMOTE\" --path \"\$MERGED\""
 git config --global difftool.trustExitCode true
-git config --global difftool.gitcomet.trustExitCode true
+git config --global difftool.repositorytree.trustExitCode true
 git config --global difftool.prompt false
 
 # GUI tool: opens focused GPUI windows for interactive diff/merge
-git config --global merge.guitool gitcomet-gui
-git config --global mergetool.gitcomet-gui.cmd \
-  "'$GITCOMET_BIN' mergetool --gui --base \"\$BASE\" --local \"\$LOCAL\" --remote \"\$REMOTE\" --merged \"\$MERGED\""
-git config --global mergetool.gitcomet-gui.trustExitCode true
+git config --global merge.guitool repositorytree-gui
+git config --global mergetool.repositorytree-gui.cmd \
+  "'$REPOSITORYTREE_BIN' mergetool --gui --base \"\$BASE\" --local \"\$LOCAL\" --remote \"\$REMOTE\" --merged \"\$MERGED\""
+git config --global mergetool.repositorytree-gui.trustExitCode true
 
-git config --global diff.guitool gitcomet-gui
-git config --global difftool.gitcomet-gui.cmd \
-  "'$GITCOMET_BIN' difftool --gui --local \"\$LOCAL\" --remote \"\$REMOTE\" --path \"\$MERGED\""
-git config --global difftool.gitcomet-gui.trustExitCode true
+git config --global diff.guitool repositorytree-gui
+git config --global difftool.repositorytree-gui.cmd \
+  "'$REPOSITORYTREE_BIN' difftool --gui --local \"\$LOCAL\" --remote \"\$REMOTE\" --path \"\$MERGED\""
+git config --global difftool.repositorytree-gui.trustExitCode true
 
 # Auto-select GUI tool when DISPLAY is available, headless otherwise
 git config --global mergetool.guiDefault auto
 git config --global difftool.guiDefault auto
 ```
 
-Built-in `setup` stores previous user values for shared generic keys under `gitcomet.backup.*` (when needed).  
-Built-in `uninstall` restores those backups only when the key still has the setup-managed value. If the user changed a setting after setup, uninstall preserves that user-edited value and then removes GitComet-specific keys.
+Built-in `setup` stores previous user values for shared generic keys under `repositorytree.backup.*` (when needed).  
+Built-in `uninstall` restores those backups only when the key still has the setup-managed value. If the user changed a setting after setup, uninstall preserves that user-edited value and then removes RepositoryTree-specific keys.
 
 </details>
 
@@ -201,7 +201,7 @@ Built-in `uninstall` restores those backups only when the key still has the setu
 **Difftool:**
 
 ```bash
-gitcomet difftool --local <path> --remote <path> [--path <display_name>] [--label-left <label>] [--label-right <label>]
+repositorytree difftool --local <path> --remote <path> [--path <display_name>] [--label-left <label>] [--label-right <label>]
 ```
 
 Also reads `LOCAL`/`REMOTE` from environment as a fallback when invoked by Git.
@@ -209,46 +209,46 @@ Also reads `LOCAL`/`REMOTE` from environment as a fallback when invoked by Git.
 **Mergetool:**
 
 ```bash
-gitcomet mergetool --local <path> --remote <path> --merged <path> [--base <path>] [--label-local <label>] [--label-remote <label>] [--label-base <label>]
+repositorytree mergetool --local <path> --remote <path> --merged <path> [--base <path>] [--label-local <label>] [--label-remote <label>] [--label-base <label>]
 ```
 
 Also reads `LOCAL`/`REMOTE`/`MERGED`/`BASE` from environment. Base is optional for add/add conflicts.
 
 #### Compatibility
 
-KDiff3 and Meld invocation forms are supported (`--L1/--L2/--L3`, `-o/--output/--out`, `--base`, positional arguments), so GitComet can be a drop-in replacement.
+KDiff3 and Meld invocation forms are supported (`--L1/--L2/--L3`, `-o/--output/--out`, `--base`, positional arguments), so RepositoryTree can be a drop-in replacement.
 
 ### Themes
 
-GitComet supports built-in themes and user-provided custom themes.
+RepositoryTree supports built-in themes and user-provided custom themes.
 
-Built-in themes are embedded in the GitComet binary. Custom themes are loaded from JSON bundle files in your per-user themes directory, which GitComet creates on startup.
+Built-in themes are embedded in the RepositoryTree binary. Custom themes are loaded from JSON bundle files in your per-user themes directory, which RepositoryTree creates on startup.
 
 The full theme guide, including file locations, schema details, example bundles, and override behavior, now lives in [THEMES.md](docs/themes.md).
 
 ### Crash logs
 
-GitComet writes panic logs and abnormal-exit recovery state to:
+RepositoryTree writes panic logs and abnormal-exit recovery state to:
 
-- Linux: `$XDG_STATE_HOME/gitcomet/crashes/` (fallback: `~/.local/state/gitcomet/crashes/`)
-- macOS: `~/Library/Logs/gitcomet/crashes/`
-- Windows: `%LOCALAPPDATA%\gitcomet\crashes\` (fallback: `%APPDATA%\gitcomet\crashes\`)
+- Linux: `$XDG_STATE_HOME/repositorytree/crashes/` (fallback: `~/.local/state/repositorytree/crashes/`)
+- macOS: `~/Library/Logs/repositorytree/crashes/`
+- Windows: `%LOCALAPPDATA%\repositorytree\crashes\` (fallback: `%APPDATA%\repositorytree\crashes\`)
 
-On Linux, the directory normally is `~/.local/state/gitcomet/crashes/`.
-GitComet creates a process-specific `session-in-progress-<pid>.log` before it
+On Linux, the directory normally is `~/.local/state/repositorytree/crashes/`.
+RepositoryTree creates a process-specific `session-in-progress-<pid>.log` before it
 starts the GPUI runtime. A native abort, terminated UI, or GPUI event loop exit
 without an explicitly requested user shutdown leaves that marker behind; Rust
 panics also write `panic-*.log`. Error-level runtime diagnostics are mirrored to
 `last-runtime-error-<pid>.log`, including their source location and a backtrace,
 so fatal errors logged and consumed by the UI runtime remain reportable.
-Recovery ignores markers owned by still-running GitComet processes, so one open
+Recovery ignores markers owned by still-running RepositoryTree processes, so one open
 instance cannot consume another's crash state.
-On the next launch, GitComet snapshots recovered data as
+On the next launch, RepositoryTree snapshots recovered data as
 `pending-startup-report.log` and retains it until the user reports or dismisses
 the notification, so a failed subsequent launch cannot discard the report before
 its notification is visible.
 
-GitComet presents the report in the next UI launch and also prints its
+RepositoryTree presents the report in the next UI launch and also prints its
 prefilled GitHub issue URL and log path to the launching terminal. The report
 includes app version, platform, structured failure details, and a trimmed
 backtrace.
@@ -261,7 +261,7 @@ This project has been created with the help of AI tools, including OpenAI Codex 
 
 ### License
 
-GitComet is licensed under the GNU Affero General Public License Version 3
+RepositoryTree is licensed under the GNU Affero General Public License Version 3
 (AGPL-3.0-only). See `LICENSE-AGPL-3.0`.
 
 Copyright (C) 2026 AutoExplore Oy  

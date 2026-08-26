@@ -1,1 +1,1 @@
-cargo wix crates\gitcomet\Cargo.toml -p gitcomet --profile release --nocapture --output dist\gitcomet-local-test.msi
+cargo wix crates\repositorytree\Cargo.toml -p repositorytree --profile release --nocapture --output dist\repositorytree-local-test.msi

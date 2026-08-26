@@ -35,7 +35,7 @@ on:
         required: false
         type: string
       tap_repo:
-        description: "Target tap repository in OWNER/REPO form (e.g. Auto-Explore/homebrew-gitcomet). Defaults to HOMEBREW_TAP_REPO when omitted."
+        description: "Target tap repository in OWNER/REPO form (e.g. RepositoryTree/homebrew-repositorytree). Defaults to HOMEBREW_TAP_REPO when omitted."
         required: false
         default: ""
         type: string
@@ -121,7 +121,7 @@ jobs:
           fi
 
           if [ -z "$tap_repo" ]; then
-            tap_repo="${REPO_OWNER}/homebrew-gitcomet"
+            tap_repo="${REPO_OWNER}/homebrew-repositorytree"
           fi
 
           if ! [[ "$tap_repo" =~ ^[^/]+/[^/]+$ ]]; then
@@ -147,15 +147,15 @@ jobs:
           gh release view "${{ steps.norm.outputs.tag }}" --repo "$GITHUB_REPOSITORY" >/dev/null
           gh release download "${{ steps.norm.outputs.tag }}" \
             --repo "$GITHUB_REPOSITORY" \
-            --pattern "gitcomet.rb" \
+            --pattern "repositorytree.rb" \
             --dir dist \
             --clobber
-          test -f dist/gitcomet.rb
+          test -f dist/repositorytree.rb
 
       - name: Validate cask syntax
         run: |
           set -euo pipefail
-          ruby -c dist/gitcomet.rb
+          ruby -c dist/repositorytree.rb
 
       - name: Emit dry-run summary
         if: ${{ steps.norm.outputs.dry_run == 'true' }}
@@ -168,9 +168,9 @@ jobs:
             echo "- Target tap: \`${{ steps.norm.outputs.tap_repo }}\`"
             echo "- Target branch: \`${{ steps.norm.outputs.tap_branch }}\`"
             echo ""
-            echo "Cask preview (Casks/gitcomet.rb):"
+            echo "Cask preview (Casks/repositorytree.rb):"
             echo '```ruby'
-            cat dist/gitcomet.rb
+            cat dist/repositorytree.rb
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -192,18 +192,18 @@ jobs:
           rm -rf tap-repo
           git clone "https://x-access-token:${TAP_TOKEN}@github.com/${TAP_REPO}.git" tap-repo
           mkdir -p tap-repo/Casks
-          cp dist/gitcomet.rb tap-repo/Casks/gitcomet.rb
+          cp dist/repositorytree.rb tap-repo/Casks/repositorytree.rb
 
           pushd tap-repo >/dev/null
-          git add Casks/gitcomet.rb
-          if git ls-files --error-unmatch Formula/gitcomet-cli.rb >/dev/null 2>&1; then
-            git rm -f Formula/gitcomet-cli.rb
+          git add Casks/repositorytree.rb
+          if git ls-files --error-unmatch Formula/repositorytree-cli.rb >/dev/null 2>&1; then
+            git rm -f Formula/repositorytree-cli.rb
           fi
-          if git ls-files --error-unmatch Formula/gitcomet.rb >/dev/null 2>&1; then
-            git rm -f Formula/gitcomet.rb
+          if git ls-files --error-unmatch Formula/repositorytree.rb >/dev/null 2>&1; then
+            git rm -f Formula/repositorytree.rb
           fi
 
-          if git diff --cached --quiet -- Casks/gitcomet.rb Formula/gitcomet-cli.rb Formula/gitcomet.rb; then
+          if git diff --cached --quiet -- Casks/repositorytree.rb Formula/repositorytree-cli.rb Formula/repositorytree.rb; then
             echo "No Homebrew cask changes detected; tap already up to date."
             popd >/dev/null
             exit 0
@@ -211,7 +211,7 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "gitcomet ${TAG}"
+          git commit -m "repositorytree ${TAG}"
           git push origin "HEAD:${TAP_BRANCH}"
           popd >/dev/null
 
