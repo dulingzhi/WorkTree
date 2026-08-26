@@ -49,6 +49,11 @@ impl AsRef<str> for JjCommitId {
 pub struct JjChange {
     pub change_id: ChangeId,
     pub commit_id: JjCommitId,
+    /// Parent change ids in jj's parent order (first parent first), short
+    /// form like [`ChangeId`]. Empty for the root change. Feeds the change
+    /// list's lane graph; parents outside the loaded page simply have no
+    /// row to connect to and the lane ends.
+    pub parent_ids: Vec<ChangeId>,
     /// The change has multiple heads (rewritten concurrently elsewhere).
     pub divergent: bool,
     /// The change's commit has conflicts embedded.

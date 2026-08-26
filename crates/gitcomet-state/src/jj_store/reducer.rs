@@ -523,6 +523,7 @@ mod tests {
         JjChange {
             change_id: ChangeId(name.to_string()),
             commit_id: JjCommitId(format!("c{name}")),
+            parent_ids: Vec::new(),
             divergent: false,
             conflicted: false,
             is_working_copy: working_copy,

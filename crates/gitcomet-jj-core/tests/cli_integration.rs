@@ -428,3 +428,43 @@ fn new_change_at_opens_a_change_on_top_of_a_selected_row() {
     assert_eq!(page.changes.len(), 1, "the new @ has exactly one parent");
     assert_eq!(page.changes[0].change_id, base.change_id);
 }
+
+/// The log carries each change's parent change ids — the input the change
+/// list's lane graph is computed from. A fresh repo is a linear chain with
+/// the root change at the bottom (its parent list is empty).
+#[test]
+fn log_reports_parent_change_ids_down_to_the_empty_root() {
+    if !tooling_ready() {
+        return;
+    }
+    let temp = tempfile::tempdir().expect("tempdir");
+    init_colocated_repo(temp.path());
+    let repo = open_repo(temp.path());
+    let first = commit_change(&repo, "base change");
+    let second = commit_change(&repo, "tip change");
+
+    let page = repo.log(&JjLogQuery::new("all()", 10)).expect("log");
+    let by_id = |id: &ChangeId| {
+        page.changes
+            .iter()
+            .find(|change| change.change_id == *id)
+            .unwrap_or_else(|| panic!("change {id} missing from log"))
+    };
+
+    // @ sits on top of the tip; the tip on top of the base.
+    assert_eq!(
+        by_id(&second.change_id).parent_ids,
+        vec![first.change_id.clone()],
+        "the tip's only parent is the base change"
+    );
+    let root = page
+        .changes
+        .iter()
+        .find(|change| change.parent_ids.is_empty())
+        .expect("the root change has no parents");
+    assert!(
+        root.change_id.0.starts_with('z'),
+        "jj spells the root change id with z's: {}",
+        root.change_id.0
+    );
+}

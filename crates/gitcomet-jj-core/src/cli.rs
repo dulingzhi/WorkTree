@@ -29,7 +29,13 @@ use crate::version::{self, JjVersionSupport, MAX_TESTED_JJ_VERSION, MIN_SUPPORTE
 /// Flag cells are single letters so a template change cannot silently
 /// shift meaning; the parser rejects anything else. Validated against
 /// jj 0.44 (which supports `\x1f`/`\x1e` escapes but not `\u{..}`).
-const LOG_TEMPLATE: &str = r#"change_id.short() ++ "\x1f" ++ commit_id.short() ++ "\x1f" ++ if(divergent, "D", "N") ++ "\x1f" ++ bookmarks.join(",") ++ "\x1f" ++ if(current_working_copy, "at", "no") ++ "\x1f" ++ author.name() ++ "\x1f" ++ author.email() ++ "\x1f" ++ committer.timestamp().format("%s") ++ "\x1f" ++ if(conflict, "C", "N") ++ "\x1f" ++ description ++ "\x1e""#;
+/// Parents are a `,`-joined list of parent change ids (the lambda
+/// `parents.map(|c| …)` form is validated against jj 0.44; the root
+/// change leaves the field empty) and sit *before* the description:
+/// the description must stay the last field, because the record framing
+/// only trims newlines at the record's edges — jj's `new -m` appends a
+/// trailing newline that a last-field description relies on losing.
+const LOG_TEMPLATE: &str = r#"change_id.short() ++ "\x1f" ++ commit_id.short() ++ "\x1f" ++ if(divergent, "D", "N") ++ "\x1f" ++ bookmarks.join(",") ++ "\x1f" ++ if(current_working_copy, "at", "no") ++ "\x1f" ++ author.name() ++ "\x1f" ++ author.email() ++ "\x1f" ++ committer.timestamp().format("%s") ++ "\x1f" ++ if(conflict, "C", "N") ++ "\x1f" ++ parents.map(|c| c.change_id().short()).join(",") ++ "\x1f" ++ description ++ "\x1e""#;
 
 /// `jj bookmark list` rows. `--all` is required for remote refs to appear;
 /// `remote` is the empty string for the local half of a pair. There is no
@@ -554,6 +560,7 @@ mod tests {
         JjChange {
             change_id: ChangeId(suffix.to_string()),
             commit_id: crate::domain::JjCommitId(format!("c{suffix}")),
+            parent_ids: Vec::new(),
             divergent: false,
             conflicted: false,
             is_working_copy: false,

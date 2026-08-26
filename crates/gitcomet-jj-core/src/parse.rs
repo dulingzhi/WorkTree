@@ -24,7 +24,7 @@ use crate::domain::{
 
 const FIELD_SEP: char = '\x1f';
 const RECORD_SEP: char = '\x1e';
-const LOG_FIELD_COUNT: usize = 10;
+const LOG_FIELD_COUNT: usize = 11;
 const BOOKMARK_FIELD_COUNT: usize = 4;
 const OP_FIELD_COUNT: usize = 4;
 
@@ -88,9 +88,19 @@ pub(crate) fn parse_log_records(output: &str) -> Result<Vec<JjChange>> {
         } else {
             fields[3].split(',').map(str::to_string).collect()
         };
+        // The root change (and only it) has no parents, so the field may be
+        // empty; every present token must be non-empty. The field sits
+        // before the description (see LOG_TEMPLATE for why the description
+        // must stay last).
+        let parent_ids = fields[9]
+            .split(',')
+            .filter(|token| !token.is_empty())
+            .map(|token| ChangeId(token.to_string()))
+            .collect();
         changes.push(JjChange {
             change_id: ChangeId(non_empty(&fields, 0, what)?.to_string()),
             commit_id: JjCommitId(non_empty(&fields, 1, what)?.to_string()),
+            parent_ids,
             divergent: flag(&fields, 2, "D", what)?,
             bookmarks,
             is_working_copy: match fields[4] {
@@ -106,7 +116,7 @@ pub(crate) fn parse_log_records(output: &str) -> Result<Vec<JjChange>> {
             author_email: fields[6].to_string(),
             committed_at_unix: unix_seconds(&fields, 7, what)?,
             conflicted: flag(&fields, 8, "C", what)?,
-            description: fields[9].to_string(),
+            description: fields[10].to_string(),
         });
     }
     Ok(changes)
@@ -227,7 +237,7 @@ mod tests {
     const FS: char = '\x1f';
     const RS: char = '\x1e';
 
-    #[allow(clippy::too_many_arguments)] // mirrors the ten log fields
+    #[allow(clippy::too_many_arguments)] // mirrors the eleven log fields
     fn log_record(
         change: &str,
         commit: &str,
@@ -239,9 +249,10 @@ mod tests {
         ts: &str,
         conflict: bool,
         desc: &str,
+        parents: &str,
     ) -> String {
         format!(
-            "{change}{FS}{commit}{FS}{}{FS}{bookmarks}{FS}{}{FS}{name}{FS}{email}{FS}{ts}{FS}{}{FS}{desc}{RS}\n",
+            "{change}{FS}{commit}{FS}{}{FS}{bookmarks}{FS}{}{FS}{name}{FS}{email}{FS}{ts}{FS}{}{FS}{parents}{FS}{desc}{RS}\n",
             if divergent { "D" } else { "N" },
             if at { "at" } else { "no" },
             if conflict { "C" } else { "N" },
@@ -261,12 +272,17 @@ mod tests {
             "1719000000",
             false,
             "describe the change",
+            "pmktrloyuskv",
         );
         let changes = parse_log_records(&output).expect("record parses");
         assert_eq!(changes.len(), 1);
         let change = &changes[0];
         assert_eq!(change.change_id.0, "wqnwyzpk");
         assert_eq!(change.commit_id.0, "019aa1e2");
+        assert_eq!(
+            change.parent_ids,
+            vec![ChangeId("pmktrloyuskv".to_string())]
+        );
         assert!(!change.divergent);
         assert!(!change.conflicted);
         assert!(change.is_working_copy);
@@ -275,6 +291,33 @@ mod tests {
         assert_eq!(change.author_email, "ada@example.com");
         assert_eq!(change.committed_at_unix, 1_719_000_000);
         assert_eq!(change.description, "describe the change");
+    }
+
+    #[test]
+    fn parses_merge_parents_and_the_empty_root_field() {
+        let merge = log_record(
+            "m", "cm", false, "", false, "n", "e", "0", false, "merge", "p1,p2",
+        );
+        let root = log_record(
+            "zzzzzzzzzzzz",
+            "c0",
+            false,
+            "",
+            false,
+            "n",
+            "e",
+            "0",
+            false,
+            "",
+            "",
+        );
+
+        let changes = parse_log_records(&format!("{merge}{root}")).expect("records parse");
+        assert_eq!(
+            changes[0].parent_ids,
+            vec![ChangeId("p1".to_string()), ChangeId("p2".to_string())]
+        );
+        assert!(changes[1].parent_ids.is_empty());
     }
 
     #[test]
@@ -290,6 +333,7 @@ mod tests {
             "0",
             false,
             "subject\n\nbody line",
+            "",
         );
         let changes = parse_log_records(&output).expect("record parses");
         assert_eq!(changes[0].description, "subject\n\nbody line");
@@ -310,15 +354,17 @@ mod tests {
                 "e",
                 "1",
                 true,
-                "divergent+conflict"
+                "divergent+conflict",
+                ""
             ),
-            log_record("a2", "c2", false, "", true, "n", "e", "2", false, "")
+            log_record("a2", "c2", false, "", true, "n", "e", "2", false, "", "a1")
         );
         let changes = parse_log_records(&output).expect("records parse");
         assert_eq!(changes.len(), 2);
         assert!(changes[0].divergent && changes[0].conflicted && !changes[0].is_working_copy);
         assert!(!changes[1].divergent && !changes[1].conflicted && changes[1].is_working_copy);
         assert_eq!(changes[1].description, "");
+        assert_eq!(changes[1].parent_ids, vec![ChangeId("a1".to_string())]);
     }
 
     #[test]
@@ -338,16 +384,17 @@ mod tests {
             "0",
             false,
             &format!("line{FS}line2"),
+            "",
         );
         assert!(parse_log_records(&injected).is_err());
     }
 
     #[test]
     fn bad_flags_and_timestamps_are_errors() {
-        let bad_flag = format!("a{FS}b{FS}X{FS}{FS}no{FS}n{FS}e{FS}0{FS}N{FS}d{RS}\n");
+        let bad_flag = format!("a{FS}b{FS}X{FS}{FS}no{FS}n{FS}e{FS}0{FS}N{FS}d{FS}{RS}\n");
         assert!(parse_log_records(&bad_flag).is_err());
 
-        let bad_wc = format!("a{FS}b{FS}N{FS}{FS}maybe{FS}n{FS}e{FS}0{FS}N{FS}d{RS}\n");
+        let bad_wc = format!("a{FS}b{FS}N{FS}{FS}maybe{FS}n{FS}e{FS}0{FS}N{FS}d{FS}{RS}\n");
         assert!(parse_log_records(&bad_wc).is_err());
 
         let bad_ts = log_record(
@@ -361,10 +408,11 @@ mod tests {
             "not-a-number",
             false,
             "d",
+            "",
         );
         assert!(parse_log_records(&bad_ts).is_err());
 
-        let empty_id = log_record("", "b", false, "", false, "n", "e", "0", false, "d");
+        let empty_id = log_record("", "b", false, "", false, "n", "e", "0", false, "d", "");
         assert!(parse_log_records(&empty_id).is_err());
     }
 
