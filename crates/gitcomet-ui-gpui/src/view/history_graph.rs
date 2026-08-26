@@ -104,12 +104,22 @@ pub struct GraphRow {
     pub is_merge: bool,
 }
 
-trait GraphCommitLike {
+/// What the lane layout needs from a log row. Implemented for git's
+/// `Commit` and — under the `jj` feature — for jj's `JjChange`, so the
+/// change list reuses the same lane algorithm and painter as the history
+/// list. The parent-id type is an associated type because the two domains
+/// key parents differently (`CommitId` vs `ChangeId`); both only need to
+/// compare as strings.
+pub(in crate::view) trait GraphCommitLike {
+    type ParentId: AsRef<str>;
+
     fn id_str(&self) -> &str;
-    fn parent_ids(&self) -> &[CommitId];
+    fn parent_ids(&self) -> &[Self::ParentId];
 }
 
 impl GraphCommitLike for Commit {
+    type ParentId = CommitId;
+
     fn id_str(&self) -> &str {
         self.id.as_ref()
     }
@@ -120,11 +130,39 @@ impl GraphCommitLike for Commit {
 }
 
 impl GraphCommitLike for &Commit {
+    type ParentId = CommitId;
+
     fn id_str(&self) -> &str {
         self.id.as_ref()
     }
 
     fn parent_ids(&self) -> &[CommitId] {
+        &self.parent_ids
+    }
+}
+
+#[cfg(feature = "jj")]
+impl GraphCommitLike for gitcomet_jj_core::JjChange {
+    type ParentId = gitcomet_jj_core::ChangeId;
+
+    fn id_str(&self) -> &str {
+        &self.change_id.0
+    }
+
+    fn parent_ids(&self) -> &[Self::ParentId] {
+        &self.parent_ids
+    }
+}
+
+#[cfg(feature = "jj")]
+impl GraphCommitLike for &gitcomet_jj_core::JjChange {
+    type ParentId = gitcomet_jj_core::ChangeId;
+
+    fn id_str(&self) -> &str {
+        &self.change_id.0
+    }
+
+    fn parent_ids(&self) -> &[Self::ParentId] {
         &self.parent_ids
     }
 }
@@ -717,7 +755,7 @@ pub fn compute_graph<'a, I>(
 where
     I: IntoIterator<Item = &'a str>,
 {
-    compute_graph_impl(commits, theme, branch_heads, active_head_target)
+    compute_graph_rows(commits, theme, branch_heads, active_head_target)
 }
 
 pub fn compute_graph_refs<'a, 'commit, I>(
@@ -727,6 +765,23 @@ pub fn compute_graph_refs<'a, 'commit, I>(
     active_head_target: Option<&str>,
 ) -> Vec<GraphRow>
 where
+    I: IntoIterator<Item = &'a str>,
+{
+    compute_graph_rows(commits, theme, branch_heads, active_head_target)
+}
+
+/// The domain-generic lane layout entry: one `GraphRow` per input row, in
+/// input order. The jj change list calls this with `&[&JjChange]`; parents
+/// outside the loaded page have no row to target, so their lanes simply
+/// end — the same degradation the paged git history already has.
+pub(in crate::view) fn compute_graph_rows<'a, C, I>(
+    commits: &[C],
+    theme: AppTheme,
+    branch_heads: I,
+    active_head_target: Option<&str>,
+) -> Vec<GraphRow>
+where
+    C: GraphCommitLike,
     I: IntoIterator<Item = &'a str>,
 {
     compute_graph_impl(commits, theme, branch_heads, active_head_target)
@@ -1333,5 +1388,85 @@ mod tests {
                 );
             }
         }
+    }
+}
+
+/// The jj flavor feeds the same lane layout `JjChange` rows: same column
+/// rules, same merge shape — only the id vocabulary differs.
+#[cfg(feature = "jj")]
+mod jj_tests {
+    use super::compute_graph_rows;
+    use crate::theme::AppTheme;
+    use gitcomet_jj_core::{ChangeId, JjChange, JjCommitId};
+
+    fn change(id: &str, parents: &[&str]) -> JjChange {
+        JjChange {
+            change_id: ChangeId(id.to_string()),
+            commit_id: JjCommitId(format!("c{id}")),
+            parent_ids: parents
+                .iter()
+                .map(|parent| ChangeId(parent.to_string()))
+                .collect(),
+            divergent: false,
+            conflicted: false,
+            is_working_copy: false,
+            bookmarks: Vec::new(),
+            author_name: String::new(),
+            author_email: String::new(),
+            committed_at_unix: 0,
+            description: String::new(),
+        }
+    }
+
+    fn graph(changes: &[JjChange]) -> Vec<super::GraphRow> {
+        let refs: Vec<&JjChange> = changes.iter().collect();
+        compute_graph_rows(
+            &refs,
+            AppTheme::gitcomet_dark(),
+            std::iter::empty::<&str>(),
+            None,
+        )
+    }
+
+    #[test]
+    fn a_linear_jj_history_stays_one_lane() {
+        let rows = graph(&[
+            change("tip", &["mid"]),
+            change("mid", &["base"]),
+            change("base", &[]),
+        ]);
+
+        assert_eq!(rows.len(), 3);
+        assert!(rows.iter().all(|row| row.node_col == 0));
+        assert!(rows.iter().all(|row| row.joins_in.is_empty()));
+        assert!(!rows[0].is_merge);
+    }
+
+    #[test]
+    fn a_jj_fork_births_a_second_lane_and_the_merge_joins_it() {
+        let rows = graph(&[
+            change("merge", &["tip", "side"]),
+            change("tip", &["base"]),
+            change("side", &["base"]),
+            change("base", &[]),
+        ]);
+
+        // The side change splits off into its own column...
+        assert_eq!(rows[2].lanes_now.len(), 2);
+        // ...and the merge row carries two live lanes out of the node.
+        assert_eq!(rows[0].lanes_next.len(), 2);
+        assert!(rows[0].is_merge);
+        assert!(!rows[1].is_merge);
+    }
+
+    #[test]
+    fn parents_beyond_the_page_leave_no_lane() {
+        // `base` names a parent that is not in the slice — the row must not
+        // grow a lane for it.
+        let rows = graph(&[change("tip", &["unloaded"]), change("other", &["unloaded"])]);
+
+        assert_eq!(rows.len(), 2);
+        assert!(rows.iter().all(|row| row.lanes_next.is_empty()));
+        assert!(rows.iter().all(|row| row.joins_in.is_empty()));
     }
 }
