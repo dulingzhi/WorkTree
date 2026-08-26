@@ -41,12 +41,16 @@ pub(super) fn panel(
         this.close_popover(cx);
     };
 
-    let mut dialog = ConfirmDialog::new("Merge commit?", DIALOG_380_WIDTH)
-        .text(theme, format!("Merge {short} into {current_branch}?"))
-        .note(
-            theme,
-            "Git resolves the merge with a merge commit when history diverges.",
-        );
+    let mut dialog = ConfirmDialog::new(
+        crate::i18n::tr("confirm.merge_commit.title"),
+        DIALOG_380_WIDTH,
+    )
+    .text(
+        theme,
+        crate::i18n::t!("confirm.merge_commit.body", short = short, current = current_branch)
+            .into_owned(),
+    )
+    .note(theme, crate::i18n::tr("confirm.merge_commit.note"));
     if !summary.is_empty() {
         dialog = dialog.note(theme, summary);
     }
@@ -55,7 +59,7 @@ pub(super) fn panel(
         theme,
         dialog_cancel_button("merge_commit_cancel", "merge_commit_cancel_hint", theme, cx),
         div().flex().items_center().gap_1().child(
-            components::Button::new("merge_commit_confirm", "Merge")
+            components::Button::new("merge_commit_confirm", crate::i18n::tr("confirm.merge_commit.go"))
                 .style(components::ButtonStyle::Filled)
                 .on_click(theme, cx, move |this, _e, _w, cx| dispatch(this, cx)),
         ),

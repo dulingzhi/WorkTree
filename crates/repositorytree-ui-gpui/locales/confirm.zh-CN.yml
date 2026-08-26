@@ -79,3 +79,14 @@ confirm:
     title: "变基"
     note: "这会改写提交历史。请避免对已推送到共享分支的提交进行变基。"
     go: "变基"
+  merge_commit:
+    title: "合并提交？"
+    body: "将 %{short} 合并到 %{current}？"
+    note: "当历史分叉时，Git 会通过合并提交来解决此次合并。"
+    go: "合并"
+  reset:
+    title: "重置"
+    note_hard: "硬重置会更新索引和工作树（破坏性）。"
+    note_mixed: "混合重置仅更新索引。"
+    note_soft: "软重置仅移动 HEAD。"
+    go: "重置"

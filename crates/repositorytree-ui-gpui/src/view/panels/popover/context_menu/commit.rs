@@ -507,7 +507,13 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
     // disabled rather than letting git reject it as "Already up to date".
     let merge_into_current_disabled = commit_is_ancestor_of_head(this, repo_id, commit_id);
     items.push(ContextMenuItem::Entry {
-        label: format!("Merge {short} into {current_branch}").into(),
+        label: crate::i18n::t!(
+            "cm.commit.merge_into_current",
+            short = short,
+            current = current_branch
+        )
+        .to_string()
+        .into(),
         icon: Some("icons/swap.svg".into()),
         shortcut: Some("M".into()),
         disabled: merge_into_current_disabled,

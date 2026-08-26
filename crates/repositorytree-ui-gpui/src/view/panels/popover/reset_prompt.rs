@@ -14,20 +14,20 @@ pub(super) fn panel(
         ResetMode::Hard => "--hard",
     };
 
-    ConfirmDialog::new("Reset", DIALOG_380_WIDTH)
+    ConfirmDialog::new(crate::i18n::tr("confirm.reset.title"), DIALOG_380_WIDTH)
         .text(theme, format!("{mode_label} → {target}"))
         .note(
             theme,
             match mode {
-                ResetMode::Hard => "Hard reset updates index + working tree (destructive).",
-                ResetMode::Mixed => "Mixed reset updates index only.",
-                ResetMode::Soft => "Soft reset moves HEAD only.",
+                ResetMode::Hard => crate::i18n::tr("confirm.reset.note_hard"),
+                ResetMode::Mixed => crate::i18n::tr("confirm.reset.note_mixed"),
+                ResetMode::Soft => crate::i18n::tr("confirm.reset.note_soft"),
             },
         )
         .render(
             theme,
             dialog_cancel_button("reset_cancel", "reset_cancel_hint", theme, cx),
-            components::Button::new("reset_go", "Reset")
+            components::Button::new("reset_go", crate::i18n::tr("confirm.reset.go"))
                 .style(components::ButtonStyle::Filled)
                 .on_click(theme, cx, move |this, _e, _w, cx| {
                     this.store.dispatch(Msg::Reset {

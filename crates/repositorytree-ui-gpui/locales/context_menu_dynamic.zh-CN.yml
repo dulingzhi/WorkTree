@@ -19,6 +19,7 @@ cm:
     cherry_pick: "拣选 %{count} 个提交…"
     interactive_rebase_child: "交互式变基 %{short} 的 %{count} 个子提交"
     interactive_rebase_children: "交互式变基 %{short} 的 %{count} 个子提交"
+    merge_into_current: "将 %{short} 合并到 %{current}"
   group:
     branch_count_one: "1 个分支"
     branch_count: "%{count} 个分支"

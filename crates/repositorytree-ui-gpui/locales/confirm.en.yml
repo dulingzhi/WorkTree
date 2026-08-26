@@ -6,8 +6,8 @@
 # This catalog covers the confirm popovers: abort merge/rebase/cherry-pick,
 # pull strategy, stash drop, delete remote/force-delete local branch,
 # remove worktree (plain and forced), remove submodule/remote, stage with
-# conflict markers, force push, unsaved file edits, terminal shutdown, and
-# rebase onto a ref.
+# conflict markers, force push, unsaved file edits, terminal shutdown,
+# rebase onto a ref, merge commit, and reset.
 #
 # NB: never name a key `on`/`off`/`yes`/`no` — YAML 1.1 parses them as
 # booleans and the dot-path silently breaks.
@@ -91,3 +91,14 @@ confirm:
     title: "Rebase"
     note: "This rewrites commit history. Avoid rebasing commits already pushed to a shared branch."
     go: "Rebase"
+  merge_commit:
+    title: "Merge commit?"
+    body: "Merge %{short} into %{current}?"
+    note: "Git resolves the merge with a merge commit when history diverges."
+    go: "Merge"
+  reset:
+    title: "Reset"
+    note_hard: "Hard reset updates index + working tree (destructive)."
+    note_mixed: "Mixed reset updates index only."
+    note_soft: "Soft reset moves HEAD only."
+    go: "Reset"

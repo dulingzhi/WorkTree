@@ -43,6 +43,7 @@
 "Copy link address": "复制链接地址"
 "Copy relative path": "复制相对路径"
 "Create branch": "创建分支"
+"Create branch from this commit": "从此提交创建分支"
 "Cut": "剪切"
 "Delete branch": "删除分支"
 "Delete remote branch…": "删除远程分支…"
@@ -161,6 +162,8 @@
 "Submodules (Add / Update / Open / Remove)": "子模块（添加 / 更新 / 打开 / 移除）"
 "Worktrees": "工作树"
 "Worktrees (Add / Refresh / Open / Remove)": "工作树（添加 / 刷新 / 打开 / 移除）"
+"Tags": "标签"
+"Tags (Click a tag to reveal its commit)": "标签（点击标签定位其提交）"
 
 # Interactive-rebase todo verbs: the row action word and the context-menu
 # entries share these gettext-style keys (rendered via `tr_en`).
