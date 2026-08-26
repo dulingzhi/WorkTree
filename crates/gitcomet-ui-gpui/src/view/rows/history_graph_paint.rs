@@ -3,7 +3,7 @@ use gpui::{App, Bounds, Pixels, Window, fill, point, px, size};
 use smallvec::SmallVec;
 
 #[allow(clippy::too_many_arguments)]
-pub(super) fn paint_history_graph(
+pub(in crate::view) fn paint_history_graph(
     theme: AppTheme,
     row: &history_graph::GraphRow,
     // This row's index into `graph_rows`, so a lane can be told from an

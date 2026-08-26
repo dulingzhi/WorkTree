@@ -69,10 +69,16 @@ pub(super) fn change_row_vm(change: &JjChange, now: std::time::SystemTime) -> Ch
 
 /// Render one row. Selection compares by `ChangeId` (not row index) so
 /// paging — which only appends — never reselects a different change.
+///
+/// The optional graph cell (the lane graph strip built by [`super::graph`])
+/// is laid out to the row's left, full height, so consecutive rows' cells
+/// stack into one continuous graph; the text block keeps the two-line
+/// layout (ids and chips, then description / author / time).
 pub(super) fn render_change_row(
     row: &ChangeRowVm,
     selected: bool,
     theme: AppTheme,
+    graph_cell: Option<gpui::AnyElement>,
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
     let mut id_row = div()
@@ -127,10 +133,7 @@ pub(super) fn render_change_row(
         ))
         .debug_selector(|| format!("jj_change_row_{}", row.change_id.0))
         .flex()
-        .flex_col()
-        .gap_0p5()
-        .px_3()
-        .py_2()
+        .flex_row()
         .when(selected, |d| {
             d.bg(theme.colors.interaction.selected_background)
         })
@@ -138,38 +141,48 @@ pub(super) fn render_change_row(
         .border_color(theme.colors.stroke.subtle)
         .hover(|d| d.bg(theme.colors.interaction.hover_background))
         .on_click(move |event, window, cx| on_click(event, window, cx))
-        .child(id_row)
+        .when_some(graph_cell, |d, cell| d.child(cell))
         .child(
             div()
                 .flex()
-                .items_baseline()
-                .gap_2()
+                .flex_col()
+                .gap_0p5()
                 .min_w_0()
+                .py_2()
+                .pr_3()
+                .child(id_row)
                 .child(
                     div()
-                        .text_sm()
-                        .text_color(theme.colors.foreground.primary)
-                        .truncate()
-                        .child(if row.description_line.is_empty() {
-                            crate::i18n::tr("jj.working_copy.empty_description").to_string()
-                        } else {
-                            row.description_line.clone()
-                        }),
-                )
-                .child(
-                    div()
-                        .ml_auto()
-                        .flex_none()
-                        .text_xs()
-                        .text_color(theme.colors.foreground.secondary)
-                        .child(row.author.clone()),
-                )
-                .child(
-                    div()
-                        .flex_none()
-                        .text_xs()
-                        .text_color(theme.colors.foreground.secondary)
-                        .child(row.time_text.clone()),
+                        .flex()
+                        .items_baseline()
+                        .gap_2()
+                        .min_w_0()
+                        .child(
+                            div()
+                                .text_sm()
+                                .text_color(theme.colors.foreground.primary)
+                                .truncate()
+                                .child(if row.description_line.is_empty() {
+                                    crate::i18n::tr("jj.working_copy.empty_description").to_string()
+                                } else {
+                                    row.description_line.clone()
+                                }),
+                        )
+                        .child(
+                            div()
+                                .ml_auto()
+                                .flex_none()
+                                .text_xs()
+                                .text_color(theme.colors.foreground.secondary)
+                                .child(row.author.clone()),
+                        )
+                        .child(
+                            div()
+                                .flex_none()
+                                .text_xs()
+                                .text_color(theme.colors.foreground.secondary)
+                                .child(row.time_text.clone()),
+                        ),
                 ),
         )
 }

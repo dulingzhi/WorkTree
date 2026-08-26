@@ -18,6 +18,7 @@ use super::*;
 
 mod change_list;
 mod details;
+mod graph;
 mod panels;
 
 use change_list::{change_row_vms, render_change_row};
@@ -25,6 +26,10 @@ use details::{file_row_vms, render_file_diff, render_file_row};
 use gitcomet_jj_core::ChangeId;
 use gitcomet_state::jj_store::{JjAppState, JjMsg, JjStore};
 use gitcomet_state::msg::StoreEvent;
+use graph::{
+    change_graph_rows, graph_column_width_px, graph_row_background, render_graph_cell,
+    selected_lane_for,
+};
 use panels::{bookmark_row_vms, op_row_vms, render_bookmark_row, render_op_row};
 
 use super::splash::{CONTENT_CARD_BOTTOM_MARGIN_PX, CONTENT_CARD_GAP_PX};
@@ -983,9 +988,14 @@ impl Render for JjRepoView {
                 }
 
                 // The change list (working copy pinned above, skipped here),
-                // under a revset filter bar.
+                // under a revset filter bar. The lane graph (#89) is laid
+                // out over the same rows the list draws, so row `ix`'s text
+                // block sits beside its own `GraphRow`.
                 let rows = change_row_vms(repo, now);
+                let graph = std::sync::Arc::new(change_graph_rows(repo, theme));
+                let graph_width = graph_column_width_px(&graph);
                 let selected = self.selected_change.clone();
+                let selected_lane = selected_lane_for(&graph, repo, selected.as_ref());
                 let list_focus = self.list_focus.clone();
 
                 let revset_bar = div()
@@ -1012,13 +1022,23 @@ impl Render for JjRepoView {
                             .child(crate::i18n::tr("jj.loading")),
                     );
                 }
-                for row in &rows {
+                for (row_ix, row) in rows.iter().enumerate() {
                     let is_selected = selected.as_ref() == Some(&row.change_id);
                     let row_change = row.change_id.clone();
+                    let graph_cell = render_graph_cell(
+                        std::sync::Arc::clone(&graph),
+                        row_ix,
+                        selected_lane,
+                        theme,
+                        graph_row_background(is_selected, theme),
+                        graph_width,
+                    )
+                    .into_any_element();
                     list = list.child(render_change_row(
                         row,
                         is_selected,
                         theme,
+                        Some(graph_cell),
                         cx.listener(move |this, _e, window, cx| {
                             if this.selected_change.as_ref() != Some(&row_change) {
                                 this.selected_file = None;
