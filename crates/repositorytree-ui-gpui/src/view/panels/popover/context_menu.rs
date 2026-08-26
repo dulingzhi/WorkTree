@@ -1127,6 +1127,16 @@ impl PopoverHost {
                     });
                 });
             }
+            ContextMenuAction::SetPushPullRetryEnabled { enabled } => {
+                close_after_action = false;
+                self.push_pull_retry_enabled = enabled;
+                let root_view = self.root_view.clone();
+                cx.defer(move |cx| {
+                    let _ = root_view.update(cx, |root, cx| {
+                        root.set_push_pull_retry_enabled(enabled, cx);
+                    });
+                });
+            }
             ContextMenuAction::UseCommitMessage { message } => {
                 self.details_pane.update(cx, |pane, cx| {
                     pane.set_commit_message_from_history(message, window, cx);
@@ -1320,7 +1330,10 @@ impl PopoverHost {
                 return;
             }
             ContextMenuAction::Push { repo_id } => {
-                self.store.dispatch(Msg::Push { repo_id });
+                self.store.dispatch(Msg::Push {
+                    repo_id,
+                    pull_retry: self.push_pull_retry_enabled,
+                });
             }
             ContextMenuAction::SetUpstreamBranch {
                 repo_id,

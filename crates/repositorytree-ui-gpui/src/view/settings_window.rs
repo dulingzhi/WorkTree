@@ -1427,6 +1427,7 @@ impl SettingsWindowView {
             default_history_mode: Some(self.default_history_mode),
             default_tag_type: Some(self.default_tag_type),
             commit_push_after_enabled: None,
+            push_pull_retry_enabled: None,
             git_executable_path: Some(applied_git_executable_path(&self.runtime_info.git.runtime)),
             terminal_external_mode: None,
             terminal_external_program: None,

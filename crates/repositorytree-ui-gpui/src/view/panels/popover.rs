@@ -156,6 +156,7 @@ pub(in super::super) struct PopoverHost {
     change_tracking_view: ChangeTrackingView,
     commit_amend_enabled: bool,
     commit_push_after_enabled: bool,
+    push_pull_retry_enabled: bool,
     diff_content_mode: DiffContentMode,
     diff_whitespace_mode: DiffWhitespaceMode,
     diff_reveal_whitespace_chars: bool,
@@ -1128,6 +1129,7 @@ impl PopoverHost {
         show_timezone: bool,
         change_tracking_view: ChangeTrackingView,
         commit_push_after_enabled: bool,
+        push_pull_retry_enabled: bool,
         diff_content_mode: DiffContentMode,
         diff_whitespace_mode: DiffWhitespaceMode,
         diff_reveal_whitespace_chars: bool,
@@ -1687,6 +1689,7 @@ impl PopoverHost {
             change_tracking_view,
             commit_amend_enabled: false,
             commit_push_after_enabled,
+            push_pull_retry_enabled,
             diff_content_mode,
             diff_whitespace_mode,
             diff_reveal_whitespace_chars,
@@ -3766,6 +3769,21 @@ impl PopoverHost {
 
         self.commit_push_after_enabled = enabled;
         if matches!(self.popover, Some(PopoverKind::CommitOptionsMenu { .. })) {
+            cx.notify();
+        }
+    }
+
+    pub(in super::super) fn sync_push_pull_retry_enabled(
+        &mut self,
+        enabled: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self.push_pull_retry_enabled == enabled {
+            return;
+        }
+
+        self.push_pull_retry_enabled = enabled;
+        if matches!(self.popover, Some(PopoverKind::PushPicker)) {
             cx.notify();
         }
     }

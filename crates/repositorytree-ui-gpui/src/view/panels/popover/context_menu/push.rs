@@ -31,6 +31,17 @@ pub(super) fn model(this: &PopoverHost) -> ContextMenuModel {
             action: Box::new(ContextMenuAction::Push { repo_id }),
         },
         ContextMenuItem::Entry {
+            label: "Pull and re-push on failure".into(),
+            icon: this
+                .push_pull_retry_enabled
+                .then_some("icons/check.svg".into()),
+            shortcut: None,
+            disabled,
+            action: Box::new(ContextMenuAction::SetPushPullRetryEnabled {
+                enabled: !this.push_pull_retry_enabled,
+            }),
+        },
+        ContextMenuItem::Entry {
             label: force_push_label.into(),
             icon: Some("icons/warning.svg".into()),
             shortcut: Some("F".into()),

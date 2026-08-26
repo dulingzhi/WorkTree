@@ -82,6 +82,7 @@ pub struct UiSession {
     pub history_tag_fetch_mode: Option<GitLogTagFetchMode>,
     pub default_history_mode: Option<HistoryMode>,
     pub commit_push_after_enabled: Option<bool>,
+    pub push_pull_retry_enabled: Option<bool>,
     pub default_tag_type: Option<DefaultTagType>,
     pub git_executable_path: Option<PathBuf>,
     pub external_code_editor: Option<ExternalCodeEditorSetting>,
@@ -229,6 +230,7 @@ struct UiSessionFile {
     history_tag_fetch_mode: Option<GitLogTagFetchMode>,
     default_history_mode: Option<HistoryModeSetting>,
     commit_push_after_enabled: Option<bool>,
+    push_pull_retry_enabled: Option<bool>,
     default_tag_type: Option<DefaultTagType>,
     git_executable_path: Option<String>,
     external_code_editor: Option<ExternalCodeEditorSettingFile>,
@@ -357,6 +359,7 @@ pub fn load_from_path(path: &Path) -> UiSession {
         history_tag_fetch_mode: file.history_tag_fetch_mode,
         default_history_mode: file.default_history_mode.map(Into::into),
         commit_push_after_enabled: file.commit_push_after_enabled,
+        push_pull_retry_enabled: file.push_pull_retry_enabled,
         default_tag_type: file.default_tag_type,
         git_executable_path: file
             .git_executable_path
@@ -810,6 +813,7 @@ pub struct UiSettings {
     pub history_tag_fetch_mode: Option<GitLogTagFetchMode>,
     pub default_history_mode: Option<HistoryMode>,
     pub commit_push_after_enabled: Option<bool>,
+    pub push_pull_retry_enabled: Option<bool>,
     pub default_tag_type: Option<DefaultTagType>,
     pub git_executable_path: Option<Option<PathBuf>>,
     pub external_code_editor: Option<Option<ExternalCodeEditorSetting>>,
@@ -993,6 +997,9 @@ pub fn persist_ui_settings_to_path(settings: UiSettings, path: &Path) -> io::Res
         }
         if let Some(value) = settings.commit_push_after_enabled {
             file.commit_push_after_enabled = Some(value);
+        }
+        if let Some(value) = settings.push_pull_retry_enabled {
+            file.push_pull_retry_enabled = Some(value);
         }
         if let Some(value) = settings.default_tag_type {
             file.default_tag_type = Some(value);
@@ -4583,6 +4590,7 @@ mod tests {
         persist_ui_settings_to_path(
             UiSettings {
                 commit_push_after_enabled: Some(true),
+                push_pull_retry_enabled: Some(true),
                 ..UiSettings::default()
             },
             &path,
@@ -4591,6 +4599,7 @@ mod tests {
 
         let loaded = load_from_path(&path);
         assert_eq!(loaded.commit_push_after_enabled, Some(true));
+        assert_eq!(loaded.push_pull_retry_enabled, Some(true));
     }
 
     #[test]

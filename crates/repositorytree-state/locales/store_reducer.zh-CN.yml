@@ -9,6 +9,8 @@ store:
     label_merge: 合并
     label_squash: 压缩
     label_push: 推送
+    # 因远程领先被拒；随后自动拉取（变基）并重试一次
+    push_pull_retry_started: "推送被拒绝（远程领先）——正在拉取后重试"
     label_push_after_commit: "提交后推送"
     label_force_push: "强制推送"
     label_force_push_with_lease: "带租约的强制推送"

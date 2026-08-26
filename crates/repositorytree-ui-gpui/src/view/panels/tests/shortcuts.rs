@@ -1361,6 +1361,13 @@ fn repo_operation_context_menu_shortcuts_match_expected_actions(cx: &mut gpui::T
             kind: PopoverKind::ForcePushConfirm { repo_id: rid }
         } if *rid == repo_id
     );
+    // The pull-retry toggle is off by default (its action enables it) and
+    // carries no shortcut of its own.
+    assert!(push_model.items.iter().any(|item| matches!(
+        item,
+        ContextMenuItem::Entry { action, .. }
+            if matches!(action.as_ref(), ContextMenuAction::SetPushPullRetryEnabled { enabled: true })
+    )));
 
     let branch_section_model = cx.update(|_window, app| {
         context_menu_model_for(

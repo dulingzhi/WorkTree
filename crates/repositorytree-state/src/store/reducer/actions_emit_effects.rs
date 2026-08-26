@@ -2,7 +2,8 @@ use super::util::{
     DiffReloadMode, SelectedConflictTarget, apply_selected_diff_load_plan_state,
     apply_selected_diff_load_plan_state_with_reload_mode, clear_banner_error_for_repo,
     diff_reload_effects, format_failure_summary, push_action_log, push_command_log,
-    refresh_full_effects, refresh_primary_effects, selected_conflict_target,
+    push_failure_needs_pull_retry, refresh_full_effects, refresh_primary_effects,
+    selected_conflict_target,
     selected_diff_load_plan, start_conflict_target_reload, start_current_conflict_target_reload,
 };
 use crate::model::{
@@ -406,12 +407,97 @@ pub(super) fn push(
     repos: &FxHashMap<RepoId, Arc<dyn GitRepository>>,
     state: &mut AppState,
     repo_id: RepoId,
+    pull_retry: bool,
 ) -> Vec<Effect> {
     bump_in_flight(repos, state, repo_id, InFlightKind::Push);
+    if let Some(repo_state) = state.repos.iter_mut().find(|repo| repo.id == repo_id) {
+        repo_state.push_pull_retry_armed = pull_retry;
+    }
     vec![Effect::Push {
         repo_id,
         auth: None,
     }]
+}
+
+/// What the push pull-retry state machine wants to do once a repo command
+/// finishes. Planned before `repo_command_finished` consumes the result
+/// (`Error` is not cloneable) and applied after it, so a rejected push's
+/// command-log entry can be rewritten as a retry-in-progress instead of an
+/// announced failure.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum PushPullRetryPlan {
+    /// The push was rejected because the remote is ahead and the retry option
+    /// was on: convert the failure into `git pull --rebase` and re-push once
+    /// the pull succeeds.
+    PullAndRetry,
+    /// The retry pull succeeded: push again, unarmed.
+    RetryPush,
+    Nothing,
+}
+
+pub(super) fn push_pull_retry_plan(
+    state: &AppState,
+    repo_id: RepoId,
+    command: &RepoCommandKind,
+    result: &std::result::Result<CommandOutput, Error>,
+) -> PushPullRetryPlan {
+    let Some(repo_state) = state.repos.iter().find(|r| r.id == repo_id) else {
+        return PushPullRetryPlan::Nothing;
+    };
+    match (command, result) {
+        (RepoCommandKind::Push, Err(error)) => {
+            if repo_state.push_pull_retry_armed && push_failure_needs_pull_retry(error) {
+                PushPullRetryPlan::PullAndRetry
+            } else {
+                PushPullRetryPlan::Nothing
+            }
+        }
+        (RepoCommandKind::Pull { .. }, Ok(_)) if repo_state.push_pull_retry_pending => {
+            PushPullRetryPlan::RetryPush
+        }
+        _ => PushPullRetryPlan::Nothing,
+    }
+}
+
+pub(super) fn apply_push_pull_retry(
+    repos: &FxHashMap<RepoId, Arc<dyn GitRepository>>,
+    state: &mut AppState,
+    repo_id: RepoId,
+    command: &RepoCommandKind,
+    plan: PushPullRetryPlan,
+) -> Vec<Effect> {
+    {
+        let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
+            return Vec::new();
+        };
+        match command {
+            RepoCommandKind::Push => {
+                // One-shot: consumed on every push finish, retry or not.
+                repo_state.push_pull_retry_armed = false;
+                if plan == PushPullRetryPlan::PullAndRetry {
+                    repo_state.push_pull_retry_pending = true;
+                    if let Some(entry) = repo_state.command_log.last_mut() {
+                        entry.announce_failure = false;
+                        entry.summary =
+                            rust_i18n::t!("store.reducer.push_pull_retry_started").to_string();
+                    }
+                    // Keep the suppressed failure from surfacing elsewhere.
+                    repo_state.last_error = None;
+                }
+            }
+            RepoCommandKind::Pull { .. } => {
+                // Cleared on any pull finish so a failed rebase (conflicts)
+                // never leaves a stale trigger behind.
+                repo_state.push_pull_retry_pending = false;
+            }
+            _ => {}
+        }
+    }
+    match plan {
+        PushPullRetryPlan::PullAndRetry => pull(repos, state, repo_id, PullMode::Rebase),
+        PushPullRetryPlan::RetryPush => push(repos, state, repo_id, false),
+        PushPullRetryPlan::Nothing => Vec::new(),
+    }
 }
 
 pub(super) fn push_after_commit(

@@ -9,6 +9,8 @@ store:
     label_merge: Merge
     label_squash: Squash
     label_push: Push
+    # Rejected because the remote is ahead; a pull --rebase and one retry follow
+    push_pull_retry_started: "Push rejected because the remote is ahead — pulling to retry"
     label_push_after_commit: "Push after commit"
     label_force_push: "Force push"
     label_force_push_with_lease: "Force push with lease"

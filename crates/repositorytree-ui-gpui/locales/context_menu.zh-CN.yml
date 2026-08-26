@@ -99,6 +99,7 @@
 "Pull (rebase)": "拉取（变基）"
 "Pull into current": "拉取到当前分支"
 "Push": "推送"
+"Pull and re-push on failure": "推送失败时拉回再试"
 "Push after commit": "提交后推送"
 "Refresh worktrees": "刷新工作树"
 "Remove…": "移除…"

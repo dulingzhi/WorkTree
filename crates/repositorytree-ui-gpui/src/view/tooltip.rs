@@ -251,6 +251,7 @@ impl RepositoryTreeView {
                             }),
                             default_history_mode: None,
                             commit_push_after_enabled: Some(this.commit_push_after_enabled),
+                            push_pull_retry_enabled: Some(this.push_pull_retry_enabled),
                             default_tag_type: None,
                             git_executable_path: None,
                             external_code_editor: None,

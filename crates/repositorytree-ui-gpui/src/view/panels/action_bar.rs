@@ -668,10 +668,15 @@ impl Render for ActionBarView {
                             return;
                         };
                         let repo_id = repo.id;
+                        let pull_retry = this
+                            .root_view
+                            .upgrade()
+                            .is_some_and(|root| root.read(cx).push_pull_retry_enabled());
                         let head = match &repo.head_branch {
                             Loadable::Ready(head) => head.clone(),
                             _ => {
-                                this.store.dispatch(Msg::Push { repo_id });
+                                this.store
+                                    .dispatch(Msg::Push { repo_id, pull_retry });
                                 return;
                             }
                         };
@@ -716,7 +721,8 @@ impl Render for ActionBarView {
                             return;
                         }
 
-                        this.store.dispatch(Msg::Push { repo_id });
+                        this.store
+                            .dispatch(Msg::Push { repo_id, pull_retry });
                     }),
                     push_menu.on_click_with_bounds(
                         theme,

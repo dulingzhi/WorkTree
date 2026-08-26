@@ -1261,6 +1261,13 @@ pub struct RepoState {
     pub pending_commit_retry: Option<PendingCommitRetry>,
     pub load_epoch: u64,
     pub pending_force_push_lease: Option<ForcePushLease>,
+    /// One-shot: the in-flight `Msg::Push` requested pull-and-retry on a
+    /// behind-remote rejection. Consumed when that push finishes.
+    pub push_pull_retry_armed: bool,
+    /// Set when a rejected push was converted into `Effect::Pull { Rebase }`;
+    /// a successful pull then re-emits the (unarmed) push. Cleared on any pull
+    /// finish so a failed rebase never leaves a stale trigger.
+    pub push_pull_retry_pending: bool,
     /// A commit/branch/tag the user "marked for comparison" via the context
     /// menu. The next "Compare with marked" resolves the target's commit and
     /// starts a range comparison (mark = base, target = tip). `None` when
@@ -1361,6 +1368,8 @@ impl RepoState {
             pending_commit_retry: None,
             load_epoch: 0,
             pending_force_push_lease: None,
+            push_pull_retry_armed: false,
+            push_pull_retry_pending: false,
             comparison_mark: None,
         }
     }

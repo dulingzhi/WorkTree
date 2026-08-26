@@ -5692,6 +5692,9 @@ pub struct RepositoryTreeView {
     /// to whichever panel is actually open.
     pub(super) active_bottom_panel: FxHashMap<RepoId, BottomPanelTab>,
     pub(super) commit_push_after_enabled: bool,
+    /// Toolbar push-menu toggle: when on, a push rejected because the remote
+    /// is ahead automatically pulls (rebase) and pushes once more.
+    pub(super) push_pull_retry_enabled: bool,
     pub(super) diff_scroll_sync: DiffScrollSync,
     pub(super) diff_content_mode: DiffContentMode,
     pub(super) diff_whitespace_mode: DiffWhitespaceMode,

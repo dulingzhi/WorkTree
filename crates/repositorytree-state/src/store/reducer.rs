@@ -364,7 +364,13 @@ fn retry_msg_for_repo_command(repo_id: RepoId, command: RepoCommandKind) -> Opti
         },
         RepoCommandKind::MergeRef { reference } => Msg::MergeRef { repo_id, reference },
         RepoCommandKind::SquashRef { reference } => Msg::SquashRef { repo_id, reference },
-        RepoCommandKind::Push => Msg::Push { repo_id },
+        // Auth retries never carry pull-retry intent: a credential failure is
+        // never a behind-remote rejection, and re-dispatching unarmed keeps
+        // `push_pull_retry_armed` from leaking into an unrelated push.
+        RepoCommandKind::Push => Msg::Push {
+            repo_id,
+            pull_retry: false,
+        },
         RepoCommandKind::PushAfterCommit {
             target,
             set_upstream,
@@ -1503,7 +1509,9 @@ fn reduce_inner(
             begin_local_action(state, repo_id);
             actions_emit_effects::squash_ref(repo_id, reference)
         }
-        Msg::Push { repo_id } => actions_emit_effects::push(repos, state, repo_id),
+        Msg::Push { repo_id, pull_retry } => {
+            actions_emit_effects::push(repos, state, repo_id, pull_retry)
+        }
         Msg::PushAfterCommit {
             repo_id,
             target,
@@ -2341,8 +2349,20 @@ fn reduce_inner(
                 _ => None,
             };
 
-            let effects =
-                actions_emit_effects::repo_command_finished(state, repo_id, command, result);
+            // Planned before `repo_command_finished` consumes `result`
+            // (errors are not cloneable), applied after it so a rejected
+            // push's log entry can be rewritten as a retry-in-progress.
+            let push_pull_retry_plan =
+                actions_emit_effects::push_pull_retry_plan(state, repo_id, &command, &result);
+            let mut effects =
+                actions_emit_effects::repo_command_finished(state, repo_id, command.clone(), result);
+            effects.extend(actions_emit_effects::apply_push_pull_retry(
+                repos,
+                state,
+                repo_id,
+                &command,
+                push_pull_retry_plan,
+            ));
 
             if let Some(path) = removed_worktree_path {
                 let repo_ids_to_close = state

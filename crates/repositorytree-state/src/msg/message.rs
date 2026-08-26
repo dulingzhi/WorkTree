@@ -707,6 +707,9 @@ pub enum Msg {
     },
     Push {
         repo_id: RepoId,
+        /// When true and the push is rejected because the remote is ahead,
+        /// automatically `git pull --rebase` and retry the push once.
+        pull_retry: bool,
     },
     PushAfterCommit {
         repo_id: RepoId,

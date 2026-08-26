@@ -1870,6 +1870,25 @@ fn detect_auth_prompt_kind_from_git_failure(failure: &GitFailure) -> Option<Auth
         .or_else(|| detect_auth_prompt_kind_from_message(&failure.to_string()))
 }
 
+/// Whether a failed push was rejected because the remote is ahead
+/// (`! [rejected] … (fetch first)`, or the diverged hint
+/// "tip of your current branch is behind"). Only those can be recovered by
+/// pulling and re-pushing; auth or hook failures must surface normally.
+pub(super) fn push_failure_needs_pull_retry(error: &Error) -> bool {
+    let ErrorKind::Git(failure) = error.kind() else {
+        return false;
+    };
+    let looks_behind_remote = |text: &str| {
+        let lower = text.to_ascii_lowercase();
+        lower.contains("(fetch first)")
+            || lower.contains("(non-fast-forward)")
+            || lower.contains("tip of your current branch is behind")
+    };
+    looks_behind_remote(&String::from_utf8_lossy(failure.stderr()))
+        || looks_behind_remote(&String::from_utf8_lossy(failure.stdout()))
+        || failure.detail().is_some_and(looks_behind_remote)
+}
+
 fn try_format_git_backend_error_message(message: &str) -> Option<(String, String)> {
     let (command, output) = parse_failed_command_message(message)?;
     if !command.trim_start().starts_with("git ") {
@@ -3037,6 +3056,51 @@ mod tests {
             detect_auth_prompt_kind(&structured),
             Some(crate::model::AuthPromptKind::HostVerification)
         );
+    }
+
+    #[test]
+    fn push_failure_needs_pull_retry_matches_only_behind_remote_rejections() {
+        let behind_remote = |stderr: &[u8]| {
+            Error::new(ErrorKind::Git(GitFailure::new(
+                "git push",
+                GitFailureId::CommandFailed,
+                Some(1),
+                Vec::new(),
+                stderr.to_vec(),
+                None,
+            )))
+        };
+
+        assert!(push_failure_needs_pull_retry(&behind_remote(
+            b" ! [rejected]        HEAD -> main (fetch first)\n"
+        )));
+        assert!(push_failure_needs_pull_retry(&behind_remote(
+            b" ! [rejected]        HEAD -> main (non-fast-forward)\n"
+        )));
+        assert!(push_failure_needs_pull_retry(&behind_remote(
+            b"hint: Updates were rejected because the tip of your current branch is behind\n"
+        )));
+        // The same rejection reported via the failure detail instead of stderr.
+        assert!(push_failure_needs_pull_retry(&Error::new(ErrorKind::Git(
+            GitFailure::new(
+                "git push",
+                GitFailureId::CommandFailed,
+                Some(1),
+                Vec::new(),
+                Vec::new(),
+                Some("(fetch first)".to_string()),
+            )
+        ))));
+        // Auth, hook and other failures must surface normally.
+        assert!(!push_failure_needs_pull_retry(&behind_remote(
+            b"git@github.com: Permission denied (publickey).\nfatal: Could not read from remote repository."
+        )));
+        assert!(!push_failure_needs_pull_retry(&behind_remote(
+            b"remote: [policy] failed to push some refs to 'repo'\npre-receive hook declined"
+        )));
+        assert!(!push_failure_needs_pull_retry(&Error::new(
+            ErrorKind::Backend("authentication failed".to_string())
+        )));
     }
 
     #[test]

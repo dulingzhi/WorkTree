@@ -86,7 +86,15 @@ fn pull_and_push_mark_in_flight_until_command_finished() {
     );
     assert_eq!(state.repos[0].pull_in_flight, 4);
 
-    reduce(&mut repos, &id_alloc, &mut state, Msg::Push { repo_id });
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Push {
+            repo_id,
+            pull_retry: false,
+        },
+    );
     assert_eq!(state.repos[0].push_in_flight, 1);
 
     reduce(
@@ -290,7 +298,15 @@ fn pull_and_push_do_not_mark_in_flight_before_repo_is_opened() {
         },
     );
     reduce(&mut repos, &id_alloc, &mut state, Msg::FetchAll { repo_id });
-    reduce(&mut repos, &id_alloc, &mut state, Msg::Push { repo_id });
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Push {
+            repo_id,
+            pull_retry: false,
+        },
+    );
 
     assert_eq!(state.repos[0].pull_in_flight, 0);
     assert_eq!(state.repos[0].push_in_flight, 0);
@@ -1501,7 +1517,10 @@ fn repo_operations_emit_effects() {
         &mut repos,
         &id_alloc,
         &mut state,
-        Msg::Push { repo_id: RepoId(1) },
+        Msg::Push {
+            repo_id: RepoId(1),
+            pull_retry: false,
+        },
     );
     assert!(matches!(
         push.as_slice(),
@@ -1631,7 +1650,15 @@ fn pull_push_bump_ops_rev() {
     );
     let ops_after_pull = state.repos[0].ops_rev;
 
-    reduce(&mut repos, &id_alloc, &mut state, Msg::Push { repo_id });
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Push {
+            repo_id,
+            pull_retry: false,
+        },
+    );
     assert!(
         state.repos[0].ops_rev > ops_after_pull,
         "ops_rev should bump after Push"
@@ -4775,4 +4802,291 @@ fn ai_commit_context_load_error_is_recorded_not_swallowed() {
         &state.repos[0].ai_commit_context,
         Loadable::Error(_)
     ));
+}
+
+// --- Push pull-retry ("推送失败时拉回再试") ---
+
+fn behind_remote_push_error() -> Error {
+    Error::new(ErrorKind::Git(repositorytree_core::error::GitFailure::new(
+        "git push",
+        repositorytree_core::error::GitFailureId::CommandFailed,
+        Some(1),
+        Vec::new(),
+        b" ! [rejected]        HEAD -> main (fetch first)\nerror: failed to push some refs to 'origin'\nhint: Updates were rejected because the tip of your current branch is behind\n".to_vec(),
+        None,
+    )))
+}
+
+fn push_pull_retry_state() -> (
+    FxHashMap<RepoId, Arc<dyn GitRepository>>,
+    AtomicU64,
+    AppState,
+    RepoId,
+) {
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+    let repo_id = RepoId(1);
+    repos.insert(repo_id, Arc::new(DummyRepo::new("/tmp/repo")));
+    state.repos.push(RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    ));
+    (repos, id_alloc, state, repo_id)
+}
+
+fn finish_repo_command(
+    repos: &mut FxHashMap<RepoId, Arc<dyn GitRepository>>,
+    id_alloc: &AtomicU64,
+    state: &mut AppState,
+    repo_id: RepoId,
+    command: RepoCommandKind,
+    result: Result<CommandOutput>,
+) -> Vec<Effect> {
+    reduce(
+        repos,
+        id_alloc,
+        state,
+        Msg::Internal(crate::msg::InternalMsg::RepoCommandFinished {
+            repo_id,
+            command,
+            result,
+        }),
+    )
+}
+
+#[test]
+fn push_failure_behind_remote_triggers_rebase_pull_and_rewrites_log_entry() {
+    let (mut repos, id_alloc, mut state, repo_id) = push_pull_retry_state();
+
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Push {
+            repo_id,
+            pull_retry: true,
+        },
+    );
+    assert!(state.repos[0].push_pull_retry_armed);
+    assert_eq!(state.repos[0].push_in_flight, 1);
+
+    let effects = finish_repo_command(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        repo_id,
+        RepoCommandKind::Push,
+        Err(behind_remote_push_error()),
+    );
+
+    assert!(effects.iter().any(|effect| matches!(
+        effect,
+        Effect::Pull {
+            repo_id: rid,
+            mode: PullMode::Rebase,
+            ..
+        } if *rid == repo_id
+    )));
+    let repo = &state.repos[0];
+    assert!(!repo.push_pull_retry_armed, "armed is one-shot");
+    assert!(repo.push_pull_retry_pending);
+    assert_eq!(repo.push_in_flight, 0);
+    assert_eq!(repo.pull_in_flight, 1);
+    let entry = repo.command_log.last().expect("push log entry");
+    assert!(!entry.announce_failure, "intermediate failure stays quiet");
+    assert_eq!(
+        entry.summary,
+        "Push rejected because the remote is ahead — pulling to retry"
+    );
+    assert!(repo.last_error.is_none());
+}
+
+#[test]
+fn retry_pushes_once_and_second_failure_surfaces_normally() {
+    let (mut repos, id_alloc, mut state, repo_id) = push_pull_retry_state();
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Push {
+            repo_id,
+            pull_retry: true,
+        },
+    );
+    finish_repo_command(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        repo_id,
+        RepoCommandKind::Push,
+        Err(behind_remote_push_error()),
+    );
+
+    let effects = finish_repo_command(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        repo_id,
+        RepoCommandKind::Pull {
+            mode: PullMode::Rebase,
+        },
+        Ok(CommandOutput::empty_success("git pull")),
+    );
+    assert!(effects.iter().any(|effect| matches!(
+        effect,
+        Effect::Push { repo_id: rid, .. } if *rid == repo_id
+    )));
+    let repo = &state.repos[0];
+    assert!(!repo.push_pull_retry_pending, "pending consumed by pull");
+    assert_eq!(repo.pull_in_flight, 0);
+    assert_eq!(repo.push_in_flight, 1, "pull success re-pushes");
+
+    let effects = finish_repo_command(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        repo_id,
+        RepoCommandKind::Push,
+        Err(behind_remote_push_error()),
+    );
+    assert!(
+        !effects
+            .iter()
+            .any(|effect| matches!(effect, Effect::Pull { .. })),
+        "the retry push never chains another pull"
+    );
+    let repo = &state.repos[0];
+    assert!(!repo.push_pull_retry_pending);
+    let entry = repo.command_log.last().expect("retry push log entry");
+    assert!(entry.announce_failure, "second failure announces normally");
+    assert!(repo.last_error.is_some());
+}
+
+#[test]
+fn push_failure_not_behind_remote_surfaces_normally() {
+    let (mut repos, id_alloc, mut state, repo_id) = push_pull_retry_state();
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Push {
+            repo_id,
+            pull_retry: true,
+        },
+    );
+
+    let effects = finish_repo_command(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        repo_id,
+        RepoCommandKind::Push,
+        Err(Error::new(ErrorKind::Backend(
+            "authentication failed".to_string(),
+        ))),
+    );
+    assert!(
+        !effects
+            .iter()
+            .any(|effect| matches!(effect, Effect::Pull { .. }))
+    );
+    let repo = &state.repos[0];
+    assert!(!repo.push_pull_retry_armed, "still consumed one-shot");
+    assert!(!repo.push_pull_retry_pending);
+    let entry = repo.command_log.last().expect("push log entry");
+    assert!(entry.announce_failure);
+}
+
+#[test]
+fn pull_failure_after_retry_clears_pending_without_pushing() {
+    let (mut repos, id_alloc, mut state, repo_id) = push_pull_retry_state();
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Push {
+            repo_id,
+            pull_retry: true,
+        },
+    );
+    finish_repo_command(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        repo_id,
+        RepoCommandKind::Push,
+        Err(behind_remote_push_error()),
+    );
+
+    let effects = finish_repo_command(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        repo_id,
+        RepoCommandKind::Pull {
+            mode: PullMode::Rebase,
+        },
+        Err(Error::new(ErrorKind::Backend(
+            "CONFLICT (content): Merge conflict in src/main.rs".to_string(),
+        ))),
+    );
+    assert!(
+        !effects
+            .iter()
+            .any(|effect| matches!(effect, Effect::Push { .. })),
+        "a conflicted rebase must not re-push"
+    );
+    assert!(!state.repos[0].push_pull_retry_pending);
+
+    // A later manual pull must not resurrect the retry either.
+    let effects = finish_repo_command(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        repo_id,
+        RepoCommandKind::Pull {
+            mode: PullMode::Default,
+        },
+        Ok(CommandOutput::empty_success("git pull")),
+    );
+    assert!(
+        !effects
+            .iter()
+            .any(|effect| matches!(effect, Effect::Push { .. }))
+    );
+}
+
+#[test]
+fn plain_push_without_pull_retry_does_not_chain() {
+    let (mut repos, id_alloc, mut state, repo_id) = push_pull_retry_state();
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Push {
+            repo_id,
+            pull_retry: false,
+        },
+    );
+    assert!(!state.repos[0].push_pull_retry_armed);
+
+    let effects = finish_repo_command(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        repo_id,
+        RepoCommandKind::Push,
+        Err(behind_remote_push_error()),
+    );
+    assert!(
+        !effects
+            .iter()
+            .any(|effect| matches!(effect, Effect::Pull { .. }))
+    );
+    let repo = &state.repos[0];
+    assert!(!repo.push_pull_retry_pending);
+    assert!(repo.command_log.last().expect("push log entry").announce_failure);
 }

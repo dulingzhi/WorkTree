@@ -916,7 +916,10 @@ impl RepositoryTreeView {
             }
             "push" => {
                 if let Some(repo_id) = self.active_repo_id() {
-                    self.store.dispatch(Msg::Push { repo_id });
+                    self.store.dispatch(Msg::Push {
+                        repo_id,
+                        pull_retry: self.push_pull_retry_enabled,
+                    });
                 }
             }
             "force-push" => {
@@ -1418,6 +1421,7 @@ impl RepositoryTreeView {
         let diff_show_line_numbers = ui_session.diff_show_line_numbers.unwrap_or(true);
         let auto_save_file_edits = ui_session.auto_save_file_edits.unwrap_or(false);
         let commit_push_after_enabled = ui_session.commit_push_after_enabled.unwrap_or(false);
+        let push_pull_retry_enabled = ui_session.push_pull_retry_enabled.unwrap_or(false);
         let restored_change_tracking_height = ui_session.change_tracking_height;
         let restored_untracked_height = ui_session.untracked_height;
 
@@ -1650,6 +1654,7 @@ impl RepositoryTreeView {
                 show_timezone,
                 change_tracking_view,
                 commit_push_after_enabled,
+                push_pull_retry_enabled,
                 diff_content_mode,
                 diff_whitespace_mode,
                 diff_reveal_whitespace_chars,
@@ -1928,6 +1933,7 @@ impl RepositoryTreeView {
             reflog_pane,
             active_bottom_panel: FxHashMap::default(),
             commit_push_after_enabled,
+            push_pull_retry_enabled,
             diff_scroll_sync,
             diff_content_mode,
             diff_whitespace_mode,
@@ -2242,6 +2248,27 @@ impl RepositoryTreeView {
         });
         self.schedule_ui_settings_persist(cx);
         cx.notify();
+    }
+
+    pub(in crate::view) fn set_push_pull_retry_enabled(
+        &mut self,
+        enabled: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self.push_pull_retry_enabled == enabled {
+            return;
+        }
+
+        self.push_pull_retry_enabled = enabled;
+        self.popover_host.update(cx, |host, cx| {
+            host.sync_push_pull_retry_enabled(enabled, cx)
+        });
+        self.schedule_ui_settings_persist(cx);
+        cx.notify();
+    }
+
+    pub(in crate::view) fn push_pull_retry_enabled(&self) -> bool {
+        self.push_pull_retry_enabled
     }
 
     pub(in crate::view) fn set_commit_amend_enabled(

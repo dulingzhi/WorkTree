@@ -265,6 +265,9 @@ pub(in crate::view) enum ContextMenuAction {
     SetCommitPushAfterEnabled {
         enabled: bool,
     },
+    SetPushPullRetryEnabled {
+        enabled: bool,
+    },
     UseCommitMessage {
         message: String,
     },
