@@ -156,7 +156,7 @@ mod tests {
 
     #[test]
     fn repository_initials_use_name_boundaries_then_fill_from_the_name() {
-        assert_eq!(repository_initials("RepositoryTree"), "GC");
+        assert_eq!(repository_initials("RepositoryTree"), "RT");
         assert_eq!(repository_initials("git-comet"), "GC");
         assert_eq!(repository_initials("repository"), "RE");
         assert_eq!(repository_initials("x"), "X");
