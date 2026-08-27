@@ -2,7 +2,8 @@ use crate::model::{ConflictFileLoadMode, RepoId};
 use repositorytree_core::auth::StagedGitAuth;
 use repositorytree_core::domain::*;
 use repositorytree_core::services::{
-    ConflictSide, ForcePushLease, InteractiveRebaseEntry, PullMode, RemoteUrlKind, ResetMode,
+    BisectVerdict, ConflictSide, ForcePushLease, InteractiveRebaseEntry, MergeRequestPushOptions,
+    PullMode, RemoteUrlKind, ResetMode,
     SafePushAfterCommitContext, SafePushAfterCommitTarget, SubmoduleTrustTarget,
 };
 use std::path::PathBuf;
@@ -35,6 +36,12 @@ pub enum Effect {
         repo_id: Option<RepoId>,
         workdir: PathBuf,
         author: Option<String>,
+        action: &'static str,
+    },
+    PersistRepoHistoryRefFilters {
+        repo_id: Option<RepoId>,
+        workdir: PathBuf,
+        refs: Vec<String>,
         action: &'static str,
     },
     OpenRepo {
@@ -77,6 +84,9 @@ pub enum Effect {
         scope: LogScope,
         /// Case-insensitive author filter, or `None` for all authors.
         author: Option<String>,
+        /// Full ref names the walk is seeded from instead of HEAD / every
+        /// ref; empty means no ref filter.
+        refs: Vec<String>,
         limit: usize,
         cursor: Option<LogCursor>,
     },
@@ -97,6 +107,11 @@ pub enum Effect {
     LoadRecentCommitMessages {
         repo_id: RepoId,
         limit: usize,
+        request_rev: u64,
+    },
+    SearchCommits {
+        repo_id: RepoId,
+        query: String,
         request_rev: u64,
     },
     LoadAiCommitContext {
@@ -144,6 +159,9 @@ pub enum Effect {
         repo_id: RepoId,
     },
     LoadRebaseState {
+        repo_id: RepoId,
+    },
+    LoadBisectState {
         repo_id: RepoId,
     },
     LoadMergeCommitMessage {
@@ -270,6 +288,11 @@ pub enum Effect {
         branch: String,
         local_branch: String,
     },
+    CheckoutPullRequest {
+        repo_id: RepoId,
+        remote: String,
+        number: u64,
+    },
     CheckoutCommit {
         repo_id: RepoId,
         commit_id: CommitId,
@@ -325,6 +348,14 @@ pub enum Effect {
         repo_id: RepoId,
         commit_id: CommitId,
         dest: PathBuf,
+    },
+    ArchiveZip {
+        repo_id: RepoId,
+        revision: String,
+        dest: PathBuf,
+    },
+    CleanupRepo {
+        repo_id: RepoId,
     },
     ApplyPatch {
         repo_id: RepoId,
@@ -496,6 +527,11 @@ pub enum Effect {
         lease: ForcePushLease,
         auth: Option<StagedGitAuth>,
     },
+    PushMergeRequest {
+        repo_id: RepoId,
+        options: MergeRequestPushOptions,
+        auth: Option<StagedGitAuth>,
+    },
     PushSetUpstream {
         repo_id: RepoId,
         remote: String,
@@ -551,6 +587,21 @@ pub enum Effect {
         auth: Option<StagedGitAuth>,
     },
     RebaseAbort {
+        repo_id: RepoId,
+    },
+    /// Bisect commands never sign and never touch the network, so unlike
+    /// `RebaseContinue` they carry no staged-auth slot.
+    BisectStart {
+        repo_id: RepoId,
+        bad: Option<String>,
+        goods: Vec<String>,
+    },
+    BisectMark {
+        repo_id: RepoId,
+        verdict: BisectVerdict,
+        commit: Option<String>,
+    },
+    BisectReset {
         repo_id: RepoId,
     },
     LoadInteractiveRebaseSetup {
@@ -617,6 +668,11 @@ pub enum Effect {
         url: String,
         kind: RemoteUrlKind,
     },
+    SetRemoteSshKey {
+        repo_id: RepoId,
+        remote: String,
+        key: Option<String>,
+    },
     CheckoutConflictSide {
         repo_id: RepoId,
         path: PathBuf,
@@ -638,6 +694,8 @@ pub enum Effect {
         repo_id: RepoId,
         message: String,
         include_untracked: bool,
+        keep_index: bool,
+        paths: RepoPathList,
     },
     ApplyStash {
         repo_id: RepoId,
@@ -650,5 +708,24 @@ pub enum Effect {
     DropStash {
         repo_id: RepoId,
         index: usize,
+    },
+    StashBranch {
+        repo_id: RepoId,
+        index: usize,
+        branch: String,
+    },
+    SetAssumeUnchanged {
+        repo_id: RepoId,
+        path: PathBuf,
+        enable: bool,
+    },
+    LoadAssumeUnchanged {
+        repo_id: RepoId,
+    },
+    /// Fetch the statistics window's commits (see
+    /// `GitRepository::contributor_commits_since`). The cutoff is the
+    /// executing worker's — long enough to cover a year in any timezone.
+    LoadRepoStatistics {
+        repo_id: RepoId,
     },
 }

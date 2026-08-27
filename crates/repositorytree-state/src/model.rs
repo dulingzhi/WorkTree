@@ -7,8 +7,8 @@ use repositorytree_core::conflict_session::{
 use repositorytree_core::domain::*;
 use repositorytree_core::process::GitRuntimeState;
 use repositorytree_core::services::{
-    BlameLine, ForcePushLease, InteractiveRebaseEntry, SafePushAfterCommitContext, SequencerState,
-    SubmoduleTrustTarget,
+    BisectState, BlameLine, ForcePushLease, InteractiveRebaseEntry, SafePushAfterCommitContext,
+    SequencerState, SubmoduleTrustTarget,
 };
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
@@ -101,6 +101,11 @@ pub type LogLoadSeq = u64;
 pub struct PendingLogLoad {
     pub scope: LogScope,
     pub author: Option<String>,
+    /// Full ref names the walk is seeded from instead of HEAD / every ref.
+    /// Empty means no ref filter. Kept sorted + deduplicated, mirroring
+    /// [`RepoState::set_history_ref_filters`], so equality of two requests
+    /// means equality of the walks they describe.
+    pub refs: Vec<String>,
     pub limit: usize,
     pub cursor: Option<LogCursor>,
 }
@@ -127,6 +132,7 @@ impl RepoLoadsInFlight {
     /// Deliberately outside `PRIMARY_REFRESH_FLAGS`: the live listing is a
     /// worktree walk, far costlier than the other loads.
     pub const FILE_BROWSER: u32 = 1 << 18;
+    pub const BISECT_STATE: u32 = 1 << 19;
     const PRIMARY_REFRESH_FLAGS: u32 = Self::HEAD_BRANCH
         | Self::UPSTREAM_DIVERGENCE
         | Self::REBASE_STATE
@@ -198,38 +204,42 @@ impl RepoLoadsInFlight {
     }
 
     /// For log loads: coalesce by keeping only the latest requested
-    /// `(scope, author, cursor)` while a log load is already in flight. Returns
-    /// the new walk's sequence number when it starts now, `None` when it was
-    /// queued behind the walk in flight.
+    /// `(scope, author, refs, cursor)` while a log load is already in flight.
+    /// Returns the new walk's sequence number when it starts now, `None` when
+    /// it was queued behind the walk in flight.
     ///
-    /// A request that changes the scope or the author filter is dispatched
-    /// straight away instead of being queued: on a large repository a walk runs
-    /// for tens of seconds, and the repo-load pool has one or two threads, so
-    /// waiting the old one out would stall the new filter for that whole time.
-    /// The effects layer cancels the superseded walk, and its reply is dropped
-    /// by [`Self::is_active_log_reply`].
+    /// A request that changes the scope, the author filter, or the ref filter
+    /// is dispatched straight away instead of being queued: on a large
+    /// repository a walk runs for tens of seconds, and the repo-load pool has
+    /// one or two threads, so waiting the old one out would stall the new
+    /// filter for that whole time. The effects layer cancels the superseded
+    /// walk, and its reply is dropped by [`Self::is_active_log_reply`].
     pub fn request_log(&mut self, next: PendingLogLoad) -> Option<LogLoadSeq> {
         if !self.is_in_flight(Self::LOG) {
             self.in_flight |= Self::LOG;
             return Some(self.start_log(next));
         }
 
-        let supersedes_active = self
-            .active_log
-            .as_ref()
-            .is_none_or(|(_, active)| active.scope != next.scope || active.author != next.author);
+        let supersedes_active = self.active_log.as_ref().is_none_or(|(_, active)| {
+            active.scope != next.scope || active.author != next.author || active.refs != next.refs
+        });
         if supersedes_active {
             self.pending_log = None;
             return Some(self.start_log(next));
         }
         match &self.pending_log {
-            // Scope or author changes invalidate older pending requests
-            // (including pagination).
-            Some(existing) if existing.scope != next.scope || existing.author != next.author => {
+            // Scope, author, or ref-filter changes invalidate older pending
+            // requests (including pagination).
+            Some(existing) if {
+                existing.scope != next.scope
+                    || existing.author != next.author
+                    || existing.refs != next.refs
+            } =>
+            {
                 self.pending_log = Some(next);
             }
             // Don't let a refresh request (cursor=None) clobber a pending pagination request
-            // for the same scope and author.
+            // for the same scope, author, and refs.
             Some(existing) if existing.cursor.is_some() && next.cursor.is_none() => {}
             _ => {
                 self.pending_log = Some(next);
@@ -787,6 +797,10 @@ pub struct HistoryState {
     /// Case-insensitive author filter for the history, or `None` for all
     /// authors. Matches the author name shown in the UI.
     pub history_author_filter: Option<String>,
+    /// Full ref names (`refs/heads/…`, `refs/remotes/…`, `refs/tags/…`) the
+    /// history is restricted to, or empty for the unfiltered walk. Kept
+    /// sorted and deduplicated by [`RepoState::set_history_ref_filters`].
+    pub history_ref_filters: Vec<String>,
     pub log: Loadable<Shared<LogPage>>,
     pub retained_log_while_loading: Option<Shared<LogPage>>,
     pub log_loading_more: bool,
@@ -855,6 +869,7 @@ impl Default for HistoryState {
         Self {
             history_scope: LogScope::default(),
             history_author_filter: None,
+            history_ref_filters: Vec::new(),
             log: Loadable::NotLoaded,
             retained_log_while_loading: None,
             log_loading_more: false,
@@ -973,6 +988,11 @@ pub struct DiffState {
     pub inline_submodule_diff_rev: u64,
     pub inline_submodule_diff: Option<InlineSubmoduleDiffState>,
     pub diff_file_image: Loadable<Option<Shared<FileDiffImage>>>,
+    /// LFS pointer change for the selected target. A Ready value takes the
+    /// place of the text diff: the worker-side load redirects here when the
+    /// path is LFS-filtered, so the pane renders the pointer panel instead
+    /// of the pointer file's raw text.
+    pub diff_file_lfs: Loadable<Option<Shared<LfsPointerChange>>>,
 }
 
 impl Default for DiffState {
@@ -996,6 +1016,7 @@ impl Default for DiffState {
             inline_submodule_diff_rev: 0,
             inline_submodule_diff: None,
             diff_file_image: Loadable::NotLoaded,
+            diff_file_lfs: Loadable::NotLoaded,
         }
     }
 }
@@ -1179,6 +1200,11 @@ pub struct RepoState {
     pub remote_tags_rev: u64,
     pub remotes: Loadable<Arc<Vec<Remote>>>,
     pub remotes_rev: u64,
+    /// Open pull requests of the repo's GitHub remote, loaded on demand by
+    /// the sidebar's Pull Requests section (UI-driven GitHub API call, no
+    /// git backend involvement).
+    pub pull_requests: Loadable<Arc<Vec<PullRequest>>>,
+    pub pull_requests_rev: u64,
     pub remote_branches: Loadable<Arc<Vec<RemoteBranch>>>,
     pub remote_branches_rev: u64,
     pub worktree_status: Loadable<Arc<Vec<FileStatus>>>,
@@ -1196,10 +1222,26 @@ pub struct RepoState {
     pub log_rev: u64,
     pub stashes: Loadable<Arc<Vec<StashEntry>>>,
     pub stashes_rev: u64,
+    /// Paths currently marked assume-unchanged (`git ls-files -v` lowercase
+    /// tags). Loaded on demand for the management dialog.
+    pub assume_unchanged: Loadable<Arc<Vec<PathBuf>>>,
+    pub assume_unchanged_rev: u64,
+    /// Bare (author, time) pairs for the statistics window, over a window
+    /// ending now. Loaded on demand, when the statistics dialog opens.
+    pub statistics: Loadable<Arc<Vec<ContributorCommit>>>,
+    pub statistics_rev: u64,
     pub reflog: Loadable<Arc<Vec<ReflogEntry>>>,
     pub reflog_rev: u64,
     pub recent_commit_messages: Loadable<Arc<Vec<RecentCommitMessage>>>,
     pub recent_commit_messages_rev: u64,
+    /// Cross-history commit search results, newest first. Empty query or
+    /// `NotLoaded` means the picker shows its local (loaded-log) rows only.
+    pub commit_search: Loadable<Arc<Vec<Commit>>>,
+    pub commit_search_rev: u64,
+    /// The query the current `commit_search` state belongs to. Set when a
+    /// search is dispatched, so the picker can tell results for the typed
+    /// query from results left over from an earlier one.
+    pub commit_search_query: Option<String>,
     /// Inputs for AI commit-message generation: the whole staged diff plus
     /// recent commit subjects as format examples. Transient — fetched on
     /// demand when the ✨ button is clicked, never refreshed implicitly.
@@ -1207,6 +1249,9 @@ pub struct RepoState {
     pub ai_commit_context_rev: u64,
     pub rebase_in_progress: Loadable<bool>,
     pub sequencer_state: Loadable<SequencerState>,
+    /// Parsed `git bisect log` state; `Ready(None)` when not bisecting.
+    /// Loaded alongside `sequencer_state` on every primary refresh.
+    pub bisect: Loadable<Option<BisectState>>,
     pub merge_commit_message: Loadable<Option<String>>,
     /// Commit whose full message the history hover card is showing, and the
     /// message once it arrives. A single slot: only one card is ever open, and
@@ -1313,6 +1358,8 @@ impl RepoState {
             remote_tags: Loadable::NotLoaded,
             remote_tags_rev: 0,
             remotes: Loadable::NotLoaded,
+            pull_requests: Loadable::NotLoaded,
+            pull_requests_rev: 0,
             remotes_rev: 0,
             remote_branches: Loadable::NotLoaded,
             remote_branches_rev: 0,
@@ -1328,14 +1375,22 @@ impl RepoState {
             log_rev: 0,
             stashes: Loadable::NotLoaded,
             stashes_rev: 0,
+            assume_unchanged: Loadable::NotLoaded,
+            assume_unchanged_rev: 0,
+            statistics: Loadable::NotLoaded,
+            statistics_rev: 0,
             reflog: Loadable::NotLoaded,
             reflog_rev: 0,
             recent_commit_messages: Loadable::NotLoaded,
             recent_commit_messages_rev: 0,
+            commit_search: Loadable::NotLoaded,
+            commit_search_rev: 0,
+            commit_search_query: None,
             ai_commit_context: Loadable::NotLoaded,
             ai_commit_context_rev: 0,
             rebase_in_progress: Loadable::NotLoaded,
             sequencer_state: Loadable::NotLoaded,
+            bisect: Loadable::NotLoaded,
             merge_commit_message: Loadable::NotLoaded,
             hover_commit_message: None,
             interactive_rebase_setup: None,
@@ -1438,6 +1493,38 @@ impl RepoState {
         self.bump_branch_sidebar_rev();
     }
 
+    pub(crate) fn set_pull_requests(&mut self, pull_requests: Loadable<Vec<PullRequest>>) {
+        let pull_requests = loadable_into_arc(pull_requests);
+        if self.pull_requests == pull_requests {
+            return;
+        }
+        self.pull_requests = pull_requests;
+        self.pull_requests_rev = self.pull_requests_rev.wrapping_add(1);
+        self.bump_branch_sidebar_rev();
+    }
+
+    /// Lands the CI verdict for one PR of the loaded list. No-op when the
+    /// list no longer carries that number (a reload replaced it meanwhile).
+    pub(crate) fn set_pull_request_checks(
+        &mut self,
+        number: u64,
+        checks: PullRequestChecksState,
+    ) {
+        let Loadable::Ready(pull_requests) = &mut self.pull_requests else {
+            return;
+        };
+        let pull_requests = Arc::make_mut(pull_requests);
+        let Some(pull_request) = pull_requests.iter_mut().find(|pr| pr.number == number) else {
+            return;
+        };
+        if pull_request.checks == Some(checks) {
+            return;
+        }
+        pull_request.checks = Some(checks);
+        self.pull_requests_rev = self.pull_requests_rev.wrapping_add(1);
+        self.bump_branch_sidebar_rev();
+    }
+
     pub(crate) fn set_remote_branches(&mut self, remote_branches: Loadable<Vec<RemoteBranch>>) {
         let remote_branches = loadable_into_arc(remote_branches);
         if self.remote_branches == remote_branches {
@@ -1483,6 +1570,18 @@ impl RepoState {
         }
         self.recent_commit_messages = messages;
         self.recent_commit_messages_rev = self.recent_commit_messages_rev.wrapping_add(1);
+    }
+
+    pub(crate) fn set_commit_search(&mut self, results: Loadable<Vec<Commit>>) {
+        let results = loadable_into_arc(results);
+        // `Loading` is exempt from the equal-value early return: two searches
+        // in a row both load, and the revision bump is what lets the second
+        // one's response reject the first one's as superseded.
+        if self.commit_search == results && !matches!(results, Loadable::Loading) {
+            return;
+        }
+        self.commit_search = results;
+        self.commit_search_rev = self.commit_search_rev.wrapping_add(1);
     }
 
     pub(crate) fn set_ai_commit_context(&mut self, context: Loadable<AiCommitContext>) {
@@ -1867,6 +1966,20 @@ impl RepoState {
         self.bump_log_revs();
     }
 
+    /// Stores the ref-filter set, normalized to sorted + deduplicated so two
+    /// requests carrying the same refs in different order compare equal — the
+    /// log-walk bookkeeping coalesces by that equality.
+    pub(crate) fn set_history_ref_filters(&mut self, refs: Vec<String>) {
+        let mut refs = refs;
+        refs.sort();
+        refs.dedup();
+        if self.history_state.history_ref_filters == refs {
+            return;
+        }
+        self.history_state.history_ref_filters = refs;
+        self.bump_log_revs();
+    }
+
     pub(crate) fn set_reveal_target(&mut self, v: Option<CommitId>) {
         self.history_state.reveal_target = v;
     }
@@ -2030,6 +2143,11 @@ impl RepoState {
 
     pub(crate) fn set_sequencer_state(&mut self, v: Loadable<SequencerState>) {
         self.sequencer_state = v;
+        self.merge_message_rev = self.merge_message_rev.wrapping_add(1);
+    }
+
+    pub(crate) fn set_bisect(&mut self, v: Loadable<Option<BisectState>>) {
+        self.bisect = v;
         self.merge_message_rev = self.merge_message_rev.wrapping_add(1);
     }
 
@@ -2522,6 +2640,7 @@ mod tests {
         repo.status = Loadable::Ready(Arc::new(RepoStatus::default()));
         repo.history_state.log = Loadable::Ready(Arc::new(LogPage {
             commits: vec![Commit {
+                signed: false,
                 id: CommitId("c1".into()),
                 parent_ids: repositorytree_core::domain::CommitParentIds::new(),
                 summary: "s1".into(),
@@ -2622,6 +2741,7 @@ mod tests {
         PendingLogLoad {
             scope,
             author: author.map(str::to_owned),
+            refs: Vec::new(),
             limit: 20,
             cursor,
         }
@@ -2948,6 +3068,7 @@ mod tests {
         let mut repo = new_repo();
         let page = Arc::new(LogPage {
             commits: vec![Commit {
+                signed: false,
                 id: CommitId("c1".into()),
                 parent_ids: repositorytree_core::domain::CommitParentIds::new(),
                 summary: "s1".into(),
@@ -3239,6 +3360,59 @@ mod tests {
         let rev = repo.remotes_rev;
         repo.set_remotes(Loadable::Loading);
         assert_eq!(repo.remotes_rev, rev);
+    }
+
+    fn sample_pull_request(number: u64) -> PullRequest {
+        PullRequest {
+            number,
+            title: format!("PR {number}"),
+            author: "alice".into(),
+            head_ref: "feature".into(),
+            head_sha: CommitId(format!("{number:040}").into()),
+            base_ref: "main".into(),
+            draft: false,
+            checks: None,
+        }
+    }
+
+    /// The checks pass lands one PR at a time after the list itself, so the
+    /// sidebar cache must only rebuild when a verdict actually changed — and
+    /// must tolerate a reload that dropped the number in between.
+    #[test]
+    fn set_pull_request_checks_bumps_rev_only_on_real_changes() {
+        let mut repo = new_repo();
+        repo.set_pull_requests(Loadable::Ready(vec![
+            sample_pull_request(7),
+            sample_pull_request(8),
+        ]));
+        let before = repo.pull_requests_rev;
+
+        repo.set_pull_request_checks(7, PullRequestChecksState::Success);
+        assert_eq!(repo.pull_requests_rev, before + 1);
+        repo.set_pull_request_checks(7, PullRequestChecksState::Success);
+        assert_eq!(repo.pull_requests_rev, before + 1);
+
+        repo.set_pull_request_checks(8, PullRequestChecksState::Pending);
+        assert_eq!(repo.pull_requests_rev, before + 2);
+        assert_eq!(
+            repo.pull_requests,
+            Loadable::Ready(Arc::new(vec![
+                PullRequest {
+                    checks: Some(PullRequestChecksState::Success),
+                    ..sample_pull_request(7)
+                },
+                PullRequest {
+                    checks: Some(PullRequestChecksState::Pending),
+                    ..sample_pull_request(8)
+                },
+            ]))
+        );
+
+        // A reload replaced the list while a status call was in flight.
+        repo.set_pull_requests(Loadable::Ready(vec![sample_pull_request(9)]));
+        let after_reload = repo.pull_requests_rev;
+        repo.set_pull_request_checks(7, PullRequestChecksState::Failure);
+        assert_eq!(repo.pull_requests_rev, after_reload);
     }
 
     #[test]

@@ -1,7 +1,7 @@
 use repositorytree_core::domain::CommitId;
 use repositorytree_core::services::{
-    ConflictSide, ForcePushLease, InteractiveRebaseEntry, PullMode, RemoteUrlKind, ResetMode,
-    SafePushAfterCommitTarget, SubmoduleTrustTarget,
+    BisectVerdict, ConflictSide, ForcePushLease, InteractiveRebaseEntry, MergeRequestPushOptions,
+    PullMode, RemoteUrlKind, ResetMode, SafePushAfterCommitTarget, SubmoduleTrustTarget,
 };
 use std::path::PathBuf;
 
@@ -35,6 +35,11 @@ pub enum RepoCommandKind {
     ForcePush,
     ForcePushWithLease {
         lease: ForcePushLease,
+    },
+    /// Push HEAD with `git push -o merge_request.*` options so GitLab opens
+    /// the merge request from the push itself.
+    PushMergeRequest {
+        options: MergeRequestPushOptions,
     },
     PushSetUpstream {
         remote: String,
@@ -73,6 +78,15 @@ pub enum RepoCommandKind {
     },
     RebaseContinue,
     RebaseAbort,
+    BisectStart {
+        bad: Option<String>,
+        goods: Vec<String>,
+    },
+    BisectMark {
+        verdict: BisectVerdict,
+        commit: Option<String>,
+    },
+    BisectReset,
     InteractiveRebase {
         base: String,
         /// True when the interactive-rebase editor was opened by the user;
@@ -120,6 +134,10 @@ pub enum RepoCommandKind {
         url: String,
         kind: RemoteUrlKind,
     },
+    SetRemoteSshKey {
+        remote: String,
+        key: Option<String>,
+    },
     CheckoutConflict {
         path: PathBuf,
         side: ConflictSide,
@@ -144,6 +162,12 @@ pub enum RepoCommandKind {
         commit_id: CommitId,
         dest: PathBuf,
     },
+    ArchiveZip {
+        revision: String,
+        dest: PathBuf,
+    },
+    /// `git gc` followed by `git lfs prune` when LFS is enabled.
+    Cleanup,
     ApplyPatch {
         patch: PathBuf,
     },

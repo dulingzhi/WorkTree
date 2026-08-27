@@ -134,6 +134,7 @@ pub(super) fn internal_msg_name(msg: &InternalMsg) -> &'static str {
         InternalMsg::RefMetadataLoaded { .. } => "RefMetadataLoaded",
         InternalMsg::SubmodulesLoaded { .. } => "SubmodulesLoaded",
         InternalMsg::RebaseStateLoaded { .. } => "RebaseStateLoaded",
+        InternalMsg::BisectStateLoaded { .. } => "BisectStateLoaded",
         InternalMsg::MergeCommitMessageLoaded { .. } => "MergeCommitMessageLoaded",
         _ => "InternalMsg",
     }
@@ -162,6 +163,7 @@ pub(super) fn effect_name(effect: &Effect) -> &'static str {
         Effect::LoadSubmodules { .. } => "LoadSubmodules",
         Effect::LoadRebaseAndMergeState { .. } => "LoadRebaseAndMergeState",
         Effect::LoadRebaseState { .. } => "LoadRebaseState",
+        Effect::LoadBisectState { .. } => "LoadBisectState",
         Effect::LoadMergeCommitMessage { .. } => "LoadMergeCommitMessage",
         Effect::PersistSession { .. } => "PersistSession",
         Effect::PersistRecentRepo { .. } => "PersistRecentRepo",
@@ -192,12 +194,14 @@ pub(super) fn effect_repo_id(effect: &Effect) -> Option<RepoId> {
         | Effect::LoadSubmodules { repo_id }
         | Effect::LoadRebaseAndMergeState { repo_id }
         | Effect::LoadRebaseState { repo_id }
+        | Effect::LoadBisectState { repo_id }
         | Effect::LoadMergeCommitMessage { repo_id } => Some(*repo_id),
         Effect::PersistSession { repo_id, .. } => *repo_id,
         Effect::PersistRecentRepo { repo_id, .. } => *repo_id,
         Effect::PersistRepoHistoryMode { repo_id, .. } => *repo_id,
         Effect::PersistRepoHistoryModesBatch { repo_id, .. } => *repo_id,
         Effect::PersistRepoHistoryAuthorFilter { repo_id, .. } => *repo_id,
+        Effect::PersistRepoHistoryRefFilters { repo_id, .. } => *repo_id,
         _ => None,
     }
 }

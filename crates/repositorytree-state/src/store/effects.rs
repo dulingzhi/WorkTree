@@ -247,6 +247,7 @@ fn send_unavailable_git_effect_result(
         | Effect::PersistRepoHistoryMode { .. }
         | Effect::PersistRepoHistoryModesBatch { .. }
         | Effect::PersistRepoHistoryAuthorFilter { .. }
+        | Effect::PersistRepoHistoryRefFilters { .. }
         | Effect::CancelRepoLoads { .. } => {}
         Effect::OpenRepo { repo_id, path } => {
             send(Msg::Internal(crate::msg::InternalMsg::RepoOpenedErr {
@@ -357,6 +358,15 @@ fn send_unavailable_git_effect_result(
                 result: Err(git_unavailable_error(runtime)),
             },
         )),
+        Effect::SearchCommits {
+            repo_id,
+            request_rev,
+            ..
+        } => send(Msg::Internal(crate::msg::InternalMsg::CommitsSearched {
+            repo_id,
+            request_rev,
+            result: Err(git_unavailable_error(runtime)),
+        })),
         Effect::LoadAiCommitContext {
             repo_id,
             request_rev,
@@ -478,6 +488,12 @@ fn send_unavailable_git_effect_result(
         }
         Effect::LoadRebaseState { repo_id } => {
             send(Msg::Internal(crate::msg::InternalMsg::RebaseStateLoaded {
+                repo_id,
+                result: Err(git_unavailable_error(runtime)),
+            }))
+        }
+        Effect::LoadBisectState { repo_id } => {
+            send(Msg::Internal(crate::msg::InternalMsg::BisectStateLoaded {
                 repo_id,
                 result: Err(git_unavailable_error(runtime)),
             }))
@@ -733,6 +749,12 @@ fn send_unavailable_git_effect_result(
             runtime,
             &send,
         ),
+        Effect::CheckoutPullRequest { repo_id, .. } => send_repo_action_unavailable(
+            repo_id,
+            RepoActionKind::CheckoutPullRequest,
+            runtime,
+            &send,
+        ),
         Effect::CheckoutCommit { repo_id, .. } => {
             send_repo_action_unavailable(repo_id, RepoActionKind::CheckoutCommit, runtime, &send)
         }
@@ -814,6 +836,31 @@ fn send_unavailable_git_effect_result(
         Effect::DropStash { repo_id, .. } => {
             send_repo_action_unavailable(repo_id, RepoActionKind::DropStash, runtime, &send)
         }
+        Effect::StashBranch { repo_id, .. } => {
+            send_repo_action_unavailable(repo_id, RepoActionKind::StashBranch, runtime, &send)
+        }
+        Effect::SetAssumeUnchanged { repo_id, .. } => send_repo_action_unavailable(
+            repo_id,
+            RepoActionKind::SetAssumeUnchanged,
+            runtime,
+            &send,
+        ),
+        Effect::LoadAssumeUnchanged { repo_id } => {
+            send(Msg::Internal(
+                crate::msg::InternalMsg::AssumeUnchangedListLoaded {
+                    repo_id,
+                    result: Err(git_unavailable_error(runtime)),
+                },
+            ))
+        }
+        Effect::LoadRepoStatistics { repo_id } => {
+            send(Msg::Internal(
+                crate::msg::InternalMsg::RepoStatisticsLoaded {
+                    repo_id,
+                    result: Err(git_unavailable_error(runtime)),
+                },
+            ))
+        }
         Effect::CloneRepo { url, dest, .. } => {
             send(Msg::Internal(crate::msg::InternalMsg::CloneRepoFinished {
                 url,
@@ -830,6 +877,24 @@ fn send_unavailable_git_effect_result(
             crate::msg::InternalMsg::RepoCommandFinished {
                 repo_id,
                 command: RepoCommandKind::ExportPatch { commit_id, dest },
+                result: Err(git_unavailable_error(runtime)),
+            },
+        )),
+        Effect::ArchiveZip {
+            repo_id,
+            revision,
+            dest,
+        } => send(Msg::Internal(
+            crate::msg::InternalMsg::RepoCommandFinished {
+                repo_id,
+                command: RepoCommandKind::ArchiveZip { revision, dest },
+                result: Err(git_unavailable_error(runtime)),
+            },
+        )),
+        Effect::CleanupRepo { repo_id } => send(Msg::Internal(
+            crate::msg::InternalMsg::RepoCommandFinished {
+                repo_id,
+                command: RepoCommandKind::Cleanup,
                 result: Err(git_unavailable_error(runtime)),
             },
         )),
@@ -1081,6 +1146,17 @@ fn send_unavailable_git_effect_result(
                 result: Err(git_unavailable_error(runtime)),
             },
         )),
+        Effect::PushMergeRequest {
+            repo_id,
+            options,
+            ..
+        } => send(Msg::Internal(
+            crate::msg::InternalMsg::RepoCommandFinished {
+                repo_id,
+                command: RepoCommandKind::PushMergeRequest { options },
+                result: Err(git_unavailable_error(runtime)),
+            },
+        )),
         Effect::PushSetUpstream {
             repo_id,
             remote,
@@ -1189,6 +1265,35 @@ fn send_unavailable_git_effect_result(
             crate::msg::InternalMsg::RepoCommandFinished {
                 repo_id,
                 command: RepoCommandKind::RebaseAbort,
+                result: Err(git_unavailable_error(runtime)),
+            },
+        )),
+        Effect::BisectStart {
+            repo_id,
+            bad,
+            goods,
+        } => send(Msg::Internal(
+            crate::msg::InternalMsg::RepoCommandFinished {
+                repo_id,
+                command: RepoCommandKind::BisectStart { bad, goods },
+                result: Err(git_unavailable_error(runtime)),
+            },
+        )),
+        Effect::BisectMark {
+            repo_id,
+            verdict,
+            commit,
+        } => send(Msg::Internal(
+            crate::msg::InternalMsg::RepoCommandFinished {
+                repo_id,
+                command: RepoCommandKind::BisectMark { verdict, commit },
+                result: Err(git_unavailable_error(runtime)),
+            },
+        )),
+        Effect::BisectReset { repo_id } => send(Msg::Internal(
+            crate::msg::InternalMsg::RepoCommandFinished {
+                repo_id,
+                command: RepoCommandKind::BisectReset,
                 result: Err(git_unavailable_error(runtime)),
             },
         )),
@@ -1304,6 +1409,17 @@ fn send_unavailable_git_effect_result(
             crate::msg::InternalMsg::RepoCommandFinished {
                 repo_id,
                 command: RepoCommandKind::SetRemoteUrl { name, url, kind },
+                result: Err(git_unavailable_error(runtime)),
+            },
+        )),
+        Effect::SetRemoteSshKey {
+            repo_id,
+            remote,
+            key,
+        } => send(Msg::Internal(
+            crate::msg::InternalMsg::RepoCommandFinished {
+                repo_id,
+                command: RepoCommandKind::SetRemoteSshKey { remote, key },
                 result: Err(git_unavailable_error(runtime)),
             },
         )),
@@ -1453,6 +1569,32 @@ pub(super) fn schedule_effect(
                 if let Err(error) = session::persist_repo_history_author_filter_to_path(
                     &workdir,
                     author.as_deref(),
+                    &session_file_path,
+                ) {
+                    util::send_or_log(
+                        &msg_tx,
+                        Msg::Internal(crate::msg::InternalMsg::SessionPersistFailed {
+                            repo_id,
+                            action,
+                            error: error.to_string(),
+                        }),
+                    );
+                }
+            });
+        }
+        Effect::PersistRepoHistoryRefFilters {
+            repo_id,
+            workdir,
+            refs,
+            action,
+        } => {
+            let Some(session_file_path) = session::default_session_file_path_for_effect() else {
+                return;
+            };
+            session_persist_executor.spawn(move || {
+                if let Err(error) = session::persist_repo_history_ref_filters_to_path(
+                    &workdir,
+                    &refs,
                     &session_file_path,
                 ) {
                     util::send_or_log(
@@ -1633,6 +1775,7 @@ pub(super) fn schedule_effect(
             seq,
             scope,
             author,
+            refs,
             limit,
             cursor,
         } => {
@@ -1647,6 +1790,7 @@ pub(super) fn schedule_effect(
                     seq,
                     scope,
                     author,
+                    refs,
                     limit,
                     cursor,
                     cancellation,
@@ -1856,6 +2000,19 @@ pub(super) fn schedule_effect(
                 );
             }
         }
+        Effect::LoadBisectState { repo_id } => {
+            if let Some((msg_tx, cancellation)) =
+                repo_load_context(thread_state, repo_task_tokens, msg_tx, repo_id)
+            {
+                repo_load::schedule_load_bisect_state(
+                    repo_load_executor,
+                    repos,
+                    msg_tx,
+                    repo_id,
+                    cancellation,
+                );
+            }
+        }
         Effect::LoadMergeCommitMessage { repo_id } => {
             if let Some((msg_tx, cancellation)) =
                 repo_load_context(thread_state, repo_task_tokens, msg_tx, repo_id)
@@ -1880,6 +2037,20 @@ pub(super) fn schedule_effect(
                 msg_tx,
                 repo_id,
                 limit,
+                request_rev,
+            );
+        }
+        Effect::SearchCommits {
+            repo_id,
+            query,
+            request_rev,
+        } => {
+            repo_load::schedule_search_commits(
+                executor,
+                repos,
+                msg_tx,
+                repo_id,
+                query,
                 request_rev,
             );
         }
@@ -2155,6 +2326,13 @@ pub(super) fn schedule_effect(
             branch,
             local_branch,
         ),
+        Effect::CheckoutPullRequest {
+            repo_id,
+            remote,
+            number,
+        } => repo_actions::schedule_checkout_pull_request(
+            executor, repos, msg_tx, repo_id, remote, number,
+        ),
         Effect::CheckoutCommit { repo_id, commit_id } => {
             repo_actions::schedule_checkout_commit(executor, repos, msg_tx, repo_id, commit_id);
         }
@@ -2220,6 +2398,16 @@ pub(super) fn schedule_effect(
             dest,
         } => {
             repo_commands::schedule_export_patch(executor, repos, msg_tx, repo_id, commit_id, dest)
+        }
+        Effect::ArchiveZip {
+            repo_id,
+            revision,
+            dest,
+        } => {
+            repo_commands::schedule_archive_zip(executor, repos, msg_tx, repo_id, revision, dest)
+        }
+        Effect::CleanupRepo { repo_id } => {
+            repo_commands::schedule_cleanup(executor, repos, msg_tx, repo_id);
         }
         Effect::ApplyPatch { repo_id, patch } => {
             repo_commands::schedule_apply_patch(executor, repos, msg_tx, repo_id, patch);
@@ -2461,6 +2649,13 @@ pub(super) fn schedule_effect(
         } => repo_commands::schedule_force_push_with_lease(
             executor, repos, msg_tx, repo_id, lease, auth,
         ),
+        Effect::PushMergeRequest {
+            repo_id,
+            options,
+            auth,
+        } => repo_commands::schedule_push_merge_request(
+            executor, repos, msg_tx, repo_id, options, auth,
+        ),
         Effect::PushSetUpstream {
             repo_id,
             remote,
@@ -2527,6 +2722,23 @@ pub(super) fn schedule_effect(
         }
         Effect::RebaseAbort { repo_id } => {
             repo_commands::schedule_rebase_abort(executor, repos, msg_tx, repo_id)
+        }
+        Effect::BisectStart {
+            repo_id,
+            bad,
+            goods,
+        } => {
+            repo_commands::schedule_bisect_start(executor, repos, msg_tx, repo_id, bad, goods)
+        }
+        Effect::BisectMark {
+            repo_id,
+            verdict,
+            commit,
+        } => {
+            repo_commands::schedule_bisect_mark(executor, repos, msg_tx, repo_id, verdict, commit)
+        }
+        Effect::BisectReset { repo_id } => {
+            repo_commands::schedule_bisect_reset(executor, repos, msg_tx, repo_id)
         }
         Effect::LoadInteractiveRebaseSetup { repo_id, base } => {
             repo_load::schedule_load_interactive_rebase_setup(
@@ -2600,6 +2812,13 @@ pub(super) fn schedule_effect(
         } => repo_commands::schedule_set_remote_url(
             executor, repos, msg_tx, repo_id, name, url, kind,
         ),
+        Effect::SetRemoteSshKey {
+            repo_id,
+            remote,
+            key,
+        } => repo_commands::schedule_set_remote_ssh_key(
+            executor, repos, msg_tx, repo_id, remote, key,
+        ),
         Effect::CheckoutConflictSide {
             repo_id,
             path,
@@ -2620,6 +2839,8 @@ pub(super) fn schedule_effect(
             repo_id,
             message,
             include_untracked,
+            keep_index,
+            paths,
         } => repo_actions::schedule_stash(
             executor,
             repos,
@@ -2627,6 +2848,8 @@ pub(super) fn schedule_effect(
             repo_id,
             message,
             include_untracked,
+            keep_index,
+            paths,
         ),
         Effect::ApplyStash { repo_id, index } => {
             repo_actions::schedule_apply_stash(executor, repos, msg_tx, repo_id, index);
@@ -2636,6 +2859,24 @@ pub(super) fn schedule_effect(
         }
         Effect::DropStash { repo_id, index } => {
             repo_actions::schedule_drop_stash(executor, repos, msg_tx, repo_id, index);
+        }
+        Effect::StashBranch {
+            repo_id,
+            index,
+            branch,
+        } => repo_actions::schedule_stash_branch(executor, repos, msg_tx, repo_id, index, branch),
+        Effect::SetAssumeUnchanged {
+            repo_id,
+            path,
+            enable,
+        } => {
+            repo_actions::schedule_set_assume_unchanged(executor, repos, msg_tx, repo_id, path, enable);
+        }
+        Effect::LoadAssumeUnchanged { repo_id } => {
+            repo_load::schedule_load_assume_unchanged(executor, repos, msg_tx, repo_id);
+        }
+        Effect::LoadRepoStatistics { repo_id } => {
+            repo_load::schedule_load_repo_statistics(executor, repos, msg_tx, repo_id);
         }
     }
 }

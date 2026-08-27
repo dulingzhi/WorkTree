@@ -1,17 +1,20 @@
 use crate::util::git_workdir_cmd_for as util_git_workdir_cmd_for;
 use repositorytree_core::conflict_session::ConflictSession;
 use repositorytree_core::domain::{
-    Branch, Commit, CommitDetails, CommitFileChange, CommitId, Diff, DiffArea, DiffPreviewTextSide,
-    DiffTarget, FileDiffImage, FileDiffText, FileEntry, HistoryMode, LogCursor, LogPage,
-    RecentCommitMessage, RefMetadata, ReflogEntry, Remote, RemoteBranch, RemoteTag, RepoSpec,
+    Branch, Commit, CommitDetails, CommitFileChange, CommitId, ContributorCommit, Diff, DiffArea,
+    DiffPreviewTextSide,
+    DiffTarget, FileDiffImage, FileDiffText, FileEntry, HistoryMode, LfsPointerChange, LogCursor,
+    LogPage, RecentCommitMessage, RefMetadata, ReflogEntry, Remote, RemoteBranch, RemoteTag,
+    RepoSpec,
     RepoStatus, StashEntry, Submodule, SubmoduleDiffSummary, Tag, UpstreamDivergence, Worktree,
 };
 use repositorytree_core::error::{Error, ErrorKind};
 use repositorytree_core::git_ops_trace::{self, GitOpTraceKind};
 use repositorytree_core::services::{
-    BlameLine, CancellationToken, CommandOutput, CommitOperationOutcome, ConflictFileStages,
-    ConflictSide, ForcePushLease, GitRepository, InteractiveRebaseEntry, MergetoolResult, PullMode,
-    RemoteUrlKind, ResetMode, Result, SafePushAfterCommitContext, SafePushAfterCommitDecision,
+    BisectState, BisectVerdict, BlameLine, CancellationToken, CommandOutput,
+    CommitOperationOutcome, ConflictFileStages, ConflictSide, ForcePushLease, GitRepository,
+    InteractiveRebaseEntry, MergetoolResult, MergeRequestPushOptions, PullMode, RemoteUrlKind,
+    ResetMode, Result, SafePushAfterCommitContext, SafePushAfterCommitDecision,
     SafePushAfterCommitTarget, SequencerState, SubmoduleTrustDecision, SubmoduleTrustTarget,
 };
 use rustc_hash::FxHashMap;
@@ -38,6 +41,7 @@ pub(super) fn bstr_to_arc_str(bytes: &[u8]) -> Arc<str> {
     }
 }
 
+mod archive;
 mod blame;
 mod conflict_stages;
 mod diff;
@@ -45,6 +49,8 @@ mod discard;
 mod file_browser;
 mod git_ops;
 mod history;
+mod assume_unchanged;
+mod lfs;
 mod log;
 mod mergetool;
 mod mergetool_builtin;
@@ -303,6 +309,22 @@ impl GitRepository for GixRepo {
         )
     }
 
+    fn log_history_mode_refs_page_streaming(
+        &self,
+        mode: HistoryMode,
+        refs: &[String],
+        author: Option<&str>,
+        limit: usize,
+        cursor: Option<&LogCursor>,
+        cancellation: &CancellationToken,
+        on_chunk: &mut dyn FnMut(repositorytree_core::services::LogChunk),
+    ) -> Result<LogPage> {
+        let _scope = git_ops_trace::scope(GitOpTraceKind::LogWalk);
+        self.log_history_mode_refs_page_streaming_impl(
+            mode, refs, author, limit, cursor, cancellation, on_chunk,
+        )
+    }
+
     fn log_head_page(&self, limit: usize, cursor: Option<&LogCursor>) -> Result<LogPage> {
         let _scope = git_ops_trace::scope(GitOpTraceKind::LogWalk);
         self.log_head_page_impl(limit, cursor)
@@ -348,6 +370,14 @@ impl GitRepository for GixRepo {
         self.author_email_map_impl()
     }
 
+    fn contributor_commits_since(
+        &self,
+        since: std::time::SystemTime,
+    ) -> Result<Vec<ContributorCommit>> {
+        let _scope = git_ops_trace::scope(GitOpTraceKind::LogWalk);
+        self.contributor_commits_since_impl(since)
+    }
+
     fn commit_details(&self, id: &CommitId) -> Result<CommitDetails> {
         self.commit_details_impl(id)
     }
@@ -370,6 +400,10 @@ impl GitRepository for GixRepo {
 
     fn recent_commit_messages(&self, limit: usize) -> Result<Vec<RecentCommitMessage>> {
         self.recent_commit_messages_impl(limit)
+    }
+
+    fn search_commits(&self, query: &str, limit: usize) -> Result<Vec<Commit>> {
+        self.search_commits_impl(query, limit)
     }
 
     fn reflog_head(&self, limit: usize) -> Result<Vec<ReflogEntry>> {
@@ -597,6 +631,10 @@ impl GitRepository for GixRepo {
         self.checkout_remote_branch_impl(remote, branch, local_branch)
     }
 
+    fn checkout_pull_request(&self, remote: &str, number: u64) -> Result<()> {
+        self.checkout_pull_request_impl(remote, number)
+    }
+
     fn checkout_commit(&self, id: &CommitId) -> Result<()> {
         self.checkout_commit_impl(id)
     }
@@ -618,8 +656,14 @@ impl GitRepository for GixRepo {
         self.revert_impl(id)
     }
 
-    fn stash_create(&self, message: &str, include_untracked: bool) -> Result<()> {
-        self.stash_create_impl(message, include_untracked)
+    fn stash_create(
+        &self,
+        message: &str,
+        include_untracked: bool,
+        keep_index: bool,
+        paths: &[PathBuf],
+    ) -> Result<()> {
+        self.stash_create_impl(message, include_untracked, keep_index, paths)
     }
 
     fn stash_list(&self) -> Result<Vec<StashEntry>> {
@@ -639,6 +683,10 @@ impl GitRepository for GixRepo {
 
     fn stash_drop(&self, index: usize) -> Result<()> {
         self.stash_drop_impl(index)
+    }
+
+    fn stash_branch(&self, branch: &str, index: usize) -> Result<()> {
+        self.stash_branch_impl(branch, index)
     }
 
     fn stage(&self, paths: &[&Path]) -> Result<()> {
@@ -726,6 +774,13 @@ impl GitRepository for GixRepo {
         self.push_force_with_lease_with_output_impl(lease)
     }
 
+    fn push_merge_request_with_output(
+        &self,
+        options: &MergeRequestPushOptions,
+    ) -> Result<CommandOutput> {
+        self.push_merge_request_with_output_impl(options)
+    }
+
     fn reset_with_output(&self, target: &str, mode: ResetMode) -> Result<CommandOutput> {
         self.reset_with_output_impl(target, mode)
     }
@@ -793,6 +848,40 @@ impl GitRepository for GixRepo {
         Ok(state)
     }
 
+    fn bisect_state(&self) -> Result<Option<BisectState>> {
+        self.bisect_state_impl()
+    }
+
+    fn bisect_state_cancellable(
+        &self,
+        cancellation: &CancellationToken,
+    ) -> Result<Option<BisectState>> {
+        cancellation.check_cancelled()?;
+        let state = self.bisect_state_impl()?;
+        cancellation.check_cancelled()?;
+        Ok(state)
+    }
+
+    fn bisect_start_with_output(
+        &self,
+        bad: Option<&str>,
+        goods: &[String],
+    ) -> Result<CommandOutput> {
+        self.bisect_start_with_output_impl(bad, goods)
+    }
+
+    fn bisect_mark_with_output(
+        &self,
+        verdict: BisectVerdict,
+        commit: Option<&str>,
+    ) -> Result<CommandOutput> {
+        self.bisect_mark_with_output_impl(verdict, commit)
+    }
+
+    fn bisect_reset_with_output(&self) -> Result<CommandOutput> {
+        self.bisect_reset_with_output_impl()
+    }
+
     fn merge_commit_message(&self) -> Result<Option<String>> {
         self.merge_commit_message_impl()
     }
@@ -852,6 +941,14 @@ impl GitRepository for GixRepo {
         kind: RemoteUrlKind,
     ) -> Result<CommandOutput> {
         self.set_remote_url_with_output_impl(name, url, kind)
+    }
+
+    fn set_remote_ssh_key_with_output(
+        &self,
+        remote: &str,
+        key: Option<&str>,
+    ) -> Result<CommandOutput> {
+        self.set_remote_ssh_key_with_output_impl(remote, key)
     }
 
     fn push_set_upstream(&self, remote: &str, branch: &str) -> Result<()> {
@@ -930,6 +1027,38 @@ impl GitRepository for GixRepo {
 
     fn export_patch_with_output(&self, commit_id: &CommitId, dest: &Path) -> Result<CommandOutput> {
         self.export_patch_with_output_impl(commit_id, dest)
+    }
+
+    fn archive_zip_with_output(&self, revision: &str, dest: &Path) -> Result<CommandOutput> {
+        self.archive_zip_with_output_impl(revision, dest)
+    }
+
+    fn lfs_enabled(&self) -> Result<bool> {
+        self.lfs_enabled_impl()
+    }
+
+    fn lfs_is_filtered(&self, path: &Path) -> Result<bool> {
+        self.lfs_is_filtered_impl(path)
+    }
+
+    fn lfs_pointer_change(&self, target: &DiffTarget) -> Result<Option<LfsPointerChange>> {
+        self.lfs_pointer_change_impl(target)
+    }
+
+    fn lfs_smudge_bytes(&self, input: &[u8]) -> Result<Vec<u8>> {
+        self.lfs_smudge_bytes_impl(input)
+    }
+
+    fn cleanup_with_output(&self) -> Result<CommandOutput> {
+        self.cleanup_with_output_impl()
+    }
+
+    fn assume_unchanged_list(&self) -> Result<Vec<PathBuf>> {
+        self.assume_unchanged_list_impl()
+    }
+
+    fn set_assume_unchanged(&self, path: &Path, enable: bool) -> Result<()> {
+        self.set_assume_unchanged_impl(path, enable)
     }
 
     fn apply_patch_with_output(&self, patch: &Path) -> Result<CommandOutput> {

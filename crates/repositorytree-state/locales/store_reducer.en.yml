@@ -14,6 +14,7 @@ store:
     label_push_after_commit: "Push after commit"
     label_force_push: "Force push"
     label_force_push_with_lease: "Force push with lease"
+    label_push_merge_request: "Push with merge request"
     label_prune_merged_branches: "Prune merged branches"
     label_prune_local_tags: "Prune local tags"
     label_set_tracking_upstream: "Set as tracking upstream"
@@ -26,9 +27,13 @@ store:
     label_reset: Reset
     label_rebase: Rebase
     label_interactive_rebase: "Interactive rebase"
+    label_bisect_start: "Bisect"
+    label_bisect_mark: "Bisect %{kind}"
+    label_bisect_reset: "Bisect reset"
     label_cherry_pick: "Cherry-pick"
     label_tag: Tag
     label_remote: Remote
+    label_remote_ssh_key: SSH key
     label_checkout_ours: "Checkout ours"
     label_checkout_theirs: "Checkout theirs"
     label_accept_deletion: "Accept deletion"
@@ -37,6 +42,8 @@ store:
     label_save_file: "Save file"
     label_update_gitignore: "Update .gitignore"
     label_patch: Patch
+    label_archive: Archive
+    label_cleanup: Cleanup
     label_worktree: Worktree
     label_working_tree: "Working tree"
     label_submodule: Submodule
@@ -80,6 +87,8 @@ store:
     force_push_done: "Force push: Completed"
     force_push_lease_uptodate: "Force push with lease: Everything up-to-date"
     force_push_lease_done: "Force push with lease: Completed"
+    push_merge_request_uptodate: "Push with merge request: Everything up-to-date"
+    push_merge_request_done: "Push with merge request: Completed"
     push_set_upstream: "Push -u %{remote}/%{branch}: %{base}"
     upstream_set: "Branch %{branch}: Upstream set to %{upstream}"
     upstream_unlinked: "Branch %{branch}: Upstream unlinked"
@@ -106,6 +115,10 @@ store:
     sequencer_paused_next: "%{operation}: Paused at the next conflict"
     sequencer_continued: "%{operation}: Continued"
     sequencer_aborted: "%{operation}: Aborted"
+    bisect_started: "Bisect: Started"
+    bisect_marked: "Bisect: Marked %{kind}"
+    bisect_first_bad: "Bisect: %{sha} is the first bad commit"
+    bisect_reset_done: "Bisect: Reset"
     interactive_rebase_state: "Interactive rebase onto %{base}: %{state}"
     rebase_onto_state: "Rebase onto %{base}: %{state}"
     cherry_pick_state: "Cherry-pick %{count} commits: %{state}"
@@ -118,7 +131,11 @@ store:
     remote_added: "Remote %{name}: Added"
     remote_removed: "Remote %{name}: Removed"
     remote_url_updated: "Remote %{name} (%{kind}): URL updated"
+    remote_ssh_key_set: "Remote %{name}: SSH key set → %{path}"
+    remote_ssh_key_cleared: "Remote %{name}: SSH key cleared"
     patch_exported: "Patch exported → %{path}"
+    archive_exported: "Archive exported → %{path}"
+    cleanup_finished: "Cleanup finished"
     patch_applied_to: "Patch applied → %{path}"
     patch_applied: "Patch applied"
     worktree_added: "Worktree added → %{path}"

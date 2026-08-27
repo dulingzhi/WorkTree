@@ -13,6 +13,7 @@ use crate::view::markdown_preview::{
 use crate::view::panes::main::diff_search::DiffSearchMatcher;
 use crate::view::perf::{self, ViewPerfRenderLane, ViewPerfSpan};
 use repositorytree_state::msg::CommitSelectMode;
+use repositorytree_core::services::BisectVerdict;
 use rustc_hash::FxHasher;
 
 #[derive(Clone)]
@@ -2896,6 +2897,13 @@ impl HistoryView {
         let (_, worktree_counts) = this.ensure_history_worktree_summary_cache();
         let plan = this.ensure_history_list_plan();
         let stash_ids = this.ensure_history_stash_ids_cache();
+        // Bisect marks resolved once per list build; per-row lookups below are
+        // scans of tiny vectors. `None` while no session runs, so the whole
+        // decoration layer is inert otherwise.
+        let bisect_session = this.active_repo().and_then(|repo| match &repo.bisect {
+            Loadable::Ready(Some(state)) => Some(state.clone()),
+            _ => None,
+        });
         // One lane keeps full colour; the rest wash out. Resolved once here rather
         // than per row -- it is a scan of the page behind a memo.
         let selected_lane = this.history_selected_lane(plan.show_working_tree_summary_row());
@@ -2930,8 +2938,17 @@ impl HistoryView {
             .history_cache
             .as_ref()
             .filter(|cache| cache.base.request.repo_id == repo.id);
-        let worktree_node_color_ix =
-            history_worktree_node_color_ix(cache.map(|cache| cache.base.graph_rows.as_ref()));
+        let head_visible_ix = repo.head_commit_id().and_then(|head| {
+            cache.and_then(|cache| cache.base.visible_ix_by_commit.get(&head).copied())
+        });
+        let (worktree_node_col, worktree_node_color_ix) = history_worktree_node_placement(
+            cache.map(|cache| cache.base.graph_rows.as_ref()),
+            head_visible_ix,
+        );
+        // The pinned row's own column, for whichever row sits directly below
+        // it and must stub up into the node without a seam.
+        let working_tree_summary_node_col =
+            plan.show_working_tree_summary_row().then_some(worktree_node_col);
 
         let worktree_dirty = match &repo.worktree_dirty {
             Loadable::Ready(dirty) => Some(Arc::clone(dirty)),
@@ -2959,6 +2976,7 @@ impl HistoryView {
                             worktree_dirty
                                 .as_ref()
                                 .map_or(&[][..], |dirty| dirty.as_slice()),
+                            working_tree_summary_node_col,
                             list_ix,
                         );
                     return Some(worktree_uncommitted_history_row(
@@ -2994,10 +3012,17 @@ impl HistoryView {
                 }
 
                 if matches!(row, HistoryListRow::WorkingTreeSummary) {
-                    // A selected worktree row also leaves `selected_commit`
-                    // empty, and only one row may read as selected.
-                    let selected = repo.history_state.selected_commit.is_none()
-                        && repo.history_state.worktree_selection.is_none();
+                    // The working-tree row's selection is the uncommitted
+                    // sentinel; a selected worktree row instead leaves
+                    // `selected_commit` empty. Only one row may read as
+                    // selected.
+                    let selected = repo
+                        .history_state
+                        .selected_commit
+                        .as_ref()
+                        .is_some_and(CommitId::is_uncommitted)
+                        || repo.history_state.selected_commit.is_none()
+                            && repo.history_state.worktree_selection.is_none();
                     // Uncommitted changes belong to the branch exactly when the
                     // HEAD they sit on does.
                     let related = related_rows.as_ref().map(|rows| {
@@ -3021,6 +3046,7 @@ impl HistoryView {
                         show_author,
                         show_date,
                         show_sha,
+                        worktree_node_col,
                         worktree_node_color_ix,
                         selected_lane,
                         related,
@@ -3055,6 +3081,7 @@ impl HistoryView {
                         worktree_dirty
                             .as_ref()
                             .map_or(&[][..], |dirty| dirty.as_slice()),
+                        working_tree_summary_node_col,
                         list_ix,
                     );
                 let selected = repo.history_state.selected_commit.as_ref() == Some(&commit.id)
@@ -3075,6 +3102,21 @@ impl HistoryView {
                     .lane_branch
                     .and_then(|ix| cache.decorations.branch_names.get(usize::from(ix)))
                     .cloned();
+                let (bisect_mark, bisect_current) = bisect_session
+                    .as_ref()
+                    .map(|session| {
+                        let mark = if session.bad.as_ref() == Some(&commit.id) {
+                            Some(BisectVerdict::Bad)
+                        } else if session.good.iter().any(|id| id == &commit.id) {
+                            Some(BisectVerdict::Good)
+                        } else if session.skipped.iter().any(|id| id == &commit.id) {
+                            Some(BisectVerdict::Skip)
+                        } else {
+                            None
+                        };
+                        (mark, session.current.as_ref() == Some(&commit.id))
+                    })
+                    .unwrap_or((None, false));
 
                 Some(history_table_row(
                     theme,
@@ -3111,6 +3153,8 @@ impl HistoryView {
                     selected,
                     base_row_vm.is_head,
                     is_stash_node,
+                    bisect_mark,
+                    bisect_current,
                     this.active_context_menu_invoker.as_ref(),
                     cx,
                 ))
@@ -3126,20 +3170,34 @@ const HISTORY_WORKTREE_BADGE_MAX_W_PX: f32 = 200.0;
 /// Matches the history table's ref chips so the badge sits on the same rhythm.
 const HISTORY_WORKTREE_BADGE_HEIGHT_PX: f32 = 18.0;
 
-fn history_worktree_node_color_ix(
+/// Where the pinned uncommitted-changes row draws its node: its column and
+/// the lane colour for that dot and its connector.
+///
+/// When HEAD is the first visible row — the unfiltered log's usual shape —
+/// the node hangs on HEAD's own lane, the lane a commit of these changes
+/// would land on. Any other page (a scoped or filtered log whose first row is
+/// not HEAD) keeps the historical column-0 anchor, which the row below's stub
+/// has always connected through.
+fn history_worktree_node_placement(
     graph_rows: Option<&[history_graph::GraphRow]>,
-) -> history_graph::LaneColorIx {
-    graph_rows
+    head_visible_ix: Option<usize>,
+) -> (usize, history_graph::LaneColorIx) {
+    if let (Some(rows), Some(0)) = (graph_rows, head_visible_ix) {
+        let row = &rows[0];
+        return (usize::from(row.node_col), row.node_color_ix);
+    }
+    // Column 0 can be a hole, whose `color_ix` is a real palette index
+    // rather than a lane's colour.
+    let color_ix = graph_rows
         .and_then(|rows| rows.first())
         .and_then(|row| {
-            // Column 0 can be a hole, whose `color_ix` is a real palette index
-            // rather than a lane's colour.
             row.lanes_now
                 .first()
                 .filter(|lane| lane.is_active())
                 .map(|lane| lane.color_ix)
         })
-        .unwrap_or(0)
+        .unwrap_or(0);
+    (0, color_ix)
 }
 
 /// The lane-coloured border down the left edge of a message cell, matching the
@@ -3211,6 +3269,11 @@ fn history_table_row(
     selected: bool,
     is_head: bool,
     is_stash_node: bool,
+    // Bisect verdict this commit carries (✗ bad / ✓ good / ⊘ skip), and
+    // whether it is the candidate currently checked out for testing (◆).
+    // Both `None`/false while no session runs.
+    bisect_mark: Option<BisectVerdict>,
+    bisect_current: bool,
     active_context_menu_invoker: Option<&SharedString>,
     cx: &mut gpui::Context<HistoryView>,
 ) -> AnyElement {
@@ -3273,6 +3336,9 @@ fn history_table_row(
         summary,
         when,
         short_sha,
+        commit.signed,
+        bisect_mark,
+        bisect_current,
         remote_avatar.is_some(),
         row_bg_overlay,
         if context_menu_active {
@@ -3659,6 +3725,7 @@ fn working_tree_summary_history_row(
     show_author: bool,
     show_date: bool,
     show_sha: bool,
+    node_col: usize,
     node_color_ix: history_graph::LaneColorIx,
     selected_lane: Option<super::history_graph_paint::SelectedLane>,
     // Whether the HEAD these changes sit on belongs to the selection.
@@ -3739,7 +3806,7 @@ fn working_tree_summary_history_row(
             let scaled_px = |value| px(value * design_scale_factor);
             let margin_x = scaled_px(HISTORY_GRAPH_MARGIN_X_PX);
             let col_gap = scaled_px(HISTORY_GRAPH_COL_GAP_PX);
-            let node_x = margin_x + col_gap * 0.0;
+            let node_x = margin_x + col_gap * node_col as f32;
             let center = point(
                 bounds.left() + node_x,
                 bounds.top() + bounds.size.height / 2.0,
@@ -3855,8 +3922,7 @@ fn working_tree_summary_history_row(
         })
         .when(show_sha, |row| row.child(div().w(col_sha)))
         .on_click(cx.listener(move |this, _e: &ClickEvent, _w, cx| {
-            this.store.dispatch(Msg::ClearCommitSelection { repo_id });
-            this.store.dispatch(Msg::ClearDiffSelection { repo_id });
+            this.store.dispatch(Msg::SelectWorkingTreeSummary { repo_id });
             cx.notify();
         }));
 
@@ -3877,7 +3943,7 @@ mod tests {
         DiffSearchMatchEmphasis, MarkdownChangeHint, MarkdownInlineStyle,
         MarkdownPreviewImageSource, MarkdownPreviewPictureSizes, MarkdownPreviewRow,
         MarkdownPreviewRowKind, build_cached_diff_styled_text, history_message_text_left_px,
-        history_scope_shows_graph_color_marker, history_worktree_node_color_ix,
+        history_scope_shows_graph_color_marker, history_worktree_node_placement,
         markdown_preview_alert_title_label, markdown_preview_expanded_slice_range,
         markdown_preview_image_source, markdown_preview_inline_highlight,
         markdown_preview_no_picture_sizes, markdown_preview_picture_skeleton,
@@ -4019,7 +4085,75 @@ mod tests {
 
     #[test]
     fn history_worktree_node_color_falls_back_to_the_primary_lane() {
-        assert_eq!(history_worktree_node_color_ix(None), 0);
+        assert_eq!(history_worktree_node_placement(None, None), (0, 0));
+    }
+
+    /// A first row whose column 0 is a hole is exactly the case the colour
+    /// fallback guards: the hole's `color_ix` is a palette index, not a lane.
+    #[test]
+    fn history_worktree_node_falls_back_to_column_zero_with_a_real_lane_colour() {
+        let row = test_graph_row(&[super::history_graph::LanePaint::HOLE], 4, 2);
+        let rows = [row];
+        // The hole at column 0 is skipped for the colour; the column stays 0.
+        assert_eq!(history_worktree_node_placement(Some(&rows), None), (0, 0));
+    }
+
+    /// The common page: HEAD is the first visible row, so the uncommitted
+    /// node hangs on HEAD's own lane -- both its column and its dot colour.
+    #[test]
+    fn history_worktree_node_sits_on_the_head_lane_when_head_leads_the_page() {
+        let row = test_graph_row(&[super::history_graph::LanePaint::lane(5, true, false)], 0, 5);
+        let rows = [row];
+        assert_eq!(
+            history_worktree_node_placement(Some(&rows), Some(0)),
+            (0, 5),
+            "HEAD's node column and colour come straight off its row"
+        );
+        let head_on_col_2 = test_graph_row(
+            &[
+                super::history_graph::LanePaint::HOLE,
+                super::history_graph::LanePaint::HOLE,
+                super::history_graph::LanePaint::lane(1, true, false),
+            ],
+            2,
+            1,
+        );
+        let rows = [head_on_col_2];
+        assert_eq!(
+            history_worktree_node_placement(Some(&rows), Some(0)),
+            (2, 1),
+            "a HEAD pushed off column 0 takes its lane's column with it"
+        );
+    }
+
+    /// A scoped or filtered log can lead with a row that is not HEAD; the
+    /// node keeps its historical column-0 anchor there, because the stub the
+    /// row below draws upward has always connected through that column.
+    #[test]
+    fn history_worktree_node_stays_on_column_zero_when_head_is_not_the_first_row() {
+        let row = test_graph_row(&[super::history_graph::LanePaint::lane(3, true, false)], 1, 3);
+        let rows = [row.clone(), row];
+        assert_eq!(
+            history_worktree_node_placement(Some(&rows), Some(1)),
+            (0, 3),
+            "HEAD visible but not first: column 0, colour from row 0's first live lane"
+        );
+    }
+
+    fn test_graph_row(
+        lanes_now: &[super::history_graph::LanePaint],
+        node_col: u16,
+        node_color_ix: super::history_graph::LaneColorIx,
+    ) -> super::history_graph::GraphRow {
+        super::history_graph::GraphRow {
+            lanes_now: lanes_now.iter().copied().collect(),
+            lanes_next: Default::default(),
+            joins_in: Default::default(),
+            edges_out: Default::default(),
+            node_col,
+            node_color_ix,
+            is_merge: false,
+        }
     }
 
     #[test]

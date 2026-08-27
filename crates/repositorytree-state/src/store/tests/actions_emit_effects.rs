@@ -275,6 +275,74 @@ fn pull_and_push_mark_in_flight_until_command_finished() {
 }
 
 #[test]
+fn push_merge_request_emits_effect_marks_in_flight_and_summarizes() {
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+
+    let repo_id = RepoId(1);
+    repos.insert(repo_id, Arc::new(DummyRepo::new("/tmp/repo")));
+    state.repos.push(RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    ));
+
+    let options = repositorytree_core::services::MergeRequestPushOptions {
+        create: true,
+        target_branch: Some("main".to_string()),
+        merge_when_pipeline_succeeds: false,
+        remove_source_branch: true,
+        push_to_mr_branch: false,
+    };
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::PushMergeRequest {
+            repo_id,
+            options: options.clone(),
+        },
+    );
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::PushMergeRequest {
+            repo_id: RepoId(1),
+            options: emitted,
+            auth: None,
+        }] if *emitted == options
+    ));
+    assert_eq!(state.repos[0].push_in_flight, 1);
+
+    // The merge-request push stays out of the pull-retry state machine: a
+    // retry would re-dispatch a plain push and lose the options.
+    assert!(!state.repos[0].push_pull_retry_armed);
+
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::RepoCommandFinished {
+            repo_id,
+            command: RepoCommandKind::PushMergeRequest { options },
+            result: Ok(repositorytree_core::services::CommandOutput {
+                command: "git push -o merge_request.create origin HEAD:refs/heads/feature"
+                    .to_string(),
+                stdout: String::new(),
+                stderr: "Everything up-to-date".to_string(),
+                exit_code: Some(0),
+            }),
+        }),
+    );
+    assert_eq!(state.repos[0].push_in_flight, 0);
+    assert_eq!(
+        state.repos[0].command_log.last().map(|entry| entry.summary.as_str()),
+        Some("Push with merge request: Everything up-to-date")
+    );
+}
+
+#[test]
 fn pull_and_push_do_not_mark_in_flight_before_repo_is_opened() {
     let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
     let id_alloc = AtomicU64::new(1);
@@ -1606,6 +1674,8 @@ fn repo_operations_emit_effects() {
             repo_id: RepoId(1),
             message: "wip".to_string(),
             include_untracked: true,
+            keep_index: false,
+            paths: Vec::new().into(),
         },
     );
     assert!(matches!(
@@ -1614,6 +1684,48 @@ fn repo_operations_emit_effects() {
             repo_id: RepoId(1),
             ..
         }]
+    ));
+
+    let stash_with_paths = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Stash {
+            repo_id: RepoId(1),
+            message: "partial".to_string(),
+            include_untracked: false,
+            keep_index: true,
+            paths: vec![std::path::PathBuf::from("src/a.rs")].into(),
+        },
+    );
+    assert!(matches!(
+        stash_with_paths.as_slice(),
+        [Effect::Stash {
+            repo_id: RepoId(1),
+            message,
+            include_untracked: false,
+            keep_index: true,
+            paths,
+        }] if message == "partial" && paths.as_slice() == [std::path::PathBuf::from("src/a.rs")]
+    ));
+
+    let stash_branch = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::StashBranch {
+            repo_id: RepoId(1),
+            index: 2,
+            branch: "recover".to_string(),
+        },
+    );
+    assert!(matches!(
+        stash_branch.as_slice(),
+        [Effect::StashBranch {
+            repo_id: RepoId(1),
+            index: 2,
+            branch,
+        }] if branch == "recover"
     ));
 }
 
@@ -2307,8 +2419,89 @@ fn additional_routing_messages_emit_effects_and_update_counters() {
         }] if branch == "feature/current"
     ));
 
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::ArchiveZip {
+            repo_id,
+            revision: "v1.0".to_string(),
+            dest: PathBuf::from("archive-v1.0.zip"),
+        },
+    );
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::ArchiveZip {
+            repo_id: RepoId(1),
+            revision,
+            dest,
+        }] if revision == "v1.0" && *dest == PathBuf::from("archive-v1.0.zip")
+    ));
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::CleanupRepo { repo_id },
+    );
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::CleanupRepo {
+            repo_id: RepoId(1),
+        }]
+    ));
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::SetAssumeUnchanged {
+            repo_id,
+            path: PathBuf::from("src/big.bin"),
+            enable: true,
+        },
+    );
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::SetAssumeUnchanged {
+            repo_id: RepoId(1),
+            path,
+            enable: true,
+        }] if *path == PathBuf::from("src/big.bin")
+    ));
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::LoadAssumeUnchanged { repo_id },
+    );
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::LoadAssumeUnchanged { repo_id: RepoId(1) }]
+    ));
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::SetRemoteSshKey {
+            repo_id,
+            remote: "origin".to_string(),
+            key: Some("~/.ssh/id_ed25519".to_string()),
+        },
+    );
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::SetRemoteSshKey {
+            repo_id: RepoId(1),
+            remote,
+            ..
+        }] if remote == "origin"
+    ));
+
     assert_eq!(
-        state.repos[0].local_actions_in_flight, 9,
+        state.repos[0].local_actions_in_flight, 13,
         "expected begin_local_action for all routed local-action messages"
     );
 
@@ -2520,6 +2713,25 @@ fn additional_routing_messages_emit_effects_and_update_counters() {
         &mut repos,
         &id_alloc,
         &mut state,
+        Msg::SetRemoteSshKey {
+            repo_id,
+            remote: "origin".to_string(),
+            key: Some("~/.ssh/id_ed25519".to_string()),
+        },
+    );
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::SetRemoteSshKey {
+            repo_id: RepoId(1),
+            key,
+            ..
+        }] if key.as_deref() == Some("~/.ssh/id_ed25519")
+    ));
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
         Msg::SetUpstreamBranch {
             repo_id,
             branch: "feature/current".to_string(),
@@ -2624,6 +2836,13 @@ fn repo_command_finished_error_summaries_cover_additional_labels() {
                 kind: repositorytree_core::services::RemoteUrlKind::Push,
             },
             "Remote",
+        ),
+        (
+            RepoCommandKind::SetRemoteSshKey {
+                remote: "origin".to_string(),
+                key: Some("~/.ssh/id_ed25519".to_string()),
+            },
+            "SSH key",
         ),
         (
             RepoCommandKind::SetUpstreamBranch {
@@ -2943,6 +3162,132 @@ fn apply_worktree_patch_command_finished_reloads_png_diff_preview() {
             .all(|effect| !matches!(effect, Effect::LoadDiffFile { .. })),
         "png reload should request image preview only"
     );
+}
+
+#[test]
+fn pull_request_list_load_messages_drive_the_loadable() {
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+    state.repos.push(RepoState::new_opening(
+        RepoId(1),
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    ));
+    state.active_repo = Some(RepoId(1));
+
+    // The UI spawns the fetch itself; the start arm only flips the loadable
+    // and emits no effects (nothing for the worker threads to do).
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::LoadPullRequests { repo_id: RepoId(1) },
+    );
+    assert!(effects.is_empty());
+    assert_eq!(
+        state.repos[0].pull_requests,
+        Loadable::<Arc<Vec<repositorytree_core::domain::PullRequest>>>::Loading
+    );
+
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::PullRequestsLoaded {
+            repo_id: RepoId(1),
+            result: Ok(vec![repositorytree_core::domain::PullRequest {
+                number: 7,
+                title: "Fix".into(),
+                author: "alice".into(),
+                head_ref: "fix".into(),
+                head_sha: CommitId("abc123".into()),
+                base_ref: "main".into(),
+                draft: false,
+                checks: None,
+            }]),
+        }),
+    );
+    assert!(matches!(
+        &state.repos[0].pull_requests,
+        Loadable::Ready(list) if list.len() == 1 && list[0].number == 7
+    ));
+
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::PullRequestChecksLoaded {
+            repo_id: RepoId(1),
+            number: 7,
+            checks: repositorytree_core::domain::PullRequestChecksState::Success,
+        }),
+    );
+    assert!(matches!(
+        &state.repos[0].pull_requests,
+        Loadable::Ready(list) if list[0].checks
+            == Some(repositorytree_core::domain::PullRequestChecksState::Success)
+    ));
+
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::PullRequestsLoaded {
+            repo_id: RepoId(1),
+            result: Err(repositorytree_core::error::Error::new(
+                repositorytree_core::error::ErrorKind::Backend("offline".into()),
+            )),
+        }),
+    );
+    assert_eq!(
+        state.repos[0].pull_requests,
+        Loadable::<Arc<Vec<repositorytree_core::domain::PullRequest>>>::Error("offline".into())
+    );
+}
+
+#[test]
+fn checkout_pull_request_message_emits_effect_and_clears_detached_head() {
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+    state.repos.push(RepoState::new_opening(
+        RepoId(1),
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    ));
+    if let Some(repo) = state.repos.iter_mut().find(|repo| repo.id == RepoId(1)) {
+        repo.set_detached_head_commit(Some(CommitId("deadbeef".into())));
+    }
+    state.active_repo = Some(RepoId(1));
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::CheckoutPullRequest {
+            repo_id: RepoId(1),
+            remote: "origin".to_string(),
+            number: 42,
+        },
+    );
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::CheckoutPullRequest {
+            repo_id: RepoId(1),
+            remote,
+            number: 42
+        }] if remote == "origin"
+    ));
+    let repo = state
+        .repos
+        .iter()
+        .find(|repo| repo.id == RepoId(1))
+        .expect("repo should exist");
+    assert!(repo.detached_head_commit.is_none());
+    assert_eq!(repo.local_actions_in_flight, 1);
 }
 
 #[test]
@@ -5089,4 +5434,142 @@ fn plain_push_without_pull_retry_does_not_chain() {
     let repo = &state.repos[0];
     assert!(!repo.push_pull_retry_pending);
     assert!(repo.command_log.last().expect("push log entry").announce_failure);
+}
+
+#[test]
+fn bisect_commands_emit_effects_track_in_flight_and_summarize() {
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+
+    let repo_id = RepoId(1);
+    repos.insert(repo_id, Arc::new(DummyRepo::new("/tmp/repo")));
+    state.repos.push(RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    ));
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::BisectStart {
+            repo_id,
+            bad: Some("HEAD".to_string()),
+            goods: vec!["main".to_string()],
+        },
+    );
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::BisectStart {
+            repo_id: RepoId(1),
+            bad,
+            goods,
+        }] if bad == &Some("HEAD".to_string()) && goods == &vec!["main".to_string()]
+    ));
+    assert_eq!(state.repos[0].local_actions_in_flight, 1);
+
+    let finish_effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::RepoCommandFinished {
+            repo_id,
+            command: RepoCommandKind::BisectStart {
+                bad: Some("HEAD".to_string()),
+                goods: vec!["main".to_string()],
+            },
+            result: Ok(CommandOutput::empty_success("git bisect start HEAD main")),
+        }),
+    );
+    assert_eq!(state.repos[0].local_actions_in_flight, 0);
+    assert_eq!(
+        state.repos[0]
+            .command_log
+            .last()
+            .map(|entry| entry.summary.as_str()),
+        Some("Bisect: Started")
+    );
+    assert!(
+        finish_effects
+            .iter()
+            .any(|e| matches!(e, Effect::LoadBisectState { repo_id: RepoId(1) })),
+        "a finished bisect command refreshes the bisect snapshot"
+    );
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::BisectMark {
+            repo_id,
+            verdict: repositorytree_core::services::BisectVerdict::Bad,
+            commit: None,
+        },
+    );
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::BisectMark {
+            repo_id: RepoId(1),
+            verdict: repositorytree_core::services::BisectVerdict::Bad,
+            commit: None,
+        }]
+    ));
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::RepoCommandFinished {
+            repo_id,
+            command: RepoCommandKind::BisectMark {
+                verdict: repositorytree_core::services::BisectVerdict::Bad,
+                commit: None,
+            },
+            result: Ok(CommandOutput {
+                command: "git bisect bad".to_string(),
+                stdout: "Bisecting: 3 revisions left to test after this (roughly 2 steps)"
+                    .to_string(),
+                stderr: String::new(),
+                exit_code: Some(0),
+            }),
+        }),
+    );
+    assert_eq!(
+        state.repos[0]
+            .command_log
+            .last()
+            .map(|entry| entry.summary.as_str()),
+        Some("Bisect: Marked bad")
+    );
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::BisectReset { repo_id },
+    );
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::BisectReset { repo_id: RepoId(1) }]
+    ));
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::RepoCommandFinished {
+            repo_id,
+            command: RepoCommandKind::BisectReset,
+            result: Ok(CommandOutput::empty_success("git bisect reset")),
+        }),
+    );
+    assert_eq!(state.repos[0].local_actions_in_flight, 0);
+    assert_eq!(
+        state.repos[0]
+            .command_log
+            .last()
+            .map(|entry| entry.summary.as_str()),
+        Some("Bisect: Reset")
+    );
 }

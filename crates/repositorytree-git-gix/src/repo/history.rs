@@ -6,8 +6,8 @@ use crate::util::{
 use repositorytree_core::domain::CommitId;
 use repositorytree_core::error::{Error, ErrorKind};
 use repositorytree_core::services::{
-    CommandOutput, InteractiveRebaseAction, InteractiveRebaseEntry, ResetMode, Result,
-    SequencerState,
+    BisectState, BisectVerdict, CommandOutput, InteractiveRebaseAction, InteractiveRebaseEntry,
+    ResetMode, Result, SequencerState,
 };
 use std::fmt::Write as _;
 use std::fs;
@@ -817,6 +817,119 @@ impl GixRepo {
         Ok(self.sequencer_state_impl()? != SequencerState::None)
     }
 
+    pub(super) fn bisect_state_impl(&self) -> Result<Option<BisectState>> {
+        let (in_bisect, git_dir) = {
+            let repo = self._repo.to_thread_local();
+            (
+                repo.state() == Some(gix::state::InProgress::Bisect),
+                repo.path().to_path_buf(),
+            )
+        };
+        if !in_bisect {
+            return Ok(None);
+        }
+
+        // Where `git bisect reset` returns to: the first line of BISECT_START
+        // holds the branch name (or the detached sha) from before the session.
+        let original_branch = fs::read_to_string(git_dir.join("BISECT_START"))
+            .ok()
+            .and_then(|contents| {
+                contents
+                    .lines()
+                    .next()
+                    .map(str::trim)
+                    .filter(|line| !line.is_empty())
+                    .map(str::to_string)
+            });
+
+        let mut cmd = self.git_workdir_cmd();
+        cmd.arg("bisect").arg("log");
+        let log = run_git_capture(cmd, "git bisect log")?;
+
+        let mut state = BisectState {
+            original_branch,
+            ..BisectState::default()
+        };
+        for line in log.lines() {
+            // Summary lines look like `# bad: [<sha>] subject` (one per good
+            // and skip mark, latest for bad). They are the only lines whose
+            // shas are already resolved.
+            let Some(summary) = line.strip_prefix("# ") else {
+                continue;
+            };
+            let Some((kind, rest)) = summary.split_once(": ") else {
+                continue;
+            };
+            let Some(sha) = rest
+                .strip_prefix('[')
+                .and_then(|bracketed| bracketed.split_once(']'))
+                .map(|(sha, _)| sha)
+            else {
+                continue;
+            };
+            match kind {
+                "bad" => state.bad = Some(CommitId(sha.to_string().into())),
+                "good" => state.good.push(CommitId(sha.to_string().into())),
+                "skip" => state.skipped.push(CommitId(sha.to_string().into())),
+                _ => {}
+            }
+        }
+        state.current = self.head_commit_id_impl()?;
+        Ok(Some(state))
+    }
+
+    pub(super) fn bisect_start_with_output_impl(
+        &self,
+        bad: Option<&str>,
+        goods: &[String],
+    ) -> Result<CommandOutput> {
+        if let Some(bad) = bad {
+            validate_ref_like_arg(bad, "bisect bad commit")?;
+        }
+        for good in goods {
+            validate_ref_like_arg(good, "bisect good commit")?;
+        }
+        let mut label = String::from("git bisect start");
+        let mut cmd = self.git_workdir_cmd();
+        cmd.arg("bisect").arg("start");
+        if let Some(bad) = bad {
+            cmd.arg(bad);
+            let _ = write!(label, " {bad}");
+        }
+        for good in goods {
+            cmd.arg(good);
+            let _ = write!(label, " {good}");
+        }
+        run_git_with_output(cmd, &label)
+    }
+
+    pub(super) fn bisect_mark_with_output_impl(
+        &self,
+        verdict: BisectVerdict,
+        commit: Option<&str>,
+    ) -> Result<CommandOutput> {
+        if let Some(commit) = commit {
+            validate_ref_like_arg(commit, "bisect commit")?;
+        }
+        let word = verdict.as_str();
+        let label = match commit {
+            Some(commit) => format!("git bisect {word} {commit}"),
+            None => format!("git bisect {word}"),
+        };
+        let mut cmd = self.git_workdir_cmd();
+        cmd.arg("bisect").arg(word);
+        if let Some(commit) = commit {
+            cmd.arg(commit);
+        }
+        run_git_with_output(cmd, &label)
+    }
+
+    pub(super) fn bisect_reset_with_output_impl(&self) -> Result<CommandOutput> {
+        let mut cmd = self.git_workdir_cmd();
+        cmd.arg("bisect").arg("reset");
+        run_git_with_output(cmd, "git bisect reset")
+    }
+
     fn cherry_pick_in_progress_impl(&self) -> Result<bool> {
         let repo = self._repo.to_thread_local();
         Ok(matches!(
@@ -1401,6 +1514,16 @@ fn build_todo_content(entries: &[InteractiveRebaseEntry]) -> String {
     });
     let mut todo = String::with_capacity(capacity);
     for entry in entries {
+        // `drop` is expressed the way the vanilla todo editor expresses it —
+        // by deleting the line. A literal `drop <sha>` line crashes git's
+        // sequencer when the commit is a merge (`BUG: sequencer.c: unexpected
+        // todo_command`, git 2.50), and line deletion is identical to `drop`
+        // for every non-merge commit anyway. The planned todo persisted for
+        // the continue path only matches message-editing steps, which a drop
+        // line never is.
+        if entry.action == InteractiveRebaseAction::Drop {
+            continue;
+        }
         let _ = write!(todo, "{} {} ", entry.action.to_todo_str(), entry.commit_id);
         for ch in entry.summary.chars() {
             todo.push(if ch == '\n' { ' ' } else { ch });

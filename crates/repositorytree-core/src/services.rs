@@ -5,6 +5,7 @@ use rustc_hash::FxHashMap;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::SystemTime;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -196,6 +197,45 @@ pub enum SequencerState {
     CherryPick,
 }
 
+/// A `git bisect good|bad|skip` verdict handed to `bisect_mark_with_output`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BisectVerdict {
+    Good,
+    Bad,
+    Skip,
+}
+
+impl BisectVerdict {
+    /// The subcommand word git itself uses (`git bisect <word>`).
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Good => "good",
+            Self::Bad => "bad",
+            Self::Skip => "skip",
+        }
+    }
+}
+
+/// Snapshot of an in-progress `git bisect` session, mirroring how
+/// [`SequencerState`] models a rebase or cherry-pick in progress. Marks come
+/// from the `# bad|good|skip: [<sha>]` summary lines of `git bisect log`,
+/// which carry resolved shas (the replayable `git bisect <word> <term>` lines
+/// repeat whatever terms the user originally typed, so they are not parsed).
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct BisectState {
+    /// Branch name (or detached sha) checked out before the bisect started,
+    /// from `.git/BISECT_START` — where `git bisect reset` returns to.
+    pub original_branch: Option<String>,
+    /// The latest commit marked bad (`refs/bisect/bad`).
+    pub bad: Option<CommitId>,
+    /// Every commit marked good so far (`refs/bisect/good-*`).
+    pub good: Vec<CommitId>,
+    /// Every commit marked skip so far, in mark order.
+    pub skipped: Vec<CommitId>,
+    /// The candidate commit currently checked out for testing (HEAD).
+    pub current: Option<CommitId>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InteractiveRebaseEntry {
     pub action: InteractiveRebaseAction,
@@ -282,6 +322,25 @@ pub struct ForcePushLease {
     pub expected: CommitId,
     pub local_branch: String,
     pub local_head: CommitId,
+}
+
+/// GitLab merge-request push options, translated to `git push -o
+/// merge_request.*` flags. `push_to_mr_branch` covers the "create MR branch"
+/// gesture from the C# client: push HEAD to `MR/<branch>` on the remote so
+/// the merge request is opened against that throwaway branch.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct MergeRequestPushOptions {
+    /// Pass `-o merge_request.create`.
+    pub create: bool,
+    /// Pass `-o merge_request.target=<branch>`; `None` lets the server use
+    /// its default branch.
+    pub target_branch: Option<String>,
+    /// Pass `-o merge_request.merge_when_pipeline_succeeds`.
+    pub merge_when_pipeline_succeeds: bool,
+    /// Pass `-o merge_request.remove_source_branch`.
+    pub remove_source_branch: bool,
+    /// Push HEAD to `MR/<current-branch>` instead of the branch's own ref.
+    pub push_to_mr_branch: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -379,6 +438,33 @@ pub trait GitRepository: Send + Sync {
         )
     }
 
+    /// Like [`Self::log_history_mode_page_streaming`], but the walk is seeded
+    /// from `refs` — full ref names such as `refs/heads/topic`,
+    /// `refs/remotes/origin/topic`, or `refs/tags/v1.0` — instead of HEAD (or
+    /// every ref, under [`HistoryMode::AllBranches`]). The mode still shapes
+    /// the walk: first-parent follows each tip's mainline, and no-merges /
+    /// merges-only keep filtering the commits that make the page. An empty
+    /// `refs` is not supported here — callers treat it as "no filter" and use
+    /// the HEAD/all-refs entry points instead.
+    ///
+    /// The default fails loudly rather than falling back to unfiltered
+    /// history: a backend that cannot resolve refs must not silently pretend
+    /// the filter was applied.
+    fn log_history_mode_refs_page_streaming(
+        &self,
+        _mode: HistoryMode,
+        _refs: &[String],
+        _author: Option<&str>,
+        _limit: usize,
+        _cursor: Option<&LogCursor>,
+        _cancellation: &CancellationToken,
+        _on_chunk: &mut dyn FnMut(LogChunk),
+    ) -> Result<LogPage> {
+        Err(Error::new(ErrorKind::Unsupported(
+            "ref-filtered history is not implemented for this backend",
+        )))
+    }
+
     fn log_head_page(&self, limit: usize, cursor: Option<&LogCursor>) -> Result<LogPage>;
     fn log_head_page_cancellable(
         &self,
@@ -430,6 +516,15 @@ pub trait GitRepository: Send + Sync {
     fn author_email_map(&self) -> Result<FxHashMap<String, String>> {
         Ok(FxHashMap::default())
     }
+    /// Every commit no older than `since`, across local branches and remotes,
+    /// as bare (author, time) pairs for the statistics window. The backend
+    /// bounds the walk itself; callers still re-filter by the exact cutoff.
+    /// The default reports an empty window; backends that can gather them
+    /// override this.
+    fn contributor_commits_since(&self, since: SystemTime) -> Result<Vec<ContributorCommit>> {
+        let _ = since;
+        Ok(Vec::new())
+    }
     fn commit_details(&self, id: &CommitId) -> Result<CommitDetails>;
     /// Files that differ between two points (`from` → `to`), for the
     /// compare-selected-commits feature. `from` is the base/older side, so the
@@ -465,6 +560,14 @@ pub trait GitRepository: Send + Sync {
     fn recent_commit_messages(&self, _limit: usize) -> Result<Vec<RecentCommitMessage>> {
         Err(Error::new(ErrorKind::Unsupported(
             "recent commit messages are not implemented for this backend",
+        )))
+    }
+    /// Cross-history commit search over message and author fields (both
+    /// passes case-insensitive), newest-first, deduplicated and capped at
+    /// `limit`. Backends that can't run it report `Unsupported`.
+    fn search_commits(&self, _query: &str, _limit: usize) -> Result<Vec<Commit>> {
+        Err(Error::new(ErrorKind::Unsupported(
+            "commit search is not implemented for this backend",
         )))
     }
     fn reflog_head(&self, limit: usize) -> Result<Vec<ReflogEntry>>;
@@ -692,6 +795,13 @@ pub trait GitRepository: Send + Sync {
             "remote branch checkout is not implemented for this backend",
         )))
     }
+    /// Checks out GitHub pull request `number` from `remote` (`git fetch
+    /// <remote> refs/pull/<number>/head` + a local `pr/<number>` branch).
+    fn checkout_pull_request(&self, _remote: &str, _number: u64) -> Result<()> {
+        Err(Error::new(ErrorKind::Unsupported(
+            "pull request checkout is not implemented for this backend",
+        )))
+    }
     fn checkout_commit(&self, id: &CommitId) -> Result<()>;
     fn cherry_pick(&self, id: &CommitId) -> Result<()>;
     /// Runs a single cherry-pick. `mainline` is Git's 1-based parent number
@@ -708,7 +818,15 @@ pub trait GitRepository: Send + Sync {
     }
     fn revert(&self, id: &CommitId) -> Result<()>;
 
-    fn stash_create(&self, message: &str, include_untracked: bool) -> Result<()>;
+    /// Creates a stash. `paths` restricts the stash to those worktree
+    /// paths (Git pathspecs, repo-relative); empty stashes everything.
+    fn stash_create(
+        &self,
+        message: &str,
+        include_untracked: bool,
+        keep_index: bool,
+        paths: &[PathBuf],
+    ) -> Result<()>;
     fn stash_list(&self) -> Result<Vec<StashEntry>>;
     fn stash_list_cancellable(&self, cancellation: &CancellationToken) -> Result<Vec<StashEntry>> {
         cancellation.check_cancelled()?;
@@ -718,6 +836,13 @@ pub trait GitRepository: Send + Sync {
     }
     fn stash_apply(&self, index: usize) -> Result<()>;
     fn stash_drop(&self, index: usize) -> Result<()>;
+    /// Checks out the stash's base commit as a new branch and applies the
+    /// stash there, dropping it on success.
+    fn stash_branch(&self, _branch: &str, _index: usize) -> Result<()> {
+        Err(Error::new(ErrorKind::Unsupported(
+            "git stash branch is not implemented for this backend",
+        )))
+    }
 
     fn stage(&self, paths: &[&Path]) -> Result<()>;
     fn unstage(&self, paths: &[&Path]) -> Result<()>;
@@ -805,6 +930,44 @@ pub trait GitRepository: Send + Sync {
         let state = self.sequencer_state()?;
         cancellation.check_cancelled()?;
         Ok(state)
+    }
+
+    /// Parsed state of the in-progress bisect session, or `None` when the
+    /// repository is not bisecting.
+    fn bisect_state(&self) -> Result<Option<BisectState>> {
+        Ok(None)
+    }
+    fn bisect_state_cancellable(
+        &self,
+        cancellation: &CancellationToken,
+    ) -> Result<Option<BisectState>> {
+        cancellation.check_cancelled()?;
+        let state = self.bisect_state()?;
+        cancellation.check_cancelled()?;
+        Ok(state)
+    }
+    fn bisect_start_with_output(
+        &self,
+        _bad: Option<&str>,
+        _goods: &[String],
+    ) -> Result<CommandOutput> {
+        Err(Error::new(ErrorKind::Unsupported(
+            "git bisect start is not implemented for this backend",
+        )))
+    }
+    fn bisect_mark_with_output(
+        &self,
+        _verdict: BisectVerdict,
+        _commit: Option<&str>,
+    ) -> Result<CommandOutput> {
+        Err(Error::new(ErrorKind::Unsupported(
+            "git bisect mark is not implemented for this backend",
+        )))
+    }
+    fn bisect_reset_with_output(&self) -> Result<CommandOutput> {
+        Err(Error::new(ErrorKind::Unsupported(
+            "git bisect reset is not implemented for this backend",
+        )))
     }
 
     fn merge_commit_message(&self) -> Result<Option<String>> {
@@ -945,6 +1108,15 @@ pub trait GitRepository: Send + Sync {
         let _ = lease;
         Err(Error::new(ErrorKind::Unsupported(
             "oid-specific force push with lease is not implemented for this backend",
+        )))
+    }
+
+    fn push_merge_request_with_output(
+        &self,
+        _options: &MergeRequestPushOptions,
+    ) -> Result<CommandOutput> {
+        Err(Error::new(ErrorKind::Unsupported(
+            "merge-request push options are not implemented for this backend",
         )))
     }
 
@@ -1135,6 +1307,93 @@ pub trait GitRepository: Send + Sync {
     ) -> Result<CommandOutput> {
         Err(Error::new(ErrorKind::Unsupported(
             "patch export is not implemented for this backend",
+        )))
+    }
+
+    /// Write a zip archive of `revision`'s tree to `dest`
+    /// (`git archive --format=zip --output=<dest> <revision>`).
+    fn archive_zip_with_output(
+        &self,
+        _revision: &str,
+        _dest: &Path,
+    ) -> Result<CommandOutput> {
+        Err(Error::new(ErrorKind::Unsupported(
+            "archive export is not implemented for this backend",
+        )))
+    }
+
+    /// Whether the repository has LFS wiring installed: the shared pre-push
+    /// hook contains the `git lfs pre-push` marker `git lfs install` writes.
+    /// Cheap file IO — no git invocation.
+    fn lfs_enabled(&self) -> Result<bool> {
+        Err(Error::new(ErrorKind::Unsupported(
+            "lfs detection is not implemented for this backend",
+        )))
+    }
+
+    /// Whether `path` carries a `filter=lfs` attribute from `.gitattributes`.
+    fn lfs_is_filtered(&self, _path: &Path) -> Result<bool> {
+        Err(Error::new(ErrorKind::Unsupported(
+            "lfs attribute lookup is not implemented for this backend",
+        )))
+    }
+
+    /// Old/new LFS pointers for the diff `target`, parsed from the unified
+    /// diff of the pointer files. `Ok(None)` when the path's diff carries no
+    /// pointer change. Callers gate this on [`Self::lfs_enabled`] and
+    /// [`Self::lfs_is_filtered`].
+    fn lfs_pointer_change(&self, _target: &DiffTarget) -> Result<Option<LfsPointerChange>> {
+        Err(Error::new(ErrorKind::Unsupported(
+            "lfs pointer diff is not implemented for this backend",
+        )))
+    }
+
+    /// Turn LFS pointer bytes into the actual content by piping them through
+    /// `git lfs smudge`.
+    fn lfs_smudge_bytes(&self, _input: &[u8]) -> Result<Vec<u8>> {
+        Err(Error::new(ErrorKind::Unsupported(
+            "lfs smudge is not implemented for this backend",
+        )))
+    }
+
+    /// Repository cleanup: `git gc`, then `git lfs prune` when LFS is
+    /// enabled. A prune failure is reported through the output, not as an
+    /// error — an unreachable LFS remote must not fail the whole cleanup.
+    fn cleanup_with_output(&self) -> Result<CommandOutput> {
+        Err(Error::new(ErrorKind::Unsupported(
+            "cleanup is not implemented for this backend",
+        )))
+    }
+
+    /// Paths currently marked assume-unchanged in the index. Cheap enough to
+    /// list wholesale (`git ls-files -v`); entries tagged lowercase are the
+    /// marked ones.
+    fn assume_unchanged_list(&self) -> Result<Vec<PathBuf>> {
+        let _ = self;
+        Err(Error::new(ErrorKind::Unsupported(
+            "assume-unchanged listing is not implemented for this backend",
+        )))
+    }
+
+    /// Mark or unmark `path` assume-unchanged in the index
+    /// (`git update-index --[no-]assume-unchanged`). Marked files drop out of
+    /// status until the flag is cleared, so a status refresh must follow.
+    fn set_assume_unchanged(&self, path: &Path, enable: bool) -> Result<()> {
+        let _ = (self, path, enable);
+        Err(Error::new(ErrorKind::Unsupported(
+            "assume-unchanged update is not implemented for this backend",
+        )))
+    }
+
+    /// Persist (`Some`) or clear (`None`) the per-repo SSH key recorded for
+    /// `remote` in the repository's git config (`remote.<name>.sshkey`).
+    fn set_remote_ssh_key_with_output(
+        &self,
+        _remote: &str,
+        _key: Option<&str>,
+    ) -> Result<CommandOutput> {
+        Err(Error::new(ErrorKind::Unsupported(
+            "remote ssh key config is not implemented for this backend",
         )))
     }
 
@@ -1525,7 +1784,13 @@ mod tests {
             unsupported()
         }
 
-        fn stash_create(&self, _message: &str, _include_untracked: bool) -> super::Result<()> {
+        fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> super::Result<()> {
             unsupported()
         }
 

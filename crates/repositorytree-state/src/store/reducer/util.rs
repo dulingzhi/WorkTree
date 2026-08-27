@@ -328,6 +328,14 @@ pub(super) fn apply_selected_diff_load_plan_state_with_reload_mode(
     } else {
         Loadable::NotLoaded
     };
+    // The LFS pointer load is the redirected form of the text load, so it
+    // follows the same flag: whichever the worker resolves, the other stays
+    // NotLoaded.
+    repo_state.diff_state.diff_file_lfs = if load_plan.load_file_text {
+        reloading(&repo_state.diff_state.diff_file_lfs, mode)
+    } else {
+        Loadable::NotLoaded
+    };
     repo_state.diff_state.diff_preview_text_file = if load_plan.preview_text_side.is_some() {
         reloading(&repo_state.diff_state.diff_preview_text_file, mode)
     } else {
@@ -653,12 +661,21 @@ fn append_requested_rebase_and_merge_refresh_effects(
     let load_merge_commit_message = repo_state
         .loads_in_flight
         .request(RepoLoadsInFlight::MERGE_COMMIT_MESSAGE);
+    // The bisect snapshot rides along with the sequencer loads on every
+    // primary refresh, but keeps its own in-flight flag so a late reply never
+    // wedges the dedup gate shared by rebase and merge state.
+    let load_bisect = repo_state
+        .loads_in_flight
+        .request(RepoLoadsInFlight::BISECT_STATE);
 
     match (load_rebase, load_merge_commit_message) {
         (true, true) => push_rebase_and_merge_refresh_effect(effects, repo_id),
         (true, false) => effects.push_effect(Effect::LoadRebaseState { repo_id }),
         (false, true) => effects.push_effect(Effect::LoadMergeCommitMessage { repo_id }),
         (false, false) => {}
+    }
+    if load_bisect {
+        effects.push_effect(Effect::LoadBisectState { repo_id });
     }
 }
 
@@ -674,6 +691,7 @@ pub(super) fn first_page_log_request(repo_state: &RepoState) -> crate::model::Pe
     crate::model::PendingLogLoad {
         scope: repo_state.history_state.history_scope,
         author: repo_state.history_state.history_author_filter.clone(),
+        refs: repo_state.history_state.history_ref_filters.clone(),
         limit: DEFAULT_LOG_PAGE_SIZE,
         cursor: None,
     }
@@ -691,6 +709,7 @@ pub(super) fn request_log_effect(
     let crate::model::PendingLogLoad {
         scope,
         author,
+        refs,
         limit,
         cursor,
     } = load;
@@ -699,6 +718,7 @@ pub(super) fn request_log_effect(
         seq,
         scope,
         author,
+        refs,
         limit,
         cursor,
     })
@@ -719,6 +739,15 @@ pub(super) fn append_refresh_primary_effects(
         effects.push_effect(Effect::LoadHeadBranch { repo_id });
         effects.push_effect(Effect::LoadUpstreamDivergence { repo_id });
         push_rebase_and_merge_refresh_effect(effects, repo_id);
+        // The batch above does not cover the bisect snapshot; keep its own
+        // in-flight flag so the fast path and the per-flag fallback below
+        // agree on when a bisect load is already running.
+        if repo_state
+            .loads_in_flight
+            .request(RepoLoadsInFlight::BISECT_STATE)
+        {
+            effects.push_effect(Effect::LoadBisectState { repo_id });
+        }
         effects.push_effect(Effect::LoadStatus { repo_id });
         // One cheap format-only walk; powers author avatars wherever only the
         // author name is available (history rows, hover cards).
@@ -728,6 +757,7 @@ pub(super) fn append_refresh_primary_effects(
             seq,
             scope: log_request.scope,
             author: log_request.author,
+            refs: log_request.refs,
             limit: log_request.limit,
             cursor: log_request.cursor,
         });
@@ -1174,6 +1204,9 @@ fn summarize_command(
             RepoCommandKind::ForcePushWithLease { .. } => {
                 rust_i18n::t!("store.reducer.label_force_push_with_lease").to_string()
             }
+            RepoCommandKind::PushMergeRequest { .. } => {
+                rust_i18n::t!("store.reducer.label_push_merge_request").to_string()
+            }
             RepoCommandKind::PushSetUpstream { .. } => {
                 rust_i18n::t!("store.reducer.label_push").to_string()
             }
@@ -1208,6 +1241,16 @@ fn summarize_command(
             RepoCommandKind::RebaseContinue | RepoCommandKind::RebaseAbort => {
                 sequencer_operation_label(output, error)
             }
+            RepoCommandKind::BisectStart { .. } => {
+                rust_i18n::t!("store.reducer.label_bisect_start").to_string()
+            }
+            RepoCommandKind::BisectMark { verdict, .. } => {
+                rust_i18n::t!("store.reducer.label_bisect_mark", kind = verdict.as_str())
+                    .to_string()
+            }
+            RepoCommandKind::BisectReset => {
+                rust_i18n::t!("store.reducer.label_bisect_reset").to_string()
+            }
             RepoCommandKind::InteractiveRebase { interactive, .. } => {
                 if *interactive {
                     rust_i18n::t!("store.reducer.label_interactive_rebase").to_string()
@@ -1237,6 +1280,9 @@ fn summarize_command(
             RepoCommandKind::SetRemoteUrl { .. } => {
                 rust_i18n::t!("store.reducer.label_remote").to_string()
             }
+            RepoCommandKind::SetRemoteSshKey { .. } => {
+                rust_i18n::t!("store.reducer.label_remote_ssh_key").to_string()
+            }
             RepoCommandKind::CheckoutConflict { side, .. } => match side {
                 ConflictSide::Ours => {
                     rust_i18n::t!("store.reducer.label_checkout_ours").to_string()
@@ -1262,6 +1308,12 @@ fn summarize_command(
             }
             RepoCommandKind::ExportPatch { .. } | RepoCommandKind::ApplyPatch { .. } => {
                 rust_i18n::t!("store.reducer.label_patch").to_string()
+            }
+            RepoCommandKind::ArchiveZip { .. } => {
+                rust_i18n::t!("store.reducer.label_archive").to_string()
+            }
+            RepoCommandKind::Cleanup => {
+                rust_i18n::t!("store.reducer.label_cleanup").to_string()
             }
             RepoCommandKind::AddWorktree { .. }
             | RepoCommandKind::RemoveWorktree { .. }
@@ -1433,6 +1485,13 @@ fn summarize_command(
                 rust_i18n::t!("store.reducer.force_push_lease_done").to_string()
             }
         }
+        RepoCommandKind::PushMergeRequest { .. } => {
+            if output.stderr.contains("Everything up-to-date") {
+                rust_i18n::t!("store.reducer.push_merge_request_uptodate").to_string()
+            } else {
+                rust_i18n::t!("store.reducer.push_merge_request_done").to_string()
+            }
+        }
         RepoCommandKind::PushSetUpstream { remote, branch } => {
             let base = if output.stderr.contains("Everything up-to-date") {
                 rust_i18n::t!("store.reducer.base_everything_up_to_date")
@@ -1573,6 +1632,28 @@ fn summarize_command(
             operation = sequencer_operation_label(output, None)
         )
         .to_string(),
+        RepoCommandKind::BisectStart { .. } => {
+            rust_i18n::t!("store.reducer.bisect_started").to_string()
+        }
+        RepoCommandKind::BisectMark { verdict, .. } => {
+            // Git prints `<sha> is the first bad commit` (stdout) once the
+            // range collapses; that line is the answer the whole session
+            // exists for, so surface it instead of a generic "marked".
+            if let Some(sha) = output
+                .stdout
+                .lines()
+                .find(|line| line.contains("is the first bad commit"))
+                .and_then(|line| line.split_whitespace().next())
+            {
+                rust_i18n::t!("store.reducer.bisect_first_bad", sha = sha).to_string()
+            } else {
+                rust_i18n::t!("store.reducer.bisect_marked", kind = verdict.as_str())
+                    .to_string()
+            }
+        }
+        RepoCommandKind::BisectReset => {
+            rust_i18n::t!("store.reducer.bisect_reset_done").to_string()
+        }
         RepoCommandKind::InteractiveRebase { base, interactive } => {
             let state = if sequencer_paused(output) {
                 rust_i18n::t!("store.reducer.state_paused")
@@ -1660,8 +1741,23 @@ fn summarize_command(
             };
             rust_i18n::t!("store.reducer.remote_url_updated", name = name, kind = kind).to_string()
         }
+        RepoCommandKind::SetRemoteSshKey { remote, key } => match key {
+            Some(key) => {
+                rust_i18n::t!("store.reducer.remote_ssh_key_set", name = remote, path = key)
+                    .to_string()
+            }
+            None => {
+                rust_i18n::t!("store.reducer.remote_ssh_key_cleared", name = remote).to_string()
+            }
+        },
         RepoCommandKind::ExportPatch { dest, .. } => {
             rust_i18n::t!("store.reducer.patch_exported", path = dest.display()).to_string()
+        }
+        RepoCommandKind::ArchiveZip { dest, .. } => {
+            rust_i18n::t!("store.reducer.archive_exported", path = dest.display()).to_string()
+        }
+        RepoCommandKind::Cleanup => {
+            rust_i18n::t!("store.reducer.cleanup_finished").to_string()
         }
         RepoCommandKind::ApplyPatch { patch } => {
             rust_i18n::t!("store.reducer.patch_applied_to", path = patch.display()).to_string()
@@ -2147,7 +2243,7 @@ mod tests {
         let mut primary = repo_state(1);
         primary.set_log_loading_more(true);
         let primary_effects = refresh_primary_effects(&mut primary);
-        assert_eq!(primary_effects.len(), 6);
+        assert_eq!(primary_effects.len(), 7);
         assert!(!primary.log_loading_more);
         assert!(matches!(primary_effects[0], Effect::LoadHeadBranch { .. }));
         assert!(
@@ -2161,8 +2257,14 @@ mod tests {
                 .any(|effect| matches!(effect, Effect::LoadAuthorEmails { .. })),
             "primary refresh loads author emails for the surfaces that only know names"
         );
+        assert!(
+            primary_effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::LoadBisectState { .. })),
+            "primary refresh loads the bisect snapshot alongside sequencer state"
+        );
         assert!(matches!(
-            primary_effects[5],
+            primary_effects[6],
             Effect::LoadLog {
                 limit: DEFAULT_LOG_PAGE_SIZE,
                 ..
@@ -2186,8 +2288,14 @@ mod tests {
         let mut full = repo_state(2);
         full.set_log_loading_more(true);
         let full_effects = refresh_full_effects(&mut full, GitLogSettings::default());
-        assert_eq!(full_effects.len(), 9);
+        assert_eq!(full_effects.len(), 10);
         assert!(!full.log_loading_more);
+        assert!(
+            full_effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::LoadBisectState { .. })),
+            "full refresh loads the bisect snapshot alongside sequencer state"
+        );
         assert!(
             full_effects
                 .iter()
@@ -2399,6 +2507,12 @@ mod tests {
             (RepoCommandKind::Push, "Push"),
             (RepoCommandKind::ForcePush, "Force push"),
             (
+                RepoCommandKind::PushMergeRequest {
+                    options: repositorytree_core::services::MergeRequestPushOptions::default(),
+                },
+                "Push with merge request",
+            ),
+            (
                 RepoCommandKind::PushSetUpstream {
                     remote: "origin".into(),
                     branch: "main".into(),
@@ -2468,6 +2582,21 @@ mod tests {
             (RepoCommandKind::RebaseContinue, "Rebase"),
             (RepoCommandKind::RebaseAbort, "Rebase"),
             (
+                RepoCommandKind::BisectStart {
+                    bad: Some("HEAD".into()),
+                    goods: vec!["main".into()],
+                },
+                "Bisect",
+            ),
+            (
+                RepoCommandKind::BisectMark {
+                    verdict: repositorytree_core::services::BisectVerdict::Good,
+                    commit: None,
+                },
+                "Bisect good",
+            ),
+            (RepoCommandKind::BisectReset, "Bisect reset"),
+            (
                 RepoCommandKind::InteractiveRebase {
                     base: "HEAD~3".into(),
                     interactive: true,
@@ -2505,6 +2634,13 @@ mod tests {
                     kind: RemoteUrlKind::Fetch,
                 },
                 "Remote",
+            ),
+            (
+                RepoCommandKind::SetRemoteSshKey {
+                    remote: "origin".into(),
+                    key: Some("~/.ssh/id_ed25519".into()),
+                },
+                "SSH key",
             ),
         ];
 
@@ -2796,6 +2932,54 @@ mod tests {
         );
         assert_eq!(rebase_abort_summary, "Rebase: Aborted");
 
+        let (_, bisect_start_summary) = summarize_command(
+            &RepoCommandKind::BisectStart {
+                bad: Some("HEAD".into()),
+                goods: Vec::new(),
+            },
+            &command_output("git bisect start HEAD", "", ""),
+            true,
+            None,
+        );
+        assert_eq!(bisect_start_summary, "Bisect: Started");
+
+        let (_, bisect_mark_summary) = summarize_command(
+            &RepoCommandKind::BisectMark {
+                verdict: repositorytree_core::services::BisectVerdict::Bad,
+                commit: None,
+            },
+            &command_output("git bisect bad", "Bisecting: 3 revisions left to test", ""),
+            true,
+            None,
+        );
+        assert_eq!(bisect_mark_summary, "Bisect: Marked bad");
+
+        let (_, bisect_converged_summary) = summarize_command(
+            &RepoCommandKind::BisectMark {
+                verdict: repositorytree_core::services::BisectVerdict::Bad,
+                commit: None,
+            },
+            &command_output(
+                "git bisect bad",
+                "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef is the first bad commit",
+                "",
+            ),
+            true,
+            None,
+        );
+        assert_eq!(
+            bisect_converged_summary,
+            "Bisect: deadbeefdeadbeefdeadbeefdeadbeefdeadbeef is the first bad commit"
+        );
+
+        let (_, bisect_reset_summary) = summarize_command(
+            &RepoCommandKind::BisectReset,
+            &command_output("git bisect reset", "", ""),
+            true,
+            None,
+        );
+        assert_eq!(bisect_reset_summary, "Bisect: Reset");
+
         let (_, cherry_pick_continue_summary) = summarize_command(
             &RepoCommandKind::RebaseContinue,
             &command_output("git cherry-pick --continue", "", ""),
@@ -2962,6 +3146,31 @@ mod tests {
             None,
         );
         assert_eq!(set_remote_url_summary, "Remote origin (push): URL updated");
+
+        let (_, set_key_summary) = summarize_command(
+            &RepoCommandKind::SetRemoteSshKey {
+                remote: "origin".into(),
+                key: Some("~/.ssh/id_ed25519".into()),
+            },
+            &command_output("git config remote.origin.sshkey ...", "", ""),
+            true,
+            None,
+        );
+        assert_eq!(
+            set_key_summary,
+            "Remote origin: SSH key set → ~/.ssh/id_ed25519"
+        );
+
+        let (_, cleared_key_summary) = summarize_command(
+            &RepoCommandKind::SetRemoteSshKey {
+                remote: "origin".into(),
+                key: None,
+            },
+            &command_output("git config --unset remote.origin.sshkey", "", ""),
+            true,
+            None,
+        );
+        assert_eq!(cleared_key_summary, "Remote origin: SSH key cleared");
     }
 
     #[test]

@@ -14,6 +14,7 @@ store:
     label_push_after_commit: "提交后推送"
     label_force_push: "强制推送"
     label_force_push_with_lease: "带租约的强制推送"
+    label_push_merge_request: "带合并请求推送"
     label_prune_merged_branches: "清理已合并分支"
     label_prune_local_tags: "清理本地标签"
     label_set_tracking_upstream: "设为跟踪上游"
@@ -26,9 +27,13 @@ store:
     label_reset: 重置
     label_rebase: 变基
     label_interactive_rebase: "交互式变基"
+    label_bisect_start: "二分排查"
+    label_bisect_mark: "二分排查 %{kind}"
+    label_bisect_reset: "二分排查重置"
     label_cherry_pick: "拣选"
     label_tag: 标签
     label_remote: 远程
+    label_remote_ssh_key: SSH 密钥
     label_checkout_ours: "检出我方版本"
     label_checkout_theirs: "检出对方版本"
     label_accept_deletion: "接受删除"
@@ -37,6 +42,8 @@ store:
     label_save_file: "保存文件"
     label_update_gitignore: "更新 .gitignore"
     label_patch: 补丁
+    label_archive: 归档
+    label_cleanup: 清理
     label_worktree: 工作树
     label_working_tree: 工作树
     label_submodule: 子模块
@@ -80,6 +87,8 @@ store:
     force_push_done: "强制推送：已完成"
     force_push_lease_uptodate: "带租约的强制推送：所有内容均已是最新"
     force_push_lease_done: "带租约的强制推送：已完成"
+    push_merge_request_uptodate: "带合并请求推送：所有内容均已是最新"
+    push_merge_request_done: "带合并请求推送：已完成"
     push_set_upstream: "推送 -u %{remote}/%{branch}：%{base}"
     upstream_set: "分支 %{branch}：上游已设为 %{upstream}"
     upstream_unlinked: "分支 %{branch}：已取消关联上游"
@@ -106,6 +115,10 @@ store:
     sequencer_paused_next: "%{operation}：在下一个冲突处暂停"
     sequencer_continued: "%{operation}：已继续"
     sequencer_aborted: "%{operation}：已中止"
+    bisect_started: "二分排查：已开始"
+    bisect_marked: "二分排查：已标记 %{kind}"
+    bisect_first_bad: "二分排查：%{sha} 是首个坏提交"
+    bisect_reset_done: "二分排查：已重置"
     interactive_rebase_state: "交互式变基到 %{base}：%{state}"
     rebase_onto_state: "变基到 %{base}：%{state}"
     cherry_pick_state: "拣选 %{count} 个提交：%{state}"
@@ -118,7 +131,11 @@ store:
     remote_added: "远程 %{name}：已添加"
     remote_removed: "远程 %{name}：已移除"
     remote_url_updated: "远程 %{name}（%{kind}）：URL 已更新"
+    remote_ssh_key_set: "远程 %{name}：SSH 密钥已设置 → %{path}"
+    remote_ssh_key_cleared: "远程 %{name}：SSH 密钥已清除"
     patch_exported: "补丁已导出 → %{path}"
+    archive_exported: "归档已导出 → %{path}"
+    cleanup_finished: "清理完成"
     patch_applied_to: "补丁已应用 → %{path}"
     patch_applied: "补丁已应用"
     worktree_added: "工作树已添加 → %{path}"

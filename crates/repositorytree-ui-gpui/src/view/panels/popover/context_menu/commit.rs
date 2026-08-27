@@ -1,5 +1,5 @@
 use super::*;
-use repositorytree_core::services::{InteractiveRebaseAction, InteractiveRebaseEntry};
+use repositorytree_core::services::{BisectVerdict, InteractiveRebaseAction, InteractiveRebaseEntry};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::VecDeque;
 
@@ -253,6 +253,51 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
             },
         }),
     });
+    // Bisect: while no session runs, the right-clicked commit can seed one as
+    // the known-bad end (the good end is marked afterwards from another
+    // commit's menu — git checks out no candidate until both ends exist).
+    // During a session the same menu marks this specific commit. Kept after
+    // "Open diff" so Enter keeps activating the diff, the far more common
+    // action on a commit row.
+    let bisect_session = this
+        .active_repo()
+        .filter(|repo| repo.id == repo_id)
+        .and_then(|repo| match &repo.bisect {
+            Loadable::Ready(Some(state)) => Some(state.clone()),
+            _ => None,
+        });
+    items.push(ContextMenuItem::Separator);
+    if let Some(_session) = bisect_session {
+        for (label, verdict, icon) in [
+            ("Bisect: mark this commit good", BisectVerdict::Good, "icons/check.svg"),
+            ("Bisect: mark this commit bad", BisectVerdict::Bad, "icons/generic_close.svg"),
+            ("Bisect: mark this commit skip", BisectVerdict::Skip, "icons/minus.svg"),
+        ] {
+            items.push(ContextMenuItem::Entry {
+                label: label.into(),
+                icon: Some(icon.into()),
+                shortcut: None,
+                disabled: false,
+                action: Box::new(ContextMenuAction::BisectMarkCommit {
+                    repo_id,
+                    verdict,
+                    commit: sha.clone(),
+                }),
+            });
+        }
+    } else {
+        items.push(ContextMenuItem::Entry {
+            label: "Start bisect here as bad…".into(),
+            icon: Some("icons/locate.svg".into()),
+            shortcut: None,
+            disabled: history_rewrite_disabled,
+            action: Box::new(ContextMenuAction::BisectStartAt {
+                repo_id,
+                bad: Some(sha.clone()),
+                goods: Vec::new(),
+            }),
+        });
+    }
     items.push(ContextMenuItem::Entry {
         label: "Browse repository at this point".into(),
         icon: Some("icons/history.svg".into()),
@@ -345,6 +390,17 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
         action: Box::new(ContextMenuAction::ExportPatch {
             repo_id,
             commit_id: commit_id.clone(),
+        }),
+    });
+    items.push(ContextMenuItem::Entry {
+        label: "Archive to ZIP…".into(),
+        icon: Some("icons/box.svg".into()),
+        shortcut: None,
+        disabled: false,
+        action: Box::new(ContextMenuAction::ArchiveZip {
+            repo_id,
+            revision: sha.clone(),
+            suggested_name: format!("archive-{short}.zip"),
         }),
     });
     items.push(ContextMenuItem::Entry {
@@ -581,6 +637,7 @@ mod tests {
 
     fn commit(id: &str, parents: &[&str]) -> Commit {
         Commit {
+            signed: false,
             id: CommitId(id.into()),
             parent_ids: parents
                 .iter()

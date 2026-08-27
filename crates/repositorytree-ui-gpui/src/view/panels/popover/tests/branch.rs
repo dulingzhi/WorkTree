@@ -29,6 +29,8 @@ pub(super) struct TrackingRepo {
     branches: Arc<Mutex<Vec<String>>>,
     current_branch: Arc<Mutex<String>>,
     actions: Arc<Mutex<Vec<String>>>,
+    bisect: Arc<Mutex<Option<repositorytree_core::services::BisectState>>>,
+    reflog: Arc<Mutex<Vec<ReflogEntry>>>,
 }
 
 impl TrackingRepo {
@@ -38,6 +40,8 @@ impl TrackingRepo {
             branches: Arc::new(Mutex::new(vec!["main".to_string()])),
             current_branch: Arc::new(Mutex::new("main".to_string())),
             actions: Arc::new(Mutex::new(Vec::new())),
+            bisect: Arc::new(Mutex::new(None)),
+            reflog: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -46,6 +50,28 @@ impl TrackingRepo {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .clone()
+    }
+
+    /// Seeds the bisect session this repo reports. Every refresh reloads it,
+    /// so the UI state survives any number of refreshes — unlike a one-shot
+    /// `BisectStateLoaded` dispatch, which the next refresh overwrites.
+    pub(super) fn set_bisect_state(
+        &self,
+        state: Option<repositorytree_core::services::BisectState>,
+    ) {
+        *self
+            .bisect
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = state;
+    }
+
+    /// Seeds the reflog this repo reports; same refresh-survival contract as
+    /// [`Self::set_bisect_state`].
+    pub(super) fn set_reflog(&self, entries: Vec<ReflogEntry>) {
+        *self
+            .reflog
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = entries;
     }
 }
 
@@ -72,7 +98,13 @@ impl GitRepository for TrackingRepo {
     }
 
     fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
-        Ok(Vec::new())
+        // Reads triggered by refreshes must not pollute `actions()` — the
+        // popover tests assert its exact contents.
+        Ok(self
+            .reflog
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone())
     }
 
     fn current_branch(&self) -> Result<String> {
@@ -166,11 +198,20 @@ impl GitRepository for TrackingRepo {
         Ok(())
     }
 
-    fn stash_create(&self, message: &str, include_untracked: bool) -> Result<()> {
+    fn stash_create(
+        &self,
+        message: &str,
+        include_untracked: bool,
+        keep_index: bool,
+        paths: &[PathBuf],
+    ) -> Result<()> {
         self.actions
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .push(format!("stash:{message}:{include_untracked}"));
+            .push(format!(
+                "stash:{message}:{include_untracked}:{keep_index}:{}",
+                paths.len()
+            ));
         Ok(())
     }
 
@@ -183,6 +224,14 @@ impl GitRepository for TrackingRepo {
     }
 
     fn stash_drop(&self, _index: usize) -> Result<()> {
+        Ok(())
+    }
+
+    fn stash_branch(&self, branch: &str, index: usize) -> Result<()> {
+        self.actions
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push(format!("stash-branch:{branch}:{index}"));
         Ok(())
     }
 
@@ -228,6 +277,96 @@ impl GitRepository for TrackingRepo {
         Ok(CommandOutput::empty_success(format!(
             "git tag {name} {target}"
         )))
+    }
+
+    fn push_merge_request_with_output(
+        &self,
+        options: &repositorytree_core::services::MergeRequestPushOptions,
+    ) -> Result<CommandOutput> {
+        self.actions
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push(format!(
+                "push-mr:{}:{}:{}:{}:{}",
+                options.create,
+                options.target_branch.as_deref().unwrap_or(""),
+                options.merge_when_pipeline_succeeds,
+                options.remove_source_branch,
+                options.push_to_mr_branch,
+            ));
+        Ok(CommandOutput::empty_success("git push"))
+    }
+
+    fn bisect_state(
+        &self,
+    ) -> Result<Option<repositorytree_core::services::BisectState>> {
+        // Reads triggered by refreshes must not pollute `actions()` — prompt
+        // tests assert on its exact contents.
+        Ok(self
+            .bisect
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone())
+    }
+
+    fn bisect_start_with_output(
+        &self,
+        bad: Option<&str>,
+        goods: &[String],
+    ) -> Result<CommandOutput> {
+        self.actions
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push(format!(
+                "bisect-start:{}:{}",
+                bad.unwrap_or("none"),
+                goods.join(","),
+            ));
+        Ok(CommandOutput::empty_success("git bisect start"))
+    }
+
+    fn bisect_mark_with_output(
+        &self,
+        verdict: repositorytree_core::services::BisectVerdict,
+        commit: Option<&str>,
+    ) -> Result<CommandOutput> {
+        self.actions
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push(format!(
+                "bisect-mark:{}:{}",
+                verdict.as_str(),
+                commit.unwrap_or("none"),
+            ));
+        Ok(CommandOutput::empty_success("git bisect mark"))
+    }
+
+    fn bisect_reset_with_output(&self) -> Result<CommandOutput> {
+        self.actions
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push("bisect-reset".to_string());
+        Ok(CommandOutput::empty_success("git bisect reset"))
+    }
+
+    fn reset_with_output(
+        &self,
+        target: &str,
+        mode: repositorytree_core::services::ResetMode,
+    ) -> Result<CommandOutput> {
+        self.actions
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push(format!("reset:{mode:?}:{target}"));
+        Ok(CommandOutput::empty_success("git reset"))
+    }
+
+    fn merge_abort_with_output(&self) -> Result<CommandOutput> {
+        self.actions
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push("merge-abort".to_string());
+        Ok(CommandOutput::empty_success("git merge --abort"))
     }
 }
 

@@ -358,6 +358,21 @@ impl Render for ActionBarView {
         };
         let rebase_has_unstaged_conflicts =
             self.active_repo().is_some_and(|r| r.has_unstaged_conflicts);
+        // A running bisect session gets its own strip beside the sequencer
+        // one. When HEAD sits on the newest bad mark there is no candidate to
+        // verdict: either no good anchor exists yet (git says "waiting for
+        // good commit(s)") or the range collapsed onto the first bad commit.
+        let bisect_session = self.active_repo().and_then(|r| match &r.bisect {
+            Loadable::Ready(Some(state)) => Some(state.clone()),
+            _ => None,
+        });
+        let bisect_no_candidate = bisect_session
+            .as_ref()
+            .is_some_and(|s| s.current.is_some() && s.current == s.bad);
+        let bisect_waiting_good = bisect_no_candidate
+            && bisect_session
+                .as_ref()
+                .is_some_and(|s| s.good.is_empty());
 
         let (pull_count, push_count) = self
             .active_repo()
@@ -759,7 +774,7 @@ impl Render for ActionBarView {
             .disabled(!can_stash)
             .on_click_with_bounds(theme, cx, move |this, _e, bounds, window, cx| {
                 this.activate_context_menu_invoker(stash_prompt_invoker.clone(), cx);
-                this.open_popover_for_bounds(PopoverKind::StashPrompt, bounds, window, cx);
+                this.open_popover_for_bounds(PopoverKind::StashPrompt { paths: Vec::new() }, bounds, window, cx);
             })
             .repositorytree_tooltip(
                 theme,
@@ -929,7 +944,136 @@ impl Render for ActionBarView {
                                     ),
                             )
                         },
-                    ),
+                    )
+                .when(bisect_session.is_some(), |d| {
+                    let session = bisect_session
+                        .as_ref()
+                        .expect("guarded by the `when` above");
+                    let bisect_label: SharedString = if bisect_no_candidate && !bisect_waiting_good
+                    {
+                        session
+                            .bad
+                            .as_ref()
+                            .map(|bad| {
+                                crate::i18n::t!(
+                                    "panels.action_bar.bisect_first_bad",
+                                    sha = bad.as_ref()
+                                )
+                                .to_string()
+                            })
+                            .unwrap_or_else(|| {
+                                crate::i18n::tr_str("panels.action_bar.state_bisecting")
+                                    .to_owned()
+                            })
+                            .into()
+                    } else {
+                        crate::i18n::tr_str("panels.action_bar.state_bisecting").into()
+                    };
+                    let mark_tooltip: SharedString = if bisect_waiting_good {
+                        crate::i18n::tr_str("panels.action_bar.bisect_waiting_good").into()
+                    } else {
+                        crate::i18n::tr_str("panels.action_bar.state_bisecting").into()
+                    };
+                    let reset_tooltip: SharedString = match &session.original_branch {
+                        Some(branch) => crate::i18n::t!(
+                            "panels.action_bar.bisect_reset_tooltip",
+                            branch = branch
+                        )
+                        .to_string()
+                        .into(),
+                        None => crate::i18n::tr_str("panels.action_bar.bisect_reset").into(),
+                    };
+                    let mark_disabled = bisect_no_candidate;
+                    d.child(
+                        div()
+                            .id("bisect_strip")
+                            .debug_selector(|| "bisect_strip".to_string())
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(theme.colors.status.warning.foreground)
+                                    .font_weight(FontWeight::BOLD)
+                                    .child(bisect_label),
+                            )
+                            .child(
+                                div().debug_selector(|| "bisect_bad_button".to_string()).child(
+                                    components::Button::new(
+                                        "bisect_mark_bad",
+                                        crate::i18n::tr("panels.action_bar.bisect_bad"),
+                                    )
+                                    .style(components::ButtonStyle::Danger)
+                                    .disabled(mark_disabled)
+                                    .on_click(theme, cx, |this, _e, _w, _cx| {
+                                        if let Some(repo_id) = this.active_repo_id() {
+                                            this.store.dispatch(Msg::BisectMark {
+                                                repo_id,
+                                                verdict: repositorytree_core::services::BisectVerdict::Bad,
+                                                commit: None,
+                                            });
+                                        }
+                                    })
+                                    .repositorytree_tooltip(theme, mark_tooltip.clone()),
+                                ),
+                            )
+                            .child(
+                                div().debug_selector(|| "bisect_good_button".to_string()).child(
+                                    components::Button::new(
+                                        "bisect_mark_good",
+                                        crate::i18n::tr("panels.action_bar.bisect_good"),
+                                    )
+                                    .style(components::ButtonStyle::Filled)
+                                    .disabled(mark_disabled)
+                                    .on_click(theme, cx, |this, _e, _w, _cx| {
+                                        if let Some(repo_id) = this.active_repo_id() {
+                                            this.store.dispatch(Msg::BisectMark {
+                                                repo_id,
+                                                verdict: repositorytree_core::services::BisectVerdict::Good,
+                                                commit: None,
+                                            });
+                                        }
+                                    })
+                                    .repositorytree_tooltip(theme, mark_tooltip),
+                                ),
+                            )
+                            .child(
+                                div().debug_selector(|| "bisect_skip_button".to_string()).child(
+                                    components::Button::new(
+                                        "bisect_mark_skip",
+                                        crate::i18n::tr("panels.action_bar.bisect_skip"),
+                                    )
+                                    .style(components::ButtonStyle::Outlined)
+                                    .disabled(mark_disabled)
+                                    .on_click(theme, cx, |this, _e, _w, _cx| {
+                                        if let Some(repo_id) = this.active_repo_id() {
+                                            this.store.dispatch(Msg::BisectMark {
+                                                repo_id,
+                                                verdict: repositorytree_core::services::BisectVerdict::Skip,
+                                                commit: None,
+                                            });
+                                        }
+                                    }),
+                                ),
+                            )
+                            .child(
+                                div().debug_selector(|| "bisect_reset_button".to_string()).child(
+                                    components::Button::new(
+                                        "bisect_reset",
+                                        crate::i18n::tr("panels.action_bar.bisect_reset"),
+                                    )
+                                    .style(components::ButtonStyle::Outlined)
+                                    .on_click(theme, cx, |this, _e, _w, _cx| {
+                                        if let Some(repo_id) = this.active_repo_id() {
+                                            this.store.dispatch(Msg::BisectReset { repo_id });
+                                        }
+                                    })
+                                    .repositorytree_tooltip(theme, reset_tooltip),
+                                ),
+                            ),
+                    )
+                }),
             )
             .child(
                 div()

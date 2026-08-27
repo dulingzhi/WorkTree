@@ -189,6 +189,13 @@ pub(in crate::view) enum ContextMenuAction {
         repo_id: RepoId,
         commit_id: CommitId,
     },
+    /// Export `revision`'s tree as a zip archive. `suggested_name` pre-fills
+    /// the platform save dialog (`archive-<short-ref>.zip`).
+    ArchiveZip {
+        repo_id: RepoId,
+        revision: String,
+        suggested_name: String,
+    },
     MarkForComparison {
         repo_id: RepoId,
         commit_id: CommitId,
@@ -211,6 +218,20 @@ pub(in crate::view) enum ContextMenuAction {
         repo_id: RepoId,
         commit_id: CommitId,
     },
+    /// Starts a bisect session anchored at the right-clicked commit. `bad` is
+    /// the commit marked bad up front (the "start here as bad" gesture); the
+    /// good anchor is marked afterwards from another commit's menu.
+    BisectStartAt {
+        repo_id: RepoId,
+        bad: Option<String>,
+        goods: Vec<String>,
+    },
+    /// Marks a specific commit good/bad/skip in the running bisect session.
+    BisectMarkCommit {
+        repo_id: RepoId,
+        verdict: repositorytree_core::services::BisectVerdict,
+        commit: String,
+    },
     CherryPickCommit {
         repo_id: RepoId,
         commit_id: CommitId,
@@ -226,6 +247,13 @@ pub(in crate::view) enum ContextMenuAction {
     CheckoutBranch {
         repo_id: RepoId,
         name: String,
+    },
+    /// Checks a pull request out into a local `pr/N` branch (fetching
+    /// `refs/pull/N/head` first when the branch does not exist yet).
+    CheckoutPullRequest {
+        repo_id: RepoId,
+        remote: String,
+        number: u64,
     },
     DeleteBranch {
         repo_id: RepoId,
@@ -292,6 +320,18 @@ pub(in crate::view) enum ContextMenuAction {
     AddToGitignoreSelectionOrPath {
         repo_id: RepoId,
         area: DiffArea,
+        path: std::path::PathBuf,
+    },
+    /// Opens the stash prompt pre-seeded with the clicked row — or the whole
+    /// multi-selection when the click belongs to one.
+    StashSelectionOrPath {
+        repo_id: RepoId,
+        area: DiffArea,
+        path: std::path::PathBuf,
+    },
+    /// Marks one tracked status file assume-unchanged in the index.
+    SetAssumeUnchangedPath {
+        repo_id: RepoId,
         path: std::path::PathBuf,
     },
     CheckoutConflictSideSelectionOrPath {
@@ -470,6 +510,10 @@ pub(in crate::view) enum ContextMenuAction {
         src_ix: usize,
     },
     UnstageHunk {
+        repo_id: RepoId,
+        src_ix: usize,
+    },
+    ExplainHunk {
         repo_id: RepoId,
         src_ix: usize,
     },
@@ -696,6 +740,9 @@ mod repo_tabs_bar;
 pub(super) use action_bar::{ActionBarView, action_bar_height};
 pub(super) use bottom_status_bar::BottomStatusBarView;
 pub(super) use popover::PopoverHost;
+/// The reflog pane's header button asks whether an undo is available before
+/// rendering, so the resolver ships one hop out of the private popover tree.
+pub(in crate::view) use popover::undo_last_action::{UndoResolution, resolve_undo};
 #[cfg(feature = "benchmarks")]
 pub(in crate::view) use popover::{benchmark_branch_checkout_rows, benchmark_workspace_rows};
 /// Layout guards outside this module assert against the tab padding, so they
