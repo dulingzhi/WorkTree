@@ -2,6 +2,7 @@ use super::*;
 use repositorytree_core::path_utils::canonicalize_or_original;
 use repositorytree_core::services::InteractiveRebaseAction;
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::path::PathBuf;
 
 type AlacrittyTermLock = super::terminal_alacritty::AlacrittyTermLock;
 
@@ -4387,7 +4388,19 @@ pub(super) struct TerminalMenuContext {
 pub(super) enum BranchPickerPurpose {
     Checkout,
     Delete,
+    Merge,
     RebaseOnto,
+}
+
+/// What the palette's remote picker does with the remote (or remote branch)
+/// row the user activates. Decides both the row source — remotes for
+/// `RemoveRemote`/`EditUrl`, `remote/branch` refs for `DeleteBranch` — and the
+/// popover or menu activation opens.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub(super) enum RemotePickerPurpose {
+    DeleteBranch,
+    RemoveRemote,
+    EditUrl,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -4395,6 +4408,7 @@ pub(super) enum StashPickerPurpose {
     Pop,
     Apply,
     Drop,
+    Branch,
 }
 
 /// Auto-squash strategy: which commit in each identical-message group survives,
@@ -4458,7 +4472,11 @@ pub(super) enum PopoverKind {
     CommitPrompt {
         repo_id: RepoId,
     },
-    StashPrompt,
+    /// Stash prompt. `paths` restricts the stash to a selection; empty stashes
+    /// the whole worktree.
+    StashPrompt {
+        paths: Vec<PathBuf>,
+    },
     StashDropConfirm {
         repo_id: RepoId,
         index: usize,
@@ -4472,6 +4490,32 @@ pub(super) enum PopoverKind {
         repo_id: RepoId,
         index: usize,
         message: String,
+    },
+    /// Asks for a branch name, then runs `git stash branch` on the stash.
+    StashBranchPrompt {
+        repo_id: RepoId,
+        index: usize,
+    },
+    /// Lists the paths marked assume-unchanged in the index and offers a
+    /// per-row restore. The list itself is loaded on open (and reloaded after
+    /// every toggle) through `Msg::LoadAssumeUnchanged`.
+    AssumeUnchangedManager {
+        repo_id: RepoId,
+    },
+    /// Commit statistics over the current week / month / year: weekday /
+    /// day-of-month / month bars plus contributor rankings. The commit list
+    /// is loaded on open through `Msg::LoadRepoStatistics` and bucketed in
+    /// the user's display timezone at render time.
+    Statistics {
+        repo_id: RepoId,
+    },
+    /// Undoes the repository's last operation. An in-progress merge or rebase
+    /// is aborted; a completed reset / merge / pull / rebase / commit is
+    /// reversed by resetting the branch back to the reflog-recorded
+    /// position, with the reset mode (and its safety note) chosen in the
+    /// preview. The reflog is loaded on open when missing.
+    UndoLastActionPrompt {
+        repo_id: RepoId,
     },
     CloneRepo,
     ResetPrompt {
@@ -4513,6 +4557,13 @@ pub(super) enum PopoverKind {
     ForcePushConfirm {
         repo_id: RepoId,
     },
+    /// Push HEAD carrying `git push -o merge_request.*` options so GitLab
+    /// opens the merge request from the push itself. The four options
+    /// (target branch, merge on green pipeline, remove source branch, push
+    /// to `MR/<branch>`) mirror the C# client's push dialog.
+    MergeRequestPushPrompt {
+        repo_id: RepoId,
+    },
     CherryPickCommitConfirm {
         repo_id: RepoId,
         commit_id: CommitId,
@@ -4537,6 +4588,32 @@ pub(super) enum PopoverKind {
         repo_id: RepoId,
         area: DiffArea,
         path: Option<std::path::PathBuf>,
+    },
+    /// Palette "Discard All Changes": every path with staged or unstaged
+    /// modifications in one confirm, unlike [`PopoverKind::DiscardChangesConfirm`]
+    /// which resolves its paths from the status selection at open time.
+    DiscardAllConfirm {
+        repo_id: RepoId,
+    },
+    /// Palette remote commands. One picker, three destinations: activating a
+    /// row opens the matching existing confirm or menu — the
+    /// [`PopoverKind::Repo`] remote kinds carry the rest of each flow.
+    RemotePicker {
+        repo_id: RepoId,
+        purpose: RemotePickerPurpose,
+    },
+    /// Palette "Delete Tag": the tag list; activation deletes without a
+    /// confirm, mirroring the tag context menu.
+    DeleteTagPicker {
+        repo_id: RepoId,
+    },
+    /// Palette "Search Commits" (and the Ctrl+F fallback when no diff is
+    /// open): a two-tier picker — matches from the already-loaded log page
+    /// appear instantly, and a trailing action row runs the cross-history
+    /// `git log --all` search whose results join the list when they land.
+    /// Activation reveals the commit in the history view.
+    CommitSearchPicker {
+        repo_id: RepoId,
     },
     /// Add the clicked status path — or its folder, or its extension — to the
     /// repo-root `.gitignore`.
@@ -4587,6 +4664,12 @@ pub(super) enum PopoverKind {
     DiffActionMenu,
     MergetoolSettingsMenu,
     DiffHunkMenu {
+        repo_id: RepoId,
+        src_ix: usize,
+    },
+    /// The diff view's "Explain this change" answer for one hunk, held open
+    /// while the AI request runs and once it lands.
+    HunkExplanation {
         repo_id: RepoId,
         src_ix: usize,
     },
@@ -4727,10 +4810,17 @@ pub(super) enum PopoverKind {
         commit_id: CommitId,
         name: String,
     },
+    PullRequestMenu {
+        repo_id: RepoId,
+        number: u64,
+    },
     HistoryBranchFilter {
         repo_id: RepoId,
     },
     HistoryAuthorFilter {
+        repo_id: RepoId,
+    },
+    HistoryRefFilter {
         repo_id: RepoId,
     },
     DiffContentModeSettings,
@@ -4767,6 +4857,7 @@ pub(super) enum RemotePopoverKind {
     RemoveConfirm { name: String },
     Menu { name: String },
     DeleteBranchConfirm { remote: String, branch: String },
+    SshKeyPrompt { name: String },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

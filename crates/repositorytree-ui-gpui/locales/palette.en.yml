@@ -21,11 +21,15 @@ palette:
     commit: Commit Changes
     stage-all: Stage All Changes
     unstage-all: Unstage All Changes
+    discard-all: Discard All Changes
     create-branch: Create Branch
     checkout-branch: Checkout Branch
     delete-branch: Delete Branch
     rename-branch: Rename Branch
     rebase: Rebase Onto
+    merge: Merge Branch
+    checkout-remote-branch: Checkout Remote Branch
+    delete-remote-branch: Delete Remote Branch
     pull: Pull
     push: Push
     force-push: Force Push
@@ -33,12 +37,17 @@ palette:
     stash-pop: Pop Stash
     stash-apply: Apply Stash
     stash-drop: Drop Stash
+    stash-branch: Branch Stash
     open-repository: Open Repository
     switch-repository: Switch Repository
     clone-repository: Clone Repository
     close-repo-tab: Close Repository Tab
     reload-repository: Reload Repository
     fetch-all: Fetch All
+    cleanup-repository: Cleanup Repository (GC)
+    manage-assume-unchanged: Assume-Unchanged Files…
+    show-statistics: Statistics…
+    undo-last-action: Undo Last Action…
     toggle-sidebar: Toggle Sidebar
     toggle-details: Toggle Details Pane
     toggle-diff-view: Toggle Diff View (Split/Inline)
@@ -50,6 +59,7 @@ palette:
     locate-file-in-explorer: Open in file explorer
     open-active-view-search: Search in Current View
     create-tag: Create Tag
+    delete-tag: Delete Tag
     new-window: New Window
     open-settings: Open Settings
     quit: Quit RepositoryTree
@@ -61,10 +71,15 @@ palette:
     reset-ui-scale: Reset UI Scale
     close-window: Close Window
     add-remote: Add Remote
+    remove-remote: Remove Remote
+    edit-remote-url: Edit Remote URL
     add-submodule: Add Submodule
+    remove-submodule: Remove Submodule
     update-submodules: Update Submodules
     add-worktree: Add Worktree
+    remove-worktree: Remove Worktree
     blame: Blame / Annotate
+    search-commits: Search Commits
     back: Navigate Back
     forward: Navigate Forward
 

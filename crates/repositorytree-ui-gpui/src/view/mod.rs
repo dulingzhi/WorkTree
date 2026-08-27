@@ -159,6 +159,7 @@ mod diff_text_model;
 mod diff_text_selection;
 mod diff_utils;
 mod file_diff_display;
+mod github;
 mod file_icons;
 mod fingerprint;
 mod history_graph;
@@ -186,6 +187,7 @@ pub(crate) mod shortcut_labels;
 mod sidebar_presentation;
 mod splash;
 mod state_apply;
+mod statistics;
 mod terminal_alacritty;
 mod terminal_panel;
 mod terminal_preferences;
@@ -797,6 +799,44 @@ impl RepositoryTreeView {
                     self.store.dispatch(Msg::FetchAll { repo_id });
                 }
             }
+            "cleanup-repository" => {
+                if let Some(repo_id) = self.active_repo_id() {
+                    self.store.dispatch(Msg::CleanupRepo { repo_id });
+                }
+            }
+            "manage-assume-unchanged" => {
+                if let Some(repo_id) = self.active_repo_id()
+                    && let Some(window) = window
+                {
+                    self.open_popover_centered(
+                        PopoverKind::AssumeUnchangedManager { repo_id },
+                        window,
+                        cx,
+                    );
+                }
+            }
+            "show-statistics" => {
+                if let Some(repo_id) = self.active_repo_id()
+                    && let Some(window) = window
+                {
+                    self.open_popover_centered(
+                        PopoverKind::Statistics { repo_id },
+                        window,
+                        cx,
+                    );
+                }
+            }
+            "undo-last-action" => {
+                if let Some(repo_id) = self.active_repo_id()
+                    && let Some(window) = window
+                {
+                    self.open_popover_centered(
+                        PopoverKind::UndoLastActionPrompt { repo_id },
+                        window,
+                        cx,
+                    );
+                }
+            }
             "previous-repo-tab" => {
                 self.activate_previous_repo_tab(cx);
             }
@@ -904,7 +944,18 @@ impl RepositoryTreeView {
                 }
             }
             "checkout-remote-branch" => {
-                // TODO: Open remote branch picker
+                // The checkout picker already lists remote-tracking branches
+                // (cloud icon, `remote/name`) and routes them through the
+                // remote-branch checkout prompt, so this entry reuses it.
+                if let Some(window) = window {
+                    self.open_popover_centered(
+                        PopoverKind::BranchPicker {
+                            purpose: BranchPickerPurpose::Checkout,
+                        },
+                        window,
+                        cx,
+                    );
+                }
             }
             "pull" => {
                 if let Some(repo_id) = self.active_repo_id() {
@@ -934,7 +985,18 @@ impl RepositoryTreeView {
                 }
             }
             "delete-remote-branch" => {
-                // TODO: Implement delete remote branch
+                if let Some(repo_id) = self.active_repo_id()
+                    && let Some(window) = window
+                {
+                    self.open_popover_centered(
+                        PopoverKind::RemotePicker {
+                            repo_id,
+                            purpose: RemotePickerPurpose::DeleteBranch,
+                        },
+                        window,
+                        cx,
+                    );
+                }
             }
             "commit" => {
                 if let Some(repo_id) = self.active_repo_id()
@@ -1024,20 +1086,33 @@ impl RepositoryTreeView {
                 }
             }
             "discard-all" => {
-                // TODO: Implement discard all changes command
+                if let Some(repo_id) = self.active_repo_id()
+                    && let Some(window) = window
+                {
+                    self.open_popover_centered(
+                        PopoverKind::DiscardAllConfirm { repo_id },
+                        window,
+                        cx,
+                    );
+                }
             }
             "stash" => {
                 if let Some(window) = window {
-                    self.open_popover_centered(PopoverKind::StashPrompt, window, cx);
+                    self.open_popover_centered(
+                        PopoverKind::StashPrompt { paths: Vec::new() },
+                        window,
+                        cx,
+                    );
                 }
             }
-            "stash-pop" | "stash-apply" | "stash-drop" => {
+            "stash-pop" | "stash-apply" | "stash-drop" | "stash-branch" => {
                 if let Some(repo_id) = self.active_repo_id()
                     && let Some(window) = window
                 {
                     let purpose = match command_id {
                         "stash-pop" => StashPickerPurpose::Pop,
                         "stash-apply" => StashPickerPurpose::Apply,
+                        "stash-branch" => StashPickerPurpose::Branch,
                         _ => StashPickerPurpose::Drop,
                     };
                     self.open_popover_centered(
@@ -1048,7 +1123,15 @@ impl RepositoryTreeView {
                 }
             }
             "merge" => {
-                // TODO: Implement merge branch/ref
+                if let Some(window) = window {
+                    self.open_popover_centered(
+                        PopoverKind::BranchPicker {
+                            purpose: BranchPickerPurpose::Merge,
+                        },
+                        window,
+                        cx,
+                    );
+                }
             }
             "rebase" => {
                 if let Some(window) = window {
@@ -1076,7 +1159,26 @@ impl RepositoryTreeView {
                 }
             }
             "delete-tag" => {
-                // TODO: Implement delete tag
+                if let Some(repo_id) = self.active_repo_id()
+                    && let Some(window) = window
+                {
+                    self.open_popover_centered(
+                        PopoverKind::DeleteTagPicker { repo_id },
+                        window,
+                        cx,
+                    );
+                }
+            }
+            "search-commits" => {
+                if let Some(repo_id) = self.active_repo_id()
+                    && let Some(window) = window
+                {
+                    self.open_popover_centered(
+                        PopoverKind::CommitSearchPicker { repo_id },
+                        window,
+                        cx,
+                    );
+                }
             }
             "show-reflog" => {
                 self.open_reflog_panel_for_active_repo(cx);
@@ -1096,10 +1198,32 @@ impl RepositoryTreeView {
                 }
             }
             "remove-remote" => {
-                // TODO: Implement remove remote
+                if let Some(repo_id) = self.active_repo_id()
+                    && let Some(window) = window
+                {
+                    self.open_popover_centered(
+                        PopoverKind::RemotePicker {
+                            repo_id,
+                            purpose: RemotePickerPurpose::RemoveRemote,
+                        },
+                        window,
+                        cx,
+                    );
+                }
             }
             "edit-remote-url" => {
-                // TODO: Implement edit remote URL
+                if let Some(repo_id) = self.active_repo_id()
+                    && let Some(window) = window
+                {
+                    self.open_popover_centered(
+                        PopoverKind::RemotePicker {
+                            repo_id,
+                            purpose: RemotePickerPurpose::EditUrl,
+                        },
+                        window,
+                        cx,
+                    );
+                }
             }
             "add-submodule" => {
                 if let Some(repo_id) = self.active_repo_id()
@@ -1121,7 +1245,18 @@ impl RepositoryTreeView {
                 }
             }
             "remove-submodule" => {
-                // TODO: Implement remove submodule
+                if let Some(repo_id) = self.active_repo_id()
+                    && let Some(window) = window
+                {
+                    self.open_popover_centered(
+                        PopoverKind::Repo {
+                            repo_id,
+                            kind: RepoPopoverKind::Submodule(SubmodulePopoverKind::RemovePicker),
+                        },
+                        window,
+                        cx,
+                    );
+                }
             }
             "add-worktree" => {
                 if let Some(repo_id) = self.active_repo_id()
@@ -1138,7 +1273,18 @@ impl RepositoryTreeView {
                 }
             }
             "remove-worktree" => {
-                // TODO: Implement remove worktree
+                if let Some(repo_id) = self.active_repo_id()
+                    && let Some(window) = window
+                {
+                    self.open_popover_centered(
+                        PopoverKind::Repo {
+                            repo_id,
+                            kind: RepoPopoverKind::Worktree(WorktreePopoverKind::RemovePicker),
+                        },
+                        window,
+                        cx,
+                    );
+                }
             }
             "blame" => {
                 self.set_annotate_enabled(!self.annotate_enabled, cx);
@@ -4090,6 +4236,16 @@ impl Render for RepositoryTreeView {
                     .main_pane
                     .update(cx, |pane, cx| pane.open_search_for_active_view(window, cx));
                 if handled {
+                    cx.stop_propagation();
+                } else if let Some(repo_id) = this.active_repo_id() {
+                    // No diff or file to search — fall back to the commit
+                    // search picker, which is what Ctrl+F means in a repo
+                    // with nothing open to page through.
+                    this.open_popover_centered(
+                        PopoverKind::CommitSearchPicker { repo_id },
+                        window,
+                        cx,
+                    );
                     cx.stop_propagation();
                 }
             }))

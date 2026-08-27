@@ -651,6 +651,185 @@ impl PopoverHost {
         input
     }
 
+    pub(super) fn ensure_remote_picker_search_input(
+        &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> Entity<components::TextInput> {
+        // The input entity is reused across opens and its placeholder is fixed
+        // at creation, so this reflects whichever purpose opened it first —
+        // both placeholders describe the field truthfully either way.
+        let placeholder = match remote_picker_state(self) {
+            Some((_, RemotePickerPurpose::DeleteBranch)) => {
+                crate::i18n::tr_str("ui.picker.filter.remote_branches")
+            }
+            _ => crate::i18n::tr_str("ui.picker.filter.remotes"),
+        };
+        let input = Self::ensure_search_input_entity(
+            &mut self.remote_picker_search_input,
+            placeholder,
+            window,
+            cx,
+        );
+        if self._remote_picker_search_input_subscription.is_none() {
+            self._remote_picker_search_input_subscription =
+                Some(Self::picker_search_subscription(
+                    &input,
+                    window,
+                    cx,
+                    |this| remote_picker_state(this).is_some(),
+                    |this| &mut this.remote_picker_selected_index,
+                    |this, query, _cx| {
+                        let (repo_id, purpose) = remote_picker_state(this)?;
+                        Some(remote_picker::nav_targets(this, repo_id, purpose, query))
+                    },
+                    |this, cx| this.close_popover(cx),
+                    |this, sel, cx| {
+                        let Some((repo_id, purpose)) = remote_picker_state(this) else {
+                            return;
+                        };
+                        let query = this
+                            .remote_picker_search_input
+                            .as_ref()
+                            .map(|input| input.read(cx).text().trim().to_string())
+                            .unwrap_or_default();
+                        let rows = remote_picker::cached(this, repo_id, purpose, &query);
+                        this.scroll_picker_prompt_to_row(
+                            &rows.items,
+                            &rows.layout,
+                            sel,
+                            remote_picker::REMOTE_PICKER_LIST_MAX_HEIGHT_PX,
+                            cx,
+                        );
+                    },
+                    |this, payload, _query, window, cx| {
+                        let Some(row) = payload else {
+                            return;
+                        };
+                        let Some((repo_id, purpose)) = remote_picker_state(this) else {
+                            return;
+                        };
+                        remote_picker::activate(this, repo_id, purpose, row, None, window, cx);
+                    },
+                ));
+        }
+        self.reset_picker_search_input(&input, window, cx);
+        input
+    }
+
+    pub(super) fn ensure_tag_picker_search_input(
+        &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> Entity<components::TextInput> {
+        let input = Self::ensure_search_input_entity(
+            &mut self.tag_picker_search_input,
+            crate::i18n::tr_str("ui.picker.filter.tags"),
+            window,
+            cx,
+        );
+        if self._tag_picker_search_input_subscription.is_none() {
+            self._tag_picker_search_input_subscription = Some(Self::picker_search_subscription(
+                &input,
+                window,
+                cx,
+                |this| tag_picker_state(this).is_some(),
+                |this| &mut this.tag_picker_selected_index,
+                |this, query, _cx| {
+                    let repo_id = tag_picker_state(this)?;
+                    Some(tag_picker::nav_targets(this, repo_id, query))
+                },
+                |this, cx| this.close_popover(cx),
+                |this, sel, cx| {
+                    let Some(repo_id) = tag_picker_state(this) else {
+                        return;
+                    };
+                    let query = this
+                        .tag_picker_search_input
+                        .as_ref()
+                        .map(|input| input.read(cx).text().trim().to_string())
+                        .unwrap_or_default();
+                    let rows = tag_picker::cached(this, repo_id, &query);
+                    this.scroll_picker_prompt_to_row(
+                        &rows.items,
+                        &rows.layout,
+                        sel,
+                        tag_picker::TAG_PICKER_LIST_MAX_HEIGHT_PX,
+                        cx,
+                    );
+                },
+                |this, payload, _query, _window, cx| {
+                    let Some(name) = payload else {
+                        return;
+                    };
+                    let Some(repo_id) = tag_picker_state(this) else {
+                        return;
+                    };
+                    tag_picker::activate(this, repo_id, name, cx);
+                },
+            ));
+        }
+        self.reset_picker_search_input(&input, window, cx);
+        input
+    }
+
+    pub(super) fn ensure_commit_search_picker_search_input(
+        &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> Entity<components::TextInput> {
+        let input = Self::ensure_search_input_entity(
+            &mut self.commit_search_picker_search_input,
+            crate::i18n::tr_str("ui.picker.filter.commits"),
+            window,
+            cx,
+        );
+        if self._commit_search_picker_search_input_subscription.is_none() {
+            self._commit_search_picker_search_input_subscription =
+                Some(Self::picker_search_subscription(
+                    &input,
+                    window,
+                    cx,
+                    |this| commit_search_picker_state(this).is_some(),
+                    |this| &mut this.commit_search_picker_selected_index,
+                    |this, query, _cx| {
+                        let repo_id = commit_search_picker_state(this)?;
+                        Some(commit_search_picker::nav_targets(this, repo_id, query))
+                    },
+                    |this, cx| this.close_popover(cx),
+                    |this, sel, cx| {
+                        let Some(repo_id) = commit_search_picker_state(this) else {
+                            return;
+                        };
+                        let query = this
+                            .commit_search_picker_search_input
+                            .as_ref()
+                            .map(|input| input.read(cx).text().trim().to_string())
+                            .unwrap_or_default();
+                        let rows = commit_search_picker::cached(this, repo_id, &query);
+                        this.scroll_picker_prompt_to_row(
+                            &rows.items,
+                            &rows.layout,
+                            sel,
+                            commit_search_picker::COMMIT_SEARCH_PICKER_LIST_MAX_HEIGHT_PX,
+                            cx,
+                        );
+                    },
+                    |this, payload, _query, _window, cx| {
+                        let Some(row) = payload else {
+                            return;
+                        };
+                        let Some(repo_id) = commit_search_picker_state(this) else {
+                            return;
+                        };
+                        commit_search_picker::activate(this, repo_id, row, cx);
+                    },
+                ));
+        }
+        self.reset_picker_search_input(&input, window, cx);
+        input
+    }
+
     pub(super) fn ensure_stash_picker_search_input(
         &mut self,
         window: &mut Window,
@@ -835,7 +1014,10 @@ fn ref_rows_spec(this: &PopoverHost) -> branch_picker::RefRowsSpec {
             ..
         }) => branch_picker::RefRowsSpec::source_ref(),
         Some(PopoverKind::BranchPicker {
-            purpose: BranchPickerPurpose::Delete | BranchPickerPurpose::RebaseOnto,
+            purpose:
+                BranchPickerPurpose::Delete
+                | BranchPickerPurpose::Merge
+                | BranchPickerPurpose::RebaseOnto,
         }) => branch_picker::RefRowsSpec::branches(true),
         _ => branch_picker::RefRowsSpec::branches(false),
     }
@@ -881,6 +1063,27 @@ fn submodule_picker_state(this: &PopoverHost) -> Option<(RepoId, bool)> {
                     kind @ (SubmodulePopoverKind::OpenPicker | SubmodulePopoverKind::RemovePicker),
                 ),
         }) => Some((*repo_id, matches!(kind, SubmodulePopoverKind::RemovePicker))),
+        _ => None,
+    }
+}
+
+fn remote_picker_state(this: &PopoverHost) -> Option<(RepoId, RemotePickerPurpose)> {
+    match &this.popover {
+        Some(PopoverKind::RemotePicker { repo_id, purpose }) => Some((*repo_id, *purpose)),
+        _ => None,
+    }
+}
+
+fn tag_picker_state(this: &PopoverHost) -> Option<RepoId> {
+    match &this.popover {
+        Some(PopoverKind::DeleteTagPicker { repo_id }) => Some(*repo_id),
+        _ => None,
+    }
+}
+
+fn commit_search_picker_state(this: &PopoverHost) -> Option<RepoId> {
+    match &this.popover {
+        Some(PopoverKind::CommitSearchPicker { repo_id }) => Some(*repo_id),
         _ => None,
     }
 }

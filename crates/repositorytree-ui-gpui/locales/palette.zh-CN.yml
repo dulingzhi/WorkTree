@@ -10,11 +10,15 @@ palette:
     commit: 提交更改
     stage-all: 暂存所有更改
     unstage-all: 取消暂存所有更改
+    discard-all: 丢弃所有更改
     create-branch: 创建分支
     checkout-branch: 检出分支
     delete-branch: 删除分支
     rename-branch: 重命名分支
     rebase: 变基到
+    merge: 合并分支
+    checkout-remote-branch: 检出远程分支
+    delete-remote-branch: 删除远程分支
     pull: 拉取
     push: 推送
     force-push: 强制推送
@@ -22,12 +26,17 @@ palette:
     stash-pop: 弹出贮藏
     stash-apply: 应用贮藏
     stash-drop: 丢弃贮藏
+    stash-branch: 贮藏建分支
     open-repository: 打开仓库
     switch-repository: 切换仓库
     clone-repository: 克隆仓库
     close-repo-tab: 关闭仓库标签页
     reload-repository: 重新加载仓库
     fetch-all: 获取全部
+    cleanup-repository: 清理仓库 (GC)
+    manage-assume-unchanged: 假定未更改的文件…
+    show-statistics: 统计…
+    undo-last-action: 撤销上次操作…
     toggle-sidebar: 切换侧边栏
     toggle-details: 切换详情面板
     toggle-diff-view: 切换差异视图（分栏/内联）
@@ -39,6 +48,7 @@ palette:
     locate-file-in-explorer: 在文件管理器中显示文件
     open-active-view-search: 在当前视图中搜索
     create-tag: 创建标签
+    delete-tag: 删除标签
     new-window: 新建窗口
     open-settings: 打开设置
     quit: 退出 RepositoryTree
@@ -50,10 +60,15 @@ palette:
     reset-ui-scale: 重置界面比例
     close-window: 关闭窗口
     add-remote: 添加远程仓库
+    remove-remote: 移除远程仓库
+    edit-remote-url: 编辑远程 URL
     add-submodule: 添加子模块
+    remove-submodule: 移除子模块
     update-submodules: 更新子模块
     add-worktree: 添加工作树
+    remove-worktree: 移除工作树
     blame: 追溯 / 注释
+    search-commits: 搜索提交
     back: 后退
     forward: 前进
 

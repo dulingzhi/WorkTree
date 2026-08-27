@@ -46,6 +46,14 @@ pub(crate) const COMMANDS: &[CommandEntry] = &[
         requires_repo: true,
     },
     CommandEntry {
+        id: "discard-all",
+        label: "palette.cmd.discard-all",
+        shortcut: Shortcut::None,
+        category: "palette.cat.working-copy",
+        keywords: "reset revert throw away changes",
+        requires_repo: true,
+    },
+    CommandEntry {
         id: "unstage-all",
         label: "palette.cmd.unstage-all",
         shortcut: Shortcut::None,
@@ -91,6 +99,30 @@ pub(crate) const COMMANDS: &[CommandEntry] = &[
         shortcut: Shortcut::None,
         category: "palette.cat.branch",
         keywords: "rebase onto history rewrite",
+        requires_repo: true,
+    },
+    CommandEntry {
+        id: "merge",
+        label: "palette.cmd.merge",
+        shortcut: Shortcut::None,
+        category: "palette.cat.branch",
+        keywords: "merge branch integrate",
+        requires_repo: true,
+    },
+    CommandEntry {
+        id: "checkout-remote-branch",
+        label: "palette.cmd.checkout-remote-branch",
+        shortcut: Shortcut::None,
+        category: "palette.cat.branch",
+        keywords: "remote tracking switch checkout",
+        requires_repo: true,
+    },
+    CommandEntry {
+        id: "delete-remote-branch",
+        label: "palette.cmd.delete-remote-branch",
+        shortcut: Shortcut::None,
+        category: "palette.cat.branch",
+        keywords: "remote tracking remove delete",
         requires_repo: true,
     },
     CommandEntry {
@@ -150,6 +182,14 @@ pub(crate) const COMMANDS: &[CommandEntry] = &[
         requires_repo: true,
     },
     CommandEntry {
+        id: "stash-branch",
+        label: "palette.cmd.stash-branch",
+        shortcut: Shortcut::None,
+        category: "palette.cat.stash",
+        keywords: "",
+        requires_repo: true,
+    },
+    CommandEntry {
         id: "open-repository",
         label: "palette.cmd.open-repository",
         shortcut: Shortcut::Secondary("O"),
@@ -198,6 +238,38 @@ pub(crate) const COMMANDS: &[CommandEntry] = &[
         shortcut: Shortcut::None,
         category: "palette.cat.repository",
         keywords: "",
+        requires_repo: true,
+    },
+    CommandEntry {
+        id: "cleanup-repository",
+        label: "palette.cmd.cleanup-repository",
+        shortcut: Shortcut::None,
+        category: "palette.cat.repository",
+        keywords: "gc prune lfs housekeeping",
+        requires_repo: true,
+    },
+    CommandEntry {
+        id: "manage-assume-unchanged",
+        label: "palette.cmd.manage-assume-unchanged",
+        shortcut: Shortcut::None,
+        category: "palette.cat.repository",
+        keywords: "assume unchanged skip tracking index flag",
+        requires_repo: true,
+    },
+    CommandEntry {
+        id: "show-statistics",
+        label: "palette.cmd.show-statistics",
+        shortcut: Shortcut::None,
+        category: "palette.cat.repository",
+        keywords: "statistics commits contributors chart week month year",
+        requires_repo: true,
+    },
+    CommandEntry {
+        id: "undo-last-action",
+        label: "palette.cmd.undo-last-action",
+        shortcut: Shortcut::None,
+        category: "palette.cat.repository",
+        keywords: "undo reset merge rebase pull reflog revert last action",
         requires_repo: true,
     },
     CommandEntry {
@@ -378,11 +450,35 @@ pub(crate) const COMMANDS: &[CommandEntry] = &[
         requires_repo: false,
     },
     CommandEntry {
+        id: "remove-remote",
+        label: "palette.cmd.remove-remote",
+        shortcut: Shortcut::None,
+        category: "palette.cat.remotes",
+        keywords: "delete remote",
+        requires_repo: true,
+    },
+    CommandEntry {
+        id: "edit-remote-url",
+        label: "palette.cmd.edit-remote-url",
+        shortcut: Shortcut::None,
+        category: "palette.cat.remotes",
+        keywords: "change remote url fetch push",
+        requires_repo: true,
+    },
+    CommandEntry {
         id: "add-remote",
         label: "palette.cmd.add-remote",
         shortcut: Shortcut::None,
         category: "palette.cat.remotes",
         keywords: "",
+        requires_repo: true,
+    },
+    CommandEntry {
+        id: "remove-submodule",
+        label: "palette.cmd.remove-submodule",
+        shortcut: Shortcut::None,
+        category: "palette.cat.submodules",
+        keywords: "delete submodule",
         requires_repo: true,
     },
     CommandEntry {
@@ -402,6 +498,14 @@ pub(crate) const COMMANDS: &[CommandEntry] = &[
         requires_repo: true,
     },
     CommandEntry {
+        id: "remove-worktree",
+        label: "palette.cmd.remove-worktree",
+        shortcut: Shortcut::None,
+        category: "palette.cat.worktrees",
+        keywords: "delete worktree",
+        requires_repo: true,
+    },
+    CommandEntry {
         id: "add-worktree",
         label: "palette.cmd.add-worktree",
         shortcut: Shortcut::None,
@@ -410,11 +514,27 @@ pub(crate) const COMMANDS: &[CommandEntry] = &[
         requires_repo: true,
     },
     CommandEntry {
+        id: "delete-tag",
+        label: "palette.cmd.delete-tag",
+        shortcut: Shortcut::None,
+        category: "palette.cat.tags",
+        keywords: "remove tag",
+        requires_repo: true,
+    },
+    CommandEntry {
         id: "blame",
         label: "palette.cmd.blame",
         shortcut: Shortcut::Alt("B"),
         category: "palette.cat.history",
         keywords: "",
+        requires_repo: true,
+    },
+    CommandEntry {
+        id: "search-commits",
+        label: "palette.cmd.search-commits",
+        shortcut: Shortcut::None,
+        category: "palette.cat.history",
+        keywords: "find grep message author log",
         requires_repo: true,
     },
     CommandEntry {
@@ -446,15 +566,6 @@ pub(crate) const COMMANDS: &[CommandEntry] = &[
     // TODO: "keyboard-shortcuts" - Keyboard Shortcuts (Help)
     // TODO: "file-history"     - File History (History)
     // TODO: "search-commits"   - Search Commits (Navigation)
-    // TODO: "checkout-remote-branch" - Checkout Remote Branch
-    // TODO: "delete-remote-branch"   - Delete Remote Branch
-    // TODO: "merge"                  - Merge Branch/Ref
-    // TODO: "delete-tag"             - Delete Tag
-    // TODO: "remove-remote"          - Remove Remote
-    // TODO: "edit-remote-url"        - Edit Remote URL
-    // TODO: "remove-submodule"       - Remove Submodule
-    // TODO: "remove-worktree"        - Remove Worktree
-    // TODO: "discard-all"        - Discard All Changes (Working Copy)
 ];
 
 /// A palette entry that survived filtering, plus the label byte positions the
@@ -1123,6 +1234,103 @@ fn fuzzy_subsequence_match(label: &str, query: &str) -> Option<(i32, Vec<usize>)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The ids every palette entry must have. `execute_command`'s `_ => {}`
+    /// arm makes a missing dispatch handler silent — the command shows, runs,
+    /// and does nothing — so this list pins the wired set: adding a
+    /// `CommandEntry` without its handler arm breaks this snapshot, and the
+    /// break is the reminder to wire (or hold back) the entry.
+    #[test]
+    fn every_command_has_a_registered_handler() {
+        let expected: &[&str] = &[
+            // Edit / working copy
+            "commit",
+            "stage-all",
+            "discard-all",
+            "unstage-all",
+            // Branches
+            "create-branch",
+            "checkout-branch",
+            "delete-branch",
+            "rename-branch",
+            "rebase",
+            "merge",
+            "checkout-remote-branch",
+            "delete-remote-branch",
+            // Remotes
+            "pull",
+            "push",
+            "force-push",
+            "remove-remote",
+            "edit-remote-url",
+            "add-remote",
+            // Stashes
+            "stash",
+            "stash-pop",
+            "stash-apply",
+            "stash-drop",
+            "stash-branch",
+            // Repositories
+            "open-repository",
+            "switch-repository",
+            "clone-repository",
+            "close-repo-tab",
+            "reload-repository",
+            "fetch-all",
+            "cleanup-repository",
+            "manage-assume-unchanged",
+            "show-statistics",
+            "undo-last-action",
+            // View toggles
+            "toggle-sidebar",
+            "toggle-details",
+            "toggle-diff-view",
+            "toggle-diff-word-wrap",
+            "toggle-line-numbers",
+            "toggle-whitespace-chars",
+            // Tabs and navigation
+            "previous-repo-tab",
+            "next-repo-tab",
+            "locate-file-in-explorer",
+            "open-active-view-search",
+            "back",
+            "forward",
+            // Tags
+            "create-tag",
+            "delete-tag",
+            // Submodules
+            "remove-submodule",
+            "add-submodule",
+            "update-submodules",
+            // Worktrees
+            "remove-worktree",
+            "add-worktree",
+            // History
+            "blame",
+            "search-commits",
+            "show-reflog",
+            // Window and app
+            "new-window",
+            "open-settings",
+            "quit",
+            "minimize-window",
+            "zoom-window",
+            "toggle-fullscreen",
+            "increase-ui-scale",
+            "decrease-ui-scale",
+            "reset-ui-scale",
+            "close-window",
+        ];
+
+        let mut ids = COMMANDS.iter().map(|entry| entry.id).collect::<Vec<_>>();
+        ids.sort_unstable();
+        let mut expected = expected.to_vec();
+        expected.sort_unstable();
+        assert_eq!(
+            ids, expected,
+            "COMMANDS and the handler registration test must stay in step"
+        );
+    }
 
     #[test]
     fn keyword_matches_find_commands_their_label_no_longer_spells_out() {
