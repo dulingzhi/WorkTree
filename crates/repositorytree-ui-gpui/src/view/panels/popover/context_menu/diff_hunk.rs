@@ -87,6 +87,20 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, src_ix: usize) -> Conte
         }),
     });
 
+    // The AI entry rides every hunk menu — the patch it explains is the same
+    // one discard builds, so it applies wherever the menu itself does. Like
+    // the commit-box ✨, the source is checked at click time (files and PATH
+    // entries change between render and click), so the entry stays enabled
+    // and an unconfigured source surfaces as a warning toast.
+    items.push(ContextMenuItem::Separator);
+    items.push(ContextMenuItem::Entry {
+        label: "Explain this change".into(),
+        icon: Some("icons/sparkle.svg".into()),
+        shortcut: None,
+        disabled: false,
+        action: Box::new(ContextMenuAction::ExplainHunk { repo_id, src_ix }),
+    });
+
     ContextMenuModel::new(items)
 }
 

@@ -5,6 +5,16 @@ panels:
     search_input_not_initialized: 搜索输入未初始化
     no_authors: 暂无作者
     no_match_hint: 无匹配 —— 按 Enter 按所输入的内容筛选
+  ref_filter:
+    title: 筛选历史
+    hint: "仅显示从所选分支和标签可达的提交；未勾选任何项时，历史跟随 HEAD。"
+    clear: 清除
+    close: 关闭
+    section_local: 本地分支
+    section_remote: 远程分支
+    section_tags: 标签
+    missing_hint: 已不存在
+    empty: "没有可筛选的引用"
   action_bar:
     pull: 拉取
     push: 推送
@@ -19,6 +29,15 @@ panels:
     state_cherry_picking: 拣选中
     state_apply_rebase: 变基/应用中
     state_merging: 合并中
+    state_bisecting: 二分排查中
+    bisect_first_bad: "首个坏提交：%{sha}"
+    bisect_waiting_good: 请标记一个已知好的提交（右键提交 → 二分：标记该提交为 good）
+    bisect_mark: "将当前检出的候选提交标记为 %{kind}"
+    bisect_good: 好的
+    bisect_bad: 坏的
+    bisect_skip: 跳过
+    bisect_reset: 重置
+    bisect_reset_tooltip: "结束二分排查并回到 %{branch}"
     continue_cherry_pick: 继续进行中的拣选
     continue_rebase_or_apply: 继续进行中的变基或应用
     resolve_conflicts_first: 继续之前请先解决所有冲突
@@ -44,6 +63,7 @@ panels:
     files_count: "%{count} 个文件"
     file: 文件
     no_files_selected: 未选择任何文件。
+    no_changes: 没有可丢弃的更改。
     discard: 丢弃
   delete_branches_confirm:
     title_local: 删除 %{group} 中的 %{count} %{noun}？
@@ -53,3 +73,21 @@ panels:
     delete: 删除
     force_delete: 强制删除
     delete_on_remote: 删除远程分支
+  undo:
+    button: "撤销…"
+    button_nothing_tooltip: 没有可撤销的操作——最近记录的操作在此没有反向动作
+    title: "撤销上次操作"
+    operation: "将撤销：%{op}"
+    return_to: "HEAD 与当前分支将回到 %{sha}"
+    mode_label: "重置模式："
+    mode_soft: 保留暂存（--soft）
+    mode_mixed: 保留工作区（--mixed）
+    mode_hard: 彻底还原（--hard）
+    go: 撤销
+    nothing_body: 最近记录的操作在此没有反向动作（或 reflog 条目太少）。
+    close: 关闭
+  hunk_explanation:
+    title: "解释这段改动"
+    generating: "正在询问模型…"
+    retry: 重试
+    close: 关闭

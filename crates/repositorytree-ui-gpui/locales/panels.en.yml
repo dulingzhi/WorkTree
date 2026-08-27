@@ -8,6 +8,16 @@ panels:
     search_input_not_initialized: Search input not initialized
     no_authors: No authors
     no_match_hint: "No match — Enter filters on what you typed"
+  ref_filter:
+    title: Filter history
+    hint: "Show only commits reachable from the selected branches and tags. With nothing checked, history follows HEAD."
+    clear: Clear
+    close: Close
+    section_local: LOCAL BRANCHES
+    section_remote: REMOTE BRANCHES
+    section_tags: TAGS
+    missing_hint: missing
+    empty: "No refs to filter by"
   action_bar:
     pull: Pull
     push: Push
@@ -22,6 +32,15 @@ panels:
     state_cherry_picking: CHERRY-PICKING
     state_apply_rebase: APPLY/REBASE
     state_merging: MERGING
+    state_bisecting: BISECTING
+    bisect_first_bad: "First bad commit: %{sha}"
+    bisect_waiting_good: "Mark a known-good commit (right-click a commit → Bisect: mark this commit good)"
+    bisect_mark: "Mark the checked-out candidate as %{kind}"
+    bisect_good: Good
+    bisect_bad: Bad
+    bisect_skip: Skip
+    bisect_reset: Reset
+    bisect_reset_tooltip: "Stop bisecting and return to %{branch}"
     continue_cherry_pick: Continue the in-progress cherry-pick
     continue_rebase_or_apply: Continue the in-progress rebase or apply
     resolve_conflicts_first: Resolve all conflicts before continuing
@@ -47,6 +66,7 @@ panels:
     files_count: "%{count} files"
     file: file
     no_files_selected: No files selected.
+    no_changes: No changes to discard.
     discard: Discard
   delete_branches_confirm:
     title_local: "Delete %{count} %{noun} in %{group}?"
@@ -56,3 +76,21 @@ panels:
     delete: Delete
     force_delete: Force delete
     delete_on_remote: Delete on remote
+  undo:
+    button: "Undo…"
+    button_nothing_tooltip: Nothing to undo — the last recorded operation has no reverse here
+    title: "Undo last action"
+    operation: "Undone operation: %{op}"
+    return_to: "HEAD and the current branch return to %{sha}"
+    mode_label: "Reset mode:"
+    mode_soft: Soft
+    mode_mixed: Mixed
+    mode_hard: Hard
+    go: Undo
+    nothing_body: The last recorded operation has no reverse here (or the reflog has too few entries).
+    close: Close
+  hunk_explanation:
+    title: "Explain this change"
+    generating: "Asking the model…"
+    retry: Retry
+    close: Close
