@@ -4,9 +4,9 @@ use repositorytree_core::auth::{
 };
 use repositorytree_core::error::{Error, ErrorKind};
 use repositorytree_core::services::{
-    CommandOutput, ConflictSide, ForcePushLease, GitRepository, InteractiveRebaseEntry, PullMode,
-    RemoteUrlKind, ResetMode, SafePushAfterCommitContext, SafePushAfterCommitTarget,
-    SubmoduleTrustTarget,
+    CommandOutput, ConflictSide, ForcePushLease, GitRepository, InteractiveRebaseEntry,
+    MergeRequestPushOptions, PullMode, RemoteUrlKind, ResetMode, SafePushAfterCommitContext,
+    SafePushAfterCommitTarget, SubmoduleTrustTarget,
 };
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
@@ -241,6 +241,45 @@ pub(super) fn schedule_export_patch(
             dest: command_dest,
         },
         move |repo| repo.export_patch_with_output(&commit_id, &dest),
+    );
+}
+
+pub(super) fn schedule_archive_zip(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    revision: String,
+    dest: PathBuf,
+) {
+    let command_revision = revision.clone();
+    let command_dest = dest.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::ArchiveZip {
+            revision: command_revision,
+            dest: command_dest,
+        },
+        move |repo| repo.archive_zip_with_output(&revision, &dest),
+    );
+}
+
+pub(super) fn schedule_cleanup(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+) {
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::Cleanup,
+        move |repo| repo.cleanup_with_output(),
     );
 }
 
@@ -819,6 +858,27 @@ pub(super) fn schedule_force_push_with_lease(
     );
 }
 
+pub(super) fn schedule_push_merge_request(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    options: MergeRequestPushOptions,
+    auth: Option<StagedGitAuth>,
+) {
+    let command_options = options.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::PushMergeRequest {
+            options: command_options,
+        },
+        move |repo| run_with_git_auth(auth, || repo.push_merge_request_with_output(&options)),
+    );
+}
+
 pub(super) fn schedule_push_set_upstream(
     executor: &TaskExecutor,
     repos: &RepoMap,
@@ -1057,6 +1117,64 @@ pub(super) fn schedule_rebase_abort(
         repo_id,
         RepoCommandKind::RebaseAbort,
         |repo| repo.rebase_abort_with_output(),
+    );
+}
+
+pub(super) fn schedule_bisect_start(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    bad: Option<String>,
+    goods: Vec<String>,
+) {
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::BisectStart {
+            bad: bad.clone(),
+            goods: goods.clone(),
+        },
+        move |repo| repo.bisect_start_with_output(bad.as_deref(), &goods),
+    );
+}
+
+pub(super) fn schedule_bisect_mark(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    verdict: repositorytree_core::services::BisectVerdict,
+    commit: Option<String>,
+) {
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::BisectMark {
+            verdict,
+            commit: commit.clone(),
+        },
+        move |repo| repo.bisect_mark_with_output(verdict, commit.as_deref()),
+    );
+}
+
+pub(super) fn schedule_bisect_reset(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+) {
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::BisectReset,
+        |repo| repo.bisect_reset_with_output(),
     );
 }
 
@@ -1302,6 +1420,29 @@ pub(super) fn schedule_set_remote_url(
             kind,
         },
         move |repo| repo.set_remote_url_with_output(&name, &url, kind),
+    );
+}
+
+pub(super) fn schedule_set_remote_ssh_key(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    remote: String,
+    key: Option<String>,
+) {
+    let command_remote = remote.clone();
+    let command_key = key.clone();
+    schedule_repo_command(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoCommandKind::SetRemoteSshKey {
+            remote: command_remote,
+            key: command_key,
+        },
+        move |repo| repo.set_remote_ssh_key_with_output(&remote, key.as_deref()),
     );
 }
 

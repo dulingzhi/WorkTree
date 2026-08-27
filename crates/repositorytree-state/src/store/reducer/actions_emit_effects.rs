@@ -41,6 +41,18 @@ pub(super) fn checkout_remote_branch(
     }]
 }
 
+pub(super) fn checkout_pull_request(
+    repo_id: RepoId,
+    remote: String,
+    number: u64,
+) -> Vec<Effect> {
+    vec![Effect::CheckoutPullRequest {
+        repo_id,
+        remote,
+        number,
+    }]
+}
+
 pub(super) fn checkout_commit(
     repo_id: RepoId,
     commit_id: repositorytree_core::domain::CommitId,
@@ -129,6 +141,18 @@ pub(super) fn export_patch(
 
 pub(super) fn apply_patch(repo_id: RepoId, patch: PathBuf) -> Vec<Effect> {
     vec![Effect::ApplyPatch { repo_id, patch }]
+}
+
+pub(super) fn archive_zip(repo_id: RepoId, revision: String, dest: PathBuf) -> Vec<Effect> {
+    vec![Effect::ArchiveZip {
+        repo_id,
+        revision,
+        dest,
+    }]
+}
+
+pub(super) fn cleanup_repo(repo_id: RepoId) -> Vec<Effect> {
+    vec![Effect::CleanupRepo { repo_id }]
 }
 
 pub(super) fn add_worktree(
@@ -553,6 +577,24 @@ pub(super) fn force_push_with_lease(
     }]
 }
 
+/// Deliberately outside the push pull-retry state machine: a retry would
+/// re-dispatch a plain `Msg::Push` and lose the merge-request options. A
+/// rejected merge-request push just reports; the user pulls, then pushes the
+/// merge request again.
+pub(super) fn push_merge_request(
+    repos: &FxHashMap<RepoId, Arc<dyn GitRepository>>,
+    state: &mut AppState,
+    repo_id: RepoId,
+    options: repositorytree_core::services::MergeRequestPushOptions,
+) -> Vec<Effect> {
+    bump_in_flight(repos, state, repo_id, InFlightKind::Push);
+    vec![Effect::PushMergeRequest {
+        repo_id,
+        options,
+        auth: None,
+    }]
+}
+
 pub(super) fn push_set_upstream(
     repos: &FxHashMap<RepoId, Arc<dyn GitRepository>>,
     state: &mut AppState,
@@ -696,6 +738,34 @@ pub(super) fn rebase_continue(repo_id: RepoId) -> Vec<Effect> {
 
 pub(super) fn rebase_abort(repo_id: RepoId) -> Vec<Effect> {
     vec![Effect::RebaseAbort { repo_id }]
+}
+
+pub(super) fn bisect_start(
+    repo_id: RepoId,
+    bad: Option<String>,
+    goods: Vec<String>,
+) -> Vec<Effect> {
+    vec![Effect::BisectStart {
+        repo_id,
+        bad,
+        goods,
+    }]
+}
+
+pub(super) fn bisect_mark(
+    repo_id: RepoId,
+    verdict: repositorytree_core::services::BisectVerdict,
+    commit: Option<String>,
+) -> Vec<Effect> {
+    vec![Effect::BisectMark {
+        repo_id,
+        verdict,
+        commit,
+    }]
+}
+
+pub(super) fn bisect_reset(repo_id: RepoId) -> Vec<Effect> {
+    vec![Effect::BisectReset { repo_id }]
 }
 
 pub(super) fn merge_abort(repo_id: RepoId) -> Vec<Effect> {
@@ -855,6 +925,18 @@ pub(super) fn set_remote_url(
     }]
 }
 
+pub(super) fn set_remote_ssh_key(
+    repo_id: RepoId,
+    remote: String,
+    key: Option<String>,
+) -> Vec<Effect> {
+    vec![Effect::SetRemoteSshKey {
+        repo_id,
+        remote,
+        key,
+    }]
+}
+
 pub(super) fn checkout_conflict_side(
     repo_id: RepoId,
     path: PathBuf,
@@ -879,11 +961,19 @@ pub(super) fn launch_mergetool(repo_id: RepoId, path: PathBuf) -> Vec<Effect> {
     vec![Effect::LaunchMergetool { repo_id, path }]
 }
 
-pub(super) fn stash(repo_id: RepoId, message: String, include_untracked: bool) -> Vec<Effect> {
+pub(super) fn stash(
+    repo_id: RepoId,
+    message: String,
+    include_untracked: bool,
+    keep_index: bool,
+    paths: RepoPathList,
+) -> Vec<Effect> {
     vec![Effect::Stash {
         repo_id,
         message,
         include_untracked,
+        keep_index,
+        paths,
     }]
 }
 
@@ -897,6 +987,30 @@ pub(super) fn pop_stash(repo_id: RepoId, index: usize) -> Vec<Effect> {
 
 pub(super) fn drop_stash(repo_id: RepoId, index: usize) -> Vec<Effect> {
     vec![Effect::DropStash { repo_id, index }]
+}
+
+pub(super) fn stash_branch(repo_id: RepoId, index: usize, branch: String) -> Vec<Effect> {
+    vec![Effect::StashBranch {
+        repo_id,
+        index,
+        branch,
+    }]
+}
+
+pub(super) fn set_assume_unchanged(
+    repo_id: RepoId,
+    path: PathBuf,
+    enable: bool,
+) -> Vec<Effect> {
+    vec![Effect::SetAssumeUnchanged {
+        repo_id,
+        path,
+        enable,
+    }]
+}
+
+pub(super) fn load_assume_unchanged(repo_id: RepoId) -> Vec<Effect> {
+    vec![Effect::LoadAssumeUnchanged { repo_id }]
 }
 
 /// Drop any loaded blame once the content it describes is known to be stale —
@@ -938,6 +1052,7 @@ pub(super) fn commit_finished(
             repo_state.set_diff_target(None);
             repo_state.diff_state.diff = Loadable::NotLoaded;
             repo_state.diff_state.diff_file = Loadable::NotLoaded;
+            repo_state.diff_state.diff_file_lfs = Loadable::NotLoaded;
             repo_state.diff_state.diff_preview_text_file = Loadable::NotLoaded;
             repo_state.diff_state.submodule_summary = Loadable::NotLoaded;
             repo_state.diff_state.inline_submodule_diff = None;
@@ -998,6 +1113,7 @@ pub(super) fn commit_amend_finished(
             repo_state.set_diff_target(None);
             repo_state.diff_state.diff = Loadable::NotLoaded;
             repo_state.diff_state.diff_file = Loadable::NotLoaded;
+            repo_state.diff_state.diff_file_lfs = Loadable::NotLoaded;
             repo_state.diff_state.diff_preview_text_file = Loadable::NotLoaded;
             repo_state.diff_state.submodule_summary = Loadable::NotLoaded;
             repo_state.diff_state.inline_submodule_diff = None;
@@ -1108,6 +1224,9 @@ fn tracks_local_actions_in_flight(command: &RepoCommandKind) -> bool {
             | RepoCommandKind::Rebase { .. }
             | RepoCommandKind::RebaseContinue
             | RepoCommandKind::RebaseAbort
+            | RepoCommandKind::BisectStart { .. }
+            | RepoCommandKind::BisectMark { .. }
+            | RepoCommandKind::BisectReset
             | RepoCommandKind::InteractiveRebase { .. }
             | RepoCommandKind::InteractiveCherryPick { .. }
             | RepoCommandKind::CherryPick { .. }
@@ -1117,6 +1236,7 @@ fn tracks_local_actions_in_flight(command: &RepoCommandKind) -> bool {
             | RepoCommandKind::AddRemote { .. }
             | RepoCommandKind::RemoveRemote { .. }
             | RepoCommandKind::SetRemoteUrl { .. }
+            | RepoCommandKind::SetRemoteSshKey { .. }
             | RepoCommandKind::SetUpstreamBranch { .. }
             | RepoCommandKind::UnsetUpstreamBranch { .. }
             | RepoCommandKind::FastForwardBranch { .. }
@@ -1127,6 +1247,8 @@ fn tracks_local_actions_in_flight(command: &RepoCommandKind) -> bool {
             | RepoCommandKind::SaveWorktreeFile { .. }
             | RepoCommandKind::AppendGitignorePatterns { .. }
             | RepoCommandKind::ExportPatch { .. }
+            | RepoCommandKind::ArchiveZip { .. }
+            | RepoCommandKind::Cleanup
             | RepoCommandKind::ApplyPatch { .. }
             | RepoCommandKind::AddSubmodule { .. }
             | RepoCommandKind::UpdateSubmodules { .. }
@@ -1150,6 +1272,7 @@ fn command_clears_pending_force_push_lease(command: &RepoCommandKind) -> bool {
             | RepoCommandKind::PushAfterCommit { .. }
             | RepoCommandKind::ForcePush
             | RepoCommandKind::ForcePushWithLease { .. }
+            | RepoCommandKind::PushMergeRequest { .. }
             | RepoCommandKind::PushSetUpstream { .. }
             | RepoCommandKind::Reset { .. }
             | RepoCommandKind::Rebase { .. }
@@ -1240,6 +1363,7 @@ pub(super) fn repo_command_finished(
         | RepoCommandKind::PushAfterCommit { .. }
         | RepoCommandKind::ForcePush
         | RepoCommandKind::ForcePushWithLease { .. }
+        | RepoCommandKind::PushMergeRequest { .. }
         | RepoCommandKind::PushSetUpstream { .. }
         | RepoCommandKind::DeleteRemoteBranch { .. }
         | RepoCommandKind::DeleteRemoteBranches { .. }
@@ -1280,6 +1404,9 @@ pub(super) fn repo_command_finished(
                     | RepoCommandKind::Rebase { .. }
                     | RepoCommandKind::RebaseContinue
                     | RepoCommandKind::RebaseAbort
+                    | RepoCommandKind::BisectStart { .. }
+                    | RepoCommandKind::BisectMark { .. }
+                    | RepoCommandKind::BisectReset
                     | RepoCommandKind::InteractiveRebase { .. }
                     | RepoCommandKind::InteractiveCherryPick { .. }
                     | RepoCommandKind::CherryPick { .. }
@@ -1288,6 +1415,7 @@ pub(super) fn repo_command_finished(
                 repo_state.set_diff_target(None);
                 repo_state.diff_state.diff = Loadable::NotLoaded;
                 repo_state.diff_state.diff_file = Loadable::NotLoaded;
+            repo_state.diff_state.diff_file_lfs = Loadable::NotLoaded;
                 repo_state.diff_state.diff_preview_text_file = Loadable::NotLoaded;
                 repo_state.diff_state.submodule_summary = Loadable::NotLoaded;
                 repo_state.diff_state.inline_submodule_diff = None;
@@ -1370,6 +1498,7 @@ pub(super) fn repo_command_finished(
             repo_state.diff_state.diff_reload_in_flight = false;
             repo_state.diff_state.diff = Loadable::NotLoaded;
             repo_state.diff_state.diff_file = Loadable::NotLoaded;
+            repo_state.diff_state.diff_file_lfs = Loadable::NotLoaded;
             repo_state.diff_state.diff_preview_text_file = Loadable::NotLoaded;
             repo_state.diff_state.submodule_summary = Loadable::NotLoaded;
             repo_state.diff_state.inline_submodule_diff = None;

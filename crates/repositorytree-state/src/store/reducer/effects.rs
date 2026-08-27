@@ -13,10 +13,10 @@ use repositorytree_core::conflict_session::{
     ConflictResolverStrategy, ConflictSession, reconstruct_conflict_marker_sides,
 };
 use repositorytree_core::domain::{
-    Branch, CommitDetails, CommitFileChange, CommitId, EMPTY_TREE_ID, FileEntry, FileSource,
-    FileStatusKind, LogPage, RecentCommitMessage, RefMetadata, ReflogEntry, Remote, RemoteBranch,
-    RemoteTag, RepoStatus, StashEntry, Submodule, Tag, UpstreamDivergence, Worktree,
-    WorktreeDirtySummary,
+    Branch, Commit, CommitDetails, CommitFileChange, CommitId, ContributorCommit, EMPTY_TREE_ID,
+    FileEntry, FileSource, FileStatus, FileStatusKind, LogPage, RecentCommitMessage, RefMetadata,
+    ReflogEntry, Remote, RemoteBranch, RemoteTag, RepoStatus, StashEntry, Submodule, Tag,
+    UpstreamDivergence, Worktree, WorktreeDirtySummary,
 };
 use repositorytree_core::error::Error;
 use repositorytree_core::merge::{MergeSource, OrderedSelection};
@@ -805,6 +805,15 @@ pub(super) fn select_commit_multi(
     clicked_index: Option<usize>,
     visible_order: Option<Vec<CommitId>>,
 ) -> Vec<Effect> {
+    // The working-tree sentinel can arrive here from a nav-history replay (its
+    // snapshot stores `selected_commit`). It is not a commit to select — the
+    // uncommitted-changes row owns that id — so route it to its own selection
+    // rather than letting it reach the multi-selection machinery, whose entries
+    // must always name real commits.
+    if commit_id.is_uncommitted() {
+        return select_working_tree_summary(state, repo_id);
+    }
+
     let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
         return Vec::new();
     };
@@ -1261,6 +1270,105 @@ pub(super) fn select_worktree_uncommitted(
         .collect()
 }
 
+/// Select the uncommitted-changes row pinned atop the history list: this
+/// checkout's working tree as a virtual node. The details pane shows a
+/// working-tree review instead of a commit.
+///
+/// The selection is the all-zeros "not committed yet" id, so every
+/// `is_uncommitted` check recognizes it — but it is deliberately never put in
+/// `multi_selection`, whose entries must always name real commits for the
+/// selection-driven commands (cherry-pick, squash, …).
+pub(super) fn select_working_tree_summary(state: &mut AppState, repo_id: RepoId) -> Vec<Effect> {
+    let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
+        return Vec::new();
+    };
+
+    // Idempotent on purpose, like `select_worktree_uncommitted` above:
+    // `set_selected_commit` bumps its rev unconditionally, and keyboard
+    // navigation re-drives selection messages while a key is held.
+    let already_selected = repo_state
+        .history_state
+        .selected_commit
+        .as_ref()
+        .is_some_and(CommitId::is_uncommitted);
+    if already_selected {
+        // A prior half-state (or a cancelled load) can still leave the details
+        // behind; restore the invariant every other selection maintains.
+        resync_working_tree_details_if_selected(repo_state);
+        return Vec::new();
+    }
+
+    // Reading this checkout's uncommitted changes displaces every other kind of
+    // history selection, exactly as selecting a linked worktree does.
+    repo_state.set_commit_multi_selection(Default::default());
+    repo_state.clear_range_comparison();
+    repo_state.set_selected_commit(Some(CommitId::uncommitted()));
+    repo_state.set_commit_details(Loadable::Ready(Arc::new(working_tree_details(repo_state))));
+    Vec::new()
+}
+
+/// The details the uncommitted-changes row "selects": every staged and unstaged
+/// entry as one file list (staged first, matching the status sections), parented
+/// on HEAD so the row reads as the commit that has not been made yet. Kept in
+/// step with status replies by [`resync_working_tree_details_if_selected`].
+fn working_tree_details(repo_state: &RepoState) -> CommitDetails {
+    let files = |entries: &[FileStatus]| -> Vec<CommitFileChange> {
+        entries
+            .iter()
+            .map(|file| CommitFileChange {
+                path: file.path.clone(),
+                kind: file.kind,
+                is_submodule: false,
+                additions: None,
+                deletions: None,
+            })
+            .collect()
+    };
+    let staged = match &repo_state.staged_status {
+        Loadable::Ready(entries) => entries.as_slice(),
+        _ => &[],
+    };
+    let unstaged = match &repo_state.worktree_status {
+        Loadable::Ready(entries) => entries.as_slice(),
+        _ => &[],
+    };
+    CommitDetails {
+        id: CommitId::uncommitted(),
+        message: String::new(),
+        author_name: String::new(),
+        author_email: String::new(),
+        authored_at_unix: 0,
+        committed_at: String::new(),
+        committed_at_unix: 0,
+        parent_ids: repo_state.head_commit_id().into_iter().collect(),
+        files: files(staged).into_iter().chain(files(unstaged)).collect(),
+    }
+}
+
+/// Re-derive the uncommitted-changes details after a status reply, so the file
+/// list behind the row's selection stays live as files change. Skips the write
+/// (and the `commit_details_rev` bump the details pane hashes) when nothing
+/// actually moved.
+pub(super) fn resync_working_tree_details_if_selected(repo_state: &mut RepoState) {
+    let selected = repo_state
+        .history_state
+        .selected_commit
+        .as_ref()
+        .is_some_and(CommitId::is_uncommitted);
+    if !selected {
+        return;
+    }
+    let next = working_tree_details(repo_state);
+    if let Loadable::Ready(details) = &repo_state.history_state.commit_details
+        && details.id == next.id
+        && details.parent_ids == next.parent_ids
+        && details.files == next.files
+    {
+        return;
+    }
+    repo_state.set_commit_details(Loadable::Ready(Arc::new(next)));
+}
+
 /// Retires an inline diff belonging to a linked worktree that is no longer the
 /// selected one.
 ///
@@ -1565,6 +1673,60 @@ pub(super) fn recent_commit_messages_loaded(
             }
         };
         repo_state.set_recent_commit_messages(value);
+    }
+    Vec::new()
+}
+
+/// Cross-history search. A new search replaces any in-flight one — the
+/// request-rev guard drops the stale reply — and an empty query just clears
+/// the previous results (the picker's local rows are all it needs then).
+pub(super) fn search_commits(
+    state: &mut AppState,
+    repo_id: RepoId,
+    query: String,
+) -> Vec<Effect> {
+    let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
+        return Vec::new();
+    };
+    if !matches!(repo_state.open, Loadable::Ready(())) {
+        return Vec::new();
+    }
+    let query = query.trim().to_string();
+    if query.is_empty() {
+        repo_state.set_commit_search(Loadable::NotLoaded);
+        repo_state.commit_search_query = None;
+        return Vec::new();
+    }
+    repo_state.set_commit_search(Loadable::Loading);
+    // The trimmed query is both what the backend searches for and what the
+    // picker compares its trimmed input against when deciding whether the
+    // stored results answer the typed query.
+    repo_state.commit_search_query = Some(query.clone());
+    let request_rev = repo_state.commit_search_rev;
+    vec![Effect::SearchCommits {
+        repo_id,
+        query,
+        request_rev,
+    }]
+}
+
+pub(super) fn commits_searched(
+    state: &mut AppState,
+    repo_id: RepoId,
+    request_rev: u64,
+    result: std::result::Result<Vec<Commit>, Error>,
+) -> Vec<Effect> {
+    if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id)
+        && repo_state.commit_search_rev == request_rev
+    {
+        let value = match result {
+            Ok(v) => Loadable::Ready(v),
+            Err(e) => {
+                push_diagnostic(repo_state, DiagnosticKind::Error, e.to_string());
+                Loadable::Error(e.to_string())
+            }
+        };
+        repo_state.set_commit_search(value);
     }
     Vec::new()
 }
@@ -2227,6 +2389,7 @@ pub(super) fn status_loaded(
                 repo_state.set_status(Loadable::Error(e.to_string()));
             }
         }
+        resync_working_tree_details_if_selected(repo_state);
         finish_status_lane_replay(
             repo_state,
             RepoLoadsInFlight::WORKTREE_STATUS,
@@ -2263,6 +2426,7 @@ pub(super) fn worktree_status_loaded(
                 repo_state.set_worktree_status(Loadable::Error(e.to_string()));
             }
         }
+        resync_working_tree_details_if_selected(repo_state);
         finish_status_lane_replay(
             repo_state,
             RepoLoadsInFlight::WORKTREE_STATUS,
@@ -2292,6 +2456,7 @@ pub(super) fn staged_status_loaded(
                 repo_state.set_staged_status(Loadable::Error(e.to_string()));
             }
         }
+        resync_working_tree_details_if_selected(repo_state);
         finish_status_lane_replay(
             repo_state,
             RepoLoadsInFlight::STAGED_STATUS,
@@ -2470,6 +2635,62 @@ pub(super) fn remote_tags_loaded(
         }
     }
     effects
+}
+
+pub(super) fn assume_unchanged_list_loaded(
+    state: &mut AppState,
+    repo_id: RepoId,
+    result: std::result::Result<Vec<std::path::PathBuf>, Error>,
+) -> Vec<Effect> {
+    if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+        let list = match result {
+            Ok(v) => Loadable::Ready(std::sync::Arc::new(v)),
+            Err(e) => {
+                push_diagnostic(repo_state, DiagnosticKind::Error, e.to_string());
+                Loadable::Error(e.to_string())
+            }
+        };
+        repo_state.assume_unchanged = list;
+        repo_state.assume_unchanged_rev = repo_state.assume_unchanged_rev.wrapping_add(1);
+        repo_state.bump_ops_rev();
+    }
+    Vec::new()
+}
+
+/// On-demand like the stash list: nothing asks until the statistics dialog
+/// opens, and while it loads the dialog shows the same pending state every
+/// other load does.
+pub(super) fn load_repo_statistics(state: &mut AppState, repo_id: RepoId) -> Vec<Effect> {
+    let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
+        return Vec::new();
+    };
+    if !matches!(repo_state.open, Loadable::Ready(())) {
+        return Vec::new();
+    }
+    repo_state.statistics = Loadable::Loading;
+    repo_state.statistics_rev = repo_state.statistics_rev.wrapping_add(1);
+    repo_state.bump_ops_rev();
+    vec![Effect::LoadRepoStatistics { repo_id }]
+}
+
+pub(super) fn repo_statistics_loaded(
+    state: &mut AppState,
+    repo_id: RepoId,
+    result: std::result::Result<Vec<ContributorCommit>, Error>,
+) -> Vec<Effect> {
+    if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+        let statistics = match result {
+            Ok(v) => Loadable::Ready(std::sync::Arc::new(v)),
+            Err(e) => {
+                push_diagnostic(repo_state, DiagnosticKind::Error, e.to_string());
+                Loadable::Error(e.to_string())
+            }
+        };
+        repo_state.statistics = statistics;
+        repo_state.statistics_rev = repo_state.statistics_rev.wrapping_add(1);
+        repo_state.bump_ops_rev();
+    }
+    Vec::new()
 }
 
 pub(super) fn stashes_loaded(
@@ -3875,6 +4096,7 @@ mod tests {
 
     fn test_commit(id: &str, parent: Option<&str>) -> repositorytree_core::domain::Commit {
         repositorytree_core::domain::Commit {
+            signed: false,
             id: CommitId(id.into()),
             parent_ids: parent
                 .map(|p| smallvec::smallvec![CommitId(p.into())])
@@ -4183,6 +4405,7 @@ mod tests {
         let mut state = new_state_with_repo(repo_id);
         repo_mut(&mut state, repo_id).set_log(Loadable::Ready(Arc::new(LogPage {
             commits: vec![repositorytree_core::domain::Commit {
+                signed: false,
                 id: CommitId("c1".into()),
                 parent_ids: repositorytree_core::domain::CommitParentIds::new(),
                 summary: "s".into(),
@@ -4206,6 +4429,7 @@ mod tests {
                 LogScope::NoMerges,
                 LogPage {
                     commits: vec![repositorytree_core::domain::Commit {
+                        signed: false,
                         id: CommitId("visible-non-merge".into()),
                         parent_ids: smallvec::smallvec![CommitId("hidden-head".into())],
                         summary: "visible".into(),
@@ -4219,6 +4443,7 @@ mod tests {
                 LogScope::MergesOnly,
                 LogPage {
                     commits: vec![repositorytree_core::domain::Commit {
+                        signed: false,
                         id: CommitId("visible-merge".into()),
                         parent_ids: smallvec::smallvec![
                             CommitId("p0".into()),

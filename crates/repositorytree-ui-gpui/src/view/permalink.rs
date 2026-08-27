@@ -9,7 +9,7 @@ use repositorytree_core::domain::{Remote, RemoteBranch};
 
 /// The forge URL shapes RepositoryTree knows how to generate.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum ForgeKind {
+pub(super) enum ForgeKind {
     GitHub,
     GitLab,
     Bitbucket,
@@ -31,9 +31,9 @@ enum ForgeKind {
 
 /// Parsed web root of a remote, e.g. `https://github.com/RepositoryTree/RepositoryTree`.
 #[derive(Debug, Eq, PartialEq)]
-struct ForgeWebBase {
-    kind: ForgeKind,
-    web_root: String,
+pub(super) struct ForgeWebBase {
+    pub(super) kind: ForgeKind,
+    pub(super) web_root: String,
 }
 
 /// The remote web links should be based on: `origin` when present, otherwise
@@ -149,7 +149,7 @@ fn web_base(remotes: &[Remote]) -> Option<ForgeWebBase> {
     parse_remote_url(url)
 }
 
-fn parse_remote_url(url: &str) -> Option<ForgeWebBase> {
+pub(super) fn parse_remote_url(url: &str) -> Option<ForgeWebBase> {
     let url = url.trim();
     if url.is_empty() {
         return None;

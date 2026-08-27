@@ -111,6 +111,13 @@ chrome:
     no_file_open: No file is open
     unsaved_edits: "Unsaved edits (%{count})"
     unsaved_discard_tooltip: Throw away the unsaved changes and reload this file from disk
+    pr:
+      empty: "No open pull requests."
+      draft: Draft
+      checks:
+        success: Checks passed
+        failure: Checks failed
+        pending: Checks running
   branch:
     upstream: Upstream
   submodule:

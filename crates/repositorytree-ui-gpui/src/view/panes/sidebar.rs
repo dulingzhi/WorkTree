@@ -8,6 +8,9 @@ use super::super::*;
 use repositorytree_core::domain::{FileEntry, FileEntryKind, LogScope};
 use repositorytree_state::model::{Loadable, SidebarDataRequest, SidebarMode};
 use repositorytree_state::msg::Msg;
+// Only the (non-test) network spawn below addresses the store directly.
+#[cfg(not(test))]
+use repositorytree_state::msg::InternalMsg;
 use palette::IntoColor;
 use rustc_hash::{FxHashSet, FxHasher};
 use std::collections::{BTreeMap, BTreeSet};
@@ -83,6 +86,7 @@ const FILE_BROWSER_REVEAL_MAX_WAIT: std::time::Duration = std::time::Duration::f
 pub(in crate::view) enum CollapsedSidebarSection {
     Local,
     Remote,
+    PullRequests,
     Worktrees,
     Submodules,
     Stashes,
@@ -91,9 +95,10 @@ pub(in crate::view) enum CollapsedSidebarSection {
 
 impl CollapsedSidebarSection {
     /// Rail order, top to bottom.
-    pub(in crate::view) const ALL: [Self; 6] = [
+    pub(in crate::view) const ALL: [Self; 7] = [
         Self::Local,
         Self::Remote,
+        Self::PullRequests,
         Self::Worktrees,
         Self::Submodules,
         Self::Stashes,
@@ -104,6 +109,7 @@ impl CollapsedSidebarSection {
         match self {
             Self::Local => "icons/computer.svg",
             Self::Remote => "icons/cloud.svg",
+            Self::PullRequests => super::super::icons::PULL_REQUEST_ICON_PATH,
             Self::Worktrees => "icons/git_worktree.svg",
             Self::Submodules => "icons/box.svg",
             Self::Stashes => super::super::icons::STASH_ICON_PATH,
@@ -118,6 +124,7 @@ impl CollapsedSidebarSection {
         match self {
             Self::Local => crate::i18n::tr_str("Local Branches"),
             Self::Remote => crate::i18n::tr_str("Remote Branches"),
+            Self::PullRequests => crate::i18n::tr_str("Pull Requests"),
             Self::Worktrees => crate::i18n::tr_str("Worktrees"),
             Self::Submodules => crate::i18n::tr_str("Submodules"),
             Self::Stashes => crate::i18n::tr_str("Stashes"),
@@ -129,6 +136,7 @@ impl CollapsedSidebarSection {
         match self {
             Self::Local => "collapsed_sidebar_icon_local",
             Self::Remote => "collapsed_sidebar_icon_remote",
+            Self::PullRequests => "collapsed_sidebar_icon_pull_requests",
             Self::Worktrees => "collapsed_sidebar_icon_worktrees",
             Self::Submodules => "collapsed_sidebar_icon_submodules",
             Self::Stashes => "collapsed_sidebar_icon_stashes",
@@ -188,9 +196,9 @@ impl CollapsedSidebarSection {
             ),
             Self::Stashes => (
                 format!("stash_section_menu_{}", repo_id.0),
-                PopoverKind::StashPrompt,
+                PopoverKind::StashPrompt { paths: Vec::new() },
             ),
-            Self::Files => return None,
+            Self::PullRequests | Self::Files => return None,
         };
         Some((invoker.into(), kind))
     }
@@ -202,6 +210,7 @@ impl CollapsedSidebarSection {
             Self::Worktrees => Some(branch_sidebar::worktrees_section_storage_key()),
             Self::Submodules => Some(branch_sidebar::submodules_section_storage_key()),
             Self::Stashes => Some(branch_sidebar::stash_section_storage_key()),
+            Self::PullRequests => Some(branch_sidebar::pull_requests_section_storage_key()),
             Self::Files => None,
         }
     }
@@ -256,6 +265,11 @@ pub(in super::super) struct SidebarPaneView {
     /// When the request was made. Bounded so an unresolvable reveal expires
     /// instead of firing at some unrelated later moment.
     pending_file_browser_reveal_at: Option<std::time::Instant>,
+    /// Guards the GitHub pull-request fetch against double-spawning: store
+    /// dispatch is async, so the `Loading` marker may not have landed yet
+    /// when the next ensure pass runs (construction fires two in quick
+    /// succession). Cleared once the store reports a settled state.
+    pull_requests_fetch_in_flight: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -452,6 +466,7 @@ impl SidebarPaneView {
             collapsed_popover_section: None,
             pending_file_browser_reveal: None,
             pending_file_browser_reveal_at: None,
+            pull_requests_fetch_in_flight: false,
         };
         this.dispatch_sidebar_data_request_if_needed(cx);
         // Reflect any already-active repo's stored search query on first mount.
@@ -893,6 +908,9 @@ impl SidebarPaneView {
     }
 
     fn dispatch_sidebar_data_request_if_needed(&mut self, cx: &mut gpui::Context<Self>) {
+        // Pull requests come from the GitHub API rather than a git backend, so
+        // their load is driven from here rather than `SidebarDataRequest`.
+        self.ensure_pull_requests_loaded(cx);
         let next = sidebar_presentation::sidebar_request_fingerprint(
             self.state.as_ref(),
             &self.sidebar_collapsed_items_by_repo,
@@ -1382,7 +1400,7 @@ impl SidebarPaneView {
     pub(in super::super) fn ensure_collapsed_section_data(
         &mut self,
         section: CollapsedSidebarSection,
-        _cx: &mut gpui::Context<Self>,
+        cx: &mut gpui::Context<Self>,
     ) {
         let Some(repo) = self.active_repo() else {
             return;
@@ -1423,7 +1441,152 @@ impl SidebarPaneView {
                         .dispatch(Msg::LoadFileBrowser { repo_id, source });
                 }
             }
+            CollapsedSidebarSection::PullRequests => {
+                // The popover renders the section regardless of the persisted
+                // collapse state, so opening it is itself fetch intent.
+                self.fetch_pull_requests_now(cx);
+            }
             CollapsedSidebarSection::Local | CollapsedSidebarSection::Remote => {}
+        }
+    }
+
+    /// Start the GitHub pull-request fetch when the sidebar section is
+    /// visible (expanded in the sidebar) and the stored listing is stale.
+    fn ensure_pull_requests_loaded(&mut self, cx: &mut gpui::Context<Self>) {
+        let Some(repo) = self.active_repo() else {
+            return;
+        };
+        if !matches!(&repo.remotes, Loadable::Ready(_)) {
+            return;
+        }
+        let collapsed = self
+            .sidebar_collapsed_items_by_repo
+            .get(&repo.spec.workdir)
+            .map(|items| {
+                branch_sidebar::is_collapsed(items, branch_sidebar::pull_requests_section_storage_key())
+            })
+            .unwrap_or(true);
+        if !collapsed {
+            self.fetch_pull_requests_now(cx);
+        }
+    }
+
+    /// Fetch the active repository's pull requests from the GitHub API
+    /// regardless of section visibility (the retry affordance on the error
+    /// row). No-op for non-GitHub remotes and while a fetch is in flight.
+    pub(in super::super) fn fetch_pull_requests_now(&mut self, cx: &mut gpui::Context<Self>) {
+        // Every read from the borrowed repo is hoisted into owned values
+        // first: the double-spawn guard below assigns into `self`, which
+        // would conflict with the outstanding `active_repo` borrow.
+        let (repo_id, settled, stale, slug) = {
+            let Some(repo) = self.active_repo() else {
+                return;
+            };
+            let slug = match &repo.remotes {
+                Loadable::Ready(remotes) => {
+                    super::super::github::github_slug_from_remotes(remotes)
+                }
+                _ => None,
+            };
+            (
+                repo.id,
+                matches!(repo.pull_requests, Loadable::Ready(_) | Loadable::Error(_)),
+                matches!(repo.pull_requests, Loadable::NotLoaded | Loadable::Error(_)),
+                slug,
+            )
+        };
+        // Settled states release the double-spawn guard; a lost reply would
+        // otherwise pin the section in Loading forever.
+        if settled {
+            self.pull_requests_fetch_in_flight = false;
+        }
+        if self.pull_requests_fetch_in_flight || !stale {
+            return;
+        }
+        let Some(slug) = slug else {
+            return;
+        };
+        self.pull_requests_fetch_in_flight = true;
+        self.store
+            .dispatch(Msg::LoadPullRequests { repo_id });
+
+        // Test builds compile the spawn out; keep the fetch inputs referenced
+        // so the function body stays identical either way.
+        #[cfg(test)]
+        {
+            let _ = (&slug, cx);
+        }
+
+        // The API call itself is UI-side (state effects run on OS threads
+        // with no HTTP); results return to the store as internal messages.
+        // Skipped in tests, which install their own listings.
+        #[cfg(not(test))]
+        {
+            let store = std::sync::Arc::clone(&self.store);
+            let slug = std::sync::Arc::new(slug);
+            cx.spawn(async move |_this, _cx| {
+                let result = super::super::github::fetch_pull_requests(&slug).await;
+                let pull_requests = match result {
+                    Ok(pull_requests) => pull_requests,
+                    Err(error) => {
+                        store.dispatch(Msg::Internal(InternalMsg::PullRequestsLoaded {
+                            repo_id,
+                            result: Err(error),
+                        }));
+                        return;
+                    }
+                };
+                store.dispatch(Msg::Internal(InternalMsg::PullRequestsLoaded {
+                    repo_id,
+                    result: Ok(pull_requests.clone()),
+                }));
+                // Combined CI status per PR head. Statuses are token-gated:
+                // unauthenticated requests share a 60/hour budget with the
+                // listing, so the chips wait for a resolved token.
+                if super::super::github::github_token().is_some() {
+                    for pull_request in pull_requests
+                        .iter()
+                        .take(super::super::github::PULL_REQUEST_CHECKS_CAP)
+                    {
+                        let sha = pull_request.head_sha.as_ref();
+                        if sha.is_empty() {
+                            continue;
+                        }
+                        if let Ok(Some(checks)) =
+                            super::super::github::fetch_pull_request_checks(&slug, sha).await
+                        {
+                            store.dispatch(Msg::Internal(
+                                InternalMsg::PullRequestChecksLoaded {
+                                    repo_id,
+                                    number: pull_request.number,
+                                    checks,
+                                },
+                            ));
+                        }
+                    }
+                }
+            })
+            .detach();
+        }
+    }
+
+    /// Open `url` in the system browser, surfacing a failure as a toast via
+    /// the root view (the pane has no toast surface of its own).
+    pub(in super::super) fn open_url_in_browser(
+        &self,
+        url: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if let Err(err) = super::super::platform_open::open_url(url)
+            && let Some(root) = self.root_view.upgrade()
+        {
+            let _ = root.update(cx, |root, cx| {
+                root.push_toast(
+                    components::ToastKind::Error,
+                    format!("Failed to open link: {err}"),
+                    cx,
+                );
+            });
         }
     }
 
@@ -2746,6 +2909,8 @@ fn is_section_header(row: &BranchSidebarRow) -> bool {
             | BranchSidebarRow::WorktreesHeader { .. }
             | BranchSidebarRow::SubmodulesHeader { .. }
             | BranchSidebarRow::StashHeader { .. }
+            | BranchSidebarRow::TagsHeader { .. }
+            | BranchSidebarRow::PullRequestsHeader { .. }
     )
 }
 
@@ -2800,6 +2965,9 @@ fn matches_section_header(row: &BranchSidebarRow, section: CollapsedSidebarSecti
         ) | (
             BranchSidebarRow::StashHeader { .. },
             CollapsedSidebarSection::Stashes,
+        ) | (
+            BranchSidebarRow::PullRequestsHeader { .. },
+            CollapsedSidebarSection::PullRequests,
         )
     )
 }

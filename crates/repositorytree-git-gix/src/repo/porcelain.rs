@@ -1,8 +1,9 @@
 use super::GixRepo;
 use super::history::gix_head_id_or_none;
 use crate::util::{
-    bytes_to_text_preserving_utf8, path_buf_from_git_bytes, run_git_raw_output, run_git_simple,
-    run_git_simple_with_paths, validate_hex_commit_id, validate_ref_like_arg,
+    bytes_to_text_preserving_utf8, git_command_failed_error, path_buf_from_git_bytes,
+    run_git_raw_output, run_git_simple, run_git_simple_with_paths, validate_hex_commit_id,
+    validate_ref_like_arg,
 };
 use repositorytree_core::domain::{CommitId, FileStatusKind, StashEntry};
 use repositorytree_core::error::{Error, ErrorKind, GitFailure, GitFailureId};
@@ -559,6 +560,72 @@ impl GixRepo {
         }
     }
 
+    /// Checks out GitHub pull request `number`: fetches `refs/pull/<N>/head`
+    /// from `remote` and checks it out as the local branch `pr/<N>`.
+    pub(super) fn checkout_pull_request_impl(&self, remote: &str, number: u64) -> Result<()> {
+        validate_ref_like_arg(remote, "remote name")?;
+        let remote_ref = format!("refs/pull/{number}/head");
+        let local_branch = format!("pr/{number}");
+        validate_ref_like_arg(&local_branch, "branch name")?;
+
+        // An earlier checkout already created pr/<N>: reuse it as-is — the
+        // user may have commits on it — instead of moving the branch.
+        if self.local_branch_exists(&local_branch)? {
+            let mut cmd = self.git_workdir_cmd();
+            cmd.arg("checkout").arg(&local_branch);
+            return run_git_simple(cmd, "git checkout");
+        }
+
+        // Fetch the PR tip without touching any local branch: fetching
+        // straight into pr/<N> would refuse while it is checked out in
+        // another worktree.
+        let label = format!("git fetch --refmap= {remote} {remote_ref}");
+        let mut cmd = self.git_workdir_cmd();
+        cmd.arg("fetch")
+            .arg("--no-tags")
+            .arg("--refmap=")
+            .arg("--")
+            .arg(remote)
+            .arg(&remote_ref);
+        let output = run_git_raw_output(cmd, &label)?;
+        if !output.status.success() {
+            return Err(git_command_failed_error(&label, output));
+        }
+
+        let label = "git rev-parse --verify FETCH_HEAD^{commit}";
+        let mut cmd = self.git_workdir_cmd();
+        cmd.arg("rev-parse")
+            .arg("--verify")
+            .arg("FETCH_HEAD^{commit}");
+        let output = run_git_raw_output(cmd, label)?;
+        if !output.status.success() {
+            return Err(git_command_failed_error(label, output));
+        }
+        let tip = bytes_to_text_preserving_utf8(&output.stdout)
+            .trim()
+            .to_string();
+        let tip = CommitId(tip.into());
+        validate_hex_commit_id(&tip)?;
+
+        // Create the local branch at the tip, tolerating a racing creator
+        // (the re-check below mirrors checkout_remote_branch_impl).
+        let label = format!("git branch {local_branch} <pull request tip>");
+        let mut cmd = self.git_workdir_cmd();
+        cmd.arg("branch")
+            .arg("--")
+            .arg(&local_branch)
+            .arg(tip.as_ref());
+        if let Err(err) = run_git_simple(cmd, &label)
+            && !self.local_branch_exists(&local_branch)?
+        {
+            return Err(err);
+        }
+
+        let mut cmd = self.git_workdir_cmd();
+        cmd.arg("checkout").arg(&local_branch);
+        run_git_simple(cmd, "git checkout")
+    }
+
     pub(super) fn checkout_commit_impl(&self, id: &CommitId) -> Result<()> {
         validate_hex_commit_id(id)?;
 
@@ -586,14 +653,29 @@ impl GixRepo {
         run_git_simple(cmd, "git revert")
     }
 
-    pub(super) fn stash_create_impl(&self, message: &str, include_untracked: bool) -> Result<()> {
+    pub(super) fn stash_create_impl(
+        &self,
+        message: &str,
+        include_untracked: bool,
+        keep_index: bool,
+        paths: &[std::path::PathBuf],
+    ) -> Result<()> {
         let mut cmd = self.git_workdir_cmd();
         cmd.arg("stash").arg("push");
         if include_untracked {
             cmd.arg("-u");
         }
+        if keep_index {
+            cmd.arg("--keep-index");
+        }
         if !message.is_empty() {
             cmd.arg("-m").arg(message);
+        }
+        if !paths.is_empty() {
+            // A pathspec that begins with '-' must reach Git as a pathspec,
+            // not as an option.
+            cmd.arg("--");
+            cmd.args(paths);
         }
         run_git_simple(cmd, "git stash push")
     }
@@ -656,6 +738,17 @@ impl GixRepo {
         let mut cmd = self.git_workdir_cmd();
         cmd.arg("stash").arg("drop").arg(stash_spec(index));
         run_git_simple(cmd, "git stash drop")
+    }
+
+    pub(super) fn stash_branch_impl(&self, branch: &str, index: usize) -> Result<()> {
+        validate_ref_like_arg(branch, "branch name")?;
+
+        let mut cmd = self.git_workdir_cmd();
+        cmd.arg("stash")
+            .arg("branch")
+            .arg(branch)
+            .arg(stash_spec(index));
+        run_git_simple(cmd, "git stash branch")
     }
 
     pub(super) fn stage_impl(&self, paths: &[&Path]) -> Result<()> {

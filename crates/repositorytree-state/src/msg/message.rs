@@ -9,9 +9,10 @@ use repositorytree_core::error::Error;
 use repositorytree_core::process::GitRuntimeState;
 use repositorytree_core::services::GitRepository;
 use repositorytree_core::services::{
-    CommandOutput, CommitOperationOutcome, ConflictSide, ForcePushLease, InteractiveRebaseEntry,
-    PullMode, RemoteUrlKind, ResetMode, SafePushAfterCommitContext, SafePushAfterCommitDecision,
-    SafePushAfterCommitTarget, SequencerState, SubmoduleTrustDecision, SubmoduleTrustTarget,
+    BisectState, BisectVerdict, CommandOutput, CommitOperationOutcome, ConflictSide,
+    ForcePushLease, InteractiveRebaseEntry, MergeRequestPushOptions, PullMode, RemoteUrlKind,
+    ResetMode, SafePushAfterCommitContext, SafePushAfterCommitDecision, SafePushAfterCommitTarget,
+    SequencerState, SubmoduleTrustDecision, SubmoduleTrustTarget,
 };
 use rustc_hash::FxHashMap;
 use std::path::PathBuf;
@@ -25,6 +26,7 @@ use super::{RepoPath, RepoPathList};
 pub enum RepoActionKind {
     CheckoutBranch,
     CheckoutRemoteBranch,
+    CheckoutPullRequest,
     CheckoutCommit,
     CherryPickCommit,
     RevertCommit,
@@ -44,6 +46,8 @@ pub enum RepoActionKind {
     ApplyStash,
     PopStash,
     DropStash,
+    StashBranch,
+    SetAssumeUnchanged,
 }
 
 /// How a history-row click mutates the commit selection.
@@ -212,6 +216,13 @@ pub enum Msg {
         repo_id: RepoId,
         author: Option<String>,
     },
+    /// Restricts the history to the commits reachable from `refs` — full ref
+    /// names (`refs/heads/…`, `refs/remotes/…`, `refs/tags/…`). An empty list
+    /// clears the filter and returns to the HEAD / all-refs walk.
+    SetHistoryRefFilters {
+        repo_id: RepoId,
+        refs: Vec<String>,
+    },
     SetFetchPruneDeletedRemoteTrackingBranches {
         repo_id: RepoId,
         enabled: bool,
@@ -318,6 +329,13 @@ pub enum Msg {
         repo_id: RepoId,
         limit: usize,
     },
+    /// Cross-history commit search: commits anywhere in the repository (all
+    /// refs), matching `query` in message or author, case-insensitively.
+    /// Unlike the paged log walks this is not anchored to what is loaded.
+    SearchCommits {
+        repo_id: RepoId,
+        query: String,
+    },
     /// Fetch the staged diff plus recent commit subjects that AI
     /// commit-message generation builds its prompt from.
     LoadAiCommitContext {
@@ -354,12 +372,24 @@ pub enum Msg {
         repo_id: RepoId,
         path: PathBuf,
     },
+    /// Select the uncommitted-changes row at the top of the history list —
+    /// this checkout's working tree as a virtual node. Drives the details pane
+    /// into a working-tree review instead of a commit.
+    SelectWorkingTreeSummary {
+        repo_id: RepoId,
+    },
     /// On-demand load of tip-commit author/date/summary for every ref. Only
     /// requested by pickers that render it.
     LoadRefMetadata {
         repo_id: RepoId,
     },
     LoadSubmodules {
+        repo_id: RepoId,
+    },
+    /// Marks the GitHub pull request list as loading. The actual GitHub API
+    /// call is UI-driven (no git backend): the sidebar spawns it and the
+    /// result lands as `InternalMsg::PullRequestsLoaded`.
+    LoadPullRequests {
         repo_id: RepoId,
     },
     LoadTags {
@@ -502,6 +532,11 @@ pub enum Msg {
         branch: String,
         local_branch: String,
     },
+    CheckoutPullRequest {
+        repo_id: RepoId,
+        remote: String,
+        number: u64,
+    },
     CheckoutCommit {
         repo_id: RepoId,
         commit_id: CommitId,
@@ -562,6 +597,14 @@ pub enum Msg {
         repo_id: RepoId,
         commit_id: CommitId,
         dest: PathBuf,
+    },
+    ArchiveZip {
+        repo_id: RepoId,
+        revision: String,
+        dest: PathBuf,
+    },
+    CleanupRepo {
+        repo_id: RepoId,
     },
     ApplyPatch {
         repo_id: RepoId,
@@ -723,6 +766,12 @@ pub enum Msg {
         repo_id: RepoId,
         lease: ForcePushLease,
     },
+    /// Push HEAD carrying `git push -o merge_request.*` options so GitLab
+    /// opens the merge request from the push itself.
+    PushMergeRequest {
+        repo_id: RepoId,
+        options: MergeRequestPushOptions,
+    },
     PushSetUpstream {
         repo_id: RepoId,
         remote: String,
@@ -783,6 +832,19 @@ pub enum Msg {
         repo_id: RepoId,
     },
     RebaseAbort {
+        repo_id: RepoId,
+    },
+    BisectStart {
+        repo_id: RepoId,
+        bad: Option<String>,
+        goods: Vec<String>,
+    },
+    BisectMark {
+        repo_id: RepoId,
+        verdict: BisectVerdict,
+        commit: Option<String>,
+    },
+    BisectReset {
         repo_id: RepoId,
     },
     LoadInteractiveRebaseSetup {
@@ -847,6 +909,11 @@ pub enum Msg {
         name: String,
         url: String,
         kind: RemoteUrlKind,
+    },
+    SetRemoteSshKey {
+        repo_id: RepoId,
+        remote: String,
+        key: Option<String>,
     },
     CheckoutConflictSide {
         repo_id: RepoId,
@@ -978,6 +1045,9 @@ pub enum Msg {
         repo_id: RepoId,
         message: String,
         include_untracked: bool,
+        keep_index: bool,
+        /// Restricts the stash to these paths; empty stashes everything.
+        paths: RepoPathList,
     },
     ApplyStash {
         repo_id: RepoId,
@@ -990,6 +1060,24 @@ pub enum Msg {
     DropStash {
         repo_id: RepoId,
         index: usize,
+    },
+    StashBranch {
+        repo_id: RepoId,
+        index: usize,
+        branch: String,
+    },
+    SetAssumeUnchanged {
+        repo_id: RepoId,
+        path: PathBuf,
+        enable: bool,
+    },
+    LoadAssumeUnchanged {
+        repo_id: RepoId,
+    },
+    /// Load the statistics window's (author, time) commits for this repo.
+    /// On-demand, like the stash list: the statistics dialog asks for it.
+    LoadRepoStatistics {
+        repo_id: RepoId,
     },
     Internal(InternalMsg),
 }
@@ -1085,14 +1173,36 @@ pub enum InternalMsg {
         repo_id: RepoId,
         result: Result<Vec<StashEntry>, Error>,
     },
+    AssumeUnchangedListLoaded {
+        repo_id: RepoId,
+        result: Result<Vec<PathBuf>, Error>,
+    },
+    RepoStatisticsLoaded {
+        repo_id: RepoId,
+        result: Result<Vec<ContributorCommit>, Error>,
+    },
     ReflogLoaded {
         repo_id: RepoId,
         result: Result<Vec<ReflogEntry>, Error>,
+    },
+    PullRequestsLoaded {
+        repo_id: RepoId,
+        result: Result<Vec<PullRequest>, Error>,
+    },
+    PullRequestChecksLoaded {
+        repo_id: RepoId,
+        number: u64,
+        checks: PullRequestChecksState,
     },
     RecentCommitMessagesLoaded {
         repo_id: RepoId,
         request_rev: u64,
         result: Result<Vec<RecentCommitMessage>, Error>,
+    },
+    CommitsSearched {
+        repo_id: RepoId,
+        request_rev: u64,
+        result: Result<Vec<Commit>, Error>,
     },
     AiCommitContextLoaded {
         repo_id: RepoId,
@@ -1102,6 +1212,10 @@ pub enum InternalMsg {
     RebaseStateLoaded {
         repo_id: RepoId,
         result: Result<SequencerState, Error>,
+    },
+    BisectStateLoaded {
+        repo_id: RepoId,
+        result: Result<Option<BisectState>, Error>,
     },
     InteractiveRebaseSetupLoaded {
         repo_id: RepoId,
@@ -1230,6 +1344,14 @@ pub enum InternalMsg {
         repo_id: RepoId,
         target: DiffTarget,
         result: Result<Option<FileDiffText>, Error>,
+    },
+    /// The text-diff load redirected to an LFS pointer change because the
+    /// target path is LFS-filtered. Resolves `diff_file` alongside
+    /// `diff_file_lfs` so the pane does not linger in Loading.
+    DiffFileLfsLoaded {
+        repo_id: RepoId,
+        target: DiffTarget,
+        result: Result<Option<LfsPointerChange>, Error>,
     },
     DiffPreviewTextFileLoaded {
         repo_id: RepoId,

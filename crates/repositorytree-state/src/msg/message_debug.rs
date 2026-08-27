@@ -131,10 +131,35 @@ impl std::fmt::Debug for InternalMsg {
                 .field("repo_id", repo_id)
                 .field("result", result)
                 .finish(),
+            InternalMsg::AssumeUnchangedListLoaded { repo_id, result } => f
+                .debug_struct("AssumeUnchangedListLoaded")
+                .field("repo_id", repo_id)
+                .field("result", result)
+                .finish(),
+            InternalMsg::RepoStatisticsLoaded { repo_id, result } => f
+                .debug_struct("RepoStatisticsLoaded")
+                .field("repo_id", repo_id)
+                .field("result", result)
+                .finish(),
             InternalMsg::ReflogLoaded { repo_id, result } => f
                 .debug_struct("ReflogLoaded")
                 .field("repo_id", repo_id)
                 .field("result", result)
+                .finish(),
+            InternalMsg::PullRequestsLoaded { repo_id, result } => f
+                .debug_struct("PullRequestsLoaded")
+                .field("repo_id", repo_id)
+                .field("result", result)
+                .finish(),
+            InternalMsg::PullRequestChecksLoaded {
+                repo_id,
+                number,
+                checks,
+            } => f
+                .debug_struct("PullRequestChecksLoaded")
+                .field("repo_id", repo_id)
+                .field("number", number)
+                .field("checks", checks)
                 .finish(),
             InternalMsg::RecentCommitMessagesLoaded {
                 repo_id,
@@ -142,6 +167,16 @@ impl std::fmt::Debug for InternalMsg {
                 result,
             } => f
                 .debug_struct("RecentCommitMessagesLoaded")
+                .field("repo_id", repo_id)
+                .field("request_rev", request_rev)
+                .field("result", result)
+                .finish(),
+            InternalMsg::CommitsSearched {
+                repo_id,
+                request_rev,
+                result,
+            } => f
+                .debug_struct("CommitsSearched")
                 .field("repo_id", repo_id)
                 .field("request_rev", request_rev)
                 .field("result", result)
@@ -158,6 +193,11 @@ impl std::fmt::Debug for InternalMsg {
                 .finish(),
             InternalMsg::RebaseStateLoaded { repo_id, result } => f
                 .debug_struct("RebaseStateLoaded")
+                .field("repo_id", repo_id)
+                .field("result", result)
+                .finish(),
+            InternalMsg::BisectStateLoaded { repo_id, result } => f
+                .debug_struct("BisectStateLoaded")
                 .field("repo_id", repo_id)
                 .field("result", result)
                 .finish(),
@@ -378,6 +418,16 @@ impl std::fmt::Debug for InternalMsg {
                 result,
             } => f
                 .debug_struct("DiffFileLoaded")
+                .field("repo_id", repo_id)
+                .field("target", target)
+                .field("result", result)
+                .finish(),
+            InternalMsg::DiffFileLfsLoaded {
+                repo_id,
+                target,
+                result,
+            } => f
+                .debug_struct("DiffFileLfsLoaded")
                 .field("repo_id", repo_id)
                 .field("target", target)
                 .field("result", result)

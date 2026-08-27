@@ -482,6 +482,7 @@ pub(super) fn schedule_load_log(
     seq: crate::model::LogLoadSeq,
     scope: LogScope,
     author: Option<String>,
+    refs: Vec<String>,
     limit: usize,
     cursor: Option<LogCursor>,
     cancellation: CancellationToken,
@@ -511,14 +512,26 @@ pub(super) fn schedule_load_log(
                         }),
                     );
                 };
-                repo.log_history_mode_page_streaming(
-                    scope,
-                    author.as_deref(),
-                    limit,
-                    cursor_ref,
-                    &cancellation,
-                    &mut on_chunk,
-                )
+                if refs.is_empty() {
+                    repo.log_history_mode_page_streaming(
+                        scope,
+                        author.as_deref(),
+                        limit,
+                        cursor_ref,
+                        &cancellation,
+                        &mut on_chunk,
+                    )
+                } else {
+                    repo.log_history_mode_refs_page_streaming(
+                        scope,
+                        &refs,
+                        author.as_deref(),
+                        limit,
+                        cursor_ref,
+                        &cancellation,
+                        &mut on_chunk,
+                    )
+                }
             };
             send_or_log(
                 &msg_tx,
@@ -643,6 +656,80 @@ pub(super) fn schedule_load_stashes(
             send_or_log(
                 &msg_tx,
                 Msg::Internal(crate::msg::InternalMsg::StashesLoaded {
+                    repo_id,
+                    result: Err(missing_repo_error(repo_id)),
+                }),
+            );
+        },
+    );
+}
+
+pub(super) fn schedule_load_assume_unchanged(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+) {
+    spawn_detached_with_repo_or_else(
+        executor,
+        "load-assume-unchanged",
+        repos,
+        repo_id,
+        msg_tx,
+        move |repo, msg_tx| {
+            let result = repo.assume_unchanged_list();
+            send_or_log(
+                &msg_tx,
+                Msg::Internal(crate::msg::InternalMsg::AssumeUnchangedListLoaded {
+                    repo_id,
+                    result,
+                }),
+            );
+        },
+        move |msg_tx| {
+            send_or_log(
+                &msg_tx,
+                Msg::Internal(crate::msg::InternalMsg::AssumeUnchangedListLoaded {
+                    repo_id,
+                    result: Err(missing_repo_error(repo_id)),
+                }),
+            );
+        },
+    );
+}
+
+/// How far back the statistics window reaches: past a full year plus the
+/// timezone spread, so every local calendar's "this year" is covered by data
+/// fetched once.
+const STATISTICS_WINDOW_DAYS: u64 = 400;
+
+pub(super) fn schedule_load_repo_statistics(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+) {
+    let since = std::time::SystemTime::now() - std::time::Duration::from_secs(STATISTICS_WINDOW_DAYS * 24 * 3600);
+    spawn_detached_with_repo_or_else(
+        executor,
+        "load-repo-statistics",
+        repos,
+        repo_id,
+        msg_tx,
+        move |repo, msg_tx| {
+            let result = repo.contributor_commits_since(since);
+            send_or_log(
+                &msg_tx,
+                Msg::Internal(crate::msg::InternalMsg::RepoStatisticsLoaded {
+                    repo_id,
+                    result,
+                }),
+            );
+        },
+        move |msg_tx| {
+            send_or_log(
+                &msg_tx,
+                Msg::Internal(crate::msg::InternalMsg::RepoStatisticsLoaded {
                     repo_id,
                     result: Err(missing_repo_error(repo_id)),
                 }),
@@ -1443,6 +1530,40 @@ pub(super) fn schedule_load_rebase_state(
     );
 }
 
+pub(super) fn schedule_load_bisect_state(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    cancellation: CancellationToken,
+) {
+    spawn_detached_with_repo_or_else(
+        executor,
+        "load-bisect-state",
+        repos,
+        repo_id,
+        msg_tx,
+        move |repo, msg_tx| {
+            send_or_log(
+                &msg_tx,
+                Msg::Internal(crate::msg::InternalMsg::BisectStateLoaded {
+                    repo_id,
+                    result: repo.bisect_state_cancellable(&cancellation),
+                }),
+            );
+        },
+        move |msg_tx| {
+            send_or_log(
+                &msg_tx,
+                Msg::Internal(crate::msg::InternalMsg::BisectStateLoaded {
+                    repo_id,
+                    result: Err(missing_repo_error(repo_id)),
+                }),
+            );
+        },
+    );
+}
+
 pub(super) fn schedule_load_rebase_and_merge_state(
     executor: &TaskExecutor,
     repos: &RepoMap,
@@ -1810,6 +1931,33 @@ pub(super) fn schedule_load_recent_commit_messages(
     });
 }
 
+/// Cap on commits returned by a cross-history search — matches the C#
+/// CommitSearchService's remote-tier bound: deep enough for real
+/// `--grep`/`--author` sweeps, bounded so a broad query can't flood the UI.
+const COMMIT_SEARCH_LIMIT: usize = 2000;
+
+/// Cross-history commit search: `git log --all` message/author matches, run
+/// on the repo's backend thread like the other loads.
+pub(super) fn schedule_search_commits(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    query: String,
+    request_rev: u64,
+) {
+    spawn_with_repo(executor, repos, repo_id, msg_tx, move |repo, msg_tx| {
+        send_or_log(
+            &msg_tx,
+            Msg::Internal(crate::msg::InternalMsg::CommitsSearched {
+                repo_id,
+                request_rev,
+                result: repo.search_commits(&query, COMMIT_SEARCH_LIMIT),
+            }),
+        );
+    });
+}
+
 /// Gather everything one AI commit-message generation needs: the whole
 /// staged diff and the recent commit subjects shown to the model as format
 /// examples. A failure of either surfaces as the context load's error — the
@@ -1879,11 +2027,42 @@ pub(super) fn schedule_load_diff_file(
             &msg_tx,
             Msg::Internal(crate::msg::InternalMsg::DiffFileLoaded {
                 repo_id,
-                target,
+                target: target.clone(),
                 result,
             }),
         );
+        // LFS-filtered paths also get a pointer summary for the panel that
+        // replaces the raw pointer text. It rides the same load (same guards,
+        // same rev) and arrives after the text result: `diff_file_loaded`
+        // clears a stale panel on every text arrival, so sending this second
+        // is what keeps the sequence land-clear-land instead of
+        // land-clear. The checks are cheap (one hook read, one check-attr)
+        // and any failure simply means no panel, with the text diff intact.
+        if let Some(path) = diff_target_path(&target)
+            && repo.lfs_enabled().unwrap_or(false)
+            && repo.lfs_is_filtered(path).unwrap_or(false)
+        {
+            let result = repo.lfs_pointer_change(&target);
+            send_or_log(
+                &msg_tx,
+                Msg::Internal(crate::msg::InternalMsg::DiffFileLfsLoaded {
+                    repo_id,
+                    target,
+                    result,
+                }),
+            );
+        }
     });
+}
+
+/// The path a diff target is scoped to, if any. `Commit { path: None }`
+/// targets have no single path to attribute-check and load as text.
+fn diff_target_path(target: &DiffTarget) -> Option<&std::path::Path> {
+    match target {
+        DiffTarget::WorkingTree { path, .. } => Some(path),
+        DiffTarget::Commit { path, .. } => path.as_deref(),
+        DiffTarget::CommitRange { path, .. } => path.as_deref(),
+    }
 }
 
 pub(super) fn schedule_load_diff_preview_text_file(

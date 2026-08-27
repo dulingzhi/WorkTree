@@ -101,6 +101,13 @@ chrome:
     no_file_open: 未打开任何文件
     unsaved_edits: 未保存的更改（%{count}）
     unsaved_discard_tooltip: 放弃未保存的更改，并从磁盘重新加载此文件
+    pr:
+      empty: 没有打开的拉取请求。
+      draft: 草稿
+      checks:
+        success: 检查通过
+        failure: 检查失败
+        pending: 检查进行中
   branch:
     upstream: 上游
   submodule:

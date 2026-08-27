@@ -16,7 +16,7 @@ use crate::model::{
 use crate::msg::{Effect, RepoActionKind, RepoExternalChange};
 use repositorytree_core::domain::{DiffArea, DiffTarget, LogCursor, LogPage, LogScope};
 use repositorytree_core::error::Error;
-use repositorytree_core::services::{InteractiveRebaseEntry, SequencerState};
+use repositorytree_core::services::{BisectState, InteractiveRebaseEntry, SequencerState};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::sync::Arc;
 
@@ -81,6 +81,7 @@ pub(super) fn reload_repo(state: &mut AppState, repo_id: crate::model::RepoId) -
     repo_state.set_reflog(Loadable::NotLoaded);
     repo_state.set_rebase_in_progress(Loadable::Loading);
     repo_state.set_sequencer_state(Loadable::Loading);
+    repo_state.set_bisect(Loadable::Loading);
     repo_state.set_merge_commit_message(Loadable::Loading);
     repo_state.history_state.file_history_path = None;
     repo_state.history_state.file_history = Loadable::NotLoaded;
@@ -358,6 +359,35 @@ pub(super) fn set_history_author_filter(
     })
 }
 
+pub(super) fn set_history_ref_filters(
+    state: &mut AppState,
+    repo_id: crate::model::RepoId,
+    refs: Vec<String>,
+) -> Vec<Effect> {
+    // The setter normalizes (sort + dedup), so compare against what it will
+    // store and skip the reload when the change is only spelling.
+    let mut normalized = refs.clone();
+    normalized.sort();
+    normalized.dedup();
+
+    let Some(repo_ix) = state.repos.iter().position(|r| r.id == repo_id) else {
+        return Vec::new();
+    };
+    if state.repos[repo_ix].history_state.history_ref_filters == normalized {
+        return Vec::new();
+    }
+    state.repos[repo_ix].set_history_ref_filters(refs);
+
+    restart_history_load(state, repo_ix, |workdir| {
+        Effect::PersistRepoHistoryRefFilters {
+            repo_id: Some(repo_id),
+            workdir,
+            refs: normalized,
+            action: "updating history ref filters",
+        }
+    })
+}
+
 pub(super) fn load_more_history(
     state: &mut AppState,
     repo_id: crate::model::RepoId,
@@ -412,6 +442,32 @@ pub(super) fn rebase_state_loaded(
             .finish(RepoLoadsInFlight::REBASE_STATE)
         {
             effects.push(Effect::LoadRebaseState { repo_id });
+        }
+    }
+    effects
+}
+
+pub(super) fn bisect_state_loaded(
+    state: &mut AppState,
+    repo_id: crate::model::RepoId,
+    result: std::result::Result<Option<BisectState>, Error>,
+) -> Vec<Effect> {
+    let mut effects = Vec::new();
+    if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+        let value = match result {
+            Ok(v) => Loadable::Ready(v),
+            Err(e) => {
+                let error = e.to_string();
+                push_diagnostic(repo_state, DiagnosticKind::Error, error.clone());
+                Loadable::Error(error)
+            }
+        };
+        repo_state.set_bisect(value);
+        if repo_state
+            .loads_in_flight
+            .finish(RepoLoadsInFlight::BISECT_STATE)
+        {
+            effects.push(Effect::LoadBisectState { repo_id });
         }
     }
     effects
@@ -714,6 +770,7 @@ pub(super) fn log_loaded(
                 seq,
                 scope: next.scope,
                 author: next.author,
+                refs: next.refs,
                 limit: next.limit,
                 cursor: next.cursor,
             });
@@ -790,6 +847,15 @@ pub(super) fn repo_action_finished(
         // cancelled above; request() returns true now that the flags were cleared.
         append_ensure_sidebar_data_effects(repo_state, &mut effects);
 
+        // The assume-unchanged dialog reloads its list after each toggle so a
+        // removed entry disappears immediately; only when a list was loaded
+        // (i.e. the dialog is or was open for this repo).
+        if action == RepoActionKind::SetAssumeUnchanged
+            && !matches!(repo_state.assume_unchanged, Loadable::NotLoaded)
+        {
+            effects.push(Effect::LoadAssumeUnchanged { repo_id });
+        }
+
         let history_reloads = selected_history_reloads_for_activation(repo_state);
         append_selected_history_reload_effects(repo_id, repo_state, history_reloads, &mut effects);
 
@@ -817,6 +883,7 @@ fn repo_action_clears_head_dependent_state(action: RepoActionKind) -> bool {
         action,
         RepoActionKind::CheckoutBranch
             | RepoActionKind::CheckoutRemoteBranch
+            | RepoActionKind::CheckoutPullRequest
             | RepoActionKind::CheckoutCommit
             | RepoActionKind::CherryPickCommit
             | RepoActionKind::RevertCommit

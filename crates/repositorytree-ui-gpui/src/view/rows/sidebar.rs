@@ -2,6 +2,7 @@ use super::*;
 use crate::ui_scale;
 use crate::view::components::InteractiveRowExt as _;
 use repositorytree_core::domain::LogScope;
+use repositorytree_core::domain::PullRequestChecksState;
 use repositorytree_core::domain::SubmoduleStatus;
 use palette::IntoColor;
 use std::num::NonZeroU32;
@@ -9,6 +10,7 @@ use std::num::NonZeroU32;
 pub(in crate::view) const WORKTREE_ICON_PATH: &str = "icons/git_worktree.svg";
 const STASH_ICON_PATH: &str = crate::view::icons::STASH_ICON_PATH;
 const TAG_ICON_PATH: &str = crate::view::icons::TAG_ICON_PATH;
+const PULL_REQUEST_ICON_PATH: &str = crate::view::icons::PULL_REQUEST_ICON_PATH;
 
 pub(in crate::view) fn listed_workspace_paths_by_branch(
     repo: &RepoState,
@@ -805,7 +807,7 @@ impl SidebarPaneView {
                                     cx,
                                 );
                                 this.open_popover_at(
-                                    PopoverKind::StashPrompt,
+                                    PopoverKind::StashPrompt { paths: Vec::new() },
                                     e.position,
                                     window,
                                     cx,
@@ -1064,6 +1066,279 @@ impl SidebarPaneView {
                             }),
                         )
                         .repositorytree_tooltip(theme, name.clone())
+                        .into_any_element()
+                }
+                BranchSidebarRow::PullRequestsHeader {
+                    top_border,
+                    collapsed,
+                    collapse_key,
+                } => {
+                    let show_pr_spinner = this.active_repo().is_some_and(|r| {
+                        matches!(r.pull_requests, Loadable::Loading)
+                            || (!collapsed && matches!(r.pull_requests, Loadable::NotLoaded))
+                    });
+
+                    div()
+                        .id(("pull_requests_section", ix))
+                        .debug_selector(move || format!("pull_requests_section_{ix}"))
+                        .relative()
+                        .h(scaled_px(24.0))
+                        .w_full()
+                        .pl(indent_px(0))
+                        .pr(scaled_px(BRANCH_ROW_TRAILING_PAD_PX))
+                        .flex()
+                        .items_center()
+                        .gap(scaled_px(BRANCH_TREE_GAP_PX))
+                        .interactive_row(row_style, components::InteractiveRowState::default())
+                        .when(top_border, |d| {
+                            d.child(top_divider(theme.colors.stroke.subtle))
+                        })
+                        .child(tree_toggle_slot(Some(collapsed)))
+                        .child(tree_icon_slot(PULL_REQUEST_ICON_PATH, icon_primary, 14.0))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w(px(0.0))
+                                .text_sm()
+                                .line_clamp(1)
+                                .whitespace_nowrap()
+                                .font_weight(FontWeight::BOLD)
+                                .text_color(theme.colors.foreground.primary)
+                                .child(crate::i18n::tr_en("Pull Requests")),
+                        )
+                        .when(show_pr_spinner, |d| {
+                            d.child(
+                                div().debug_selector(move || {
+                                    format!("pull_requests_spinner_{}", repo_id.0)
+                                })
+                                .child(svg_spinner(
+                                    ("pull_requests_spinner", repo_id.0),
+                                    icon_muted,
+                                    12.0,
+                                )),
+                            )
+                        })
+                        .repositorytree_tooltip(
+                            theme,
+                            crate::i18n::tr_en(
+                                "Pull Requests (Right-click a row for checkout and link actions)",
+                            ),
+                        )
+                        .on_click(cx.listener(move |this, e: &ClickEvent, _w, cx| {
+                            if !e.standard_click() || e.click_count() != 1 {
+                                return;
+                            }
+                            this.toggle_active_repo_collapse_key(collapse_key.clone(), cx);
+                        }))
+                        .into_any_element()
+                }
+                BranchSidebarRow::PullRequestPlaceholder {
+                    message,
+                    retryable,
+                } => {
+                    let placeholder = div()
+                        .id(("pr_placeholder", ix))
+                        .h(scaled_px(22.0))
+                        .w_full()
+                        .px_2()
+                        .text_sm()
+                        .text_color(theme.colors.foreground.secondary)
+                        .child(message);
+                    if retryable {
+                        placeholder
+                            .debug_selector(|| "pr_placeholder_retry".to_string())
+                            .cursor(CursorStyle::PointingHand)
+                            .on_click(cx.listener(move |this, e: &ClickEvent, _w, cx| {
+                                if e.standard_click() {
+                                    this.fetch_pull_requests_now(cx);
+                                    cx.notify();
+                                }
+                            }))
+                            .into_any_element()
+                    } else {
+                        placeholder.into_any_element()
+                    }
+                }
+                BranchSidebarRow::PullRequestItem {
+                    number,
+                    title,
+                    author,
+                    draft,
+                    checks,
+                } => {
+                    let context_menu_invoker: SharedString =
+                        format!("pr_menu_{}_{}", repo_id.0, number).into();
+                    let context_menu_active =
+                        this.active_context_menu_invoker.as_ref() == Some(&context_menu_invoker);
+                    let context_menu_invoker_for_right_click = context_menu_invoker.clone();
+                    let row_group: SharedString =
+                        format!("pr_row_{}_{}", repo_id.0, number).into();
+                    let row_state =
+                        components::InteractiveRowState::default().open(context_menu_active);
+                    let number_for_menu = number;
+                    let tooltip: SharedString =
+                        format!("#{number} · {title} · {author}").into();
+
+                    let mut end_accessories = div()
+                        .ml_auto()
+                        .flex_none()
+                        .flex()
+                        .items_center()
+                        .gap(scaled_px(BRANCH_TREE_GAP_PX));
+
+                    if !author.is_empty() {
+                        end_accessories = end_accessories.child(
+                            div()
+                                .flex_none()
+                                .text_sm()
+                                .line_clamp(1)
+                                .max_w(scaled_px(120.0))
+                                .text_color(theme.colors.foreground.secondary)
+                                .child(author.clone()),
+                        );
+                    }
+
+                    if draft {
+                        end_accessories = end_accessories.child(
+                            div()
+                                .id(("pr_draft_chip", ix))
+                                .flex_none()
+                                .px(scaled_px(4.0))
+                                .rounded(px(theme.radii.control))
+                                .border_1()
+                                .border_color(theme.colors.stroke.subtle)
+                                .text_size(scaled_px(10.0))
+                                .text_color(theme.colors.foreground.secondary)
+                                .child(crate::i18n::tr("chrome.sidebar.pr.draft")),
+                        );
+                    }
+
+                    if let Some(checks_state) = checks {
+                        let (color, tooltip_key): (gpui::Rgba, &'static str) = match checks_state
+                        {
+                            PullRequestChecksState::Success => (
+                                theme.colors.status.success.foreground,
+                                "chrome.sidebar.pr.checks.success",
+                            ),
+                            PullRequestChecksState::Failure | PullRequestChecksState::Error => (
+                                theme.colors.status.danger.foreground,
+                                "chrome.sidebar.pr.checks.failure",
+                            ),
+                            PullRequestChecksState::Pending => (
+                                theme.colors.status.warning.foreground,
+                                "chrome.sidebar.pr.checks.pending",
+                            ),
+                        };
+                        let chip_tooltip = crate::i18n::tr(tooltip_key);
+                        end_accessories = end_accessories.child(
+                            div()
+                                .id(("pr_checks_chip", ix))
+                                .debug_selector(move || format!("pr_checks_chip_{number}"))
+                                .flex()
+                                .flex_none()
+                                .items_center()
+                                .justify_center()
+                                .size(scaled_px(14.0))
+                                .rounded_full()
+                                .bg(with_alpha(color, 0.16))
+                                .child(
+                                    div()
+                                        .size(scaled_px(6.0))
+                                        .rounded_full()
+                                        .bg(color),
+                                )
+                                .repositorytree_tooltip(theme, chip_tooltip),
+                        );
+                    }
+
+                    div()
+                        .id(("pr_sidebar_row", ix))
+                        .debug_selector(move || format!("pr_sidebar_row_{number}"))
+                        .relative()
+                        .group(row_group.clone())
+                        .flex()
+                        .items_center()
+                        .gap(scaled_px(BRANCH_TREE_GAP_PX))
+                        .pl(indent_px(0))
+                        .pr(scaled_px(BRANCH_ROW_TRAILING_PAD_PX))
+                        .h(scaled_px(24.0))
+                        .w_full()
+                        .interactive_row(row_style, row_state)
+                        .child(tree_toggle_slot(None))
+                        .child(tree_icon_slot(PULL_REQUEST_ICON_PATH, icon_primary, 12.0))
+                        .child(
+                            div()
+                                .flex()
+                                .flex_1()
+                                .min_w(px(0.0))
+                                .items_center()
+                                .gap(scaled_px(4.0))
+                                .overflow_hidden()
+                                .child(
+                                    div()
+                                        .flex_none()
+                                        .text_sm()
+                                        .text_color(theme.colors.foreground.secondary)
+                                        .child(format!("#{number}")),
+                                )
+                                .child(
+                                    components::FadingText::new(
+                                        div()
+                                            .text_sm()
+                                            .line_clamp(1)
+                                            .whitespace_nowrap()
+                                            .child(title.clone()),
+                                        row_style.resolved_background(row_state),
+                                    )
+                                    .hover_bg(
+                                        row_group.clone(),
+                                        row_style.resolved_hover_background(row_state),
+                                    )
+                                    .render(ui_scale_percent),
+                                ),
+                        )
+                        .child(end_accessories)
+                        .on_click(cx.listener(move |this, e: &ClickEvent, _w, cx| {
+                            if !e.standard_click() || e.click_count() != 2 {
+                                return;
+                            }
+                            // The PR web URL is rebuilt from the remotes so the
+                            // row never carries a stale copy of it.
+                            if let Some(url) = this
+                                .active_repo()
+                                .and_then(|repo| match &repo.remotes {
+                                    Loadable::Ready(remotes) => {
+                                        super::super::github::github_slug_from_remotes(remotes)
+                                    }
+                                    _ => None,
+                                })
+                                .map(|slug| {
+                                    super::super::github::pull_web_url(&slug, number_for_menu)
+                                })
+                            {
+                                this.open_url_in_browser(&url, cx);
+                            }
+                        }))
+                        .on_mouse_down(
+                            MouseButton::Right,
+                            cx.listener(move |this, e: &MouseDownEvent, window, cx| {
+                                cx.stop_propagation();
+                                this.activate_context_menu_invoker(
+                                    context_menu_invoker_for_right_click.clone(),
+                                    cx,
+                                );
+                                this.open_popover_at(
+                                    PopoverKind::PullRequestMenu {
+                                        repo_id,
+                                        number: number_for_menu,
+                                    },
+                                    e.position,
+                                    window,
+                                    cx,
+                                );
+                            }),
+                        )
+                        .repositorytree_tooltip(theme, tooltip)
                         .into_any_element()
                 }
                 BranchSidebarRow::Placeholder {
@@ -2640,6 +2915,130 @@ impl DetailsPaneView {
             .collect()
     }
 
+    /// The uncommitted-changes review's file rows. Same presentation as the
+    /// linked-worktree rows, but a click opens the entry's own diff in this
+    /// checkout — the staged patch for staged entries, the working-tree patch
+    /// for unstaged ones — exactly what clicking the same file in the status
+    /// sections below does.
+    pub(in super::super) fn render_working_tree_review_rows(
+        this: &mut Self,
+        range: Range<usize>,
+        _window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> Vec<AnyElement> {
+        let Some(repo) = this.active_repo() else {
+            return Vec::new();
+        };
+        let repo_id = repo.id;
+        let key = (
+            repo_id,
+            repo.worktree_status_cache_rev(),
+            repo.staged_status_cache_rev(),
+        );
+        // Derived once per status reply, not per frame: this list is
+        // virtualized, but the inputs behind it are one entry per changed file.
+        let inputs = this.cached_working_tree_review_inputs(repo);
+        let files = &inputs.files;
+        let file_rows = this.cached_working_tree_file_rows(key, files);
+
+        let theme = this.theme;
+        let ui_scale_percent = this.ui_scale_percent;
+        let scaled_px =
+            |value: f32| crate::ui_scale::design_px_from_percent(value, ui_scale_percent);
+        let selected_target = repo.diff_state.diff_target.clone();
+        let visible_signature = crate::kit::text_truncation::path_alignment_visible_signature(&(
+            key,
+            files.len(),
+            range.start,
+            range.end,
+        ));
+        let path_alignment_group = this
+            .working_tree_files_path_alignment_group
+            .visible_rows(visible_signature);
+
+        range
+            .filter_map(|ix| {
+                files
+                    .get(ix)
+                    .zip(file_rows.get(ix))
+                    .zip(inputs.targets.get(ix))
+                    .map(|((f, row), target)| (ix, f.clone(), row.label.clone(), row.visuals, target.clone()))
+            })
+            .map(|(ix, _f, path_label, visuals, (path, area))| {
+                let color = visuals.color(&theme);
+                let selected = selected_target.as_ref()
+                    == Some(&DiffTarget::WorkingTree {
+                        path: path.clone(),
+                        area,
+                    });
+                let tooltip = path_label.clone();
+
+                let mut row = div()
+                    .id(("working_tree_review_file", ix))
+                    .debug_selector(move || format!("working_tree_review_file_{}_{ix}", repo_id.0))
+                    .h(scaled_px(24.0))
+                    .flex()
+                    .items_center()
+                    .gap(scaled_px(8.0))
+                    .px(scaled_px(8.0))
+                    .w_full()
+                    .rounded(px(theme.radii.row))
+                    .cursor(CursorStyle::PointingHand)
+                    .hover(move |s| s.bg(theme.colors.interaction.hover_background))
+                    .active(move |s| s.bg(theme.colors.interaction.pressed_background))
+                    .child(
+                        div()
+                            .w(scaled_px(16.0))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child(svg_icon(visuals.icon, color, scaled_px(14.0))),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w(px(0.0))
+                            .text_sm()
+                            .line_height(scaled_px(18.0))
+                            .line_clamp(1)
+                            .whitespace_nowrap()
+                            .child(
+                                components::TruncatedText::aligned_path(
+                                    path_label,
+                                    path_alignment_group.clone(),
+                                )
+                                .text_sm()
+                                .render(cx),
+                            ),
+                    )
+                    .on_click(cx.listener(move |this, e: &ClickEvent, window, cx| {
+                        if !e.standard_click() {
+                            return;
+                        }
+                        this.focus_diff_panel(window, cx);
+                        this.store.dispatch(Msg::SelectDiff {
+                            repo_id,
+                            target: DiffTarget::WorkingTree {
+                                path: path.clone(),
+                                area,
+                            },
+                        });
+                        cx.notify();
+                    }))
+                    .repositorytree_tooltip(theme, tooltip);
+
+                if selected {
+                    row = row.bg(with_alpha(
+                        theme.colors.accent.foreground,
+                        if theme.is_dark { 0.16 } else { 0.10 },
+                    ));
+                }
+
+                row.into_any_element()
+            })
+            .collect()
+    }
+
     pub(in super::super) fn render_range_file_rows(
         this: &mut Self,
         range: Range<usize>,
@@ -2781,8 +3180,8 @@ impl DetailsPaneView {
 mod tests {
     use super::*;
     use repositorytree_core::domain::{
-        Branch, Commit, CommitId, DiffTarget, LogPage, RemoteBranch, RepoSpec, Upstream,
-        UpstreamDivergence, Worktree,
+        Branch, Commit, CommitId, DiffTarget, LogPage, PullRequest, PullRequestChecksState, Remote,
+        RemoteBranch, RepoSpec, Upstream, UpstreamDivergence, Worktree,
     };
     use repositorytree_core::services::{GitBackend, GitRepository, Result};
     use repositorytree_state::msg::{InternalMsg, Msg};
@@ -2884,6 +3283,7 @@ mod tests {
 
     fn commit(id: &str) -> Commit {
         Commit {
+            signed: false,
             id: commit_id(id),
             parent_ids: repositorytree_core::domain::CommitParentIds::new(),
             summary: id.into(),
@@ -4322,5 +4722,118 @@ mod tests {
                     !crate::view::test_support::history_refs_hover_is_open(view.read(app), app)
                 })
         });
+    }
+
+    #[gpui::test]
+    fn pull_request_rows_render_with_checks_chips(cx: &mut gpui::TestAppContext) {
+        let _visual_guard = crate::test_support::lock_visual_test();
+        let (store, events) = AppStore::new(Arc::new(BlockingBackend));
+        let store_for_assert = store.clone();
+        let (view, cx) =
+            cx.add_window_view(|window, cx| RepositoryTreeView::new(store, events, None, window, cx));
+
+        let repo_id = RepoId(1);
+        crate::view::test_support::redraw(cx);
+        store_for_assert.dispatch(Msg::OpenRepo(PathBuf::from("/tmp/repo")));
+        wait_until(cx, "opened repo placeholder", |_cx| {
+            let snapshot = store_for_assert.snapshot();
+            snapshot.active_repo == Some(repo_id)
+                && snapshot.repos.iter().any(|repo| repo.id == repo_id)
+        });
+        sync_view_for_tests(cx, &view);
+
+        store_for_assert.dispatch(Msg::Internal(InternalMsg::RemotesLoaded {
+            repo_id,
+            result: Ok(vec![Remote {
+                name: "origin".to_string(),
+                url: Some("https://github.com/acme/widgets.git".to_string()),
+            }]),
+        }));
+        store_for_assert.dispatch(Msg::Internal(InternalMsg::PullRequestsLoaded {
+            repo_id,
+            result: Ok(vec![
+                PullRequest {
+                    number: 7,
+                    title: "Fix merge dialog focus".to_string(),
+                    author: "jai".to_string(),
+                    head_ref: "fix/merge-focus".to_string(),
+                    head_sha: commit_id("aa1111111111111111111111111111111111111111"),
+                    base_ref: "main".to_string(),
+                    draft: false,
+                    // The status pass lands separately — first render has no chip.
+                    checks: None,
+                },
+                PullRequest {
+                    number: 9,
+                    title: "WIP sidebar chips".to_string(),
+                    author: "kim".to_string(),
+                    head_ref: "kim/chips".to_string(),
+                    head_sha: commit_id("bb2222222222222222222222222222222222222222"),
+                    base_ref: "main".to_string(),
+                    draft: true,
+                    checks: Some(PullRequestChecksState::Pending),
+                },
+            ]),
+        }));
+        store_for_assert.dispatch(Msg::Internal(InternalMsg::PullRequestChecksLoaded {
+            repo_id,
+            number: 7,
+            checks: PullRequestChecksState::Success,
+        }));
+        wait_until(cx, "pull requests loaded", |_cx| {
+            let snapshot = store_for_assert.snapshot();
+            snapshot.repos.iter().any(|repo| repo.id == repo_id
+                && matches!(repo.pull_requests, Loadable::Ready(_)))
+        });
+
+        // The section is default-collapsed: until it is expanded (the way a
+        // session restore or a header click would), only the header renders.
+        sync_view_for_tests(cx, &view);
+        let header_ix = cx.update(|_window, app| {
+            let sidebar_pane = view.read(app).sidebar_pane.clone();
+            sidebar_pane.update(app, |pane, _cx| {
+                pane.branch_sidebar_presentation_cached()
+                    .expect("sidebar presentation")
+                    .rows
+                    .iter()
+                    .position(|row| matches!(row, BranchSidebarRow::PullRequestsHeader { .. }))
+                    .expect("pull-request header row in the presentation")
+            })
+        });
+        assert!(
+            cx.debug_bounds(leak_selector(format!("pull_requests_section_{header_ix}"))).is_some(),
+            "the pull-request section header renders"
+        );
+        assert!(
+            cx.debug_bounds(leak_selector("pr_sidebar_row_7".to_string())).is_none(),
+            "collapsed section must not render pull-request rows"
+        );
+
+        cx.update(|_window, app| {
+            let sidebar_pane = view.read(app).sidebar_pane.clone();
+            sidebar_pane.update(app, |pane, _cx| {
+                pane.set_collapsed_keys_for_test(&["expanded:section:pull-requests"]);
+            });
+        });
+        sync_view_for_tests(cx, &view);
+
+        assert!(
+            cx.debug_bounds(leak_selector("pr_sidebar_row_7".to_string())).is_some(),
+            "expanded section renders the first pull-request row"
+        );
+        assert!(
+            cx.debug_bounds(leak_selector("pr_sidebar_row_9".to_string())).is_some(),
+            "expanded section renders the second pull-request row"
+        );
+        // The late-arriving combined status of #7 renders as its chip; #9 was
+        // seeded with its own.
+        assert!(
+            cx.debug_bounds(leak_selector("pr_checks_chip_7".to_string())).is_some(),
+            "pull request #7 renders a checks chip"
+        );
+        assert!(
+            cx.debug_bounds(leak_selector("pr_checks_chip_9".to_string())).is_some(),
+            "pull request #9 renders a checks chip"
+        );
     }
 }

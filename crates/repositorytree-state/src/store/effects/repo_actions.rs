@@ -169,6 +169,25 @@ pub(super) fn schedule_checkout_remote_branch(
     );
 }
 
+pub(super) fn schedule_checkout_pull_request(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    remote: String,
+    number: u64,
+) {
+    schedule_repo_action_with_hook(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        move |repo| repo.checkout_pull_request(&remote, number),
+        send_refresh_branches_and_load_worktrees_on_success,
+        repo_action_finished(RepoActionKind::CheckoutPullRequest),
+    );
+}
+
 pub(super) fn schedule_checkout_commit(
     executor: &TaskExecutor,
     repos: &RepoMap,
@@ -577,13 +596,16 @@ pub(super) fn schedule_stash(
     repo_id: RepoId,
     message: String,
     include_untracked: bool,
+    keep_index: bool,
+    paths: crate::msg::RepoPathList,
 ) {
+    let paths = paths.as_slice().to_vec();
     schedule_repo_action_with_hook(
         executor,
         repos,
         msg_tx,
         repo_id,
-        move |repo| repo.stash_create(&message, include_untracked),
+        move |repo| repo.stash_create(&message, include_untracked, keep_index, &paths),
         |msg_tx, repo_id, result| {
             if result.is_ok() {
                 send_or_log(msg_tx, Msg::LoadStashes { repo_id });
@@ -666,6 +688,50 @@ pub(super) fn schedule_drop_stash(
             send_or_log(msg_tx, Msg::LoadStashes { repo_id });
         },
         repo_action_finished(RepoActionKind::DropStash),
+    );
+}
+
+/// `git stash branch` checks out a new branch, so HEAD moves when it succeeds;
+/// the repo monitor picks that up exactly like any other checkout. Only the
+/// stash list needs an explicit reload — on success Git has dropped the stash.
+pub(super) fn schedule_stash_branch(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    index: usize,
+    branch: String,
+) {
+    schedule_repo_action_with_hook(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        move |repo| repo.stash_branch(&branch, index),
+        |msg_tx, repo_id, result| {
+            if result.is_ok() {
+                send_or_log(msg_tx, Msg::LoadStashes { repo_id });
+            }
+        },
+        repo_action_finished(RepoActionKind::StashBranch),
+    );
+}
+
+pub(super) fn schedule_set_assume_unchanged(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    path: PathBuf,
+    enable: bool,
+) {
+    schedule_repo_action(
+        executor,
+        repos,
+        msg_tx,
+        repo_id,
+        RepoActionKind::SetAssumeUnchanged,
+        move |repo| repo.set_assume_unchanged(&path, enable),
     );
 }
 

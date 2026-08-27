@@ -1,5 +1,5 @@
 use super::*;
-use repositorytree_core::domain::SubmoduleStatus;
+use repositorytree_core::domain::{PullRequestChecksState, SubmoduleStatus};
 use rustc_hash::{FxHashMap, FxHasher};
 use smallvec::SmallVec;
 use std::{
@@ -19,6 +19,7 @@ const WORKTREES_SECTION_KEY: &str = "section:worktrees";
 const SUBMODULES_SECTION_KEY: &str = "section:submodules";
 const STASH_SECTION_KEY: &str = "section:stash";
 const TAGS_SECTION_KEY: &str = "section:tags";
+const PULL_REQUESTS_SECTION_KEY: &str = "section:pull-requests";
 const EXPANDED_DEFAULT_SECTION_PREFIX: &str = "expanded:";
 const TRAILING_BOTTOM_SPACERS: usize = 3;
 const REMOTE_HEADER_GROUP_PREFIX: &str = "group:remote-header:";
@@ -125,6 +126,10 @@ pub(super) const fn stash_section_storage_key() -> &'static str {
 
 pub(super) const fn tags_section_storage_key() -> &'static str {
     TAGS_SECTION_KEY
+}
+
+pub(super) const fn pull_requests_section_storage_key() -> &'static str {
+    PULL_REQUESTS_SECTION_KEY
 }
 
 pub(super) fn remote_header_storage_key(name: &str) -> String {
@@ -259,6 +264,24 @@ pub(super) enum BranchSidebarRow {
         /// Creation time as a Unix timestamp in seconds, for the row's date
         /// and the list's newest-first order.
         created_at: Option<i64>,
+    },
+    PullRequestsHeader {
+        top_border: bool,
+        collapsed: bool,
+        collapse_key: SharedString,
+    },
+    PullRequestPlaceholder {
+        message: SharedString,
+        /// Set for load failures, where the row doubles as the retry
+        /// affordance.
+        retryable: bool,
+    },
+    PullRequestItem {
+        number: u64,
+        title: SharedString,
+        author: SharedString,
+        draft: bool,
+        checks: Option<PullRequestChecksState>,
     },
 }
 
@@ -395,6 +418,9 @@ pub(in crate::view) struct BranchSidebarSourceFingerprintParts {
     tags_rev: u64,
     tags_hash: u64,
     tags_reuse_identity: fingerprint::LoadableArcIdentity,
+    pull_requests_rev: u64,
+    pull_requests_hash: u64,
+    pull_requests_reuse_identity: fingerprint::LoadableArcIdentity,
 }
 
 impl BranchSidebarSourceFingerprintParts {
@@ -416,6 +442,9 @@ impl BranchSidebarSourceFingerprintParts {
         let stash_reuse_identity = fingerprint::loadable_arc_identity(&repo.stashes);
         let tags_rev = repo.tags_rev;
         let tags_reuse_identity = fingerprint::loadable_arc_identity(&repo.tags);
+        let pull_requests_rev = repo.pull_requests_rev;
+        let pull_requests_reuse_identity =
+            fingerprint::loadable_arc_identity(&repo.pull_requests);
 
         Self {
             local_revs,
@@ -481,6 +510,17 @@ impl BranchSidebarSourceFingerprintParts {
                     || branch_sidebar_tags_source_hash(repo),
                     |parts| parts.tags_hash,
                 ),
+            pull_requests_rev,
+            pull_requests_reuse_identity,
+            pull_requests_hash: reuse
+                .filter(|parts| {
+                    parts.pull_requests_rev == pull_requests_rev
+                        || parts.pull_requests_reuse_identity == pull_requests_reuse_identity
+                })
+                .map_or_else(
+                    || branch_sidebar_pull_requests_source_hash(repo),
+                    |parts| parts.pull_requests_hash,
+                ),
         }
     }
 
@@ -498,6 +538,8 @@ impl BranchSidebarSourceFingerprintParts {
         self.stash_hash.hash(&mut hasher);
         5u8.hash(&mut hasher);
         self.tags_hash.hash(&mut hasher);
+        6u8.hash(&mut hasher);
+        self.pull_requests_hash.hash(&mut hasher);
         BranchSidebarSourceFingerprint(hasher.finish())
     }
 }
@@ -561,6 +603,14 @@ pub(in crate::view) fn branch_sidebar_source_matches_cached(
     let tags_rev = repo.tags_rev;
     if cached.tags_rev != tags_rev
         && cached.tags_reuse_identity != fingerprint::loadable_arc_identity(&repo.tags)
+    {
+        return false;
+    }
+
+    let pull_requests_rev = repo.pull_requests_rev;
+    if cached.pull_requests_rev != pull_requests_rev
+        && cached.pull_requests_reuse_identity
+            != fingerprint::loadable_arc_identity(&repo.pull_requests)
     {
         return false;
     }
@@ -740,6 +790,34 @@ fn branch_sidebar_tags_source_hash(repo: &RepoState) -> u64 {
     hasher.finish()
 }
 
+/// The PR section's shape depends on the remotes too (a `github.com` origin
+/// is what makes it appear at all), so the remote identity hashes in ahead
+/// of the listing.
+fn hash_branch_sidebar_pull_requests_source<H: Hasher>(repo: &RepoState, hasher: &mut H) {
+    if let Loadable::Ready(remotes) = &repo.remotes {
+        for remote in remotes.iter() {
+            remote.name.hash(hasher);
+            remote.url.hash(hasher);
+        }
+    }
+    fingerprint::hash_loadable_kind(&repo.pull_requests, hasher);
+    if let Loadable::Ready(pull_requests) = &repo.pull_requests {
+        for pull_request in pull_requests.iter() {
+            pull_request.number.hash(hasher);
+            pull_request.title.hash(hasher);
+            pull_request.author.hash(hasher);
+            pull_request.draft.hash(hasher);
+            pull_request.checks.hash(hasher);
+        }
+    }
+}
+
+fn branch_sidebar_pull_requests_source_hash(repo: &RepoState) -> u64 {
+    let mut hasher = FxHasher::default();
+    hash_branch_sidebar_pull_requests_source(repo, &mut hasher);
+    hasher.finish()
+}
+
 fn branch_sidebar_stash_source_hash(repo: &RepoState) -> u64 {
     let mut hasher = FxHasher::default();
     hash_branch_sidebar_stash_source(repo, &mut hasher);
@@ -784,7 +862,11 @@ fn branch_sidebar_divergence_count(count: usize) -> Option<NonZeroU32> {
 fn defaults_to_collapsed(collapse_key: &str) -> bool {
     matches!(
         collapse_key,
-        WORKTREES_SECTION_KEY | SUBMODULES_SECTION_KEY | STASH_SECTION_KEY | TAGS_SECTION_KEY
+        WORKTREES_SECTION_KEY
+            | SUBMODULES_SECTION_KEY
+            | STASH_SECTION_KEY
+            | TAGS_SECTION_KEY
+            | PULL_REQUESTS_SECTION_KEY
     )
 }
 
@@ -897,6 +979,14 @@ pub(super) fn branch_sidebar_rows(
     let submodules_collapsed = is_collapsed(collapsed_items, submodules_section_storage_key());
     let stash_collapsed = is_collapsed(collapsed_items, stash_section_storage_key());
     let tags_collapsed = is_collapsed(collapsed_items, tags_section_storage_key());
+    // The PR section exists only for repositories whose link remote lives on
+    // github.com; other forges (and remotes still loading) render nothing.
+    let github_slug = match &repo.remotes {
+        Loadable::Ready(remotes) => super::github::github_slug_from_remotes(remotes),
+        _ => None,
+    };
+    let pull_requests_collapsed =
+        github_slug.is_none() || is_collapsed(collapsed_items, pull_requests_section_storage_key());
     let visible_rows = if local_collapsed {
         0
     } else {
@@ -937,6 +1027,13 @@ pub(super) fn branch_sidebar_rows(
     } else {
         match &repo.tags {
             Loadable::Ready(tags) => tags.len(),
+            _ => 0,
+        }
+    } + if pull_requests_collapsed {
+        0
+    } else {
+        match &repo.pull_requests {
+            Loadable::Ready(pull_requests) => pull_requests.len(),
             _ => 0,
         }
     };
@@ -1155,6 +1252,51 @@ pub(super) fn branch_sidebar_rows(
     }
 
     rows.push(BranchSidebarRow::SectionSpacer);
+
+    // Pull requests sit next to the remote branches they arrive through. The
+    // section is only emitted for github.com remotes — the API client behind
+    // it knows no other host.
+    if github_slug.is_some() {
+        rows.push(BranchSidebarRow::PullRequestsHeader {
+            top_border: true,
+            collapsed: pull_requests_collapsed,
+            collapse_key: pull_requests_section_storage_key().into(),
+        });
+
+        if !pull_requests_collapsed {
+            match &repo.pull_requests {
+                Loadable::Ready(pull_requests) if pull_requests.is_empty() => {
+                    rows.push(BranchSidebarRow::PullRequestPlaceholder {
+                        message: crate::i18n::tr("chrome.sidebar.pr.empty"),
+                        retryable: false,
+                    });
+                }
+                Loadable::Ready(pull_requests) => {
+                    for pull_request in pull_requests.iter() {
+                        rows.push(BranchSidebarRow::PullRequestItem {
+                            number: pull_request.number,
+                            title: pull_request.title.clone().into(),
+                            author: pull_request.author.clone().into(),
+                            draft: pull_request.draft,
+                            checks: pull_request.checks,
+                        });
+                    }
+                }
+                Loadable::Loading | Loadable::NotLoaded => {
+                    rows.push(BranchSidebarRow::PullRequestPlaceholder {
+                        message: crate::i18n::tr("ui.common.loading"),
+                        retryable: false,
+                    });
+                }
+                Loadable::Error(error) => rows.push(BranchSidebarRow::PullRequestPlaceholder {
+                    message: error.clone().into(),
+                    retryable: true,
+                }),
+            }
+        }
+
+        rows.push(BranchSidebarRow::SectionSpacer);
+    }
 
     rows.push(BranchSidebarRow::WorktreesHeader {
         top_border: true,
@@ -2097,8 +2239,9 @@ mod tests {
     }
     use super::*;
     use repositorytree_core::domain::{
-        Branch, CommitId, FileStatus, FileStatusKind, Remote, RemoteBranch, RepoSpec, RepoStatus,
-        StashEntry, Submodule, SubmoduleStatus, Upstream, Worktree,
+        Branch, CommitId, FileStatus, FileStatusKind, PullRequest, PullRequestChecksState, Remote,
+        RemoteBranch, RepoSpec, RepoStatus, StashEntry, Submodule, SubmoduleStatus, Upstream,
+        Worktree,
     };
     use std::collections::BTreeSet;
     use std::path::PathBuf;
@@ -2543,5 +2686,183 @@ mod tests {
             branch_sidebar_branch_tooltip("origin/main", true).as_ref(),
             "Branch: origin/main (upstream for current branch)"
         );
+    }
+
+    fn github_repo_with_pull_requests() -> RepoState {
+        let mut repo = populated_repo();
+        repo.remotes = Loadable::Ready(Arc::new(vec![Remote {
+            name: "origin".to_string(),
+            url: Some("https://github.com/acme/widgets.git".to_string()),
+        }]));
+        repo.pull_requests = Loadable::Ready(Arc::new(vec![
+            PullRequest {
+                number: 7,
+                title: "Fix merge dialog focus".to_string(),
+                author: "jai".to_string(),
+                head_ref: "fix/merge-focus".to_string(),
+                head_sha: commit_id("aa1111111111111111111111111111111111111111"),
+                base_ref: "main".to_string(),
+                draft: false,
+                checks: Some(PullRequestChecksState::Success),
+            },
+            PullRequest {
+                number: 9,
+                title: "WIP sidebar chips".to_string(),
+                author: "kim".to_string(),
+                head_ref: "kim/chips".to_string(),
+                head_sha: commit_id("bb2222222222222222222222222222222222222222"),
+                base_ref: "main".to_string(),
+                draft: true,
+                checks: Some(PullRequestChecksState::Pending),
+            },
+        ]));
+        repo
+    }
+
+    /// The PR section is default-collapsed, so tests that want its contents
+    /// opt out the same way a user's click does.
+    fn pr_section_expanded_items() -> BTreeSet<String> {
+        let mut items = BTreeSet::new();
+        set_collapse_state(&mut items, pull_requests_section_storage_key(), false);
+        items
+    }
+
+    #[test]
+    fn pull_request_rows_render_between_remote_branches_and_worktrees() {
+        let repo = github_repo_with_pull_requests();
+        let rows = branch_sidebar_rows(
+            &repo,
+            &pr_section_expanded_items(),
+            &BTreeSet::new(),
+            "",
+        );
+
+        let header = rows
+            .iter()
+            .position(|row| matches!(row, BranchSidebarRow::PullRequestsHeader { .. }))
+            .expect("pull-request section header");
+        let worktrees = rows
+            .iter()
+            .position(|row| matches!(row, BranchSidebarRow::WorktreesHeader { .. }))
+            .expect("worktrees section header");
+
+        let items: Vec<(u64, bool, Option<PullRequestChecksState>)> = rows
+            .iter()
+            .filter_map(|row| match row {
+                BranchSidebarRow::PullRequestItem {
+                    number,
+                    draft,
+                    checks,
+                    ..
+                } => Some((*number, *draft, *checks)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            items,
+            vec![
+                (7, false, Some(PullRequestChecksState::Success)),
+                (9, true, Some(PullRequestChecksState::Pending)),
+            ]
+        );
+        assert!(
+            header < worktrees,
+            "the pull-request section sits before the worktrees section"
+        );
+        assert!(
+            items
+                .iter()
+                .all(|(number, _, _)| rows
+                    .iter()
+                    .position(|row| matches!(row, BranchSidebarRow::PullRequestItem { number: n, .. } if n == number))
+                    .is_some_and(|pos| header < pos && pos < worktrees)),
+            "every pull-request row sits inside its own section"
+        );
+    }
+
+    #[test]
+    fn pull_request_section_stays_collapsed_until_expanded() {
+        let repo = github_repo_with_pull_requests();
+        // No stored collapse state → the default-collapsed section renders as
+        // just a header, even with a listing ready.
+        let rows = branch_sidebar_rows(&repo, &BTreeSet::new(), &BTreeSet::new(), "");
+
+        assert!(rows.iter().any(|row| matches!(
+            row,
+            BranchSidebarRow::PullRequestsHeader { collapsed: true, .. }
+        )));
+        assert!(!rows
+            .iter()
+            .any(|row| matches!(row, BranchSidebarRow::PullRequestItem { .. })));
+    }
+
+    #[test]
+    fn pull_request_section_is_absent_without_a_github_remote() {
+        let mut repo = github_repo_with_pull_requests();
+        repo.remotes = Loadable::Ready(Arc::new(vec![Remote {
+            name: "origin".to_string(),
+            url: Some("https://gitlab.com/acme/widgets.git".to_string()),
+        }]));
+        let rows = branch_sidebar_rows(
+            &repo,
+            &pr_section_expanded_items(),
+            &BTreeSet::new(),
+            "",
+        );
+
+        assert!(!rows.iter().any(|row| matches!(
+            row,
+            BranchSidebarRow::PullRequestsHeader { .. }
+                | BranchSidebarRow::PullRequestItem { .. }
+                | BranchSidebarRow::PullRequestPlaceholder { .. }
+        )));
+    }
+
+    #[test]
+    fn pull_request_error_loading_and_empty_states_render_placeholders() {
+        let mut repo = github_repo_with_pull_requests();
+
+        repo.pull_requests = Loadable::Error("rate limited".into());
+        let rows = branch_sidebar_rows(
+            &repo,
+            &pr_section_expanded_items(),
+            &BTreeSet::new(),
+            "",
+        );
+        assert!(matches!(
+            rows.iter()
+                .find(|row| matches!(row, BranchSidebarRow::PullRequestPlaceholder { .. })),
+            Some(BranchSidebarRow::PullRequestPlaceholder { retryable: true, .. })
+        ));
+
+        repo.pull_requests = Loadable::NotLoaded;
+        let rows = branch_sidebar_rows(
+            &repo,
+            &pr_section_expanded_items(),
+            &BTreeSet::new(),
+            "",
+        );
+        assert!(matches!(
+            rows.iter()
+                .find(|row| matches!(row, BranchSidebarRow::PullRequestPlaceholder { .. })),
+            Some(BranchSidebarRow::PullRequestPlaceholder { retryable: false, .. })
+        ));
+
+        // Zero open PRs is a settled state: one hint row, nothing retryable.
+        repo.pull_requests = Loadable::Ready(Arc::new(vec![]));
+        let rows = branch_sidebar_rows(
+            &repo,
+            &pr_section_expanded_items(),
+            &BTreeSet::new(),
+            "",
+        );
+        assert!(matches!(
+            rows.iter()
+                .find(|row| matches!(row, BranchSidebarRow::PullRequestPlaceholder { .. })),
+            Some(BranchSidebarRow::PullRequestPlaceholder { retryable: false, .. })
+        ));
+        assert!(!rows
+            .iter()
+            .any(|row| matches!(row, BranchSidebarRow::PullRequestItem { .. })));
     }
 }

@@ -928,11 +928,27 @@ impl RepositoryTreeView {
             |value: f32| crate::ui_scale::design_px_from_percent(value, ui_scale_percent);
         let active = self.sidebar_collapsed_popover;
         let icon_muted = theme.colors.foreground.secondary;
+        // The pull-request section only exists for repositories whose link
+        // remote lives on github.com; the rail hides its icon otherwise.
+        let pull_requests_available = self
+            .state
+            .repos
+            .iter()
+            .find(|repo| Some(repo.id) == self.active_repo_id())
+            .is_some_and(|repo| {
+                matches!(&repo.remotes, Loadable::Ready(remotes)
+                    if super::github::github_slug_from_remotes(remotes).is_some())
+            });
         let active_bg = theme.active_overlay();
         let hover_bg = theme.hover_overlay();
         let slot = scaled_px(28.0);
 
-        let icons = CollapsedSidebarSection::ALL.into_iter().map(|section| {
+        let icons = CollapsedSidebarSection::ALL
+            .into_iter()
+            .filter(|section| {
+                *section != CollapsedSidebarSection::PullRequests || pull_requests_available
+            })
+            .map(|section| {
             let is_active = active == Some(section);
             let icon_color = if is_active {
                 theme.colors.foreground.primary
