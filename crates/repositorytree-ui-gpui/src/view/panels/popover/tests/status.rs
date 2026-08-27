@@ -838,3 +838,42 @@ fn status_file_menu_hides_gitignore_for_a_mixed_selection(cx: &mut gpui::TestApp
         "one tracked path in the selection would get a pattern that does nothing"
     );
 }
+
+#[gpui::test]
+fn status_file_menu_offers_assume_unchanged_for_tracked_unstaged_files(
+    cx: &mut gpui::TestAppContext,
+) {
+    use repositorytree_core::domain::FileStatusKind;
+
+    let entries = &[
+        ("build/out.log", FileStatusKind::Untracked),
+        ("src/lib.rs", FileStatusKind::Modified),
+    ];
+
+    let tracked = status_menu_for(cx, entries, &[], "src/lib.rs");
+    let action = tracked.items.iter().find_map(|item| match item {
+        ContextMenuItem::Entry { label, action, .. } if label.as_ref() == "Assume unchanged" => {
+            Some((**action).clone())
+        }
+        _ => None,
+    });
+    match action {
+        Some(ContextMenuAction::SetAssumeUnchangedPath { repo_id: _, path }) => {
+            assert_eq!(
+                path,
+                std::path::PathBuf::from("src/lib.rs"),
+                "the entry marks the clicked row"
+            );
+        }
+        _ => panic!("expected SetAssumeUnchangedPath on a tracked unstaged file"),
+    }
+
+    let untracked = status_menu_for(cx, entries, &[], "build/out.log");
+    assert!(
+        !untracked.items.iter().any(|item| matches!(
+            item,
+            ContextMenuItem::Entry { label, .. } if label.as_ref() == "Assume unchanged"
+        )),
+        "an untracked path has no index entry to mark"
+    );
+}
