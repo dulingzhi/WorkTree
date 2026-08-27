@@ -3,6 +3,8 @@ use repositorytree_core::domain::*;
 use repositorytree_core::error::{Error, ErrorKind};
 use repositorytree_core::services::{GitBackend, GitRepository, Result};
 use std::path::Path;
+#[cfg(test)]
+use std::path::PathBuf;
 use std::sync::Arc;
 
 #[derive(Default)]
@@ -87,7 +89,13 @@ impl GitRepository for NoopRepo {
         Err(Error::new(ErrorKind::Unsupported("No Git backend enabled")))
     }
 
-    fn stash_create(&self, _message: &str, _include_untracked: bool) -> Result<()> {
+    fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> Result<()> {
         Err(Error::new(ErrorKind::Unsupported("No Git backend enabled")))
     }
 
@@ -204,7 +212,7 @@ mod tests {
         assert_unsupported(repo.checkout_commit(&commit));
         assert_unsupported(repo.cherry_pick(&commit));
         assert_unsupported(repo.revert(&commit));
-        assert_unsupported(repo.stash_create("savepoint", true));
+        assert_unsupported(repo.stash_create("savepoint", true, false, &[]));
         assert_unsupported(repo.stash_list());
         assert_unsupported(repo.stash_apply(0));
         assert_unsupported(repo.stash_drop(0));
@@ -271,6 +279,8 @@ mod tests {
             "https://example.com/repo.git",
             RemoteUrlKind::Fetch,
         ));
+        assert_unsupported(repo.set_remote_ssh_key_with_output("origin", Some("~/.ssh/id_ed25519")));
+        assert_unsupported(repo.set_remote_ssh_key_with_output("origin", None));
         assert_unsupported(repo.fetch_all_with_output());
         assert_unsupported(repo.fetch_all_with_output_prune(true));
         assert_unsupported(repo.pull_with_output(PullMode::FastForwardOnly));
@@ -295,6 +305,14 @@ mod tests {
         assert_unsupported(repo.checkout_conflict_base(path));
         assert_unsupported(repo.launch_mergetool(path));
         assert_unsupported(repo.export_patch_with_output(&commit, path));
+        assert_unsupported(repo.archive_zip_with_output("HEAD", path));
+        assert_unsupported(repo.lfs_enabled());
+        assert_unsupported(repo.lfs_is_filtered(path));
+        assert_unsupported(repo.lfs_pointer_change(&diff_target));
+        assert_unsupported(repo.lfs_smudge_bytes(b"pointer"));
+        assert_unsupported(repo.cleanup_with_output());
+        assert_unsupported(repo.assume_unchanged_list());
+        assert_unsupported(repo.set_assume_unchanged(path, true));
         assert_unsupported(repo.apply_patch_with_output(path));
         assert_unsupported(repo.apply_unified_patch_to_index_with_output("@@ -1 +1 @@", false));
         assert_unsupported(repo.apply_unified_patch_to_worktree_with_output("@@ -1 +1 @@", true));

@@ -104,6 +104,16 @@ pub(super) fn activate(
                 cx,
             );
         }
+        StashPickerPurpose::Branch => {
+            this.open_popover_centered(
+                PopoverKind::StashBranchPrompt {
+                    repo_id,
+                    index: row.index,
+                },
+                window,
+                cx,
+            );
+        }
     }
 }
 
@@ -121,6 +131,7 @@ pub(super) fn panel(
         StashPickerPurpose::Pop => "Pop Stash",
         StashPickerPurpose::Apply => "Apply Stash",
         StashPickerPurpose::Drop => "Drop Stash",
+        StashPickerPurpose::Branch => "Branch Stash",
     };
 
     let mut menu = div()

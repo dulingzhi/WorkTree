@@ -7,6 +7,8 @@ cm:
   rebase_onto: "将 %{current} 变基到 %{target}"
   interactive_rebase_onto: "交互式变基：将 %{current} 变基到 %{target}"
   open_in: "在 %{name} 中打开"
+  pr:
+    menu_title: "拉取请求 #%{number}"
   tag:
     tags_on: "%{short} 上的标签"
     create_on: "在 %{short} 上创建标签 %{name}"
@@ -34,6 +36,7 @@ cm:
     resolve_selected_ours: "采用我方解决所选（%{count} 个）"
     resolve_selected_theirs: "采用对方解决所选（%{count} 个）"
     add_gitignore_count: "将 %{count} 个文件加入 .gitignore…"
+    stash_count: "贮藏（%{count} 个）…"
   diff:
     discard_lines_count: "放弃 %{count} 行"
     stage_hunks_count: "暂存 %{count} 个改动块"

@@ -558,7 +558,13 @@ fn load_conflict_file_effect_reads_worktree_and_emits_loaded() {
         fn revert(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
-        fn stash_create(&self, _message: &str, _include_untracked: bool) -> Result<()> {
+        fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> Result<()> {
             unimplemented!()
         }
         fn stash_list(&self) -> Result<Vec<StashEntry>> {
@@ -746,7 +752,13 @@ fn load_conflict_file_effect_reuses_conflict_session_payloads_without_stage_fetc
         fn revert(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
-        fn stash_create(&self, _message: &str, _include_untracked: bool) -> Result<()> {
+        fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> Result<()> {
             unimplemented!()
         }
         fn stash_list(&self) -> Result<Vec<StashEntry>> {
@@ -960,7 +972,13 @@ fn load_conflict_file_effect_preserves_binary_payloads_when_reusing_session() {
         fn revert(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
-        fn stash_create(&self, _message: &str, _include_untracked: bool) -> Result<()> {
+        fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> Result<()> {
             unimplemented!()
         }
         fn stash_list(&self) -> Result<Vec<StashEntry>> {
@@ -1186,7 +1204,13 @@ fn load_conflict_file_effect_reuses_absent_current_payload_without_rereading_wor
         fn revert(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
-        fn stash_create(&self, _message: &str, _include_untracked: bool) -> Result<()> {
+        fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> Result<()> {
             unimplemented!()
         }
         fn stash_list(&self) -> Result<Vec<StashEntry>> {
@@ -1406,7 +1430,13 @@ fn load_conflict_file_effect_records_trace_stages_and_sizes() {
         fn revert(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
-        fn stash_create(&self, _message: &str, _include_untracked: bool) -> Result<()> {
+        fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> Result<()> {
             unimplemented!()
         }
         fn stash_list(&self) -> Result<Vec<StashEntry>> {
@@ -1668,7 +1698,13 @@ fn save_worktree_file_effect_writes_and_can_stage() {
         fn revert(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
-        fn stash_create(&self, _message: &str, _include_untracked: bool) -> Result<()> {
+        fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> Result<()> {
             unimplemented!()
         }
         fn stash_list(&self) -> Result<Vec<StashEntry>> {
@@ -1907,7 +1943,13 @@ fn append_gitignore_patterns_effect_creates_appends_and_dedupes() {
         fn revert(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
-        fn stash_create(&self, _message: &str, _include_untracked: bool) -> Result<()> {
+        fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> Result<()> {
             unimplemented!()
         }
         fn stash_list(&self) -> Result<Vec<StashEntry>> {
@@ -2104,7 +2146,13 @@ fn checkout_conflict_base_effect_calls_repo_and_emits_finished() {
         fn revert(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
-        fn stash_create(&self, _message: &str, _include_untracked: bool) -> Result<()> {
+        fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> Result<()> {
             unimplemented!()
         }
         fn stash_list(&self) -> Result<Vec<StashEntry>> {
@@ -2266,7 +2314,13 @@ fn accept_conflict_deletion_effect_calls_repo_and_emits_finished() {
         fn revert(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
-        fn stash_create(&self, _message: &str, _include_untracked: bool) -> Result<()> {
+        fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> Result<()> {
             unimplemented!()
         }
         fn stash_list(&self) -> Result<Vec<StashEntry>> {
@@ -2431,7 +2485,13 @@ fn load_stashes_effect_truncates_results_to_limit() {
         fn revert(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
-        fn stash_create(&self, _message: &str, _include_untracked: bool) -> Result<()> {
+        fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> Result<()> {
             unimplemented!()
         }
         fn stash_list(&self) -> Result<Vec<StashEntry>> {
@@ -2598,9 +2658,16 @@ fn stash_effect_requests_stash_reload_on_success() {
             unimplemented!()
         }
 
-        fn stash_create(&self, message: &str, include_untracked: bool) -> Result<()> {
+        fn stash_create(
+            &self,
+            message: &str,
+            include_untracked: bool,
+            keep_index: bool,
+            paths: &[PathBuf],
+        ) -> Result<()> {
             self.calls.lock().unwrap().push(format!(
-                "stash {message} include_untracked={include_untracked}"
+                "stash {message} include_untracked={include_untracked} keep_index={keep_index} paths={}",
+                paths.len()
             ));
             Ok(())
         }
@@ -2668,6 +2735,8 @@ fn stash_effect_requests_stash_reload_on_success() {
             repo_id: RepoId(1),
             message: "wip".to_string(),
             include_untracked: true,
+            keep_index: false,
+            paths: Vec::new().into(),
         },
     );
 
@@ -2703,7 +2772,7 @@ fn stash_effect_requests_stash_reload_on_success() {
     assert!(saw_finished, "expected stash effect to complete");
     assert_eq!(
         *calls.lock().unwrap(),
-        vec!["stash wip include_untracked=true".to_string()]
+        vec!["stash wip include_untracked=true keep_index=false paths=0".to_string()]
     );
 }
 
@@ -2768,7 +2837,13 @@ fn pop_stash_effect_applies_and_drops_then_requests_stash_reload() {
             unimplemented!()
         }
 
-        fn stash_create(&self, _message: &str, _include_untracked: bool) -> Result<()> {
+        fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> Result<()> {
             unimplemented!()
         }
         fn stash_list(&self) -> Result<Vec<StashEntry>> {
@@ -2936,7 +3011,13 @@ fn pop_stash_effect_propagates_apply_error_without_drop_or_reload() {
             unimplemented!()
         }
 
-        fn stash_create(&self, _message: &str, _include_untracked: bool) -> Result<()> {
+        fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> Result<()> {
             unimplemented!()
         }
         fn stash_list(&self) -> Result<Vec<StashEntry>> {
@@ -3103,7 +3184,13 @@ fn drop_stash_effect_requests_stash_reload_on_success() {
             unimplemented!()
         }
 
-        fn stash_create(&self, _message: &str, _include_untracked: bool) -> Result<()> {
+        fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> Result<()> {
             unimplemented!()
         }
         fn stash_list(&self) -> Result<Vec<StashEntry>> {
@@ -3267,7 +3354,13 @@ fn drop_stash_effect_requests_stash_reload_on_error() {
             unimplemented!()
         }
 
-        fn stash_create(&self, _message: &str, _include_untracked: bool) -> Result<()> {
+        fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> Result<()> {
             unimplemented!()
         }
         fn stash_list(&self) -> Result<Vec<StashEntry>> {
@@ -3445,7 +3538,13 @@ impl GitRepository for UnsupportedRepo {
         unsupported_repo_result()
     }
 
-    fn stash_create(&self, _message: &str, _include_untracked: bool) -> Result<()> {
+    fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> Result<()> {
         unsupported_repo_result()
     }
     fn stash_list(&self) -> Result<Vec<StashEntry>> {
@@ -3591,7 +3690,13 @@ impl GitRepository for MetadataSchedulingRepo {
     fn revert(&self, _id: &CommitId) -> Result<()> {
         unsupported_repo_result()
     }
-    fn stash_create(&self, _message: &str, _include_untracked: bool) -> Result<()> {
+    fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> Result<()> {
         unsupported_repo_result()
     }
     fn stash_list(&self) -> Result<Vec<StashEntry>> {
@@ -3713,7 +3818,13 @@ impl GitRepository for SelectedDiffSchedulingRepo {
     fn revert(&self, _id: &CommitId) -> Result<()> {
         unsupported_repo_result()
     }
-    fn stash_create(&self, _message: &str, _include_untracked: bool) -> Result<()> {
+    fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> Result<()> {
         unsupported_repo_result()
     }
     fn stash_list(&self) -> Result<Vec<StashEntry>> {
@@ -3837,7 +3948,13 @@ impl GitRepository for RecordingLogRepo {
     fn revert(&self, _id: &CommitId) -> Result<()> {
         unsupported_repo_result()
     }
-    fn stash_create(&self, _message: &str, _include_untracked: bool) -> Result<()> {
+    fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> Result<()> {
         unsupported_repo_result()
     }
     fn stash_list(&self) -> Result<Vec<StashEntry>> {
@@ -3943,6 +4060,13 @@ impl GitRepository for RecordingCheckoutRepo {
             .push(format!("checkout_commit {}", id.as_ref()));
         Ok(())
     }
+    fn checkout_pull_request(&self, remote: &str, number: u64) -> Result<()> {
+        self.calls
+            .lock()
+            .expect("checkout recording mutex")
+            .push(format!("checkout_pull {remote} #{number}"));
+        Ok(())
+    }
     fn cherry_pick(&self, _id: &CommitId) -> Result<()> {
         unsupported_repo_result()
     }
@@ -3950,7 +4074,13 @@ impl GitRepository for RecordingCheckoutRepo {
         unsupported_repo_result()
     }
 
-    fn stash_create(&self, _message: &str, _include_untracked: bool) -> Result<()> {
+    fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> Result<()> {
         unsupported_repo_result()
     }
     fn stash_list(&self) -> Result<Vec<StashEntry>> {
@@ -4118,6 +4248,45 @@ fn checkout_remote_branch_effect_requests_branch_and_worktree_reload_on_success(
     assert_eq!(
         *calls.lock().expect("checkout recording mutex"),
         vec!["checkout_remote origin/feature -> feature".to_string()]
+    );
+}
+
+#[test]
+fn checkout_pull_request_effect_requests_branch_and_worktree_reload_on_success() {
+    let repo_id = RepoId(703);
+    let calls = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let backend: Arc<dyn GitBackend> = Arc::new(PanicOpenBackend);
+    let repo: Arc<dyn GitRepository> = Arc::new(RecordingCheckoutRepo {
+        spec: RepoSpec {
+            workdir: unique_temp_path("repositorytree-checkout-pull-request-effect"),
+        },
+        calls: Arc::clone(&calls),
+    });
+    let repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = {
+        let mut repos = FxHashMap::default();
+        repos.insert(repo_id, repo);
+        repos
+    };
+    let executor = super::executor::TaskExecutor::new(1);
+    let (msg_tx, msg_rx) = std::sync::mpsc::channel::<Msg>();
+
+    schedule_effect_for_test(
+        &executor,
+        &executor,
+        &backend,
+        &repos,
+        msg_tx,
+        Effect::CheckoutPullRequest {
+            repo_id,
+            remote: "origin".to_string(),
+            number: 42,
+        },
+    );
+
+    wait_for_checkout_refresh_messages(&msg_rx, repo_id, true, true);
+    assert_eq!(
+        *calls.lock().expect("checkout recording mutex"),
+        vec!["checkout_pull origin #42".to_string()]
     );
 }
 
@@ -4612,6 +4781,7 @@ fn load_log_effect_uses_history_mode_api() {
             seq: 1,
             scope: LogScope::NoMerges,
             author: None,
+            refs: Vec::new(),
             limit: 20,
             cursor: Some(cursor.clone()),
         },
@@ -4993,6 +5163,7 @@ fn schedule_effect_dispatches_many_variants_with_repo_present() {
                 seq: 1,
                 scope: LogScope::CurrentBranch,
                 author: None,
+                refs: Vec::new(),
                 limit: 20,
                 cursor: None,
             },
@@ -5004,6 +5175,7 @@ fn schedule_effect_dispatches_many_variants_with_repo_present() {
                 seq: 2,
                 scope: LogScope::AllBranches,
                 author: None,
+                refs: Vec::new(),
                 limit: 20,
                 cursor: Some(LogCursor {
                     last_seen: CommitId("cursor".into()),
@@ -5187,6 +5359,24 @@ fn schedule_effect_dispatches_many_variants_with_repo_present() {
             },
             1,
         ),
+        (
+            Effect::ArchiveZip {
+                repo_id,
+                revision: "v1.0".to_string(),
+                dest: PathBuf::from("archive-v1.0.zip"),
+            },
+            1,
+        ),
+        ((Effect::CleanupRepo { repo_id }), 1),
+        (
+            Effect::SetAssumeUnchanged {
+                repo_id,
+                path: PathBuf::from("src/big.bin"),
+                enable: false,
+            },
+            1,
+        ),
+        ((Effect::LoadAssumeUnchanged { repo_id }), 1),
         (
             Effect::ApplyPatch {
                 repo_id,
@@ -5530,6 +5720,14 @@ fn schedule_effect_dispatches_many_variants_with_repo_present() {
             1,
         ),
         (
+            Effect::SetRemoteSshKey {
+                repo_id,
+                remote: "origin".to_string(),
+                key: Some("~/.ssh/id_ed25519".to_string()),
+            },
+            1,
+        ),
+        (
             Effect::CheckoutConflictSide {
                 repo_id,
                 path: PathBuf::from("conflicted.txt"),
@@ -5563,12 +5761,25 @@ fn schedule_effect_dispatches_many_variants_with_repo_present() {
                 repo_id,
                 message: "wip".to_string(),
                 include_untracked: false,
+                keep_index: false,
+                paths: Vec::new().into(),
             },
             1,
         ),
         (Effect::ApplyStash { repo_id, index: 0 }, 1),
         (Effect::PopStash { repo_id, index: 0 }, 1),
         (Effect::DropStash { repo_id, index: 0 }, 2),
+        // Success hook reloads the stash list, so a failing backend (the
+        // default `stash_branch` is Unsupported) still reports exactly the
+        // finished action.
+        (
+            Effect::StashBranch {
+                repo_id,
+                index: 0,
+                branch: "recover".to_string(),
+            },
+            1,
+        ),
     ];
 
     for (effect, expected_messages) in effect_specs {

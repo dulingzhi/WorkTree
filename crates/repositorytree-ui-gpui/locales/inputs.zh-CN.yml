@@ -4,6 +4,11 @@ input:
     title: "编辑远程仓库 URL（%{kind}）"
     remote_line: "远程仓库：%{name}"
     save: "保存"
+  remote_ssh_key:
+    title: "设置 SSH 密钥"
+    remote_line: "远程仓库：%{name}"
+    save: "保存"
+    clear: "清除"
   remote_add:
     title: "添加远程仓库"
     name_label: "名称"
@@ -29,6 +34,19 @@ input:
   stash:
     title: "创建贮藏"
     stash: "贮藏"
+    include_untracked: "包含未跟踪文件"
+    keep_index: "保留已暂存的更改"
+    paths_selected: "贮藏选中的 %{count} 个路径"
+  stash_branch:
+    title: "贮藏建分支"
+    create: "创建分支"
+  mr_push:
+    title: "带合并请求推送"
+    hint: "GitLab 会通过本次推送直接创建合并请求（git push -o merge_request.*）。GitHub 远程会忽略这些选项。"
+    pipeline: "流水线成功后自动合并"
+    remove_source: "合并后删除源分支"
+    mr_branch: "推送到 MR/<分支> 而非分支本身"
+    push: "推送"
   commit:
     title: "提交更改"
     commit: "提交"
@@ -36,3 +54,9 @@ input:
     title: "更改子模块指针"
     target_label: "目标引用 / 分支 / 标签 / 提交"
     change: "更改"
+  assume_unchanged:
+    title: "假定未更改的文件"
+    hint: "已告知 git 在检查工作区更改时跳过的文件。移除标记前，它们不会出现在更改列表中。"
+    empty: "没有标记为假定未更改的文件。"
+    remove_flag: "移除标记"
+    close: "关闭"

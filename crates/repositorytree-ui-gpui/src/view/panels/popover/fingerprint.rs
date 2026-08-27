@@ -138,7 +138,7 @@ fn repo_for_popover<'a>(state: &'a AppState, popover: &PopoverKind) -> Option<&'
 
         // Popovers that implicitly use the currently active repo.
         PopoverKind::BranchPicker { .. }
-        | PopoverKind::StashPrompt
+        | PopoverKind::StashPrompt { .. }
         | PopoverKind::PullPicker
         | PopoverKind::PushPicker
         | PopoverKind::AppMenu
@@ -162,6 +162,10 @@ fn repo_for_popover<'a>(state: &'a AppState, popover: &PopoverKind) -> Option<&'
         | PopoverKind::CheckoutRemoteBranchPrompt { repo_id, .. }
         | PopoverKind::StashDropConfirm { repo_id, .. }
         | PopoverKind::StashMenu { repo_id, .. }
+        | PopoverKind::StashBranchPrompt { repo_id, .. }
+        | PopoverKind::AssumeUnchangedManager { repo_id }
+        | PopoverKind::Statistics { repo_id }
+        | PopoverKind::UndoLastActionPrompt { repo_id }
         | PopoverKind::RepoTabMenu { repo_id }
         | PopoverKind::CreateTagPrompt { repo_id, .. }
         | PopoverKind::Repo { repo_id, .. }
@@ -169,12 +173,17 @@ fn repo_for_popover<'a>(state: &'a AppState, popover: &PopoverKind) -> Option<&'
         | PopoverKind::UpstreamPicker { repo_id, .. }
         | PopoverKind::PushSetUpstreamPrompt { repo_id, .. }
         | PopoverKind::ForcePushConfirm { repo_id }
+        | PopoverKind::MergeRequestPushPrompt { repo_id }
         | PopoverKind::CherryPickCommitConfirm { repo_id, .. }
         | PopoverKind::MergeCommitConfirm { repo_id, .. }
         | PopoverKind::MergeAbortConfirm { repo_id }
         | PopoverKind::ForceDeleteBranchConfirm { repo_id, .. }
         | PopoverKind::ForceRemoveWorktreeConfirm { repo_id, .. }
         | PopoverKind::DiscardChangesConfirm { repo_id, .. }
+        | PopoverKind::DiscardAllConfirm { repo_id, .. }
+        | PopoverKind::RemotePicker { repo_id, .. }
+        | PopoverKind::DeleteTagPicker { repo_id }
+        | PopoverKind::CommitSearchPicker { repo_id }
         | PopoverKind::AddToGitignorePrompt { repo_id, .. }
         | PopoverKind::StageConflictMarkersConfirm { repo_id, .. }
         | PopoverKind::PullReconcilePrompt { repo_id }
@@ -183,6 +192,7 @@ fn repo_for_popover<'a>(state: &'a AppState, popover: &PopoverKind) -> Option<&'
         | PopoverKind::PreviousCommitMessagesMenu { repo_id }
         | PopoverKind::DiffHunkMenu { repo_id, .. }
         | PopoverKind::DiffEditorMenu { repo_id, .. }
+        | PopoverKind::HunkExplanation { repo_id, .. }
         | PopoverKind::CommitMenu { repo_id, .. }
         | PopoverKind::StatusFileMenu { repo_id, .. }
         | PopoverKind::BranchMenu { repo_id, .. }
@@ -198,8 +208,10 @@ fn repo_for_popover<'a>(state: &'a AppState, popover: &PopoverKind) -> Option<&'
         | PopoverKind::TagMenu { repo_id, .. }
         | PopoverKind::TerminalMenu { repo_id, .. }
         | PopoverKind::TagRefMenu { repo_id, .. }
+        | PopoverKind::PullRequestMenu { repo_id, .. }
         | PopoverKind::HistoryBranchFilter { repo_id }
         | PopoverKind::HistoryAuthorFilter { repo_id }
+        | PopoverKind::HistoryRefFilter { repo_id }
         | PopoverKind::CommitShaLinkMenu { repo_id, .. }
         | PopoverKind::ReflogEntryMenu { repo_id, .. } => Some(*repo_id),
     }?;
@@ -268,14 +280,67 @@ fn hash_repo_for_popover<H: Hasher>(repo: &RepoState, popover: &PopoverKind, has
             repo.submodules_rev.hash(hasher);
         }
 
-        PopoverKind::StashPrompt => {
+        PopoverKind::StashPrompt { .. } => {
             repo.stashes_rev.hash(hasher);
             repo.status_cache_rev().hash(hasher);
         }
+        // The discard-all dialog lists every staged and unstaged path, so any
+        // status change while it is up must repaint it — including the
+        // disabled button when there is nothing left to discard.
+        PopoverKind::DiscardAllConfirm { .. } => {
+            repo.status_cache_rev().hash(hasher);
+        }
+        // The picker's rows are the remotes (or remote branches, by purpose),
+        // so it repaints when the list it lists changes — the same pairing the
+        // rows cache key makes on its side.
+        PopoverKind::RemotePicker { purpose, .. } => match purpose {
+            RemotePickerPurpose::DeleteBranch => {
+                repo.remote_branches_rev.hash(hasher);
+            }
+            RemotePickerPurpose::RemoveRemote | RemotePickerPurpose::EditUrl => {
+                repo.remotes_rev.hash(hasher);
+            }
+        },
+        PopoverKind::DeleteTagPicker { .. } => {
+            repo.tags_rev.hash(hasher);
+        }
+        // Both tiers' rows live here: the local tier reads the loaded log
+        // page, the cross-history tier reads the search results (and their
+        // Loading state). The typed query itself is a popover-field input the
+        // search input re-renders on its own.
+        PopoverKind::CommitSearchPicker { .. } => {
+            repo.log_rev.hash(hasher);
+            repo.commit_search_rev.hash(hasher);
+        }
         PopoverKind::StashDropConfirm { .. }
         | PopoverKind::StashMenu { .. }
+        | PopoverKind::StashBranchPrompt { .. }
         | PopoverKind::StashPickerPrompt { .. } => {
             repo.stashes_rev.hash(hasher);
+        }
+
+        // The manager's rows are the assume-unchanged list, so it has to
+        // repaint when the list first lands and again after every toggle the
+        // dialog itself dispatches (the reload bumps the rev).
+        PopoverKind::AssumeUnchangedManager { .. } => {
+            repo.assume_unchanged_rev.hash(hasher);
+            view_fingerprint::hash_loadable_arc(&repo.assume_unchanged, hasher);
+        }
+        // The preview is derived from the loaded reflog plus the two
+        // in-progress flags that switch it to an abort; it must repaint when
+        // either side changes.
+        PopoverKind::UndoLastActionPrompt { .. } => {
+            repo.reflog_rev.hash(hasher);
+            view_fingerprint::hash_loadable_arc(&repo.reflog, hasher);
+            view_fingerprint::hash_loadable_kind(&repo.merge_commit_message, hasher);
+            view_fingerprint::hash_loadable_kind(&repo.rebase_in_progress, hasher);
+        }
+
+        // The chart and rankings are derived from the loaded commit list, so
+        // the popover repaints when the load lands (or fails and retries).
+        PopoverKind::Statistics { .. } => {
+            repo.statistics_rev.hash(hasher);
+            view_fingerprint::hash_loadable_arc(&repo.statistics, hasher);
         }
 
         PopoverKind::FileHistory { .. } => {
@@ -301,6 +366,7 @@ fn hash_repo_for_popover<H: Hasher>(repo: &RepoState, popover: &PopoverKind, has
             repo.diff_state.diff_file_rev.hash(hasher);
             view_fingerprint::hash_loadable_kind(&repo.diff_state.diff_file, hasher);
             view_fingerprint::hash_loadable_kind(&repo.diff_state.diff_file_image, hasher);
+            view_fingerprint::hash_loadable_kind(&repo.diff_state.diff_file_lfs, hasher);
 
             // Working tree diff popovers need status for file-kind/conflict decisions.
             if matches!(
@@ -324,6 +390,16 @@ fn hash_repo_for_popover<H: Hasher>(repo: &RepoState, popover: &PopoverKind, has
             repo.log_rev.hash(hasher);
         }
 
+        // The rows come from the ref lists, and every checkmark reads the
+        // filter set — a toggle dispatch has to repaint the popover, not just
+        // restart the walk behind it.
+        PopoverKind::HistoryRefFilter { .. } => {
+            repo.history_state.history_ref_filters.hash(hasher);
+            repo.branches_rev.hash(hasher);
+            repo.remote_branches_rev.hash(hasher);
+            repo.tags_rev.hash(hasher);
+        }
+
         PopoverKind::PullPicker
         | PopoverKind::PushPicker
         | PopoverKind::PullReconcilePrompt { .. }
@@ -333,6 +409,15 @@ fn hash_repo_for_popover<H: Hasher>(repo: &RepoState, popover: &PopoverKind, has
             repo.remotes_rev.hash(hasher);
             repo.remote_branches_rev.hash(hasher);
             hash_pending_force_push_lease(repo, hasher);
+        }
+
+        PopoverKind::MergeRequestPushPrompt { .. } => {
+            // The header decorates the title with the current branch's
+            // tracking upstream, so the fingerprint tracks where that name
+            // comes from. The options themselves live on the host.
+            repo.head_branch_rev.hash(hasher);
+            repo.branches_rev.hash(hasher);
+            repo.remotes_rev.hash(hasher);
         }
 
         PopoverKind::PreviousCommitMessagesMenu { .. } => {
@@ -367,6 +452,13 @@ fn hash_repo_for_popover<H: Hasher>(repo: &RepoState, popover: &PopoverKind, has
             repo.remote_tags_rev.hash(hasher);
         }
 
+        // The menu reads the listing (title, CI chip) and resolves its
+        // checkout remote from the remotes.
+        PopoverKind::PullRequestMenu { .. } => {
+            repo.pull_requests_rev.hash(hasher);
+            repo.remotes_rev.hash(hasher);
+        }
+
         // Most prompt-style popovers don't require live state updates.
         PopoverKind::InteractiveRebaseActionMenu { .. }
         | PopoverKind::InteractiveRebaseAutosquashMenu
@@ -393,6 +485,10 @@ fn hash_repo_for_popover<H: Hasher>(repo: &RepoState, popover: &PopoverKind, has
         // text input. Re-hashing status would rebuild the dialog under the
         // user's cursor when a refresh lands mid-edit.
         | PopoverKind::AddToGitignorePrompt { .. }
+        // The hunk snapshot travels with the host's explanation state and
+        // repaints through cx.notify; hashing the diff would rebuild the
+        // popover under the reply when an unrelated refresh lands.
+        | PopoverKind::HunkExplanation { .. }
         | PopoverKind::DiffContentModeSettings
         | PopoverKind::WebLinkMenu { .. }
         | PopoverKind::CommitShaLinkMenu { .. }
@@ -469,7 +565,10 @@ fn hash_popover_kind<H: Hasher>(kind: &PopoverKind, hasher: &mut H) {
             remote.hash(hasher);
             branch.hash(hasher);
         }
-        PopoverKind::StashPrompt => 3u8.hash(hasher),
+        PopoverKind::StashPrompt { paths } => {
+            3u8.hash(hasher);
+            paths.hash(hasher);
+        }
         PopoverKind::StashDropConfirm {
             repo_id,
             index,
@@ -607,6 +706,49 @@ fn hash_popover_kind<H: Hasher>(kind: &PopoverKind, hasher: &mut H) {
             repo_id.hash(hasher);
             hash_diff_area(*area, hasher);
             path.hash(hasher);
+        }
+        PopoverKind::DiscardAllConfirm { repo_id } => {
+            105u8.hash(hasher);
+            repo_id.hash(hasher);
+        }
+        PopoverKind::RemotePicker { repo_id, purpose } => {
+            106u8.hash(hasher);
+            repo_id.hash(hasher);
+            purpose.hash(hasher);
+        }
+        PopoverKind::DeleteTagPicker { repo_id } => {
+            107u8.hash(hasher);
+            repo_id.hash(hasher);
+        }
+        PopoverKind::CommitSearchPicker { repo_id } => {
+            108u8.hash(hasher);
+            repo_id.hash(hasher);
+        }
+        PopoverKind::StashBranchPrompt { repo_id, index } => {
+            109u8.hash(hasher);
+            repo_id.hash(hasher);
+            index.hash(hasher);
+        }
+        PopoverKind::AssumeUnchangedManager { repo_id } => {
+            110u8.hash(hasher);
+            repo_id.hash(hasher);
+        }
+        PopoverKind::Statistics { repo_id } => {
+            111u8.hash(hasher);
+            repo_id.hash(hasher);
+        }
+        PopoverKind::MergeRequestPushPrompt { repo_id } => {
+            112u8.hash(hasher);
+            repo_id.hash(hasher);
+        }
+        PopoverKind::UndoLastActionPrompt { repo_id } => {
+            113u8.hash(hasher);
+            repo_id.hash(hasher);
+        }
+        PopoverKind::HunkExplanation { repo_id, src_ix } => {
+            115u8.hash(hasher);
+            repo_id.hash(hasher);
+            src_ix.hash(hasher);
         }
         PopoverKind::AddToGitignorePrompt {
             repo_id,
@@ -841,6 +983,16 @@ fn hash_popover_kind<H: Hasher>(kind: &PopoverKind, hasher: &mut H) {
             97u8.hash(hasher);
             repo_id.hash(hasher);
         }
+        PopoverKind::HistoryRefFilter { repo_id } => {
+            114u8.hash(hasher);
+            repo_id.hash(hasher);
+        }
+
+        PopoverKind::PullRequestMenu { repo_id, number } => {
+            116u8.hash(hasher);
+            repo_id.hash(hasher);
+            number.hash(hasher);
+        }
         PopoverKind::TerminalMenu { repo_id, context } => {
             72u8.hash(hasher);
             repo_id.hash(hasher);
@@ -929,6 +1081,11 @@ fn hash_repo_popover_kind<H: Hasher>(repo_id: RepoId, kind: &RepoPopoverKind, ha
                 repo_id.hash(hasher);
                 remote.hash(hasher);
                 branch.hash(hasher);
+            }
+            RemotePopoverKind::SshKeyPrompt { name } => {
+                34u8.hash(hasher);
+                repo_id.hash(hasher);
+                name.hash(hasher);
             }
         },
         RepoPopoverKind::Worktree(worktree_kind) => match worktree_kind {

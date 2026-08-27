@@ -6992,6 +6992,153 @@ fn checkout_remote_branch_creates_tracking_branch_when_missing_locally() {
 }
 
 #[test]
+fn checkout_pull_request_fetches_pr_ref_into_local_branch() {
+    if !require_git_shell_for_status_integration_tests() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let origin = dir.path().join("origin.git");
+    let seed = dir.path().join("seed");
+    let clone = dir.path().join("clone");
+    fs::create_dir_all(&origin).unwrap();
+    fs::create_dir_all(&seed).unwrap();
+
+    run_git(&origin, &["init", "--bare", "-b", "main"]);
+
+    run_git(&seed, &["init", "-b", "main"]);
+    run_git(&seed, &["config", "user.email", "you@example.com"]);
+    run_git(&seed, &["config", "user.name", "You"]);
+    run_git(&seed, &["config", "commit.gpgsign", "false"]);
+    write(&seed, "a.txt", "one\n");
+    run_git(&seed, &["add", "a.txt"]);
+    run_git(
+        &seed,
+        &["-c", "commit.gpgsign=false", "commit", "-m", "init"],
+    );
+    run_git(
+        &seed,
+        &["remote", "add", "origin", git_remote_url(&origin).as_str()],
+    );
+    run_git(&seed, &["push", "-u", "origin", "main"]);
+
+    // Simulate a GitHub pull request: refs/pull/7/head pointing at a commit
+    // that no branch carries (the PR author's pushed tip).
+    run_git(&seed, &["checkout", "-b", "pr-work"]);
+    write(&seed, "pr.txt", "pull request change\n");
+    run_git(&seed, &["add", "pr.txt"]);
+    run_git(
+        &seed,
+        &["-c", "commit.gpgsign=false", "commit", "-m", "pr change"],
+    );
+    run_git(&seed, &["push", "origin", "pr-work"]);
+    let pr_tip = run_git_output(&seed, &["rev-parse", "HEAD"]);
+    run_git(&origin, &["update-ref", "refs/pull/7/head", &pr_tip]);
+
+    run_git(
+        dir.path(),
+        &[
+            "clone",
+            git_remote_url(&origin).as_str(),
+            git_path_arg(&clone).as_str(),
+        ],
+    );
+
+    let backend = GixBackend;
+    let opened = backend.open(&clone).unwrap();
+    opened.checkout_pull_request("origin", 7).unwrap();
+
+    let head = run_git_output(&clone, &["rev-parse", "--abbrev-ref", "HEAD"]);
+    assert_eq!(head, "pr/7");
+    let local_tip = run_git_output(&clone, &["rev-parse", "pr/7"]);
+    assert_eq!(local_tip, pr_tip);
+    assert!(clone.join("pr.txt").exists());
+}
+
+#[test]
+fn checkout_pull_request_reuses_existing_local_branch_without_moving_it() {
+    if !require_git_shell_for_status_integration_tests() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let origin = dir.path().join("origin.git");
+    let seed = dir.path().join("seed");
+    let clone = dir.path().join("clone");
+    fs::create_dir_all(&origin).unwrap();
+    fs::create_dir_all(&seed).unwrap();
+
+    run_git(&origin, &["init", "--bare", "-b", "main"]);
+
+    run_git(&seed, &["init", "-b", "main"]);
+    run_git(&seed, &["config", "user.email", "you@example.com"]);
+    run_git(&seed, &["config", "user.name", "You"]);
+    run_git(&seed, &["config", "commit.gpgsign", "false"]);
+    write(&seed, "a.txt", "one\n");
+    run_git(&seed, &["add", "a.txt"]);
+    run_git(
+        &seed,
+        &["-c", "commit.gpgsign=false", "commit", "-m", "init"],
+    );
+    run_git(
+        &seed,
+        &["remote", "add", "origin", git_remote_url(&origin).as_str()],
+    );
+    run_git(&seed, &["push", "-u", "origin", "main"]);
+    let main_tip = run_git_output(&seed, &["rev-parse", "main"]);
+
+    let pr_tip_sha = {
+        run_git(&seed, &["checkout", "-b", "pr-work"]);
+        write(&seed, "pr.txt", "pull request change\n");
+        run_git(&seed, &["add", "pr.txt"]);
+        run_git(
+            &seed,
+            &["-c", "commit.gpgsign=false", "commit", "-m", "pr change"],
+        );
+        let tip = run_git_output(&seed, &["rev-parse", "HEAD"]);
+        run_git(&seed, &["push", "origin", "pr-work"]);
+        run_git(&origin, &["update-ref", "refs/pull/7/head", &tip]);
+        tip
+    };
+
+    run_git(
+        dir.path(),
+        &[
+            "clone",
+            git_remote_url(&origin).as_str(),
+            git_path_arg(&clone).as_str(),
+        ],
+    );
+
+    // A previous checkout already created pr/7 — at the PR tip, with the
+    // user's own review commit on top of it.
+    run_git(&clone, &["config", "user.email", "you@example.com"]);
+    run_git(&clone, &["config", "user.name", "You"]);
+    run_git(&clone, &["config", "commit.gpgsign", "false"]);
+    run_git(&clone, &["fetch", "origin", "refs/pull/7/head"]);
+    run_git(&clone, &["checkout", "-b", "pr/7", "FETCH_HEAD"]);
+    write(&clone, "review.txt", "review note\n");
+    run_git(&clone, &["add", "review.txt"]);
+    run_git(
+        &clone,
+        &["-c", "commit.gpgsign=false", "commit", "-m", "review"],
+    );
+    let review_tip = run_git_output(&clone, &["rev-parse", "HEAD"]);
+    run_git(&clone, &["checkout", "main"]);
+
+    let backend = GixBackend;
+    let opened = backend.open(&clone).unwrap();
+    opened.checkout_pull_request("origin", 7).unwrap();
+
+    let head = run_git_output(&clone, &["rev-parse", "--abbrev-ref", "HEAD"]);
+    assert_eq!(head, "pr/7");
+    let branch_tip = run_git_output(&clone, &["rev-parse", "pr/7"]);
+    assert_eq!(
+        branch_tip, review_tip,
+        "an existing pr/<N> branch keeps the user's commits; the PR tip is not force-moved"
+    );
+    assert_ne!(branch_tip, main_tip);
+}
+
+#[test]
 fn checkout_remote_branch_existing_local_branch_updates_upstream_and_checks_out() {
     if !require_git_shell_for_status_integration_tests() {
         return;
@@ -7704,7 +7851,7 @@ fn stash_create_list_apply_and_drop_work() {
     let backend = GixBackend;
     let opened = backend.open(repo).unwrap();
 
-    opened.stash_create("wip", false).unwrap();
+    opened.stash_create("wip", false, false, &[]).unwrap();
     assert_eq!(fs::read_to_string(repo.join("a.txt")).unwrap(), "one\n");
 
     let stashes = opened.stash_list().unwrap();
@@ -7721,6 +7868,237 @@ fn stash_create_list_apply_and_drop_work() {
     opened.stash_drop(0).unwrap();
     let stashes = opened.stash_list().unwrap();
     assert!(stashes.is_empty());
+}
+
+#[test]
+fn stash_create_with_paths_stashes_only_those_paths() {
+    if !require_git_shell_for_status_integration_tests() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path();
+
+    run_git(repo, &["init"]);
+    run_git(repo, &["config", "user.email", "you@example.com"]);
+    run_git(repo, &["config", "user.name", "You"]);
+    run_git(repo, &["config", "commit.gpgsign", "false"]);
+
+    write(repo, "a.txt", "one\n");
+    write(repo, "b.txt", "bee\n");
+    run_git(repo, &["add", "a.txt", "b.txt"]);
+    run_git(
+        repo,
+        &["-c", "commit.gpgsign=false", "commit", "-m", "init"],
+    );
+
+    write(repo, "a.txt", "one\ntwo\n");
+    write(repo, "b.txt", "bee\ntwo\n");
+
+    let backend = GixBackend;
+    let opened = backend.open(repo).unwrap();
+
+    let paths = [std::path::PathBuf::from("a.txt")];
+    opened.stash_create("only-a", false, false, &paths).unwrap();
+
+    // a.txt was stashed back to its committed contents; b.txt kept its edit.
+    assert_eq!(fs::read_to_string(repo.join("a.txt")).unwrap(), "one\n");
+    assert_eq!(
+        fs::read_to_string(repo.join("b.txt")).unwrap(),
+        "bee\ntwo\n"
+    );
+
+    let stashes = opened.stash_list().unwrap();
+    assert_eq!(stashes.len(), 1);
+    assert!(stashes[0].message.contains("only-a"));
+}
+
+#[test]
+fn stash_create_keep_index_leaves_staged_changes_in_the_worktree() {
+    if !require_git_shell_for_status_integration_tests() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path();
+
+    run_git(repo, &["init"]);
+    run_git(repo, &["config", "user.email", "you@example.com"]);
+    run_git(repo, &["config", "user.name", "You"]);
+    run_git(repo, &["config", "commit.gpgsign", "false"]);
+
+    write(repo, "a.txt", "one\n");
+    run_git(repo, &["add", "a.txt"]);
+    run_git(
+        repo,
+        &["-c", "commit.gpgsign=false", "commit", "-m", "init"],
+    );
+
+    write(repo, "a.txt", "one\nstaged\n");
+    run_git(repo, &["add", "a.txt"]);
+    write(repo, "a.txt", "one\nstaged\nworktree\n");
+
+    let backend = GixBackend;
+    let opened = backend.open(repo).unwrap();
+
+    opened.stash_create("keep", false, true, &[]).unwrap();
+
+    // --keep-index: the staged half of the change stays in the worktree and
+    // the index; only the unstaged remainder was stashed away.
+    assert_eq!(
+        fs::read_to_string(repo.join("a.txt")).unwrap(),
+        "one\nstaged\n"
+    );
+    let staged_diff = run_git_output(repo, &["diff", "--cached", "--name-only"]);
+    assert_eq!(staged_diff.trim(), "a.txt");
+}
+
+#[test]
+fn stash_branch_checks_out_new_branch_applies_and_drops() {
+    if !require_git_shell_for_status_integration_tests() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path();
+
+    run_git(repo, &["init"]);
+    run_git(repo, &["config", "user.email", "you@example.com"]);
+    run_git(repo, &["config", "user.name", "You"]);
+    run_git(repo, &["config", "commit.gpgsign", "false"]);
+
+    write(repo, "a.txt", "one\n");
+    run_git(repo, &["add", "a.txt"]);
+    run_git(
+        repo,
+        &["-c", "commit.gpgsign=false", "commit", "-m", "init"],
+    );
+
+    write(repo, "a.txt", "one\ntwo\n");
+    let backend = GixBackend;
+    let opened = backend.open(repo).unwrap();
+    opened.stash_create("wip", false, false, &[]).unwrap();
+
+    opened.stash_branch("recover-wip", 0).unwrap();
+
+    let branch = run_git_output(repo, &["rev-parse", "--abbrev-ref", "HEAD"]);
+    assert_eq!(branch.trim(), "recover-wip");
+    // The stash was applied onto the new branch and dropped on success.
+    assert_eq!(
+        fs::read_to_string(repo.join("a.txt")).unwrap(),
+        "one\ntwo\n"
+    );
+    assert!(opened.stash_list().unwrap().is_empty());
+}
+
+#[test]
+fn stash_branch_rejects_option_like_branch_names() {
+    if !require_git_shell_for_status_integration_tests() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path();
+
+    run_git(repo, &["init"]);
+    run_git(repo, &["config", "user.email", "you@example.com"]);
+    run_git(repo, &["config", "user.name", "You"]);
+    run_git(repo, &["config", "commit.gpgsign", "false"]);
+
+    write(repo, "a.txt", "one\n");
+    run_git(repo, &["add", "a.txt"]);
+    run_git(
+        repo,
+        &["-c", "commit.gpgsign=false", "commit", "-m", "init"],
+    );
+
+    let backend = GixBackend;
+    let opened = backend.open(repo).unwrap();
+
+    let err = opened
+        .stash_branch("--force", 0)
+        .expect_err("option-like branch name must be rejected");
+    assert!(
+        err.to_string().contains("invalid branch name"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn archive_zip_writes_revision_snapshot() {
+    if !require_git_shell_for_status_integration_tests() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path();
+
+    run_git(repo, &["init"]);
+    run_git(repo, &["config", "user.email", "you@example.com"]);
+    run_git(repo, &["config", "user.name", "You"]);
+    run_git(repo, &["config", "commit.gpgsign", "false"]);
+
+    write(repo, "a.txt", "one\n");
+    run_git(repo, &["add", "a.txt"]);
+    run_git(
+        repo,
+        &["-c", "commit.gpgsign=false", "commit", "-m", "init"],
+    );
+    write(repo, "b.txt", "two\n");
+    run_git(repo, &["add", "b.txt"]);
+    run_git(
+        repo,
+        &["-c", "commit.gpgsign=false", "commit", "-m", "add b"],
+    );
+    run_git(repo, &["tag", "v1.0"]);
+
+    let backend = GixBackend;
+    let opened = backend.open(repo).unwrap();
+
+    // A full sha addresses the first commit's tree.
+    let first_sha = run_git_output(repo, &["rev-parse", "HEAD~1"]);
+    let zip_head = dir.path().join("head.zip");
+    opened
+        .archive_zip_with_output(first_sha.trim(), &zip_head)
+        .unwrap();
+    let bytes = fs::read(&zip_head).unwrap();
+    assert!(
+        bytes.starts_with(b"PK\x03\x04"),
+        "expected a zip local-file header"
+    );
+    assert!(bytes.len() > 100, "suspiciously small archive");
+
+    // A tag name addresses the same content through a ref.
+    let zip_tag = dir.path().join("tag.zip");
+    opened.archive_zip_with_output("v1.0", &zip_tag).unwrap();
+    assert!(fs::read(&zip_tag).unwrap().starts_with(b"PK\x03\x04"));
+}
+
+#[test]
+fn archive_zip_rejects_option_like_revisions() {
+    if !require_git_shell_for_status_integration_tests() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path();
+
+    run_git(repo, &["init"]);
+    run_git(repo, &["config", "user.email", "you@example.com"]);
+    run_git(repo, &["config", "user.name", "You"]);
+    run_git(repo, &["config", "commit.gpgsign", "false"]);
+
+    write(repo, "a.txt", "one\n");
+    run_git(repo, &["add", "a.txt"]);
+    run_git(
+        repo,
+        &["-c", "commit.gpgsign=false", "commit", "-m", "init"],
+    );
+
+    let backend = GixBackend;
+    let opened = backend.open(repo).unwrap();
+
+    let err = opened
+        .archive_zip_with_output("--output=/tmp/evil", dir.path().join("out.zip").as_path())
+        .expect_err("option-like revision must be rejected");
+    assert!(
+        err.to_string().contains("invalid revision"),
+        "unexpected error: {err}"
+    );
 }
 
 #[test]
@@ -7747,7 +8125,7 @@ fn stash_apply_conflict_is_mergeable() {
     let opened = backend.open(repo).unwrap();
 
     write(repo, "a.txt", "base\nstash-change\n");
-    opened.stash_create("wip", false).unwrap();
+    opened.stash_create("wip", false, false, &[]).unwrap();
 
     write(repo, "a.txt", "base\nbranch-change\n");
     run_git(repo, &["add", "a.txt"]);
@@ -7813,7 +8191,7 @@ fn stash_apply_still_errors_when_merge_does_not_start() {
     let opened = backend.open(repo).unwrap();
 
     write(repo, "a.txt", "base\nstash-change\n");
-    opened.stash_create("wip", false).unwrap();
+    opened.stash_create("wip", false, false, &[]).unwrap();
 
     write(repo, "a.txt", "base\nlocal-uncommitted-change\n");
 
@@ -7865,7 +8243,7 @@ fn stash_apply_tracked_payload_overwriting_untracked_file_is_worktree_overwrite(
 
     write(repo, "new.txt", "from stash\n");
     run_git(repo, &["add", "new.txt"]);
-    opened.stash_create("wip", false).unwrap();
+    opened.stash_create("wip", false, false, &[]).unwrap();
 
     write(repo, "new.txt", "local untracked\n");
 
@@ -7920,7 +8298,7 @@ fn stash_apply_staged_overlap_still_merges_into_conflict() {
     let opened = backend.open(repo).unwrap();
 
     write(repo, "a.txt", "base\nstash-change\n");
-    opened.stash_create("wip", false).unwrap();
+    opened.stash_create("wip", false, false, &[]).unwrap();
 
     write(repo, "a.txt", "base\nlocal-staged-change\n");
     run_git(repo, &["add", "a.txt"]);
@@ -7965,7 +8343,7 @@ fn stash_apply_allows_merge_when_only_untracked_restore_fails() {
 
     write(repo, "a.txt", "base\nstash-change\n");
     write(repo, "Cargo.toml.orig", "from stash\n");
-    opened.stash_create("wip", true).unwrap();
+    opened.stash_create("wip", true, false, &[]).unwrap();
 
     // Existing untracked file blocks restoration of untracked payload from stash.
     write(repo, "Cargo.toml.orig", "local copy\n");
@@ -8034,7 +8412,7 @@ fn stash_apply_preserves_original_error_when_untracked_merge_markers_fail() {
     let opened = backend.open(repo).unwrap();
 
     write(repo, "Cargo.toml.orig", "from stash\n");
-    opened.stash_create("wip", true).unwrap();
+    opened.stash_create("wip", true, false, &[]).unwrap();
 
     let local_binary = b"\xff\xfe\x00\x80";
     write(repo, "Cargo.toml.orig", local_binary);
@@ -8083,7 +8461,7 @@ fn stash_apply_allows_untracked_restore_failure_when_stash_has_tracked_payload()
     // Stash contains tracked and untracked payload.
     write(repo, "a.txt", "base\nstash-change\n");
     write(repo, "Cargo.toml.orig", "from stash\n");
-    opened.stash_create("wip", true).unwrap();
+    opened.stash_create("wip", true, false, &[]).unwrap();
 
     // Apply the same tracked change on the branch first, so stash apply has no
     // tracked-status delta even though stash had tracked payload.
@@ -8166,7 +8544,7 @@ fn stash_apply_merges_when_only_untracked_restore_fails_without_tracked_changes(
     let opened = backend.open(repo).unwrap();
 
     write(repo, "Cargo.toml.orig", "from stash\n");
-    opened.stash_create("wip", true).unwrap();
+    opened.stash_create("wip", true, false, &[]).unwrap();
 
     write(repo, "Cargo.toml.orig", "local copy\n");
 
@@ -8221,10 +8599,10 @@ fn stash_list_reports_reflog_indices_for_drop() {
     write(repo, "a.txt", "one\ntwo\n");
     let backend = GixBackend;
     let opened = backend.open(repo).unwrap();
-    opened.stash_create("wip-1", false).unwrap();
+    opened.stash_create("wip-1", false, false, &[]).unwrap();
 
     write(repo, "a.txt", "one\nthree\n");
-    opened.stash_create("wip-2", false).unwrap();
+    opened.stash_create("wip-2", false, false, &[]).unwrap();
 
     let stashes = opened.stash_list().unwrap();
     assert_eq!(stashes.len(), 2);
@@ -9797,4 +10175,115 @@ fn conflict_session_deleted_by_them_keep_ours_resolves_conflict() {
             .any(|e| e.path == Path::new("a.txt") && e.kind == FileStatusKind::Conflicted),
         "a.txt should no longer be conflicted after keeping ours"
     );
+}
+
+#[test]
+fn remote_ssh_key_set_and_clear_round_trip() {
+    if !require_git_shell_for_status_integration_tests() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path();
+
+    run_git(repo, &["init"]);
+    run_git(repo, &["config", "user.email", "you@example.com"]);
+    run_git(repo, &["config", "user.name", "You"]);
+
+    let backend = GixBackend;
+    let opened = backend.open(repo).unwrap();
+
+    let key = dir.path().join("id_ed25519");
+    opened
+        .set_remote_ssh_key_with_output("origin", Some(key.to_str().unwrap()))
+        .unwrap();
+    assert_eq!(
+        run_git_output(repo, &["config", "--get", "remote.origin.sshkey"]),
+        key.to_str().unwrap()
+    );
+
+    // Clearing a configured key removes the config entry. `git config --get`
+    // exits 1 when unset, which run_git_output reports as failure.
+    opened.set_remote_ssh_key_with_output("origin", None).unwrap();
+    let cleared = git_command()
+        .arg("-C")
+        .arg(repo)
+        .args(["config", "--get", "remote.origin.sshkey"])
+        .output()
+        .expect("git command to run");
+    assert!(
+        !cleared.status.success(),
+        "sshkey config should be gone, got: {:?}",
+        String::from_utf8_lossy(&cleared.stdout)
+    );
+
+    // Clearing again when already unset is a no-op success.
+    opened.set_remote_ssh_key_with_output("origin", None).unwrap();
+}
+
+#[test]
+fn remote_ssh_key_rejects_option_like_paths() {
+    if !require_git_shell_for_status_integration_tests() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path();
+
+    run_git(repo, &["init"]);
+
+    let backend = GixBackend;
+    let opened = backend.open(repo).unwrap();
+
+    let err = opened
+        .set_remote_ssh_key_with_output("origin", Some("--global"))
+        .expect_err("option-like key path must be rejected");
+    assert!(
+        err.to_string().contains("invalid ssh key path"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn fetch_and_push_succeed_with_remote_ssh_key_configured() {
+    if !require_git_shell_for_status_integration_tests() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo");
+    let origin = dir.path().join("origin.git");
+    fs::create_dir_all(&repo).unwrap();
+    fs::create_dir_all(&origin).unwrap();
+
+    run_git(&repo, &["init", "-b", "main"]);
+    run_git(&repo, &["config", "user.email", "you@example.com"]);
+    run_git(&repo, &["config", "user.name", "You"]);
+    run_git(&repo, &["config", "commit.gpgsign", "false"]);
+
+    write(&repo, "a.txt", "one\n");
+    run_git(&repo, &["add", "a.txt"]);
+    run_git(
+        &repo,
+        &["-c", "commit.gpgsign=false", "commit", "-m", "init"],
+    );
+
+    run_git(&origin, &["init", "--bare", "-b", "main"]);
+    run_git(
+        &repo,
+        &["remote", "add", "origin", git_remote_url(&origin).as_str()],
+    );
+
+    let backend = GixBackend;
+    let opened = backend.open(&repo).unwrap();
+
+    // A file://-style local transport never consults ssh, so a configured
+    // key only proves the injection composes with these commands.
+    let key = dir.path().join("id_ed25519");
+    opened
+        .set_remote_ssh_key_with_output("origin", Some(key.to_str().unwrap()))
+        .unwrap();
+
+    opened.fetch_all_with_output_prune(false).unwrap();
+    opened.push_set_upstream_with_output("origin", "main").unwrap();
+    let remote_head = run_git_output(&origin, &["rev-parse", "HEAD"]);
+    let local_head = run_git_output(&repo, &["rev-parse", "HEAD"]);
+    assert_eq!(remote_head, local_head);
 }

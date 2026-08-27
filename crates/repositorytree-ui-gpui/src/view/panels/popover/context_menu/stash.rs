@@ -26,6 +26,15 @@ pub(super) fn model(repo_id: RepoId, index: usize, message: &str) -> ContextMenu
             disabled: false,
             action: Box::new(ContextMenuAction::PopStash { repo_id, index }),
         },
+        ContextMenuItem::Entry {
+            label: "Branch stash…".into(),
+            icon: Some("icons/git_branch.svg".into()),
+            shortcut: Some("B".into()),
+            disabled: false,
+            action: Box::new(ContextMenuAction::OpenPopover {
+                kind: PopoverKind::StashBranchPrompt { repo_id, index },
+            }),
+        },
         ContextMenuItem::Separator,
         ContextMenuItem::Entry {
             label: "Drop stash…".into(),

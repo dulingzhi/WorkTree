@@ -4,25 +4,31 @@ use repositorytree_core::services::InteractiveRebaseAction;
 mod add_repo_menu;
 mod add_to_gitignore_prompt;
 mod app_menu;
+mod assume_unchanged_manager;
 mod author_filter;
 mod branch_picker;
 mod checkout_remote_branch_prompt;
 mod cherry_pick_commit_confirm;
 mod clone_repo;
 mod commit_prompt;
+mod commit_search_picker;
 pub(in super::super) mod context_menu;
 mod create_branch_from_ref_prompt;
 mod create_tag_prompt;
 mod delete_branches_confirm;
 mod delete_remote_branch_confirm;
+mod discard_all_confirm;
 mod discard_changes_confirm;
 mod file_history;
 mod fingerprint;
 mod force_delete_branch_confirm;
 mod force_push_confirm;
 mod force_remove_worktree_confirm;
+mod history_ref_filter;
+mod hunk_explanation;
 mod merge_abort_confirm;
 mod merge_commit_confirm;
+mod merge_request_push;
 mod picker_nav;
 mod picker_row_menu;
 mod pull_reconcile_prompt;
@@ -30,7 +36,9 @@ mod push_set_upstream_prompt;
 mod rebase_onto_confirm;
 mod remote_add_prompt;
 mod remote_edit_url_prompt;
+mod remote_picker;
 mod remote_remove_confirm;
+mod remote_ssh_key_prompt;
 mod rename_branch_prompt;
 mod repo_picker;
 mod reset_prompt;
@@ -38,7 +46,9 @@ mod rows_cache;
 mod search_inputs;
 mod squash_prompt;
 mod stage_conflict_markers_confirm;
+mod statistics;
 mod stash_drop_confirm;
+mod stash_branch_prompt;
 mod stash_picker_prompt;
 mod stash_prompt;
 mod submodule_add_prompt;
@@ -47,6 +57,8 @@ mod submodule_picker;
 mod submodule_remove_confirm;
 mod submodule_trust_confirm;
 mod terminal_shutdown_confirm;
+pub(crate) mod undo_last_action;
+mod tag_picker;
 mod unsaved_file_edits_confirm;
 mod upstream_picker;
 mod workspace_picker;
@@ -115,6 +127,10 @@ const STASH_MENU_WIDTH: PopoverWidthSpec = PopoverWidthSpec::range(220.0, 180.0,
 /// names run long — "Firstname Middlename Lastname" truncates at the menu
 /// default.
 const HISTORY_AUTHOR_FILTER_WIDTH: PopoverWidthSpec = PopoverWidthSpec::range(320.0, 240.0, 420.0);
+/// Remote branch rows carry `remote/feature/…` names, which run longer than
+/// local ones; the range lets narrow windows take the scroll instead of
+/// truncating every row.
+const HISTORY_REF_FILTER_WIDTH: PopoverWidthSpec = PopoverWidthSpec::range(420.0, 320.0, 540.0);
 const REPO_TAB_MENU_WIDTH: PopoverWidthSpec = PopoverWidthSpec::fixed(360.0);
 const PICKER_WIDTH: PopoverWidthSpec = PopoverWidthSpec::range(420.0, 420.0, 820.0);
 const LARGE_PICKER_WIDTH: PopoverWidthSpec = PopoverWidthSpec::range(520.0, 520.0, 820.0);
@@ -169,6 +185,9 @@ pub(in super::super) struct PopoverHost {
     _workspace_picker_search_input_subscription: Option<gpui::Subscription>,
     _upstream_picker_search_input_subscription: Option<gpui::Subscription>,
     _submodule_picker_search_input_subscription: Option<gpui::Subscription>,
+    _remote_picker_search_input_subscription: Option<gpui::Subscription>,
+    _tag_picker_search_input_subscription: Option<gpui::Subscription>,
+    _commit_search_picker_search_input_subscription: Option<gpui::Subscription>,
     _file_history_search_input_subscription: Option<gpui::Subscription>,
     _history_author_filter_search_input_subscription: Option<gpui::Subscription>,
     _squash_message_input_subscription: gpui::Subscription,
@@ -205,6 +224,24 @@ pub(in super::super) struct PopoverHost {
     /// merge-commit cherry-pick confirmation. Reset every time that dialog
     /// opens; drafts are intentionally session-local.
     cherry_pick_mainline: Option<usize>,
+    /// Period tab shown by the statistics popover. View-local rather than a
+    /// `PopoverKind` field so switching tabs doesn't reopen the popover (which
+    /// would refocus and re-request data); reset to Week on open.
+    statistics_period: statistics::StatisticsPeriod,
+    /// Reset mode chosen in the undo prompt, once the user departs from the
+    /// plan's suggestion. `None` until then; reset on open.
+    undo_reset_mode: Option<ResetMode>,
+    /// The diff view's pending (or landed) AI explanation, paired with the
+    /// hunk snapshot it was requested against. Reset on open; every open
+    /// starts a fresh request.
+    hunk_explanation: Option<hunk_explanation::HunkExplanation>,
+    /// Test seams standing in for the network call test builds cannot make:
+    /// how many explanation requests were driven, and the patch the last one
+    /// carried.
+    #[cfg(test)]
+    hunk_explanation_test_requests: usize,
+    #[cfg(test)]
+    hunk_explanation_test_last_patch: Option<String>,
     context_menu_focus_handle: FocusHandle,
     /// Focus held by the App/Add Repository menu invoker, restored when that
     /// menu is dismissed without replacing it with another prompt.
@@ -245,6 +282,9 @@ pub(in super::super) struct PopoverHost {
     /// open from elsewhere still starts blank.
     pending_worktree_add_prefill: Option<(String, String)>,
     submodule_picker_selected_index: Option<usize>,
+    remote_picker_selected_index: Option<usize>,
+    tag_picker_selected_index: Option<usize>,
+    commit_search_picker_selected_index: Option<usize>,
     file_history_selected_index: Option<usize>,
     history_author_filter_selected_index: Option<usize>,
     /// Author suggestions for the history author filter, keyed by repository and
@@ -264,6 +304,10 @@ pub(in super::super) struct PopoverHost {
     stash_picker_rows_cache: rows_cache::RowsCache<stash_picker_prompt::StashRow>,
     file_history_rows_cache: rows_cache::RowsCache<CommitId>,
     submodule_picker_rows_cache: rows_cache::RowsCache<std::path::PathBuf>,
+    remote_picker_rows_cache: rows_cache::RowsCache<remote_picker::RemotePickerRow>,
+    tag_picker_rows_cache: rows_cache::RowsCache<String>,
+    commit_search_picker_rows_cache:
+        rows_cache::RowsCache<commit_search_picker::CommitSearchPickerRow>,
     worktree_picker_rows_cache: rows_cache::RowsCache<std::path::PathBuf>,
     branch_ref_rows_cache: rows_cache::RowsCache<String>,
 
@@ -276,6 +320,8 @@ pub(in super::super) struct PopoverHost {
     workspace_picker_search_input: Option<Entity<components::TextInput>>,
     upstream_picker_search_input: Option<Entity<components::TextInput>>,
     submodule_picker_search_input: Option<Entity<components::TextInput>>,
+    tag_picker_search_input: Option<Entity<components::TextInput>>,
+    commit_search_picker_search_input: Option<Entity<components::TextInput>>,
     picker_prompt_scroll: ScrollHandle,
 
     clone_repo_url_input: Entity<components::TextInput>,
@@ -311,6 +357,7 @@ pub(in super::super) struct PopoverHost {
     remote_name_input: Entity<components::TextInput>,
     remote_url_input: Entity<components::TextInput>,
     remote_url_edit_input: Entity<components::TextInput>,
+    remote_ssh_key_input: Entity<components::TextInput>,
     create_branch_input: Entity<components::TextInput>,
     create_branch_checkout_enabled: bool,
     create_branch_source_target: String,
@@ -327,6 +374,23 @@ pub(in super::super) struct PopoverHost {
     checkout_remote_branch_focus: DialogFocus,
     stash_message_input: Entity<components::TextInput>,
     stash_focus: DialogFocus,
+    /// Stash prompt option rows. Defaults re-applied every time the prompt
+    /// opens, so an earlier stash never leak its options into the next one.
+    stash_include_untracked: bool,
+    stash_keep_index: bool,
+    stash_include_untracked_focus_handle: FocusHandle,
+    stash_keep_index_focus_handle: FocusHandle,
+    /// Merge-request push prompt state. Like the stash options, defaults are
+    /// re-applied every time the prompt opens; `merge_request.create` itself
+    /// is implicit — the dialog exists to create one.
+    mr_push_target_input: Entity<components::TextInput>,
+    mr_push_merge_when_pipeline_succeeds: bool,
+    mr_push_remove_source_branch: bool,
+    mr_push_push_to_mr_branch: bool,
+    mr_push_pipeline_focus_handle: FocusHandle,
+    mr_push_remove_source_focus_handle: FocusHandle,
+    mr_push_mr_branch_focus_handle: FocusHandle,
+    stash_branch_focus: DialogFocus,
     stash_picker_prompt_selected_index: Option<usize>,
     stash_picker_search_input: Option<Entity<components::TextInput>>,
     _stash_picker_search_input_subscription: Option<gpui::Subscription>,
@@ -342,6 +406,8 @@ pub(in super::super) struct PopoverHost {
     create_tag_focus: DialogFocus,
     remote_add_focus: DialogFocus,
     remote_edit_focus: DialogFocus,
+    remote_ssh_key_focus: DialogFocus,
+    remote_ssh_key_clear_focus: FocusHandle,
     push_upstream_focus: DialogFocus,
     worktree_browse_focus_handle: FocusHandle,
     worktree_focus: DialogFocus,
@@ -485,6 +551,7 @@ fn popover_is_context_menu(kind: &PopoverKind) -> bool {
             | PopoverKind::ReflogEntryMenu { .. }
             | PopoverKind::TagMenu { .. }
             | PopoverKind::TagRefMenu { .. }
+            | PopoverKind::PullRequestMenu { .. }
             | PopoverKind::StatusFileMenu { .. }
             | PopoverKind::BranchMenu { .. }
             | PopoverKind::BranchSectionMenu { .. }
@@ -529,9 +596,11 @@ fn popover_is_confirm_dialog(kind: &PopoverKind) -> bool {
             | PopoverKind::DeleteBranchesConfirm { .. }
             | PopoverKind::ForceRemoveWorktreeConfirm { .. }
             | PopoverKind::DiscardChangesConfirm { .. }
+            | PopoverKind::DiscardAllConfirm { .. }
             | PopoverKind::AddToGitignorePrompt { .. }
             | PopoverKind::StageConflictMarkersConfirm { .. }
             | PopoverKind::ResetPrompt { .. }
+            | PopoverKind::UndoLastActionPrompt { .. }
             | PopoverKind::PullReconcilePrompt { .. }
             | PopoverKind::TerminalShutdownConfirm(_)
             | PopoverKind::UnsavedFileEditsConfirm(_)
@@ -773,7 +842,7 @@ fn popover_anchor_corner(kind: &PopoverKind) -> Anchor {
         | PopoverKind::PushPicker
         | PopoverKind::CreateBranchFromRefPrompt { .. }
         | PopoverKind::RenameBranchPrompt { .. }
-        | PopoverKind::StashPrompt
+        | PopoverKind::StashPrompt { .. }
         | PopoverKind::StashDropConfirm { .. }
         | PopoverKind::CloneRepo
         | PopoverKind::ResetPrompt { .. }
@@ -783,7 +852,8 @@ fn popover_anchor_corner(kind: &PopoverKind) -> Anchor {
                 RepoPopoverKind::Remote(
                     RemotePopoverKind::AddPrompt
                     | RemotePopoverKind::EditUrlPrompt { .. }
-                    | RemotePopoverKind::RemoveConfirm { .. },
+                    | RemotePopoverKind::RemoveConfirm { .. }
+                    | RemotePopoverKind::SshKeyPrompt { .. },
                 ),
             ..
         }
@@ -811,6 +881,8 @@ fn popover_anchor_corner(kind: &PopoverKind) -> Anchor {
         }
         | PopoverKind::PushSetUpstreamPrompt { .. }
         | PopoverKind::ForcePushConfirm { .. }
+        | PopoverKind::MergeRequestPushPrompt { .. }
+        | PopoverKind::UndoLastActionPrompt { .. }
         | PopoverKind::CherryPickCommitConfirm { .. }
         | PopoverKind::MergeCommitConfirm { .. }
         | PopoverKind::MergeAbortConfirm { .. }
@@ -826,6 +898,7 @@ fn popover_anchor_corner(kind: &PopoverKind) -> Anchor {
         | PopoverKind::MergetoolSettingsMenu
         | PopoverKind::HistoryBranchFilter { .. }
         | PopoverKind::HistoryAuthorFilter { .. }
+        | PopoverKind::HistoryRefFilter { .. }
         | PopoverKind::DiffContentModeSettings
         | PopoverKind::ChangeTrackingSettings
         | PopoverKind::TerminalMenu { .. }
@@ -838,18 +911,32 @@ pub(in super::super) fn popover_width_spec(kind: &PopoverKind) -> Option<Popover
     match kind {
         PopoverKind::RepoPicker
         | PopoverKind::BranchPicker {
-            purpose: BranchPickerPurpose::Delete | BranchPickerPurpose::RebaseOnto,
+            purpose:
+                BranchPickerPurpose::Delete
+                | BranchPickerPurpose::Merge
+                | BranchPickerPurpose::RebaseOnto,
         }
+        | PopoverKind::RemotePicker { .. }
+        | PopoverKind::DeleteTagPicker { .. }
+        | PopoverKind::CommitSearchPicker { .. }
         | PopoverKind::UpstreamPicker { .. } => Some(PICKER_WIDTH),
         PopoverKind::BranchPicker {
             purpose: BranchPickerPurpose::Checkout,
         } => Some(LARGE_PICKER_WIDTH),
-        PopoverKind::StashPrompt
+        PopoverKind::StashPrompt { .. }
+        | PopoverKind::StashBranchPrompt { .. }
         | PopoverKind::CommitPrompt { .. }
         | PopoverKind::StashPickerPrompt { .. }
         | PopoverKind::CloneRepo
         | PopoverKind::CreateTagPrompt { .. }
         | PopoverKind::SquashPrompt { .. } => Some(DIALOG_420_WIDTH),
+        PopoverKind::MergeRequestPushPrompt { .. } => Some(DIALOG_440_WIDTH),
+        PopoverKind::UndoLastActionPrompt { .. } => Some(DIALOG_440_WIDTH),
+        PopoverKind::AssumeUnchangedManager { .. } => Some(DIALOG_540_WIDTH),
+        PopoverKind::Statistics { .. } => Some(DIALOG_540_WIDTH),
+        // The explanation reads like prose, not a form; give it the wide
+        // dialog so a normal paragraph wraps once, not three times.
+        PopoverKind::HunkExplanation { .. } => Some(DIALOG_540_WIDTH),
         PopoverKind::CreateBranchFromRefPrompt { .. }
         | PopoverKind::RenameBranchPrompt { .. }
         | PopoverKind::CheckoutRemoteBranchPrompt { .. } => Some(DIALOG_540_WIDTH),
@@ -874,6 +961,7 @@ pub(in super::super) fn popover_width_spec(kind: &PopoverKind) -> Option<Popover
         | PopoverKind::ForceDeleteBranchConfirm { .. }
         | PopoverKind::DeleteBranchesConfirm { .. }
         | PopoverKind::DiscardChangesConfirm { .. }
+        | PopoverKind::DiscardAllConfirm { .. }
         | PopoverKind::StageConflictMarkersConfirm { .. } => Some(DIALOG_420_WIDTH),
         PopoverKind::PushSetUpstreamPrompt { .. } => Some(DIALOG_320_WIDTH),
         PopoverKind::ResetPrompt { .. }
@@ -888,7 +976,9 @@ pub(in super::super) fn popover_width_spec(kind: &PopoverKind) -> Option<Popover
         PopoverKind::Repo {
             kind:
                 RepoPopoverKind::Remote(
-                    RemotePopoverKind::AddPrompt | RemotePopoverKind::EditUrlPrompt { .. },
+                    RemotePopoverKind::AddPrompt
+                        | RemotePopoverKind::EditUrlPrompt { .. }
+                        | RemotePopoverKind::SshKeyPrompt { .. },
                 ),
             ..
         }
@@ -950,6 +1040,7 @@ pub(in super::super) fn popover_width_spec(kind: &PopoverKind) -> Option<Popover
         | PopoverKind::PreviousCommitMessagesMenu { .. }
         | PopoverKind::TagMenu { .. }
         | PopoverKind::TagRefMenu { .. }
+        | PopoverKind::PullRequestMenu { .. }
         | PopoverKind::StatusFileMenu { .. }
         | PopoverKind::BranchMenu { .. }
         | PopoverKind::BranchSectionMenu { .. }
@@ -985,6 +1076,7 @@ pub(in super::super) fn popover_width_spec(kind: &PopoverKind) -> Option<Popover
         | PopoverKind::UiScalePicker
         | PopoverKind::DiffHunkMenu { .. } => Some(NARROW_CONTEXT_MENU_WIDTH),
         PopoverKind::HistoryAuthorFilter { .. } => Some(HISTORY_AUTHOR_FILTER_WIDTH),
+        PopoverKind::HistoryRefFilter { .. } => Some(HISTORY_REF_FILTER_WIDTH),
         PopoverKind::ChangeTrackingSettings => Some(CHANGE_TRACKING_MENU_WIDTH),
         PopoverKind::DiffEditorMenu { .. } => Some(DIFF_EDITOR_MENU_WIDTH),
         PopoverKind::ConflictResolverInputRowMenu { .. } => Some(CONFLICT_INPUT_MENU_WIDTH),
@@ -1314,6 +1406,17 @@ impl PopoverHost {
             )
         });
 
+        let remote_ssh_key_input = cx.new(|cx| {
+            components::TextInput::new(
+                components::TextInputOptions {
+                    placeholder: "~/.ssh/id_ed25519".into(),
+                    ..Default::default()
+                },
+                window,
+                cx,
+            )
+        });
+
         let create_branch_input = cx.new(|cx| {
             components::TextInput::new(
                 components::TextInputOptions {
@@ -1329,6 +1432,17 @@ impl PopoverHost {
             components::TextInput::new(
                 components::TextInputOptions {
                     placeholder: crate::i18n::tr("ui.placeholder.stash_message"),
+                    ..Default::default()
+                },
+                window,
+                cx,
+            )
+        });
+
+        let mr_push_target_input = cx.new(|cx| {
+            components::TextInput::new(
+                components::TextInputOptions {
+                    placeholder: crate::i18n::tr("ui.placeholder.mr_push_target"),
                     ..Default::default()
                 },
                 window,
@@ -1532,6 +1646,7 @@ impl PopoverHost {
                     Some(PopoverKind::CreateBranchFromRefPrompt { .. })
                         | Some(PopoverKind::RenameBranchPrompt { .. })
                         | Some(PopoverKind::CheckoutRemoteBranchPrompt { .. })
+                        | Some(PopoverKind::StashBranchPrompt { .. })
                 )
             },
             |this, window, cx| {
@@ -1542,6 +1657,8 @@ impl PopoverHost {
                     this.submit_create_branch(window, cx);
                 } else if matches!(this.popover, Some(PopoverKind::RenameBranchPrompt { .. })) {
                     this.submit_rename_branch(window, cx);
+                } else if matches!(this.popover, Some(PopoverKind::StashBranchPrompt { .. })) {
+                    this.submit_stash_branch(window, cx);
                 } else {
                     this.submit_checkout_remote_branch(cx);
                 }
@@ -1551,8 +1668,15 @@ impl PopoverHost {
             &stash_message_input,
             window,
             cx,
-            |this| matches!(this.popover, Some(PopoverKind::StashPrompt)),
+            |this| matches!(this.popover, Some(PopoverKind::StashPrompt { .. })),
             |this, window, cx| this.submit_stash(window, cx),
+        ));
+        prompt_input_subscriptions.push(Self::prompt_enter_subscription(
+            &mr_push_target_input,
+            window,
+            cx,
+            |this| matches!(this.popover, Some(PopoverKind::MergeRequestPushPrompt { .. })),
+            |this, window, cx| this.submit_mr_push(window, cx),
         ));
         prompt_input_subscriptions.push(Self::prompt_enter_subscription(
             &submodule_ref_input,
@@ -1602,6 +1726,21 @@ impl PopoverHost {
                 )
             },
             |this, _window, cx| this.submit_remote_edit_url(cx),
+        ));
+        prompt_input_subscriptions.push(Self::prompt_enter_subscription(
+            &remote_ssh_key_input,
+            window,
+            cx,
+            |this| {
+                matches!(
+                    this.popover,
+                    Some(PopoverKind::Repo {
+                        kind: RepoPopoverKind::Remote(RemotePopoverKind::SshKeyPrompt { .. }),
+                        ..
+                    })
+                )
+            },
+            |this, _window, cx| this.submit_remote_ssh_key(cx),
         ));
         prompt_input_subscriptions.push(Self::prompt_enter_subscription(
             &push_upstream_branch_input,
@@ -1661,6 +1800,12 @@ impl PopoverHost {
         let create_branch_from_ref_focus = DialogFocus::new(cx);
         let checkout_remote_branch_focus = DialogFocus::new(cx);
         let stash_focus = DialogFocus::new(cx);
+        let stash_include_untracked_focus_handle = cx.focus_handle().tab_index(0).tab_stop(true);
+        let stash_keep_index_focus_handle = cx.focus_handle().tab_index(0).tab_stop(true);
+        let mr_push_pipeline_focus_handle = cx.focus_handle().tab_index(0).tab_stop(true);
+        let mr_push_remove_source_focus_handle = cx.focus_handle().tab_index(0).tab_stop(true);
+        let mr_push_mr_branch_focus_handle = cx.focus_handle().tab_index(0).tab_stop(true);
+        let stash_branch_focus = DialogFocus::new(cx);
         let commit_prompt_focus = DialogFocus::new(cx);
         let clone_repo_browse_focus_handle = cx.focus_handle().tab_index(0).tab_stop(true);
         let squash_cancel_focus_handle = cx.focus_handle().tab_index(0).tab_stop(true);
@@ -1671,6 +1816,8 @@ impl PopoverHost {
         let create_tag_annotated_focus_handle = cx.focus_handle().tab_index(0).tab_stop(true);
         let remote_add_focus = DialogFocus::new(cx);
         let remote_edit_focus = DialogFocus::new(cx);
+        let remote_ssh_key_clear_focus = cx.focus_handle().tab_index(0).tab_stop(true);
+        let remote_ssh_key_focus = DialogFocus::new(cx);
         let push_upstream_focus = DialogFocus::new(cx);
         let worktree_browse_focus_handle = cx.focus_handle().tab_index(0).tab_stop(true);
         let worktree_focus = DialogFocus::new(cx);
@@ -1702,6 +1849,9 @@ impl PopoverHost {
             _workspace_picker_search_input_subscription: None,
             _upstream_picker_search_input_subscription: None,
             _submodule_picker_search_input_subscription: None,
+            _remote_picker_search_input_subscription: None,
+            _tag_picker_search_input_subscription: None,
+            _commit_search_picker_search_input_subscription: None,
             _file_history_search_input_subscription: None,
             _history_author_filter_search_input_subscription: None,
             _stash_picker_search_input_subscription: None,
@@ -1722,6 +1872,13 @@ impl PopoverHost {
             popover: None,
             popover_anchor: None,
             cherry_pick_mainline: None,
+            statistics_period: statistics::StatisticsPeriod::default(),
+            undo_reset_mode: None,
+            hunk_explanation: None,
+            #[cfg(test)]
+            hunk_explanation_test_requests: 0,
+            #[cfg(test)]
+            hunk_explanation_test_last_patch: None,
             context_menu_focus_handle,
             menu_invoker_focus: None,
             popover_opened_from_diff_panel: false,
@@ -1742,6 +1899,9 @@ impl PopoverHost {
             upstream_picker_selected_index: None,
             pending_worktree_add_prefill: None,
             submodule_picker_selected_index: None,
+            remote_picker_selected_index: None,
+            tag_picker_selected_index: None,
+            commit_search_picker_selected_index: None,
             file_history_selected_index: None,
             history_author_filter_selected_index: None,
             history_author_suggestions: None,
@@ -1752,6 +1912,9 @@ impl PopoverHost {
             stash_picker_rows_cache: rows_cache::RowsCache::default(),
             file_history_rows_cache: rows_cache::RowsCache::default(),
             submodule_picker_rows_cache: rows_cache::RowsCache::default(),
+            remote_picker_rows_cache: rows_cache::RowsCache::default(),
+            tag_picker_rows_cache: rows_cache::RowsCache::default(),
+            commit_search_picker_rows_cache: rows_cache::RowsCache::default(),
             worktree_picker_rows_cache: rows_cache::RowsCache::default(),
             branch_ref_rows_cache: rows_cache::RowsCache::default(),
             repo_picker_search_input: None,
@@ -1763,6 +1926,8 @@ impl PopoverHost {
             workspace_picker_search_input: None,
             upstream_picker_search_input: None,
             submodule_picker_search_input: None,
+            tag_picker_search_input: None,
+            commit_search_picker_search_input: None,
             picker_prompt_scroll: ScrollHandle::new(),
             clone_repo_url_input,
             clone_repo_parent_dir_input,
@@ -1782,6 +1947,7 @@ impl PopoverHost {
             remote_name_input,
             remote_url_input,
             remote_url_edit_input,
+            remote_ssh_key_input,
             create_branch_input,
             create_branch_checkout_enabled: true,
             create_branch_source_target: String::new(),
@@ -1795,6 +1961,19 @@ impl PopoverHost {
             checkout_remote_branch_focus,
             stash_message_input,
             stash_focus,
+            stash_include_untracked: true,
+            stash_keep_index: false,
+            stash_include_untracked_focus_handle,
+            stash_keep_index_focus_handle,
+            mr_push_target_input,
+            mr_push_merge_when_pipeline_succeeds: false,
+            // GitLab-side default from the C# client's push dialog.
+            mr_push_remove_source_branch: true,
+            mr_push_push_to_mr_branch: false,
+            mr_push_pipeline_focus_handle,
+            mr_push_remove_source_focus_handle,
+            mr_push_mr_branch_focus_handle,
+            stash_branch_focus,
             stash_picker_prompt_selected_index: None,
             stash_picker_search_input: None,
             commit_prompt_message_drafts: FxHashMap::default(),
@@ -1809,6 +1988,8 @@ impl PopoverHost {
             create_tag_focus,
             remote_add_focus,
             remote_edit_focus,
+            remote_ssh_key_clear_focus,
+            remote_ssh_key_focus,
             push_upstream_focus,
             worktree_browse_focus_handle,
             worktree_focus,
@@ -1846,6 +2027,7 @@ impl PopoverHost {
             &self.remote_name_input,
             &self.remote_url_input,
             &self.remote_url_edit_input,
+            &self.remote_ssh_key_input,
             &self.create_branch_input,
             &self.stash_message_input,
             &self.commit_prompt_message_input,
@@ -1872,6 +2054,8 @@ impl PopoverHost {
                 &self.workspace_picker_search_input,
                 &self.upstream_picker_search_input,
                 &self.submodule_picker_search_input,
+                &self.tag_picker_search_input,
+                &self.commit_search_picker_search_input,
                 &self.stash_picker_search_input,
             ]
             .into_iter()
@@ -2101,7 +2285,8 @@ impl PopoverHost {
             Some(PopoverKind::CreateBranchFromRefPrompt { .. })
                 | Some(PopoverKind::RenameBranchPrompt { .. })
                 | Some(PopoverKind::CheckoutRemoteBranchPrompt { .. })
-                | Some(PopoverKind::StashPrompt)
+                | Some(PopoverKind::StashPrompt { .. })
+                | Some(PopoverKind::StashBranchPrompt { .. })
                 | Some(PopoverKind::CommitPrompt { .. })
                 | Some(PopoverKind::CloneRepo)
                 | Some(PopoverKind::CreateTagPrompt { .. })
@@ -2113,6 +2298,10 @@ impl PopoverHost {
                 })
                 | Some(PopoverKind::Repo {
                     kind: RepoPopoverKind::Remote(RemotePopoverKind::EditUrlPrompt { .. }),
+                    ..
+                })
+                | Some(PopoverKind::Repo {
+                    kind: RepoPopoverKind::Remote(RemotePopoverKind::SshKeyPrompt { .. }),
                     ..
                 })
                 | Some(PopoverKind::Repo {
@@ -2199,7 +2388,8 @@ impl PopoverHost {
         match self.popover.as_ref() {
             Some(PopoverKind::CreateBranchFromRefPrompt { .. })
             | Some(PopoverKind::RenameBranchPrompt { .. })
-            | Some(PopoverKind::StashPrompt)
+            | Some(PopoverKind::StashPrompt { .. })
+            | Some(PopoverKind::StashBranchPrompt { .. })
             | Some(PopoverKind::CommitPrompt { .. })
             | Some(PopoverKind::StashPickerPrompt { .. })
             | Some(PopoverKind::Repo {
@@ -2217,6 +2407,10 @@ impl PopoverHost {
             })
             | Some(PopoverKind::Repo {
                 kind: RepoPopoverKind::Remote(RemotePopoverKind::EditUrlPrompt { .. }),
+                ..
+            })
+            | Some(PopoverKind::Repo {
+                kind: RepoPopoverKind::Remote(RemotePopoverKind::SshKeyPrompt { .. }),
                 ..
             })
             | Some(PopoverKind::Repo {
@@ -2531,6 +2725,15 @@ impl PopoverHost {
                     cx,
                 );
             }
+            Some(PopoverKind::BranchPicker {
+                purpose: BranchPickerPurpose::Merge,
+            }) => {
+                // The branch context menu merges refs without a confirm; the
+                // picker matches it. An unwanted merge is abortable.
+                self.store
+                    .dispatch(Msg::MergeRef { repo_id, reference: name });
+                self.close_popover(cx);
+            }
             _ => {
                 self.store.dispatch(Msg::CheckoutBranch { repo_id, name });
                 self.close_popover(cx);
@@ -2694,6 +2897,9 @@ impl PopoverHost {
     }
 
     fn submit_stash(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
+        let Some(PopoverKind::StashPrompt { paths }) = self.popover.clone() else {
+            return;
+        };
         let Some(repo_id) = self.active_repo_id() else {
             return;
         };
@@ -2704,10 +2910,72 @@ impl PopoverHost {
             return;
         }
 
+        let include_untracked = self.stash_include_untracked;
+        let keep_index = self.stash_keep_index;
+        let stashing_selection = !paths.is_empty();
         self.store.dispatch(Msg::Stash {
             repo_id,
             message,
-            include_untracked: true,
+            include_untracked,
+            keep_index,
+            paths: paths.into(),
+        });
+        if stashing_selection {
+            // A selection-seeded stash has gone ahead; the rows it described
+            // are leaving the status list, so the selection has served its
+            // purpose.
+            self.clear_status_multi_selection(repo_id, cx);
+        }
+        self.dismiss_inline_popover(window, cx);
+    }
+
+    fn can_submit_stash_branch(&self, cx: &mut gpui::Context<Self>) -> bool {
+        matches!(self.popover, Some(PopoverKind::StashBranchPrompt { .. }))
+            && self
+                .create_branch_input
+                .read_with(cx, |input, _| !input.text().trim().is_empty())
+    }
+
+    /// The merge-request push is always submittable while its prompt is up:
+    /// every option is optional and the target branch defaults server-side.
+    fn can_submit_mr_push(&self) -> bool {
+        matches!(self.popover, Some(PopoverKind::MergeRequestPushPrompt { .. }))
+    }
+
+    fn submit_mr_push(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
+        let Some(PopoverKind::MergeRequestPushPrompt { repo_id }) = self.popover.clone() else {
+            return;
+        };
+        let target_branch = self
+            .mr_push_target_input
+            .read_with(cx, |input, _| input.text().trim().to_string());
+        let options = repositorytree_core::services::MergeRequestPushOptions {
+            create: true,
+            target_branch: (!target_branch.is_empty()).then_some(target_branch),
+            merge_when_pipeline_succeeds: self.mr_push_merge_when_pipeline_succeeds,
+            remove_source_branch: self.mr_push_remove_source_branch,
+            push_to_mr_branch: self.mr_push_push_to_mr_branch,
+        };
+        self.store
+            .dispatch(Msg::PushMergeRequest { repo_id, options });
+        self.dismiss_inline_popover(window, cx);
+    }
+
+    fn submit_stash_branch(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
+        let Some(PopoverKind::StashBranchPrompt { repo_id, index }) = self.popover.clone() else {
+            return;
+        };
+        let branch = self
+            .create_branch_input
+            .read_with(cx, |input, _| input.text().trim().to_string());
+        if branch.is_empty() {
+            return;
+        }
+
+        self.store.dispatch(Msg::StashBranch {
+            repo_id,
+            index,
+            branch,
         });
         self.dismiss_inline_popover(window, cx);
     }
@@ -2765,6 +3033,49 @@ impl PopoverHost {
             name,
             url,
             kind,
+        });
+        self.close_popover(cx);
+    }
+
+    pub(super) fn can_submit_remote_ssh_key(&self, cx: &mut gpui::Context<Self>) -> bool {
+        self.remote_ssh_key_input
+            .read_with(cx, |i, _| !i.text().trim().is_empty())
+    }
+
+    pub(super) fn submit_remote_ssh_key(&mut self, cx: &mut gpui::Context<Self>) {
+        let Some(PopoverKind::Repo {
+            repo_id,
+            kind: RepoPopoverKind::Remote(RemotePopoverKind::SshKeyPrompt { name }),
+        }) = self.popover.clone()
+        else {
+            return;
+        };
+        if !self.can_submit_remote_ssh_key(cx) {
+            return;
+        }
+        let key = self
+            .remote_ssh_key_input
+            .read_with(cx, |i, _| i.text().trim().to_string());
+        self.store.dispatch(Msg::SetRemoteSshKey {
+            repo_id,
+            remote: name,
+            key: Some(key),
+        });
+        self.close_popover(cx);
+    }
+
+    pub(super) fn clear_remote_ssh_key(&mut self, cx: &mut gpui::Context<Self>) {
+        let Some(PopoverKind::Repo {
+            repo_id,
+            kind: RepoPopoverKind::Remote(RemotePopoverKind::SshKeyPrompt { name }),
+        }) = self.popover.clone()
+        else {
+            return;
+        };
+        self.store.dispatch(Msg::SetRemoteSshKey {
+            repo_id,
+            remote: name,
+            key: None,
         });
         self.close_popover(cx);
     }
@@ -2961,6 +3272,9 @@ impl PopoverHost {
             }
             PopoverKind::PreviousCommitMessagesMenu { repo_id } => Some(*repo_id),
             PopoverKind::CommitOptionsMenu { repo_id } => Some(*repo_id),
+            PopoverKind::AssumeUnchangedManager { repo_id } => Some(*repo_id),
+            PopoverKind::Statistics { repo_id } => Some(*repo_id),
+            PopoverKind::UndoLastActionPrompt { repo_id } => Some(*repo_id),
             PopoverKind::BranchPicker { .. } => self.state.active_repo,
             _ => None,
         };
@@ -2970,6 +3284,45 @@ impl PopoverHost {
         let Some(repo) = self.state.repos.iter().find(|repo| repo.id == repo_id) else {
             return;
         };
+
+        if matches!(kind, PopoverKind::AssumeUnchangedManager { .. }) {
+            // Rows come from the loaded list; a NotLoaded or failed load is
+            // retried on open. A successful load stays — toggles reload it
+            // through the action-finished effect, not through this path.
+            if matches!(
+                repo.assume_unchanged,
+                Loadable::NotLoaded | Loadable::Error(_)
+            ) {
+                self.store.dispatch(Msg::LoadAssumeUnchanged { repo_id });
+            }
+            return;
+        }
+
+        if matches!(kind, PopoverKind::Statistics { .. }) {
+            // The chart reads the loaded commit list; retry a failed load on
+            // reopen, keep a successful one (it covers 400 days, so a stale
+            // window only matters across month boundaries and the popover is
+            // short-lived).
+            if matches!(
+                repo.statistics,
+                Loadable::NotLoaded | Loadable::Error(_)
+            ) {
+                self.store.dispatch(Msg::LoadRepoStatistics { repo_id });
+            }
+            return;
+        }
+
+        if matches!(kind, PopoverKind::UndoLastActionPrompt { .. }) {
+            // The preview classifies the newest reflog entries; a missing or
+            // failed reflog is (re)requested so the prompt can fill itself
+            // in. A stale-but-loaded reflog still shows — undo targets the
+            // recorded past, and the newest entry only changes when the user
+            // just ran another operation, which reopens this prompt anyway.
+            if matches!(repo.reflog, Loadable::NotLoaded | Loadable::Error(_)) {
+                self.store.dispatch(Msg::LoadReflog { repo_id });
+            }
+            return;
+        }
 
         if matches!(kind, PopoverKind::BranchPicker { .. }) {
             // Decorates the checkout picker's rows; load once, retry on error.
@@ -3019,6 +3372,19 @@ impl PopoverHost {
         if matches!(&kind, PopoverKind::CherryPickCommitConfirm { .. }) {
             self.cherry_pick_mainline = None;
         }
+        if matches!(&kind, PopoverKind::Statistics { .. }) {
+            self.statistics_period = statistics::StatisticsPeriod::default();
+        }
+        if matches!(&kind, PopoverKind::UndoLastActionPrompt { .. }) {
+            // Back to the plan's suggested mode; the user may have softened
+            // it in an earlier visit to the prompt.
+            self.undo_reset_mode = None;
+        }
+        if matches!(&kind, PopoverKind::HunkExplanation { .. }) {
+            // Every open starts a fresh request; a previous answer (or error)
+            // never carries over.
+            self.hunk_explanation = None;
+        }
         self.menu_invoker_focus =
             if matches!(&kind, PopoverKind::AppMenu | PopoverKind::AddRepoMenu) {
                 window.focused(cx)
@@ -3038,12 +3404,14 @@ impl PopoverHost {
                 &kind,
                 PopoverKind::CreateBranchFromRefPrompt { .. }
                     | PopoverKind::RenameBranchPrompt { .. }
-                    | PopoverKind::StashPrompt
+                    | PopoverKind::StashPrompt { .. }
                     | PopoverKind::CommitPrompt { .. }
                     | PopoverKind::StashPickerPrompt { .. }
                     // Opened from the AUTHOR column header, which stays
                     // highlighted while its dropdown is up.
                     | PopoverKind::HistoryAuthorFilter { .. }
+                    // Same for the branch column's ref-filter funnel.
+                    | PopoverKind::HistoryRefFilter { .. }
                     // Action-bar badges stay lit while their picker is open.
                     // Scoped to Checkout: the Delete picker is opened from the
                     // sidebar context menu, whose invoker must still be cleared.
@@ -3072,6 +3440,9 @@ impl PopoverHost {
         self.workspace_picker_selected_index = None;
         self.upstream_picker_selected_index = None;
         self.submodule_picker_selected_index = None;
+        self.remote_picker_selected_index = None;
+        self.tag_picker_selected_index = None;
+        self.commit_search_picker_selected_index = None;
         self.file_history_selected_index = None;
         self.history_author_filter_selected_index = None;
         // Rows are keyed by the data they were built from, so a stale slot can
@@ -3084,6 +3455,9 @@ impl PopoverHost {
         self.stash_picker_rows_cache.clear();
         self.file_history_rows_cache.clear();
         self.submodule_picker_rows_cache.clear();
+        self.remote_picker_rows_cache.clear();
+        self.tag_picker_rows_cache.clear();
+        self.commit_search_picker_rows_cache.clear();
         self.worktree_picker_rows_cache.clear();
         self.branch_ref_rows_cache.clear();
         if is_context_menu {
@@ -3112,6 +3486,15 @@ impl PopoverHost {
                 }
                 PopoverKind::UpstreamPicker { .. } => {
                     let _ = self.ensure_upstream_picker_search_input(window, cx);
+                }
+                PopoverKind::RemotePicker { .. } => {
+                    let _ = self.ensure_remote_picker_search_input(window, cx);
+                }
+                PopoverKind::DeleteTagPicker { .. } => {
+                    let _ = self.ensure_tag_picker_search_input(window, cx);
+                }
+                PopoverKind::CommitSearchPicker { .. } => {
+                    let _ = self.ensure_commit_search_picker_search_input(window, cx);
                 }
                 PopoverKind::CreateBranchFromRefPrompt {
                     source_selectable,
@@ -3168,8 +3551,10 @@ impl PopoverHost {
                         .read_with(cx, |i, _| i.focus_handle());
                     window.focus(&focus, cx);
                 }
-                PopoverKind::StashPrompt => {
+                PopoverKind::StashPrompt { .. } => {
                     let theme = self.theme;
+                    self.stash_include_untracked = true;
+                    self.stash_keep_index = false;
                     self.stash_message_input.update(cx, |input, cx| {
                         input.clear_transient_key_presses();
                         input.set_theme(theme, cx);
@@ -3179,6 +3564,36 @@ impl PopoverHost {
                     let focus = self
                         .stash_message_input
                         .read_with(cx, |i, _| i.focus_handle());
+                    window.focus(&focus, cx);
+                }
+                PopoverKind::MergeRequestPushPrompt { .. } => {
+                    let theme = self.theme;
+                    self.mr_push_merge_when_pipeline_succeeds = false;
+                    self.mr_push_remove_source_branch = true;
+                    self.mr_push_push_to_mr_branch = false;
+                    self.mr_push_target_input.update(cx, |input, cx| {
+                        input.clear_transient_key_presses();
+                        input.set_theme(theme, cx);
+                        input.set_text("", cx);
+                        cx.notify();
+                    });
+                    let focus = self
+                        .mr_push_target_input
+                        .read_with(cx, |i, _| i.focus_handle());
+                    window.focus(&focus, cx);
+                }
+                PopoverKind::StashBranchPrompt { index, .. } => {
+                    let theme = self.theme;
+                    let suggested = format!("stash-{index}");
+                    self.create_branch_input.update(cx, |input, cx| {
+                        input.clear_transient_key_presses();
+                        input.set_theme(theme, cx);
+                        input.set_text(suggested, cx);
+                        cx.notify();
+                    });
+                    let focus = self
+                        .create_branch_input
+                        .read_with(cx, |input, _| input.focus_handle());
                     window.focus(&focus, cx);
                 }
                 PopoverKind::CommitPrompt { repo_id } => {
@@ -3289,6 +3704,21 @@ impl PopoverHost {
                     });
                     let focus = self
                         .remote_name_input
+                        .read_with(cx, |i, _| i.focus_handle());
+                    window.focus(&focus, cx);
+                }
+                PopoverKind::Repo {
+                    repo_id: _,
+                    kind: RepoPopoverKind::Remote(RemotePopoverKind::SshKeyPrompt { .. }),
+                } => {
+                    let theme = self.theme;
+                    self.remote_ssh_key_input.update(cx, |input, cx| {
+                        input.set_theme(theme, cx);
+                        input.set_text("", cx);
+                        cx.notify();
+                    });
+                    let focus = self
+                        .remote_ssh_key_input
                         .read_with(cx, |i, _| i.focus_handle());
                     window.focus(&focus, cx);
                 }
@@ -4057,7 +4487,20 @@ impl PopoverHost {
                 remote,
                 branch,
             } => checkout_remote_branch_prompt::panel(self, repo_id, remote, branch, cx),
-            PopoverKind::StashPrompt => stash_prompt::panel(self, cx),
+            PopoverKind::StashPrompt { paths } => stash_prompt::panel(self, paths, cx),
+            PopoverKind::StashBranchPrompt { repo_id, index } => {
+                stash_branch_prompt::panel(self, repo_id, index, cx)
+            }
+            PopoverKind::AssumeUnchangedManager { repo_id } => {
+                assume_unchanged_manager::panel(self, repo_id, cx)
+            }
+            PopoverKind::Statistics { repo_id } => statistics::panel(self, repo_id, cx),
+            PopoverKind::UndoLastActionPrompt { repo_id } => {
+                undo_last_action::panel(self, repo_id, cx)
+            }
+            PopoverKind::HunkExplanation { repo_id, src_ix } => {
+                hunk_explanation::panel(self, repo_id, src_ix, cx)
+            }
             PopoverKind::CommitPrompt { repo_id } => commit_prompt::panel(self, repo_id, cx),
             PopoverKind::StashPickerPrompt { repo_id, purpose } => {
                 stash_picker_prompt::panel(self, repo_id, purpose, cx)
@@ -4082,6 +4525,9 @@ impl PopoverHost {
                     RemotePopoverKind::AddPrompt => remote_add_prompt::panel(self, repo_id, cx),
                     RemotePopoverKind::EditUrlPrompt { name, kind } => {
                         remote_edit_url_prompt::panel(self, repo_id, name, kind, cx)
+                    }
+                    RemotePopoverKind::SshKeyPrompt { name } => {
+                        remote_ssh_key_prompt::panel(self, repo_id, name, cx)
                     }
                     RemotePopoverKind::RemoveConfirm { name } => {
                         remote_remove_confirm::panel(self, repo_id, name, cx)
@@ -4160,6 +4606,9 @@ impl PopoverHost {
             PopoverKind::ForcePushConfirm { repo_id } => {
                 force_push_confirm::panel(self, repo_id, cx)
             }
+            PopoverKind::MergeRequestPushPrompt { repo_id } => {
+                merge_request_push::panel(self, repo_id, cx)
+            }
             PopoverKind::CherryPickCommitConfirm { repo_id, commit_id } => {
                 cherry_pick_commit_confirm::panel(self, repo_id, commit_id, cx)
             }
@@ -4182,6 +4631,18 @@ impl PopoverHost {
                 area,
                 path,
             } => discard_changes_confirm::panel(self, repo_id, area, path.clone(), cx),
+            PopoverKind::DiscardAllConfirm { repo_id } => {
+                discard_all_confirm::panel(self, repo_id, cx)
+            }
+            PopoverKind::RemotePicker { repo_id, purpose } => {
+                remote_picker::panel(self, repo_id, purpose, cx)
+            }
+            PopoverKind::DeleteTagPicker { repo_id } => {
+                tag_picker::panel(self, repo_id, cx)
+            }
+            PopoverKind::CommitSearchPicker { repo_id } => {
+                commit_search_picker::panel(self, repo_id, cx)
+            }
             PopoverKind::AddToGitignorePrompt {
                 repo_id,
                 area,
@@ -4229,6 +4690,9 @@ impl PopoverHost {
                 self.context_menu_view(PopoverKind::HistoryBranchFilter { repo_id }, cx)
             }
             PopoverKind::HistoryAuthorFilter { repo_id } => author_filter::panel(self, repo_id, cx),
+            PopoverKind::HistoryRefFilter { repo_id } => {
+                history_ref_filter::panel(self, repo_id, cx)
+            }
             PopoverKind::DiffContentModeSettings => {
                 self.context_menu_view(PopoverKind::DiffContentModeSettings, cx)
             }
@@ -4279,6 +4743,9 @@ impl PopoverHost {
             ),
             PopoverKind::DiffHunkMenu { repo_id, src_ix } => {
                 self.context_menu_view(PopoverKind::DiffHunkMenu { repo_id, src_ix }, cx)
+            }
+            PopoverKind::PullRequestMenu { repo_id, number } => {
+                self.context_menu_view(PopoverKind::PullRequestMenu { repo_id, number }, cx)
             }
             PopoverKind::DiffEditorMenu {
                 repo_id,

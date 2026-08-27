@@ -142,7 +142,13 @@ impl GitRepository for ReadyOpenRepo {
     fn revert(&self, _id: &CommitId) -> Result<()> {
         Ok(())
     }
-    fn stash_create(&self, _message: &str, _include_untracked: bool) -> Result<()> {
+    fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> Result<()> {
         Ok(())
     }
     fn stash_list(&self) -> Result<Vec<StashEntry>> {
@@ -392,7 +398,13 @@ impl GitRepository for BlockingDiffRepo {
     fn revert(&self, _id: &CommitId) -> Result<()> {
         Ok(())
     }
-    fn stash_create(&self, _message: &str, _include_untracked: bool) -> Result<()> {
+    fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> Result<()> {
         Ok(())
     }
     fn stash_list(&self) -> Result<Vec<StashEntry>> {

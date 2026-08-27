@@ -128,7 +128,7 @@ fn stash_prompt_escape_cancels(cx: &mut gpui::TestAppContext) {
             this.set_active_context_menu_invoker(Some("stash_btn".into()), cx);
             this.popover_host.update(cx, |host, cx| {
                 host.open_popover_at(
-                    PopoverKind::StashPrompt,
+                    PopoverKind::StashPrompt { paths: Vec::new() },
                     gpui::point(gpui::px(120.0), gpui::px(72.0)),
                     window,
                     cx,
@@ -199,7 +199,7 @@ fn stash_prompt_renders_shortcut_hints_and_separators(cx: &mut gpui::TestAppCont
         view.update(app, |this, cx| {
             this.popover_host.update(cx, |host, cx| {
                 host.open_popover_at(
-                    PopoverKind::StashPrompt,
+                    PopoverKind::StashPrompt { paths: Vec::new() },
                     gpui::point(gpui::px(120.0), gpui::px(72.0)),
                     window,
                     cx,
@@ -242,7 +242,7 @@ fn stash_prompt_enter_stashes_and_closes(cx: &mut gpui::TestAppContext) {
             this.set_active_context_menu_invoker(Some("stash_btn".into()), cx);
             this.popover_host.update(cx, |host, cx| {
                 host.open_popover_at(
-                    PopoverKind::StashPrompt,
+                    PopoverKind::StashPrompt { paths: Vec::new() },
                     gpui::point(gpui::px(120.0), gpui::px(72.0)),
                     window,
                     cx,
@@ -292,7 +292,7 @@ fn stash_prompt_enter_stashes_and_closes(cx: &mut gpui::TestAppContext) {
     });
 
     wait_until("stash action", || {
-        repo.actions() == vec!["stash:wip:true".to_string()]
+        repo.actions() == vec!["stash:wip:true:false:0".to_string()]
     });
 }
 
@@ -317,7 +317,7 @@ fn stash_prompt_enter_with_empty_input_does_not_close_or_stash(cx: &mut gpui::Te
             this.set_active_context_menu_invoker(Some("stash_btn".into()), cx);
             this.popover_host.update(cx, |host, cx| {
                 host.open_popover_at(
-                    PopoverKind::StashPrompt,
+                    PopoverKind::StashPrompt { paths: Vec::new() },
                     gpui::point(gpui::px(120.0), gpui::px(72.0)),
                     window,
                     cx,
@@ -362,4 +362,219 @@ fn stash_prompt_enter_with_empty_input_does_not_close_or_stash(cx: &mut gpui::Te
         repo.actions().is_empty(),
         "expected empty input to avoid stash actions"
     );
+}
+
+#[gpui::test]
+fn stash_prompt_with_paths_renders_count_and_option_toggles(cx: &mut gpui::TestAppContext) {
+    let (store, events, _repo, _workdir) = create_tracking_store("stash-paths-render");
+    let store_for_view = store.clone();
+    let (view, cx) = cx.add_window_view(|window, cx| {
+        RepositoryTreeView::new(store_for_view, events, None, window, cx)
+    });
+
+    cx.update(|window, app| {
+        let _ = window.draw(app);
+    });
+
+    cx.update(|window, app| {
+        view.update(app, |this, cx| {
+            this.popover_host.update(cx, |host, cx| {
+                host.open_popover_at(
+                    PopoverKind::StashPrompt {
+                        paths: vec![
+                            std::path::PathBuf::from("src/a.rs"),
+                            std::path::PathBuf::from("src/b.rs"),
+                        ],
+                    },
+                    gpui::point(gpui::px(120.0), gpui::px(72.0)),
+                    window,
+                    cx,
+                );
+            });
+        });
+    });
+    cx.update(|window, app| {
+        let _ = window.draw(app);
+    });
+
+    cx.debug_bounds("stash_paths_selected")
+        .expect("expected selected-paths row in stash prompt");
+    cx.debug_bounds("stash_include_untracked_toggle")
+        .expect("expected include-untracked toggle in stash prompt");
+    cx.debug_bounds("stash_keep_index_toggle")
+        .expect("expected keep-index toggle in stash prompt");
+
+    // The full-worktree prompt shows no paths row.
+    cx.update(|window, app| {
+        view.update(app, |this, cx| {
+            this.popover_host.update(cx, |host, cx| {
+                host.open_popover_at(
+                    PopoverKind::StashPrompt { paths: Vec::new() },
+                    gpui::point(gpui::px(120.0), gpui::px(72.0)),
+                    window,
+                    cx,
+                );
+            });
+        });
+    });
+    cx.update(|window, app| {
+        let _ = window.draw(app);
+    });
+    assert!(
+        cx.debug_bounds("stash_paths_selected").is_none(),
+        "full-worktree stash prompt must not show the paths row"
+    );
+}
+
+#[gpui::test]
+fn stash_prompt_submit_carries_options_and_paths(cx: &mut gpui::TestAppContext) {
+    let (store, events, repo, _workdir) = create_tracking_store("stash-options-submit");
+    let store_for_view = store.clone();
+    let (view, cx) = cx.add_window_view(|window, cx| {
+        RepositoryTreeView::new(store_for_view, events, None, window, cx)
+    });
+
+    cx.update(|window, app| {
+        app.bind_keys([gpui::KeyBinding::new(
+            "enter",
+            crate::kit::Enter,
+            Some("TextInput"),
+        )]);
+        let _ = window.draw(app);
+    });
+
+    cx.update(|window, app| {
+        view.update(app, |this, cx| {
+            this.popover_host.update(cx, |host, cx| {
+                host.open_popover_at(
+                    PopoverKind::StashPrompt {
+                        paths: vec![
+                            std::path::PathBuf::from("src/a.rs"),
+                            std::path::PathBuf::from("src/b.rs"),
+                        ],
+                    },
+                    gpui::point(gpui::px(120.0), gpui::px(72.0)),
+                    window,
+                    cx,
+                );
+                // The option rows are click-driven; the submit path reads
+                // these fields, so flip them the way the click handler would.
+                host.stash_include_untracked = false;
+                host.stash_keep_index = true;
+                host.stash_message_input
+                    .update(cx, |input, cx| input.set_text("partial", cx));
+            });
+        });
+    });
+    cx.update(|window, app| {
+        let _ = window.draw(app);
+    });
+
+    cx.simulate_keystrokes("enter");
+    cx.run_until_parked();
+
+    wait_until("stash action with options", || {
+        repo.actions() == vec!["stash:partial:false:true:2".to_string()]
+    });
+}
+
+#[gpui::test]
+fn stash_menu_branch_entry_opens_prefilled_prompt_and_submits(cx: &mut gpui::TestAppContext) {
+    let (store, events, repo, _workdir) = create_tracking_store("stash-branch-prompt");
+    let repo_id = store.snapshot().active_repo.expect("expected active repo");
+    let store_for_view = store.clone();
+    let (view, cx) = cx.add_window_view(|window, cx| {
+        RepositoryTreeView::new(store_for_view, events, None, window, cx)
+    });
+
+    cx.update(|window, app| {
+        app.bind_keys([gpui::KeyBinding::new(
+            "enter",
+            crate::kit::Enter,
+            Some("TextInput"),
+        )]);
+        let _ = window.draw(app);
+    });
+
+    cx.update(|_window, app| {
+        let model = view
+            .update(app, |this, cx| {
+                this.popover_host.update(cx, |host, cx| {
+                    host.context_menu_model(
+                        &PopoverKind::StashMenu {
+                            repo_id,
+                            index: 3,
+                            message: "WIP".to_string(),
+                        },
+                        cx,
+                    )
+                })
+            })
+            .expect("expected stash context menu model");
+
+        let branch_action = model.items.iter().find_map(|item| match item {
+            ContextMenuItem::Entry { label, action, .. } if label.as_ref() == "Branch stash…" => {
+                Some((**action).clone())
+            }
+            _ => None,
+        });
+        assert!(
+            matches!(
+                branch_action,
+                Some(ContextMenuAction::OpenPopover {
+                    kind: PopoverKind::StashBranchPrompt { repo_id: rid, index: 3 }
+                }) if rid == repo_id
+            ),
+            "expected Branch stash… entry to open the stash-branch prompt"
+        );
+    });
+
+    cx.update(|window, app| {
+        view.update(app, |this, cx| {
+            this.popover_host.update(cx, |host, cx| {
+                host.open_popover_centered(
+                    PopoverKind::StashBranchPrompt {
+                        repo_id,
+                        index: 3,
+                    },
+                    window,
+                    cx,
+                );
+            });
+        });
+    });
+    cx.update(|window, app| {
+        let _ = window.draw(app);
+    });
+
+    // The prompt opens with a suggested branch name derived from the index.
+    cx.update(|_window, app| {
+        let prefilled = view.update(app, |this, cx| {
+            this.popover_host
+                .read_with(cx, |host, _| host.create_branch_input.read(cx).text().to_string())
+        });
+        assert_eq!(prefilled, "stash-3");
+    });
+
+    cx.update(|_window, app| {
+        view.update(app, |this, cx| {
+            this.popover_host.update(cx, |host, cx| {
+                host.create_branch_input
+                    .update(cx, |input, cx| input.set_text("recover-wip", cx));
+            });
+        });
+    });
+    cx.update(|window, app| {
+        let _ = window.draw(app);
+    });
+
+    cx.simulate_keystrokes("enter");
+    cx.run_until_parked();
+
+    let is_open = cx.update(|_window, app| view.read(app).popover_host.read(app).is_open());
+    assert!(!is_open, "expected Enter to close the stash-branch prompt");
+
+    wait_until("stash branch action", || {
+        repo.actions() == vec!["stash-branch:recover-wip:3".to_string()]
+    });
 }

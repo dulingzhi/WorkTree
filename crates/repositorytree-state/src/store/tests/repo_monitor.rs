@@ -131,7 +131,13 @@ impl GitRepository for RepoActivationRecordingRepo {
         Ok(())
     }
 
-    fn stash_create(&self, _message: &str, _include_untracked: bool) -> Result<()> {
+    fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> Result<()> {
         Ok(())
     }
 
@@ -294,6 +300,7 @@ fn repo_monitor_active_repo_activation_coalesces_with_in_flight_refresh() {
         loads_in_flight.request_primary_refresh_batch(crate::model::PendingLogLoad {
             scope: repositorytree_core::domain::HistoryMode::FullReachable,
             author: None,
+            refs: Vec::new(),
             limit: 200,
             cursor: None,
         });

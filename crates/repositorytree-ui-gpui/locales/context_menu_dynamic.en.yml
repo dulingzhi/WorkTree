@@ -11,6 +11,8 @@ cm:
   rebase_onto: "Rebase %{current} onto %{target}"
   interactive_rebase_onto: "Interactive rebase %{current} onto %{target}"
   open_in: "Open in %{name}"
+  pr:
+    menu_title: "Pull request #%{number}"
   tag:
     tags_on: "Tags on %{short}"
     # NB: never name a key `on`/`off`/`yes`/`no` — YAML 1.1 parses them as
@@ -40,6 +42,7 @@ cm:
     resolve_selected_ours: "Resolve selected using ours (%{count})"
     resolve_selected_theirs: "Resolve selected using theirs (%{count})"
     add_gitignore_count: "Add %{count} files to .gitignore…"
+    stash_count: "Stash (%{count})…"
   diff:
     discard_lines_count: "Discard lines (%{count})"
     stage_hunks_count: "Stage hunks (%{count})"

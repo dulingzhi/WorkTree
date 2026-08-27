@@ -1309,7 +1309,13 @@ impl GitRepository for SlowSubmoduleRepo {
         Ok(Vec::new())
     }
 
-    fn stash_create(&self, _message: &str, _include_untracked: bool) -> Result<()> {
+    fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> Result<()> {
         Self::unsupported()
     }
 
@@ -1443,7 +1449,13 @@ impl GitRepository for SlowStashRepo {
         Self::unsupported()
     }
 
-    fn stash_create(&self, _message: &str, _include_untracked: bool) -> Result<()> {
+    fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> Result<()> {
         Self::unsupported()
     }
 

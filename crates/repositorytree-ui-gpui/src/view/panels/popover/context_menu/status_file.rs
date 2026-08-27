@@ -35,7 +35,13 @@ pub(super) fn model(
             )
         });
 
-    let (is_conflicted, is_unstaged_conflicted, has_unstaged_for_path, is_staged_added) = this
+    let (
+        is_conflicted,
+        is_unstaged_conflicted,
+        has_unstaged_for_path,
+        is_staged_added,
+        is_unstaged_untracked,
+    ) = this
         .state
         .repos
         .iter()
@@ -65,9 +71,13 @@ pub(super) fn model(
                     staged_kind,
                     Some(repositorytree_core::domain::FileStatusKind::Added)
                 ),
+                matches!(
+                    unstaged_kind,
+                    Some(repositorytree_core::domain::FileStatusKind::Untracked)
+                ),
             )
         })
-        .unwrap_or((false, false, false, false));
+        .unwrap_or((false, false, false, false, false));
 
     let submodule_menu_state = this
         .state
@@ -332,6 +342,44 @@ pub(super) fn model(
                 }),
             }),
         };
+
+        // Stashing a conflicted path has no useful meaning (`git stash push`
+        // refuses unmerged entries), which is why this sits in the
+        // non-conflicted branch next to Stage/Unstage.
+        items.push(ContextMenuItem::Entry {
+            label: if use_selection {
+                crate::i18n::t!("cm.status.stash_count", count = selected_count)
+                    .into_owned()
+                    .into()
+            } else {
+                "Stash changes…".into()
+            },
+            icon: Some(crate::view::icons::STASH_ICON_PATH.into()),
+            shortcut: None,
+            disabled: false,
+            action: Box::new(ContextMenuAction::StashSelectionOrPath {
+                repo_id,
+                area,
+                path: path.to_path_buf(),
+            }),
+        });
+
+        // Only tracked unstaged files: the flag lives on an index entry, so an
+        // untracked path has nothing to mark and `git update-index` would
+        // refuse it. Removing the flag again lives in the assume-unchanged
+        // manager (command palette).
+        if area == DiffArea::Unstaged && !is_unstaged_untracked {
+            items.push(ContextMenuItem::Entry {
+                label: "Assume unchanged".into(),
+                icon: Some("icons/check.svg".into()),
+                shortcut: None,
+                disabled: false,
+                action: Box::new(ContextMenuAction::SetAssumeUnchangedPath {
+                    repo_id,
+                    path: path.to_path_buf(),
+                }),
+            });
+        }
     }
 
     let show_discard_changes = !(is_conflicted && area == DiffArea::Staged);

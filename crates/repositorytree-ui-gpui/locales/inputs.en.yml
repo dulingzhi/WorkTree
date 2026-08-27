@@ -11,6 +11,11 @@ input:
     title: "Edit remote URL (%{kind})"
     remote_line: "Remote: %{name}"
     save: "Save"
+  remote_ssh_key:
+    title: "Set SSH key"
+    remote_line: "Remote: %{name}"
+    save: "Save"
+    clear: "Clear"
   remote_add:
     title: "Add remote"
     name_label: "Name"
@@ -36,6 +41,19 @@ input:
   stash:
     title: "Create stash"
     stash: "Stash"
+    include_untracked: "Include untracked files"
+    keep_index: "Keep staged changes"
+    paths_selected: "Stashing %{count} selected path(s)"
+  stash_branch:
+    title: "Branch Stash"
+    create: "Create Branch"
+  mr_push:
+    title: "Push with merge request"
+    hint: "GitLab opens the merge request from this push (git push -o merge_request.*). GitHub remotes ignore these options."
+    pipeline: "Merge when the pipeline succeeds"
+    remove_source: "Delete source branch when merged"
+    mr_branch: "Push to MR/<branch> instead of the branch itself"
+    push: "Push"
   commit:
     title: "Commit Changes"
     commit: "Commit"
@@ -43,3 +61,9 @@ input:
     title: "Change submodule pointer"
     target_label: "Target ref / branch / tag / commit"
     change: "Change"
+  assume_unchanged:
+    title: "Assume-Unchanged Files"
+    hint: "Files git is told to skip when checking for worktree changes. They leave the change list until the flag is removed."
+    empty: "No files are marked assume-unchanged."
+    remove_flag: "Remove flag"
+    close: "Close"
