@@ -208,6 +208,17 @@ fn tag_names_model(
                 name: name.clone(),
             }),
         });
+        items.push(ContextMenuItem::Entry {
+            label: "Archive to ZIP…".into(),
+            icon: Some("icons/box.svg".into()),
+            shortcut: None,
+            disabled: false,
+            action: Box::new(ContextMenuAction::ArchiveZip {
+                repo_id,
+                revision: name.clone(),
+                suggested_name: format!("archive-{name}.zip"),
+            }),
+        });
 
         for remote in &remote_names {
             items.push(ContextMenuItem::Entry {

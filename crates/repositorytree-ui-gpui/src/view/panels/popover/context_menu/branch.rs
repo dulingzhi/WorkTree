@@ -177,6 +177,23 @@ pub(super) fn model(
         disabled: false,
         action: Box::new(ContextMenuAction::CopyText { text: name.clone() }),
     });
+    // Remote rows carry the full `remote/branch` ref in `name`, so it serves
+    // as the archive revision for both sections; the suggested file name
+    // keeps only the last segment (mirroring the C# `GetFileNameWithoutExtension`).
+    items.push(ContextMenuItem::Entry {
+        label: "Archive to ZIP…".into(),
+        icon: Some("icons/box.svg".into()),
+        shortcut: None,
+        disabled: false,
+        action: Box::new(ContextMenuAction::ArchiveZip {
+            repo_id,
+            revision: name.clone(),
+            suggested_name: format!(
+                "archive-{}.zip",
+                name.rsplit('/').next().unwrap_or(name)
+            ),
+        }),
+    });
     let pinned = this.is_branch_pinned(repo_id, section, name);
     items.push(ContextMenuItem::Entry {
         label: if pinned {

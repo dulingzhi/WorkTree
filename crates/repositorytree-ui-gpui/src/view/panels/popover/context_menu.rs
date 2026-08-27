@@ -23,6 +23,7 @@ mod mergetool_settings;
 mod pinned_section;
 mod previous_commit_messages;
 mod pull;
+mod pull_request;
 mod push;
 mod reflog_entry;
 mod remote;
@@ -301,7 +302,7 @@ impl PopoverHost {
     ///
     /// Every context-menu action that opens a dialog needs this, and the six
     /// copies it replaced all carried the same duplicated fallback constant.
-    fn popover_anchor_point(&self) -> gpui::Point<Pixels> {
+    pub(super) fn popover_anchor_point(&self) -> gpui::Point<Pixels> {
         self.popover_anchor
             .as_ref()
             .map(|anchor| match anchor {
@@ -412,6 +413,9 @@ impl PopoverHost {
                 commit_id,
                 name,
             } => Some(tag::model_for_tag(self, *repo_id, commit_id, name)),
+            PopoverKind::PullRequestMenu { repo_id, number } => {
+                Some(pull_request::model(self, *repo_id, *number))
+            }
             PopoverKind::StatusFileMenu {
                 repo_id,
                 area,
@@ -954,9 +958,77 @@ impl PopoverHost {
                 self.close_popover(cx);
                 return;
             }
+            ContextMenuAction::ArchiveZip {
+                repo_id,
+                revision,
+                suggested_name,
+            } => {
+                cx.stop_propagation();
+                // The platform save dialog doubles as the confirmation step:
+                // cancelling it cancels the export. It starts in the repo's
+                // workdir with the suggested archive name pre-filled.
+                let Some(workdir) = self
+                    .state
+                    .repos
+                    .iter()
+                    .find(|repo| repo.id == repo_id)
+                    .map(|repo| repo.spec.workdir.clone())
+                else {
+                    return;
+                };
+                let view = cx.weak_entity();
+                let rx = cx.prompt_for_new_path(&workdir, Some(&suggested_name));
+                window
+                    .spawn(cx, async move |cx| {
+                        let result = rx.await;
+                        let path = match result {
+                            Ok(Ok(Some(path))) => path,
+                            Ok(Ok(None)) | Ok(Err(_)) | Err(_) => return,
+                        };
+                        // `--format=zip` decides the content; make the name
+                        // agree when the dialog did not append an extension.
+                        let mut dest = path;
+                        if dest.extension().is_none() {
+                            dest.set_extension("zip");
+                        }
+                        let _ = view.update(cx, |this, cx| {
+                            this.store.dispatch(Msg::ArchiveZip {
+                                repo_id,
+                                revision,
+                                dest,
+                            });
+                            cx.notify();
+                        });
+                    })
+                    .detach();
+                self.close_popover(cx);
+                return;
+            }
             ContextMenuAction::CheckoutCommit { repo_id, commit_id } => {
                 self.store
                     .dispatch(Msg::CheckoutCommit { repo_id, commit_id });
+            }
+            ContextMenuAction::BisectStartAt {
+                repo_id,
+                bad,
+                goods,
+            } => {
+                self.store.dispatch(Msg::BisectStart {
+                    repo_id,
+                    bad,
+                    goods,
+                });
+            }
+            ContextMenuAction::BisectMarkCommit {
+                repo_id,
+                verdict,
+                commit,
+            } => {
+                self.store.dispatch(Msg::BisectMark {
+                    repo_id,
+                    verdict,
+                    commit: Some(commit),
+                });
             }
             ContextMenuAction::MarkForComparison {
                 repo_id,
@@ -1026,6 +1098,17 @@ impl PopoverHost {
             }
             ContextMenuAction::CheckoutBranch { repo_id, name } => {
                 self.store.dispatch(Msg::CheckoutBranch { repo_id, name });
+            }
+            ContextMenuAction::CheckoutPullRequest {
+                repo_id,
+                remote,
+                number,
+            } => {
+                self.store.dispatch(Msg::CheckoutPullRequest {
+                    repo_id,
+                    remote,
+                    number,
+                });
             }
             ContextMenuAction::DeleteBranch { repo_id, name } => {
                 let _ = self.root_view.update(cx, |root, _| {
@@ -1244,6 +1327,25 @@ impl PopoverHost {
                 );
                 return;
             }
+            ContextMenuAction::StashSelectionOrPath {
+                repo_id,
+                area,
+                path,
+            } => {
+                let anchor = self.popover_anchor_point();
+                // Deliberately does not consume the row selection: the prompt
+                // can still be cancelled, and `submit_stash` is the point of
+                // no return. The prompt carries the resolved paths so it stays
+                // correct even if the selection changes while it is open.
+                let (paths, _) = self.status_paths_for_action(repo_id, area, &path, cx);
+                self.open_popover_at(
+                    PopoverKind::StashPrompt { paths },
+                    anchor,
+                    window,
+                    cx,
+                );
+                return;
+            }
             ContextMenuAction::CheckoutConflictSideSelectionOrPath {
                 repo_id,
                 area,
@@ -1266,6 +1368,13 @@ impl PopoverHost {
             }
             ContextMenuAction::LaunchMergetool { repo_id, path } => {
                 self.store.dispatch(Msg::LaunchMergetool { repo_id, path });
+            }
+            ContextMenuAction::SetAssumeUnchangedPath { repo_id, path } => {
+                self.store.dispatch(Msg::SetAssumeUnchanged {
+                    repo_id,
+                    path,
+                    enable: true,
+                });
             }
             ContextMenuAction::FetchAll { repo_id } => {
                 self.store.dispatch(Msg::FetchAll { repo_id });
@@ -1633,6 +1742,21 @@ impl PopoverHost {
                         crate::i18n::t!("toast.context_menu.patch_build_failed").into_owned(),
                         cx,
                     );
+                }
+            }
+            ContextMenuAction::ExplainHunk { repo_id, src_ix } => {
+                // start_ opens the explanation popover in the menu's place, so
+                // it takes over the close-path; when it only warned (no patch,
+                // or no configured source) the menu closes as any action's
+                // aftermath does.
+                if !crate::ai_commit::current().is_configured() {
+                    self.push_toast(
+                        components::ToastKind::Warning,
+                        crate::i18n::t!("misc.ai_commit.not_configured").into_owned(),
+                        cx,
+                    );
+                } else if self.start_hunk_explanation(repo_id, src_ix, window, cx) {
+                    return;
                 }
             }
             ContextMenuAction::DeleteTag { repo_id, name } => {
