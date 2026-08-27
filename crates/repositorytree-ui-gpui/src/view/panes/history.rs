@@ -825,6 +825,13 @@ fn peek_history_selected_list_index(
         return None;
     }
     let selected_commit = selection.commit;
+    // The uncommitted sentinel is the pinned row's own selection, not a
+    // commit to look up among the visible ones: it sits at list index 0
+    // whenever the row shows, and anchors to nothing when it does not.
+    let working_tree_row_selected = selected_commit.is_some_and(CommitId::is_uncommitted);
+    if working_tree_row_selected {
+        return plan.show_working_tree_summary_row().then_some(0);
+    }
     if plan.show_working_tree_summary_row() && selected_commit.is_none() {
         return Some(0);
     }
@@ -1534,8 +1541,7 @@ impl HistoryView {
         repo_id: RepoId,
         cx: &mut gpui::Context<Self>,
     ) {
-        self.store.dispatch(Msg::ClearCommitSelection { repo_id });
-        self.store.dispatch(Msg::ClearDiffSelection { repo_id });
+        self.store.dispatch(Msg::SelectWorkingTreeSummary { repo_id });
         self.dismiss_history_refs_hover(cx);
         self.history_scroll
             .scroll_to_item_strict(0, gpui::ScrollStrategy::Center);
@@ -2165,9 +2171,13 @@ impl HistoryView {
                 })
             });
         let anchor = worktree_anchor.or_else(|| {
+            // The uncommitted sentinel names the pinned working-tree row, not
+            // any commit in the log -- its chain highlight is HEAD's, exactly
+            // as when the row is selected without a `selected_commit`.
             repo.history_state
                 .selected_commit
                 .clone()
+                .filter(|commit_id| !commit_id.is_uncommitted())
                 .or_else(|| {
                     show_worktree_summary_row
                         .then(|| repo.head_commit_id())
@@ -3178,6 +3188,7 @@ mod tests {
 
     fn commit(id: &str, parents: &[&str], summary: &str) -> Commit {
         Commit {
+            signed: false,
             id: CommitId(id.into()),
             parent_ids: parents.iter().map(|p| CommitId((*p).into())).collect(),
             summary: summary.into(),

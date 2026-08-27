@@ -7,8 +7,8 @@ mod repo_management;
 mod util;
 
 use crate::model::{
-    AppState, AuthPromptState, AuthRetryOperation, BannerErrorState, PendingCommitRetry, RepoId,
-    SubmoduleAddProgressState, SubmoduleTrustCheckOperation, SubmoduleTrustCheckState,
+    AppState, AuthPromptState, AuthRetryOperation, BannerErrorState, Loadable, PendingCommitRetry,
+    RepoId, SubmoduleAddProgressState, SubmoduleTrustCheckOperation, SubmoduleTrustCheckState,
     SubmoduleTrustPromptOperation, SubmoduleTrustPromptState,
 };
 use crate::msg::{ConflictRegionChoice, Effect, Msg, RepoCommandKind, RepoPath, RepoPathList};
@@ -98,6 +98,7 @@ pub(crate) fn msg_requires_available_git(msg: &Msg) -> bool {
             | Msg::SetHistoryAuthorFilter { .. }
             | Msg::LoadMoreHistory { .. }
             | Msg::SelectCommit { .. }
+            | Msg::SelectWorkingTreeSummary { .. }
             | Msg::CompareCommitRange { .. }
             | Msg::CompareWithMarked { .. }
             | Msg::CompareWithWorkingTree { .. }
@@ -105,9 +106,11 @@ pub(crate) fn msg_requires_available_git(msg: &Msg) -> bool {
             | Msg::SelectConflictDiff { .. }
             | Msg::SelectWorktreeUncommitted { .. }
             | Msg::LoadStashes { .. }
+            | Msg::LoadRepoStatistics { .. }
             | Msg::LoadConflictFile { .. }
             | Msg::LoadReflog { .. }
             | Msg::LoadRecentCommitMessages { .. }
+            | Msg::SearchCommits { .. }
             | Msg::LoadAiCommitContext { .. }
             | Msg::LoadHoverCommitMessage { .. }
             | Msg::LoadFileHistory { .. }
@@ -148,6 +151,8 @@ pub(crate) fn msg_requires_available_git(msg: &Msg) -> bool {
             | Msg::DeleteBranches { .. }
             | Msg::CloneRepo { .. }
             | Msg::ExportPatch { .. }
+            | Msg::ArchiveZip { .. }
+            | Msg::CleanupRepo { .. }
             | Msg::ApplyPatch { .. }
             | Msg::AddWorktree { .. }
             | Msg::RemoveWorktree { .. }
@@ -179,6 +184,7 @@ pub(crate) fn msg_requires_available_git(msg: &Msg) -> bool {
             | Msg::PushAfterCommit { .. }
             | Msg::ForcePush { .. }
             | Msg::ForcePushWithLease { .. }
+            | Msg::PushMergeRequest { .. }
             | Msg::PushSetUpstream { .. }
             | Msg::SetUpstreamBranch { .. }
             | Msg::UnsetUpstreamBranch { .. }
@@ -191,6 +197,9 @@ pub(crate) fn msg_requires_available_git(msg: &Msg) -> bool {
             | Msg::Rebase { .. }
             | Msg::RebaseContinue { .. }
             | Msg::RebaseAbort { .. }
+            | Msg::BisectStart { .. }
+            | Msg::BisectMark { .. }
+            | Msg::BisectReset { .. }
             | Msg::InteractiveRebase { .. }
             | Msg::InteractiveCherryPick { .. }
             | Msg::MergeAbort { .. }
@@ -201,6 +210,7 @@ pub(crate) fn msg_requires_available_git(msg: &Msg) -> bool {
             | Msg::AddRemote { .. }
             | Msg::RemoveRemote { .. }
             | Msg::SetRemoteUrl { .. }
+            | Msg::SetRemoteSshKey { .. }
             | Msg::CheckoutConflictSide { .. }
             | Msg::AcceptConflictDeletion { .. }
             | Msg::CheckoutConflictBase { .. }
@@ -209,6 +219,8 @@ pub(crate) fn msg_requires_available_git(msg: &Msg) -> bool {
             | Msg::ApplyStash { .. }
             | Msg::PopStash { .. }
             | Msg::DropStash { .. }
+            | Msg::StashBranch { .. }
+            | Msg::SetAssumeUnchanged { .. }
     )
 }
 
@@ -381,6 +393,9 @@ fn retry_msg_for_repo_command(repo_id: RepoId, command: RepoCommandKind) -> Opti
         },
         RepoCommandKind::ForcePush => Msg::ForcePush { repo_id },
         RepoCommandKind::ForcePushWithLease { lease } => Msg::ForcePushWithLease { repo_id, lease },
+        RepoCommandKind::PushMergeRequest { options } => {
+            Msg::PushMergeRequest { repo_id, options }
+        }
         RepoCommandKind::PushSetUpstream { remote, branch } => Msg::PushSetUpstream {
             repo_id,
             remote,
@@ -425,6 +440,19 @@ fn retry_msg_for_repo_command(repo_id: RepoId, command: RepoCommandKind) -> Opti
         RepoCommandKind::Rebase { onto } => Msg::Rebase { repo_id, onto },
         RepoCommandKind::RebaseContinue => Msg::RebaseContinue { repo_id },
         RepoCommandKind::RebaseAbort => Msg::RebaseAbort { repo_id },
+        // Bisect commands never need auth, so this replay path never fires for
+        // them — but a faithful mapping keeps the match exhaustive.
+        RepoCommandKind::BisectStart { bad, goods } => Msg::BisectStart {
+            repo_id,
+            bad,
+            goods,
+        },
+        RepoCommandKind::BisectMark { verdict, commit } => Msg::BisectMark {
+            repo_id,
+            verdict,
+            commit,
+        },
+        RepoCommandKind::BisectReset => Msg::BisectReset { repo_id },
         // Sequencer commands only reach an auth prompt through a signing
         // passphrase failure, and by then git has already left cherry-pick
         // or rebase state on disk: replaying the original plan would be
@@ -483,6 +511,11 @@ fn retry_msg_for_repo_command(repo_id: RepoId, command: RepoCommandKind) -> Opti
             url,
             kind,
         },
+        RepoCommandKind::SetRemoteSshKey { remote, key } => Msg::SetRemoteSshKey {
+            repo_id,
+            remote,
+            key,
+        },
         RepoCommandKind::CheckoutConflict { path, side } => Msg::CheckoutConflictSide {
             repo_id,
             path,
@@ -498,6 +531,12 @@ fn retry_msg_for_repo_command(repo_id: RepoId, command: RepoCommandKind) -> Opti
         RepoCommandKind::ExportPatch { commit_id, dest } => Msg::ExportPatch {
             repo_id,
             commit_id,
+            dest,
+        },
+        RepoCommandKind::Cleanup => Msg::CleanupRepo { repo_id },
+        RepoCommandKind::ArchiveZip { revision, dest } => Msg::ArchiveZip {
+            repo_id,
+            revision,
             dest,
         },
         RepoCommandKind::ApplyPatch { patch } => Msg::ApplyPatch { repo_id, patch },
@@ -581,6 +620,7 @@ fn attach_git_auth_to_effects(mut effects: Vec<Effect>, auth: StagedGitAuth) -> 
         | Effect::PushAfterCommit { auth: slot, .. }
         | Effect::ForcePush { auth: slot, .. }
         | Effect::ForcePushWithLease { auth: slot, .. }
+        | Effect::PushMergeRequest { auth: slot, .. }
         | Effect::PushSetUpstream { auth: slot, .. }
         | Effect::DeleteRemoteBranch { auth: slot, .. }
         | Effect::DeleteRemoteBranches { auth: slot, .. }
@@ -780,6 +820,8 @@ fn is_view_navigation(msg: &Msg) -> bool {
             // Selecting a linked-worktree row is a destination like any other
             // history selection; it just is not a commit.
             | Msg::SelectWorktreeUncommitted { .. }
+            // So is selecting this checkout's uncommitted-changes row.
+            | Msg::SelectWorkingTreeSummary { .. }
             | Msg::CompareCommitRange { .. }
             | Msg::CompareWithMarked { .. }
             | Msg::CompareWithWorkingTree { .. }
@@ -931,6 +973,9 @@ fn reduce_inner(
         Msg::SetHistoryAuthorFilter { repo_id, author } => {
             external_and_history::set_history_author_filter(state, repo_id, author)
         }
+        Msg::SetHistoryRefFilters { repo_id, refs } => {
+            external_and_history::set_history_ref_filters(state, repo_id, refs)
+        }
         Msg::SetFetchPruneDeletedRemoteTrackingBranches { repo_id, enabled } => {
             repo_management::set_fetch_prune_deleted_remote_tracking_branches(
                 state, repo_id, enabled,
@@ -1039,6 +1084,7 @@ fn reduce_inner(
         Msg::LoadRecentCommitMessages { repo_id, limit } => {
             effects::load_recent_commit_messages(state, repo_id, limit)
         }
+        Msg::SearchCommits { repo_id, query } => effects::search_commits(state, repo_id, query),
         Msg::LoadAiCommitContext { repo_id } => effects::load_ai_commit_context(state, repo_id),
         Msg::LoadFileHistory {
             repo_id,
@@ -1055,8 +1101,20 @@ fn reduce_inner(
         Msg::SelectWorktreeUncommitted { repo_id, path } => {
             effects::select_worktree_uncommitted(state, repo_id, path)
         }
+        Msg::SelectWorkingTreeSummary { repo_id } => {
+            effects::select_working_tree_summary(state, repo_id)
+        }
         Msg::LoadRefMetadata { repo_id } => effects::load_ref_metadata(state, repo_id),
         Msg::LoadSubmodules { repo_id } => effects::load_submodules(state, repo_id),
+        // The GitHub API call itself is spawned by the UI (the store has no
+        // HTTP); this arm only flips the loadable so the section renders its
+        // loading state and re-loads are not double-spawned.
+        Msg::LoadPullRequests { repo_id } => {
+            if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+                repo_state.set_pull_requests(Loadable::Loading);
+            }
+            Vec::new()
+        }
         Msg::LoadTags { repo_id } => effects::load_tags(state, repo_id),
         Msg::LoadRemoteTags { repo_id } => effects::load_remote_tags(state, repo_id),
         Msg::RefreshBranches { repo_id } => effects::refresh_branches(state, repo_id),
@@ -1163,6 +1221,17 @@ fn reduce_inner(
             begin_head_changing_local_action(state, repo_id);
             actions_emit_effects::checkout_remote_branch(repo_id, remote, branch, local_branch)
         }
+        Msg::CheckoutPullRequest {
+            repo_id,
+            remote,
+            number,
+        } => {
+            if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+                repo_state.set_detached_head_commit(None);
+            }
+            begin_head_changing_local_action(state, repo_id);
+            actions_emit_effects::checkout_pull_request(repo_id, remote, number)
+        }
         Msg::CheckoutCommit { repo_id, commit_id } => {
             if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
                 repo_state.set_detached_head_commit(Some(commit_id.clone()));
@@ -1254,6 +1323,18 @@ fn reduce_inner(
         } => {
             begin_local_action(state, repo_id);
             actions_emit_effects::export_patch(repo_id, commit_id, dest)
+        }
+        Msg::ArchiveZip {
+            repo_id,
+            revision,
+            dest,
+        } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::archive_zip(repo_id, revision, dest)
+        }
+        Msg::CleanupRepo { repo_id } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::cleanup_repo(repo_id)
         }
         Msg::ApplyPatch { repo_id, patch } => {
             begin_local_action(state, repo_id);
@@ -1521,6 +1602,9 @@ fn reduce_inner(
         Msg::ForcePushWithLease { repo_id, lease } => {
             actions_emit_effects::force_push_with_lease(repos, state, repo_id, lease)
         }
+        Msg::PushMergeRequest { repo_id, options } => {
+            actions_emit_effects::push_merge_request(repos, state, repo_id, options)
+        }
         Msg::PushSetUpstream {
             repo_id,
             remote,
@@ -1591,6 +1675,26 @@ fn reduce_inner(
         Msg::RebaseAbort { repo_id } => {
             begin_local_action(state, repo_id);
             actions_emit_effects::rebase_abort(repo_id)
+        }
+        Msg::BisectStart {
+            repo_id,
+            bad,
+            goods,
+        } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::bisect_start(repo_id, bad, goods)
+        }
+        Msg::BisectMark {
+            repo_id,
+            verdict,
+            commit,
+        } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::bisect_mark(repo_id, verdict, commit)
+        }
+        Msg::BisectReset { repo_id } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::bisect_reset(repo_id)
         }
         Msg::LoadInteractiveRebaseSetup { repo_id, base } => {
             actions_emit_effects::load_interactive_rebase_setup(state, repo_id, base)
@@ -1671,6 +1775,14 @@ fn reduce_inner(
         } => {
             begin_local_action(state, repo_id);
             actions_emit_effects::set_remote_url(repo_id, name, url, kind)
+        }
+        Msg::SetRemoteSshKey {
+            repo_id,
+            remote,
+            key,
+        } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::set_remote_ssh_key(repo_id, remote, key)
         }
         Msg::CheckoutConflictSide {
             repo_id,
@@ -1854,9 +1966,11 @@ fn reduce_inner(
             repo_id,
             message,
             include_untracked,
+            keep_index,
+            paths,
         } => {
             begin_local_action(state, repo_id);
-            actions_emit_effects::stash(repo_id, message, include_untracked)
+            actions_emit_effects::stash(repo_id, message, include_untracked, keep_index, paths)
         }
         Msg::ApplyStash { repo_id, index } => {
             begin_local_action(state, repo_id);
@@ -1869,6 +1983,26 @@ fn reduce_inner(
         Msg::DropStash { repo_id, index } => {
             begin_local_action(state, repo_id);
             actions_emit_effects::drop_stash(repo_id, index)
+        }
+        Msg::SetAssumeUnchanged {
+            repo_id,
+            path,
+            enable,
+        } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::set_assume_unchanged(repo_id, path, enable)
+        }
+        Msg::LoadAssumeUnchanged { repo_id } => {
+            actions_emit_effects::load_assume_unchanged(repo_id)
+        }
+        Msg::LoadRepoStatistics { repo_id } => effects::load_repo_statistics(state, repo_id),
+        Msg::StashBranch {
+            repo_id,
+            index,
+            branch,
+        } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::stash_branch(repo_id, index, branch)
         }
         Msg::Internal(crate::msg::InternalMsg::RepoOpenedOk {
             repo_id,
@@ -1955,11 +2089,26 @@ fn reduce_inner(
         Msg::Internal(crate::msg::InternalMsg::StashesLoaded { repo_id, result }) => {
             effects::stashes_loaded(state, repo_id, result)
         }
+        Msg::Internal(crate::msg::InternalMsg::AssumeUnchangedListLoaded {
+            repo_id,
+            result,
+        }) => {
+            effects::assume_unchanged_list_loaded(state, repo_id, result)
+        }
+        Msg::Internal(crate::msg::InternalMsg::RepoStatisticsLoaded {
+            repo_id,
+            result,
+        }) => {
+            effects::repo_statistics_loaded(state, repo_id, result)
+        }
         Msg::Internal(crate::msg::InternalMsg::ReflogLoaded { repo_id, result }) => {
             effects::reflog_loaded(state, repo_id, result)
         }
         Msg::Internal(crate::msg::InternalMsg::RebaseStateLoaded { repo_id, result }) => {
             external_and_history::rebase_state_loaded(state, repo_id, result)
+        }
+        Msg::Internal(crate::msg::InternalMsg::BisectStateLoaded { repo_id, result }) => {
+            external_and_history::bisect_state_loaded(state, repo_id, result)
         }
         Msg::Internal(crate::msg::InternalMsg::InteractiveRebaseSetupLoaded {
             repo_id,
@@ -2177,6 +2326,11 @@ fn reduce_inner(
             request_rev,
             result,
         }) => effects::recent_commit_messages_loaded(state, repo_id, request_rev, result),
+        Msg::Internal(crate::msg::InternalMsg::CommitsSearched {
+            repo_id,
+            request_rev,
+            result,
+        }) => effects::commits_searched(state, repo_id, request_rev, result),
         Msg::Internal(crate::msg::InternalMsg::AiCommitContextLoaded {
             repo_id,
             request_rev,
@@ -2192,6 +2346,11 @@ fn reduce_inner(
             target,
             result,
         }) => diff_selection::diff_file_loaded(state, repo_id, target, result),
+        Msg::Internal(crate::msg::InternalMsg::DiffFileLfsLoaded {
+            repo_id,
+            target,
+            result,
+        }) => diff_selection::diff_file_lfs_loaded(state, repo_id, target, result),
         Msg::Internal(crate::msg::InternalMsg::DiffPreviewTextFileLoaded {
             repo_id,
             target,
@@ -2232,6 +2391,25 @@ fn reduce_inner(
             target,
             result,
         }) => diff_selection::diff_file_image_loaded(state, repo_id, target, result),
+        Msg::Internal(crate::msg::InternalMsg::PullRequestsLoaded { repo_id, result }) => {
+            if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+                repo_state.set_pull_requests(match result {
+                    Ok(pull_requests) => Loadable::Ready(pull_requests),
+                    Err(error) => Loadable::Error(error.to_string()),
+                });
+            }
+            Vec::new()
+        }
+        Msg::Internal(crate::msg::InternalMsg::PullRequestChecksLoaded {
+            repo_id,
+            number,
+            checks,
+        }) => {
+            if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+                repo_state.set_pull_request_checks(number, checks);
+            }
+            Vec::new()
+        }
         Msg::Internal(crate::msg::InternalMsg::RepoActionFinished {
             repo_id,
             action,
@@ -2513,6 +2691,45 @@ mod nav_history_tests {
             "forward must reproduce the worktree row, not just clear the commit"
         );
         assert_eq!(repo(&state, repo_id).history_state.selected_commit, None);
+    }
+
+    /// The uncommitted-changes row is a fourth kind of history selection. Like
+    /// the worktree row, it must be a navigation step of its own — otherwise
+    /// Back would skip the commit the user came from, and Forward could not
+    /// reproduce the working-tree review.
+    #[test]
+    fn selecting_the_working_tree_row_is_a_navigation_step_of_its_own() {
+        let repo_id = RepoId(1);
+        let mut state = available_state_with_repo(repo_id);
+        let commit = CommitId("abc".into());
+
+        dispatch(
+            &mut state,
+            Msg::SelectCommit {
+                repo_id,
+                commit_id: commit.clone(),
+            },
+        );
+        dispatch(&mut state, Msg::SelectWorkingTreeSummary { repo_id });
+        assert_eq!(
+            repo(&state, repo_id).history_state.selected_commit,
+            Some(CommitId::uncommitted()),
+            "the working-tree row displaces the commit selection"
+        );
+
+        dispatch(&mut state, Msg::GlobalNavBack { repo_id });
+        assert_eq!(
+            repo(&state, repo_id).history_state.selected_commit.as_ref(),
+            Some(&commit),
+            "back must return to the commit the working-tree row was selected from"
+        );
+
+        dispatch(&mut state, Msg::GlobalNavForward { repo_id });
+        assert_eq!(
+            repo(&state, repo_id).history_state.selected_commit,
+            Some(CommitId::uncommitted()),
+            "forward must reproduce the working-tree review"
+        );
     }
 
     #[test]
@@ -2946,6 +3163,7 @@ mod comparison_tests {
 
     fn commit(id: &str, parent: &str) -> Commit {
         Commit {
+            signed: false,
             id: CommitId(id.into()),
             parent_ids: smallvec::smallvec![CommitId(parent.into())],
             summary: id.into(),

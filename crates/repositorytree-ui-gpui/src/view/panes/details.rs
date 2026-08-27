@@ -51,6 +51,22 @@ pub(in super::super) struct WorktreeFileListInputs {
     pub(in super::super) entries: Vec<repositorytree_state::model::InlineSubmoduleDiffEntry>,
 }
 
+/// The cached [`WorkingTreeReviewInputs`] and the status revisions they were
+/// derived from: repo, worktree-status lane, staged-status lane.
+type WorkingTreeReviewInputsCacheEntry = (
+    (RepoId, u64, u64),
+    Arc<WorkingTreeReviewInputs>,
+);
+
+/// This checkout's uncommitted changes in the shape the review view needs: the
+/// rows render from `files`, and a click opens the entry's own diff via its
+/// `(path, area)` pair — the staged patch for staged entries, the working-tree
+/// patch for unstaged ones.
+pub(in super::super) struct WorkingTreeReviewInputs {
+    pub(in super::super) files: Vec<repositorytree_core::domain::CommitFileChange>,
+    pub(in super::super) targets: Vec<(std::path::PathBuf, DiffArea)>,
+}
+
 pub(in super::super) struct DetailsPaneView {
     pub(in super::super) store: Arc<AppStore>,
     pub(in super::super) state: Arc<AppState>,
@@ -134,6 +150,16 @@ pub(in super::super) struct DetailsPaneView {
     /// scan rather than per frame. Same key as `worktree_file_rows`, and for the
     /// same reason.
     worktree_file_inputs: std::cell::RefCell<Option<WorktreeFileListInputsCacheEntry>>,
+    /// The uncommitted-changes review's inputs, derived once per status reply
+    /// rather than per frame. Keyed on both status lanes' revisions; the rows
+    /// cache below shares the key for the same reason.
+    working_tree_file_inputs: std::cell::RefCell<Option<WorkingTreeReviewInputsCacheEntry>>,
+    working_tree_file_rows: std::cell::RefCell<
+        crate::view::rows::CommitFileRowPresentationCache<(RepoId, u64, u64)>,
+    >,
+    pub(in super::super) working_tree_scroll: UniformListScrollHandle,
+    pub(in super::super) working_tree_files_path_alignment_group:
+        components::PathTruncationAlignmentGroup,
     pub(in super::super) untracked_path_alignment_group: components::PathTruncationAlignmentGroup,
     pub(in super::super) unstaged_path_alignment_group: components::PathTruncationAlignmentGroup,
     pub(in super::super) staged_path_alignment_group: components::PathTruncationAlignmentGroup,
@@ -495,6 +521,13 @@ impl DetailsPaneView {
                 crate::view::rows::CommitFileRowPresentationCache::default(),
             ),
             worktree_file_inputs: std::cell::RefCell::new(None),
+            working_tree_file_inputs: std::cell::RefCell::new(None),
+            working_tree_file_rows: std::cell::RefCell::new(
+                crate::view::rows::CommitFileRowPresentationCache::default(),
+            ),
+            working_tree_scroll: UniformListScrollHandle::new(),
+            working_tree_files_path_alignment_group:
+                components::PathTruncationAlignmentGroup::default(),
             untracked_path_alignment_group: components::PathTruncationAlignmentGroup::default(),
             unstaged_path_alignment_group: components::PathTruncationAlignmentGroup::default(),
             staged_path_alignment_group: components::PathTruncationAlignmentGroup::default(),
@@ -1207,6 +1240,62 @@ impl DetailsPaneView {
             range.start,
             range.end,
         ))
+    }
+
+    /// This checkout's uncommitted changes as the review's inputs, derived once
+    /// per status reply rather than per frame — same contract as
+    /// [`Self::cached_worktree_file_inputs`]. Staged entries first, matching
+    /// the status sections and the synthesized details.
+    pub(in super::super) fn cached_working_tree_review_inputs(
+        &self,
+        repo: &repositorytree_state::model::RepoState,
+    ) -> Arc<WorkingTreeReviewInputs> {
+        let key = (
+            repo.id,
+            repo.worktree_status_cache_rev(),
+            repo.staged_status_cache_rev(),
+        );
+        let mut cache = self.working_tree_file_inputs.borrow_mut();
+        if let Some((cached_key, inputs)) = cache.as_ref()
+            && *cached_key == key
+        {
+            return Arc::clone(inputs);
+        }
+
+        let mut files = Vec::new();
+        let mut targets = Vec::new();
+        let mut push = |list: &Loadable<Arc<Vec<repositorytree_core::domain::FileStatus>>>,
+                        area: DiffArea| {
+            let Loadable::Ready(entries) = list else {
+                return;
+            };
+            for file in entries.iter() {
+                files.push(repositorytree_core::domain::CommitFileChange {
+                    path: file.path.clone(),
+                    kind: file.kind,
+                    is_submodule: false,
+                    additions: None,
+                    deletions: None,
+                });
+                targets.push((file.path.clone(), area));
+            }
+        };
+        push(&repo.staged_status, DiffArea::Staged);
+        push(&repo.worktree_status, DiffArea::Unstaged);
+        let inputs = Arc::new(WorkingTreeReviewInputs { files, targets });
+        *cache = Some((key, Arc::clone(&inputs)));
+        inputs
+    }
+
+    /// Presentation rows for the uncommitted-changes review. Keyed on both
+    /// status lanes' revisions, which is exactly when the file list moves.
+    pub(in super::super) fn cached_working_tree_file_rows(
+        &self,
+        key: (RepoId, u64, u64),
+        files: &[repositorytree_core::domain::CommitFileChange],
+    ) -> Arc<[crate::view::rows::CommitFileRowPresentation]> {
+        let mut cache = self.working_tree_file_rows.borrow_mut();
+        cache.rows_for(&key, files)
     }
 
     pub(in super::super) fn status_path_alignment_group(

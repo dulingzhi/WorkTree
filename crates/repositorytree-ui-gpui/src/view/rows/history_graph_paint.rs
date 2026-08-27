@@ -244,7 +244,8 @@ pub(super) fn paint_graph_fade(
 /// upwards, and both have to agree on the column or the two rows show a seam.
 ///
 /// Only the two synthetic row kinds connect downwards: the pinned working-tree
-/// row, which always sits on column 0, and a worktree band. A band's connector
+/// row, on the column its caller placed its node (HEAD's lane when HEAD leads
+/// the page, otherwise column 0), and a worktree band. A band's connector
 /// leaves on its node's `exit_col`, not the column the node is drawn on — when the
 /// node is pushed out to a free column it elbows back across before the row ends
 /// (see [`band_node_for`]) — and it is that landing column the row below must
@@ -256,12 +257,13 @@ pub(in crate::view) fn worktree_band_connect_from_top_col(
     plan: &crate::view::caches::HistoryListPlan,
     graph_rows: &[history_graph::GraphRow],
     worktree_dirty: &[repositorytree_core::domain::WorktreeDirtySummary],
+    working_tree_summary_node_col: Option<usize>,
     list_ix: usize,
 ) -> Option<usize> {
     use crate::view::caches::HistoryListRow;
 
     match plan.row_at(list_ix.checked_sub(1)?) {
-        Some(HistoryListRow::WorkingTreeSummary) => Some(0),
+        Some(HistoryListRow::WorkingTreeSummary) => working_tree_summary_node_col,
         Some(HistoryListRow::WorktreeUncommitted {
             visible_ix,
             worktree_ix,
@@ -1114,29 +1116,35 @@ mod band_tests {
         );
 
         assert_eq!(
-            worktree_band_connect_from_top_col(&plan, &rows, &dirty, 1),
+            worktree_band_connect_from_top_col(&plan, &rows, &dirty, None, 1),
             Some(usize::from(detached.exit_col)),
             "the lower band meets the column the band above actually lands on, \
              not the one its node is drawn on"
         );
         assert_eq!(
-            worktree_band_connect_from_top_col(&plan, &rows, &dirty, 0),
+            worktree_band_connect_from_top_col(&plan, &rows, &dirty, None, 0),
             None,
             "the top band has nothing above it"
         );
     }
 
-    /// The pinned working-tree row always draws its connector straight down
-    /// column 0, whatever the band below resolves to.
+    /// The pinned working-tree row draws its connector down whatever column its
+    /// node was placed on, whatever the band below resolves to.
     #[test]
-    fn a_band_under_the_working_tree_row_connects_from_column_zero() {
+    fn a_band_under_the_working_tree_row_connects_from_the_placed_column() {
         let row = band(&[incoming(1), born(7)], 0);
         let dirty = [worktree(Some("behind"), false)];
         let plan = HistoryListPlan::new(true, vec![row_anchor(0, 0)]);
 
         assert_eq!(
-            worktree_band_connect_from_top_col(&plan, &[row], &dirty, 1),
-            Some(0)
+            worktree_band_connect_from_top_col(&plan, &[row.clone()], &dirty, Some(0), 1),
+            Some(0),
+            "the column-0 placement is the fallback the caller passes through"
+        );
+        assert_eq!(
+            worktree_band_connect_from_top_col(&plan, &[row], &dirty, Some(3), 1),
+            Some(3),
+            "a HEAD-lane placement flows through to the row below unchanged"
         );
     }
 
@@ -1150,7 +1158,7 @@ mod band_tests {
         let plan = HistoryListPlan::new(false, vec![row_anchor(1, 0)]);
 
         assert_eq!(
-            worktree_band_connect_from_top_col(&plan, &[row.clone(), row], &dirty, 1),
+            worktree_band_connect_from_top_col(&plan, &[row.clone(), row], &dirty, None, 1),
             None
         );
     }

@@ -22,6 +22,9 @@ layout:
     open_in_tab: "Open this worktree in a tab\n%{path}"
     close: Close
     loading_files: Loading files…
+  working_tree_review:
+    close: Close
+    empty: "No uncommitted changes."
   comparison:
     title: Comparison
     close: Close comparison

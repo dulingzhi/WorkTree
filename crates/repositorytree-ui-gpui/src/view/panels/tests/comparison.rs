@@ -8,6 +8,7 @@ fn sha(ix: usize) -> String {
 
 fn log_commit(ix: usize) -> Commit {
     Commit {
+        signed: false,
         id: CommitId(sha(ix).into()),
         parent_ids: CommitParentIds::new(),
         summary: format!("commit {ix}").into(),
@@ -487,5 +488,176 @@ mod worktree_uncommitted {
         let cx = draw_worktree(cx, RepoId(92), Vec::new(), Vec::new(), true);
 
         assert!(cx.debug_bounds("worktree_uncommitted_body").is_some());
+    }
+}
+
+/// The pinned uncommitted-changes row's own details view: this checkout's
+/// working tree as a review. Selecting the row parks the uncommitted sentinel
+/// in `selected_commit`, and the pane answers with the staged and unstaged
+/// files instead of a commit's.
+mod working_tree_review {
+    use super::*;
+    use repositorytree_core::domain::{FileStatus, FileStatusKind};
+
+    fn file(path: &str, kind: FileStatusKind) -> FileStatus {
+        FileStatus {
+            path: std::path::PathBuf::from(path),
+            kind,
+            conflict: None,
+        }
+    }
+
+    /// Draw the details pane with the uncommitted-changes row selected and the
+    /// given staged and unstaged files in the always-loaded status state.
+    fn draw_review(
+        cx: &mut gpui::TestAppContext,
+        repo_id: RepoId,
+        staged: Vec<FileStatus>,
+        unstaged: Vec<FileStatus>,
+    ) -> (
+        gpui::Entity<super::super::super::RepositoryTreeView>,
+        &mut gpui::VisualTestContext,
+    ) {
+        let (store, events) = AppStore::new(Arc::new(TestBackend));
+        let (view, cx) = cx.add_window_view(|window, cx| {
+            super::super::super::RepositoryTreeView::new(store, events, None, window, cx)
+        });
+
+        cx.update(|_window, app| {
+            view.update(app, |this, cx| {
+                let mut repo = opening_repo_state(repo_id, Path::new("/tmp/repo-review"));
+                repo.open = Loadable::Ready(());
+                repo.head_branch = Loadable::Ready("main".into());
+                repo.detached_head_commit = Some(CommitId(sha(0).into()));
+                repo.status = Loadable::Ready(repositorytree_core::domain::RepoStatus::default().into());
+                repo.log = Loadable::Ready(Arc::new(repositorytree_core::domain::LogPage {
+                    commits: (0..2).map(log_commit).collect(),
+                    next_cursor: None,
+                }));
+                repo.log_rev = 1;
+                repo.staged_status = Loadable::Ready(Arc::new(staged));
+                repo.worktree_status = Loadable::Ready(Arc::new(unstaged));
+                repo.history_state.selected_commit = Some(CommitId::uncommitted());
+
+                let next_state = app_state_with_repo(repo, repo_id);
+                this.store
+                    .replace_snapshot_for_test(Arc::clone(&next_state));
+                push_test_state(this, next_state, cx);
+            });
+        });
+
+        cx.update(|window, app| {
+            let _ = window.draw(app);
+        });
+        (view, cx)
+    }
+
+    /// The row's selection is not a commit, so the pane must not fall through
+    /// to the commit-details empty state -- it becomes the working tree's own
+    /// review, with every changed file a row.
+    #[gpui::test]
+    fn selecting_the_working_tree_row_takes_over_the_details_pane(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (_view, cx) = draw_review(
+            cx,
+            RepoId(95),
+            vec![file("staged.rs", FileStatusKind::Modified)],
+            vec![file("unstaged.txt", FileStatusKind::Modified)],
+        );
+
+        assert!(
+            cx.debug_bounds("working_tree_review_body").is_some(),
+            "the uncommitted-changes row should render its own view"
+        );
+        assert!(
+            cx.debug_bounds("working_tree_review_file_95_0").is_some(),
+            "the staged file should render"
+        );
+        assert!(
+            cx.debug_bounds("working_tree_review_file_95_1").is_some(),
+            "the unstaged file should render"
+        );
+        let staged_row = cx
+            .debug_bounds("working_tree_review_file_95_0")
+            .expect("staged row");
+        let unstaged_row = cx
+            .debug_bounds("working_tree_review_file_95_1")
+            .expect("unstaged row");
+        assert!(
+            staged_row.origin.y <= unstaged_row.origin.y,
+            "staged files come first, mirroring the status sections"
+        );
+    }
+
+    /// The status state can go clean while the row is still selected -- between
+    /// one repaint and the next. The review must say so rather than vanish.
+    #[gpui::test]
+    fn a_clean_tree_under_selection_reads_as_empty(cx: &mut gpui::TestAppContext) {
+        let (_view, cx) = draw_review(cx, RepoId(96), Vec::new(), Vec::new());
+
+        assert!(cx.debug_bounds("working_tree_review_body").is_some());
+        assert!(
+            cx.debug_bounds("working_tree_review_empty").is_some(),
+            "a selected row over a clean tree should say there is nothing to review"
+        );
+        assert!(
+            cx.debug_bounds("working_tree_review_file_96_0").is_none(),
+            "no file rows without changes"
+        );
+    }
+
+    /// Clicking a file in the review opens that entry's own diff: the staged
+    /// patch for staged entries, the working-tree patch for unstaged ones --
+    /// the same target clicking the file in the status sections produces.
+    #[gpui::test]
+    fn clicking_a_review_file_selects_its_working_tree_diff(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let (view, cx) = draw_review(
+            cx,
+            RepoId(97),
+            Vec::new(),
+            vec![file("notes.txt", FileStatusKind::Modified)],
+        );
+
+        let row = cx
+            .debug_bounds("working_tree_review_file_97_0")
+            .expect("the unstaged file's row should render");
+        let center = row.center();
+        cx.simulate_event(gpui::MouseDownEvent {
+            position: center,
+            modifiers: Default::default(),
+            button: gpui::MouseButton::Left,
+            click_count: 1,
+            first_mouse: false,
+        });
+        cx.simulate_event(gpui::MouseUpEvent {
+            position: center,
+            modifiers: Default::default(),
+            button: gpui::MouseButton::Left,
+            click_count: 1,
+        });
+        cx.update(|window, app| {
+            let _ = window.draw(app);
+        });
+
+        let target = cx.update(|_window, app| {
+            view.read(app)
+                .store
+                .snapshot()
+                .repos
+                .iter()
+                .find(|repo| repo.id == RepoId(97))
+                .and_then(|repo| repo.diff_state.diff_target.clone())
+        });
+        assert_eq!(
+            target,
+            Some(repositorytree_core::domain::DiffTarget::WorkingTree {
+                path: std::path::PathBuf::from("notes.txt"),
+                area: repositorytree_core::domain::DiffArea::Unstaged,
+            }),
+            "clicking an unstaged review file should open the working-tree patch"
+        );
     }
 }

@@ -21,6 +21,9 @@ layout:
     open_in_tab: "在标签页中打开此工作树\n%{path}"
     close: 关闭
     loading_files: 正在加载文件…
+  working_tree_review:
+    close: 关闭
+    empty: "没有未提交的更改。"
   comparison:
     title: 比较
     close: 关闭比较
