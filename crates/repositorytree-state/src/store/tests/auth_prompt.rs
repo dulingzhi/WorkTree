@@ -42,6 +42,7 @@ fn effect_git_auth(effect: &Effect) -> Option<&StagedGitAuth> {
         | Effect::PushAfterCommit { auth, .. }
         | Effect::ForcePush { auth, .. }
         | Effect::ForcePushWithLease { auth, .. }
+        | Effect::PushMergeRequest { auth, .. }
         | Effect::PushSetUpstream { auth, .. }
         | Effect::DeleteRemoteBranch { auth, .. }
         | Effect::DeleteRemoteBranches { auth, .. }

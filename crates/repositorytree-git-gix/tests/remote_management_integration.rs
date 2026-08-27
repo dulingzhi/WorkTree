@@ -1,4 +1,6 @@
-use repositorytree_core::services::{GitBackend, PullMode, RemoteUrlKind};
+use repositorytree_core::services::{
+    GitBackend, MergeRequestPushOptions, PullMode, RemoteUrlKind,
+};
 use repositorytree_git_gix::GixBackend;
 #[path = "support/test_git_env.rs"]
 mod test_git_env;
@@ -1104,5 +1106,140 @@ fn pull_branch_with_output_merges_named_remote_branch() {
     assert!(
         !merged.trim().is_empty(),
         "expected main branch to remain valid"
+    );
+}
+
+/// Shared fixture for the merge-request push tests: a bare remote plus a work
+/// repo whose `feature` branch has one commit and no upstream, so the
+/// merge-request push resolves the remote itself.
+fn setup_merge_request_push_fixture(root: &Path) -> (std::path::PathBuf, std::path::PathBuf) {
+    let remote_repo = root.join("remote.git");
+    let work_repo = root.join("work");
+    fs::create_dir_all(&remote_repo).expect("create remote repo dir");
+    fs::create_dir_all(&work_repo).expect("create work repo dir");
+
+    run_git(&remote_repo, &["init", "--bare", "-b", "main"]);
+    // GitLab advertises push-option support; a stock bare repo does not.
+    run_git(
+        &remote_repo,
+        &["config", "receive.advertisePushOptions", "true"],
+    );
+    run_git(&work_repo, &["init", "-b", "main"]);
+    configure_repo_with_user(&work_repo);
+
+    let remote_str = git_remote_url(&remote_repo);
+    run_git(&work_repo, &["remote", "add", "origin", &remote_str]);
+
+    fs::write(work_repo.join("file.txt"), "base\n").expect("write base file");
+    run_git(&work_repo, &["add", "file.txt"]);
+    run_git(
+        &work_repo,
+        &["-c", "commit.gpgsign=false", "commit", "-m", "base"],
+    );
+    run_git(&work_repo, &["checkout", "-b", "feature"]);
+
+    (remote_repo, work_repo)
+}
+
+#[test]
+fn push_merge_request_with_output_carries_push_options() {
+    let _guard = remote_management_test_lock();
+    if !require_git_local_push_for_remote_management_tests() {
+        return;
+    }
+    let dir = tempfile::tempdir().expect("create tempdir");
+    let (_remote_repo, work_repo) = setup_merge_request_push_fixture(dir.path());
+
+    let backend = GixBackend;
+    let opened = backend.open(&work_repo).expect("open work repo");
+    let output = opened
+        .push_merge_request_with_output(&MergeRequestPushOptions {
+            create: true,
+            target_branch: Some("main".to_string()),
+            merge_when_pipeline_succeeds: false,
+            remove_source_branch: true,
+            push_to_mr_branch: false,
+        })
+        .expect("merge-request push");
+    assert_eq!(output.exit_code, Some(0));
+    assert!(
+        output.command.contains("-o merge_request.create"),
+        "command label should carry the create option: {}",
+        output.command
+    );
+    assert!(
+        output
+            .command
+            .contains("-o merge_request.target=main"),
+        "command label should carry the target option: {}",
+        output.command
+    );
+    assert!(
+        output
+            .command
+            .contains("-o merge_request.remove_source_branch"),
+        "command label should carry the remove-source option: {}",
+        output.command
+    );
+    assert!(
+        output.command.contains("origin HEAD:refs/heads/feature"),
+        "without an upstream the branch itself is the refspec: {}",
+        output.command
+    );
+
+    let remote_feature = run_git_capture(
+        &work_repo,
+        &["ls-remote", "--heads", "origin", "refs/heads/feature"],
+    );
+    assert!(
+        !remote_feature.trim().is_empty(),
+        "expected the feature branch on origin"
+    );
+}
+
+#[test]
+fn push_merge_request_with_output_can_push_to_mr_branch() {
+    let _guard = remote_management_test_lock();
+    if !require_git_local_push_for_remote_management_tests() {
+        return;
+    }
+    let dir = tempfile::tempdir().expect("create tempdir");
+    let (_remote_repo, work_repo) = setup_merge_request_push_fixture(dir.path());
+
+    let backend = GixBackend;
+    let opened = backend.open(&work_repo).expect("open work repo");
+    let output = opened
+        .push_merge_request_with_output(&MergeRequestPushOptions {
+            create: true,
+            target_branch: None,
+            merge_when_pipeline_succeeds: false,
+            remove_source_branch: false,
+            push_to_mr_branch: true,
+        })
+        .expect("merge-request push to MR branch");
+    assert_eq!(output.exit_code, Some(0));
+    assert!(
+        output.command.contains("HEAD:refs/heads/MR/feature"),
+        "the MR-branch gesture redirects the refspec: {}",
+        output.command
+    );
+
+    // Fully-qualified patterns: a bare "feature" would tail-match
+    // refs/heads/MR/feature too.
+    let remote_mr_branch = run_git_capture(
+        &work_repo,
+        &["ls-remote", "--heads", "origin", "refs/heads/MR/feature"],
+    );
+    assert!(
+        !remote_mr_branch.trim().is_empty(),
+        "expected an MR/feature branch on origin"
+    );
+    let remote_feature = run_git_capture(
+        &work_repo,
+        &["ls-remote", "--heads", "origin", "refs/heads/feature"],
+    );
+    assert!(
+        remote_feature.trim().is_empty(),
+        "the branch's own ref must stay untouched"
     );
 }

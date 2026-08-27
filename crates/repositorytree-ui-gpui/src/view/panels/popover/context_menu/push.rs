@@ -42,6 +42,15 @@ pub(super) fn model(this: &PopoverHost) -> ContextMenuModel {
             }),
         },
         ContextMenuItem::Entry {
+            label: "Push with merge request…".into(),
+            icon: Some("icons/git_merge.svg".into()),
+            shortcut: None,
+            disabled,
+            action: Box::new(ContextMenuAction::OpenPopover {
+                kind: PopoverKind::MergeRequestPushPrompt { repo_id },
+            }),
+        },
+        ContextMenuItem::Entry {
             label: force_push_label.into(),
             icon: Some("icons/warning.svg".into()),
             shortcut: Some("F".into()),
