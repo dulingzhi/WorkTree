@@ -4882,7 +4882,7 @@ fn semantic_conflict_navigation_handles_automatic_deltas_and_projection_rebuilds
 }
 
 #[gpui::test]
-fn commit_message_text_input_secondary_f_activates_diff_search(cx: &mut gpui::TestAppContext) {
+fn secondary_f_from_a_focused_diff_panel_activates_diff_search(cx: &mut gpui::TestAppContext) {
     let (store, events) = AppStore::new(Arc::new(TestBackend));
     let (view, cx) = cx.add_window_view(|window, cx| {
         super::super::RepositoryTreeView::new(store, events, None, window, cx)
@@ -4891,7 +4891,77 @@ fn commit_message_text_input_secondary_f_activates_diff_search(cx: &mut gpui::Te
     let repo_id = RepoId(7055);
     let commit_id = CommitId("1111222233334444".into());
     let workdir = std::env::temp_dir().join(format!(
-        "repositorytree_ui_test_{}_commit_message_secondary_f",
+        "repositorytree_ui_test_{}_diff_panel_secondary_f",
+        std::process::id()
+    ));
+    let path = std::path::PathBuf::from("src/lib.rs");
+
+    let repo = simple_worktree_repo(
+        repo_id,
+        &workdir,
+        &commit_id,
+        std::slice::from_ref(&path),
+        &path,
+    );
+    apply_state(cx, &view, app_state_with_active_repo(repo));
+    let query = "needle";
+    cx.update(|window, app| {
+        crate::app::bind_app_keys_for_test(app);
+        view.update(app, |this, cx| {
+            this.main_pane.update(cx, |pane, cx| {
+                pane.diff_search_query = query.into();
+                pane.diff_search_input
+                    .update(cx, |input, cx| input.set_text(query.to_string(), cx));
+            });
+        });
+        // Reading the diff is the one context that keeps Ctrl+F for the
+        // diff itself — the click-into-diff focus the shortcut expects.
+        let handle = view
+            .read(app)
+            .main_pane
+            .read(app)
+            .diff_panel_focus_handle
+            .clone();
+        window.focus(&handle, app);
+        let _ = window.draw(app);
+    });
+
+    cx.simulate_keystrokes("secondary-f");
+    draw_and_drain_test_window(cx);
+
+    assert!(
+        diff_search_active(cx, &view),
+        "expected secondary-f from the diff panel to activate diff search when a diff is visible"
+    );
+    assert!(
+        diff_search_input_is_focused(cx, &view),
+        "expected secondary-f from the diff panel to focus diff search when a diff is visible"
+    );
+    cx.update(|_window, app| {
+        let pane = view.read(app).main_pane.read(app);
+        assert_eq!(
+            pane.diff_search_input.read(app).selected_range(),
+            0..query.len(),
+            "expected secondary-f to select the full existing diff search query"
+        );
+    });
+}
+
+/// Ctrl+F defaults to the commit search — the C# shortcut — even while a
+/// diff is on screen; only the diff panel's own focus claims the key.
+#[gpui::test]
+fn commit_message_text_input_secondary_f_opens_commit_search_over_a_visible_diff(
+    cx: &mut gpui::TestAppContext,
+) {
+    let (store, events) = AppStore::new(Arc::new(TestBackend));
+    let (view, cx) = cx.add_window_view(|window, cx| {
+        super::super::RepositoryTreeView::new(store, events, None, window, cx)
+    });
+
+    let repo_id = RepoId(70552);
+    let commit_id = CommitId("1111222233334455".into());
+    let workdir = std::env::temp_dir().join(format!(
+        "repositorytree_ui_test_{}_commit_message_secondary_f_diff",
         std::process::id()
     ));
     let path = std::path::PathBuf::from("src/lib.rs");
@@ -4905,16 +4975,8 @@ fn commit_message_text_input_secondary_f_activates_diff_search(cx: &mut gpui::Te
     );
     apply_state(cx, &view, app_state_with_active_repo(repo));
     focus_commit_message_input(cx, &view);
-    let query = "needle";
     cx.update(|window, app| {
         crate::app::bind_app_keys_for_test(app);
-        view.update(app, |this, cx| {
-            this.main_pane.update(cx, |pane, cx| {
-                pane.diff_search_query = query.into();
-                pane.diff_search_input
-                    .update(cx, |input, cx| input.set_text(query.to_string(), cx));
-            });
-        });
         let _ = window.draw(app);
     });
 
@@ -4922,25 +4984,18 @@ fn commit_message_text_input_secondary_f_activates_diff_search(cx: &mut gpui::Te
     draw_and_drain_test_window(cx);
 
     assert!(
-        diff_search_active(cx, &view),
-        "expected secondary-f from commit-message input to activate diff search when a diff is visible"
+        !diff_search_active(cx, &view),
+        "expected secondary-f from the commit input to leave diff search alone even with a diff visible"
     );
+    let popover =
+        cx.update(|_window, app| crate::view::test_support::popover_kind(view.read(app), app));
     assert!(
-        diff_search_input_is_focused(cx, &view),
-        "expected secondary-f from commit-message input to focus diff search when a diff is visible"
+        matches!(
+            popover,
+            Some(crate::view::PopoverKind::CommitSearchPicker { repo_id: id }) if id == repo_id
+        ),
+        "expected secondary-f from the commit input to open the commit search picker, got {popover:?}"
     );
-    assert!(
-        !commit_message_input_is_focused(cx, &view),
-        "expected secondary-f from commit-message input to move focus to diff search"
-    );
-    cx.update(|_window, app| {
-        let pane = view.read(app).main_pane.read(app);
-        assert_eq!(
-            pane.diff_search_input.read(app).selected_range(),
-            0..query.len(),
-            "expected secondary-f to select the full existing diff search query"
-        );
-    });
 }
 
 #[gpui::test]
@@ -4991,6 +5046,68 @@ fn commit_message_text_input_secondary_f_without_visible_diff_opens_commit_searc
             Some(crate::view::PopoverKind::CommitSearchPicker { repo_id: id }) if id == repo_id
         ),
         "expected secondary-f with no visible diff to open the commit search picker, got {popover:?}"
+    );
+}
+
+#[gpui::test]
+fn secondary_f_keeps_an_open_commit_search_picker_from_reaching_diff_search(
+    cx: &mut gpui::TestAppContext,
+) {
+    let (store, events) = AppStore::new(Arc::new(TestBackend));
+    let (view, cx) = cx.add_window_view(|window, cx| {
+        super::super::RepositoryTreeView::new(store, events, None, window, cx)
+    });
+
+    let repo_id = RepoId(70562);
+    let commit_id = CommitId("1111222233334447".into());
+    let workdir = std::env::temp_dir().join(format!(
+        "repositorytree_ui_test_{}_commit_search_open_secondary_f",
+        std::process::id()
+    ));
+    let path = std::path::PathBuf::from("src/lib.rs");
+
+    let repo = simple_worktree_repo(
+        repo_id,
+        &workdir,
+        &commit_id,
+        std::slice::from_ref(&path),
+        &path,
+    );
+    apply_state(cx, &view, app_state_with_active_repo(repo));
+
+    // The picker is open (with a diff visible behind it) and the user has
+    // clicked away into the commit message input — the old precedence would
+    // have activated a diff search behind the popover.
+    cx.update(|window, app| {
+        crate::app::bind_app_keys_for_test(app);
+        view.update(app, |this, cx| {
+            this.open_popover_centered(
+                crate::view::PopoverKind::CommitSearchPicker { repo_id },
+                window,
+                cx,
+            );
+        });
+    });
+    focus_commit_message_input(cx, &view);
+    cx.update(|window, app| {
+        let _ = window.draw(app);
+    });
+
+    cx.simulate_keystrokes("secondary-f");
+    draw_and_drain_test_window(cx);
+
+    assert!(
+        !diff_search_active(cx, &view),
+        "expected secondary-f with the commit search open to leave diff search alone"
+    );
+    let popover =
+        cx.update(|_window, app| crate::view::test_support::popover_kind(view.read(app), app));
+    assert!(
+        matches!(
+            popover,
+            Some(crate::view::PopoverKind::CommitSearchPicker { repo_id: id }) if id == repo_id
+        ),
+        "expected the commit search picker to stay open, got {popover:?}"
     );
 }
 

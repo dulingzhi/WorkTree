@@ -4232,20 +4232,45 @@ impl Render for RepositoryTreeView {
         root = root.child(UiScaleScrollCapture { view: cx.entity() });
         root = root
             .on_action(cx.listener(|this, _: &OpenActiveViewSearch, window, cx| {
-                let handled = this
-                    .main_pane
-                    .update(cx, |pane, cx| pane.open_search_for_active_view(window, cx));
-                if handled {
-                    cx.stop_propagation();
-                } else if let Some(repo_id) = this.active_repo_id() {
-                    // No diff or file to search — fall back to the commit
-                    // search picker, which is what Ctrl+F means in a repo
-                    // with nothing open to page through.
-                    this.open_popover_centered(
-                        PopoverKind::CommitSearchPicker { repo_id },
-                        window,
-                        cx,
-                    );
+                // Ctrl+F means commit search by default — the C# app's
+                // shortcut unconditionally opens the histories search, and
+                // the diff view replaces the list here, so reserving the key
+                // for diff search whenever a diff is visible would leave the
+                // commit list unreachable by keyboard. The diff keeps the
+                // shortcut only while the user is in it: the search overlay
+                // already open (paging through matches), or the diff panel
+                // itself focused. An already-open commit-search picker also
+                // keeps the key — Esc closes it, so the shortcut must not
+                // open a diff search behind the popover.
+                let commit_search_picker_open = this.active_repo_id().is_some_and(|repo_id| {
+                    this.popover_host
+                        .read(cx)
+                        .is_kind_open(&PopoverKind::CommitSearchPicker { repo_id })
+                });
+                let diff_context = {
+                    let main = this.main_pane.read(cx);
+                    main.diff_search_active
+                        || main
+                            .diff_panel_focus_handle
+                            .contains_focused(window, cx)
+                };
+                if !commit_search_picker_open && diff_context {
+                    let handled = this
+                        .main_pane
+                        .update(cx, |pane, cx| pane.open_search_for_active_view(window, cx));
+                    if handled {
+                        cx.stop_propagation();
+                        return;
+                    }
+                }
+                if let Some(repo_id) = this.active_repo_id() {
+                    if !commit_search_picker_open {
+                        this.open_popover_centered(
+                            PopoverKind::CommitSearchPicker { repo_id },
+                            window,
+                            cx,
+                        );
+                    }
                     cx.stop_propagation();
                 }
             }))
