@@ -755,6 +755,7 @@ mod tests {
 
     fn commit(id: &str, parent_ids: Vec<&str>) -> Commit {
         Commit {
+            signed: false,
             id: CommitId(id.into()),
             parent_ids: parent_ids.into_iter().map(|p| CommitId(p.into())).collect(),
             summary: "".into(),

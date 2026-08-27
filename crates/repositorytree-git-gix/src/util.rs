@@ -1084,6 +1084,9 @@ impl GitLogPrettyParseState {
         };
 
         commits.push(Commit {
+            // The pretty format carries no signature field, so commits fed
+            // through this path (git log --follow) read as unsigned.
+            signed: false,
             id,
             parent_ids,
             summary: summary.into(),

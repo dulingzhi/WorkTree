@@ -328,6 +328,7 @@ mod tests {
 
     fn commit(sha: &str, parents: &[&str], age: u64) -> Commit {
         Commit {
+            signed: false,
             id: id(sha),
             parent_ids: parents.iter().map(|p| id(p)).collect(),
             summary: Arc::from(sha),

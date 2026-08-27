@@ -246,6 +246,7 @@ enum SettingsCategory {
     GitLog,
     Tags,
     GitExecutable,
+    GpgSigning,
     Environment,
     Links,
 }
@@ -260,6 +261,7 @@ impl SettingsCategory {
         SettingsCategory::GitLog,
         SettingsCategory::Tags,
         SettingsCategory::GitExecutable,
+        SettingsCategory::GpgSigning,
         SettingsCategory::Environment,
         SettingsCategory::Links,
     ];
@@ -274,6 +276,7 @@ impl SettingsCategory {
             Self::GitLog => tr_str("settings.nav.git_log"),
             Self::Tags => tr_str("settings.nav.tags"),
             Self::GitExecutable => tr_str("settings.nav.git_executable"),
+            Self::GpgSigning => tr_str("settings.nav.gpg_signing"),
             Self::Environment => tr_str("settings.nav.environment"),
             Self::Links => tr_str("settings.nav.links"),
         }
@@ -289,6 +292,7 @@ impl SettingsCategory {
             Self::GitLog => "icons/history.svg",
             Self::Tags => "icons/tag.svg",
             Self::GitExecutable => "icons/git_branch.svg",
+            Self::GpgSigning => "icons/check.svg",
             Self::Environment => "icons/computer.svg",
             Self::Links => "icons/link.svg",
         }
@@ -304,6 +308,7 @@ impl SettingsCategory {
             Self::GitLog => "settings_window_nav_git_log",
             Self::Tags => "settings_window_nav_tags",
             Self::GitExecutable => "settings_window_nav_git_executable",
+            Self::GpgSigning => "settings_window_nav_gpg_signing",
             Self::Environment => "settings_window_nav_environment",
             Self::Links => "settings_window_nav_links",
         }
@@ -333,6 +338,10 @@ impl SettingsCategory {
             }
             Self::Tags => "tags automatically fetch tags",
             Self::GitExecutable => "git executable custom path system path version",
+            Self::GpgSigning => {
+                "gpg signing commit signing sign commits key program user.signingkey \
+                 gpg.program verified signature"
+            }
             Self::Environment => "environment build operating system app version",
             Self::Links => {
                 "links theme guide github license open source licenses professional edition \
@@ -411,6 +420,41 @@ enum TerminalProgramInputTarget {
     ExternalTerminal,
 }
 
+/// Snapshot of git's global commit-signing config, as edited by the GPG
+/// signing card. Reads and writes go straight through `git config --global`
+/// — there is no app-side persistence for these keys.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct GpgConfig {
+    commit_signing_enabled: bool,
+    user_signing_key: String,
+    gpg_program: String,
+}
+
+impl GpgConfig {
+    /// Test builds skip the subprocess probe: every settings-window test
+    /// constructs the view, and the reads would slow them down while
+    /// observing the developer's real global config.
+    #[cfg(test)]
+    fn read_from_git() -> Self {
+        GpgConfig::default()
+    }
+
+    #[cfg(not(test))]
+    fn read_from_git() -> Self {
+        GpgConfig {
+            commit_signing_enabled:
+                repositorytree_core::process::git_config_global_get("commit.gpgsign")
+                    .as_deref()
+                    == Some("true"),
+            user_signing_key:
+                repositorytree_core::process::git_config_global_get("user.signingkey")
+                    .unwrap_or_default(),
+            gpg_program: repositorytree_core::process::git_config_global_get("gpg.program")
+                .unwrap_or_default(),
+        }
+    }
+}
+
 pub(crate) struct SettingsWindowView {
     theme_mode: ThemeMode,
     theme: AppTheme,
@@ -472,11 +516,22 @@ pub(crate) struct SettingsWindowView {
     git_executable_mode: GitExecutableMode,
     git_custom_path_draft: String,
     git_executable_input: Entity<components::TextInput>,
+    gpg_config: GpgConfig,
+    gpg_signing_key_draft: String,
+    gpg_program_draft: String,
+    gpg_signing_key_input: Entity<components::TextInput>,
+    gpg_program_input: Entity<components::TextInput>,
+    gpg_save_error: Option<String>,
     external_editor_setting: Option<ExternalCodeEditorSetting>,
     external_editor_custom_path_draft: String,
     external_editor_custom_arguments_draft: String,
     external_editor_custom_path_input: Entity<components::TextInput>,
     external_editor_custom_arguments_input: Entity<components::TextInput>,
+    ai_commit_source: crate::ai_commit_sources::AiSource,
+    ai_commit_source_scroll: UniformListScrollHandle,
+    ai_commit_availability: Option<crate::ai_commit_sources::SourceAvailability>,
+    ai_commit_custom_command_draft: String,
+    ai_commit_custom_command_input: Entity<components::TextInput>,
     ai_commit_provider: crate::ai_commit::AiProvider,
     ai_commit_provider_scroll: UniformListScrollHandle,
     ai_commit_models: AiCommitModels,
@@ -491,9 +546,12 @@ pub(crate) struct SettingsWindowView {
     hover_resize_edge: Option<ResizeEdge>,
     title_drag_state: chrome::TitleBarDragState,
     _git_executable_input_subscription: gpui::Subscription,
+    _gpg_signing_key_input_subscription: gpui::Subscription,
+    _gpg_program_input_subscription: gpui::Subscription,
     _external_editor_custom_path_input_subscription: gpui::Subscription,
     _external_editor_custom_arguments_input_subscription: gpui::Subscription,
     _ai_commit_model_input_subscription: gpui::Subscription,
+    _ai_commit_custom_command_input_subscription: gpui::Subscription,
     _ai_commit_api_key_input_subscription: gpui::Subscription,
     _ai_commit_endpoint_input_subscription: gpui::Subscription,
     _appearance_subscription: gpui::Subscription,
@@ -504,6 +562,8 @@ pub(crate) struct SettingsWindowView {
     external_editor_browse_notify_count: usize,
     #[cfg(test)]
     ai_commit_models_test_fetches: usize,
+    #[cfg(test)]
+    gpg_config_test_writes: Vec<(String, Option<String>)>,
 }
 
 pub(crate) fn open_settings_window(cx: &mut App) {
@@ -929,10 +989,12 @@ impl SettingsWindowView {
         // current value.
         crate::ai_commit::init_from_session(&ui_session);
         let ai_commit_current = crate::ai_commit::current();
+        let ai_commit_source = ai_commit_current.source;
         let ai_commit_provider = ai_commit_current.provider;
         let ai_commit_model_draft = ai_commit_current.model;
         let ai_commit_api_key_draft = ai_commit_current.api_key;
         let ai_commit_endpoint_draft = ai_commit_current.endpoint;
+        let ai_commit_custom_command_draft = ai_commit_current.custom_command;
         let theme = theme_mode.resolve_theme(window.appearance());
         let runtime_info = SettingsRuntimeInfo::detect();
         let git_executable_mode =
@@ -1019,6 +1081,61 @@ impl SettingsWindowView {
                 }
             });
 
+        let gpg_config = GpgConfig::read_from_git();
+        let gpg_signing_key_draft = gpg_config.user_signing_key.clone();
+        let gpg_program_draft = gpg_config.gpg_program.clone();
+
+        let gpg_signing_key_input = cx.new(|cx| {
+            components::TextInput::new(
+                components::TextInputOptions {
+                    placeholder: tr("settings.gpg_signing.signing_key_placeholder"),
+                    ..Default::default()
+                },
+                window,
+                cx,
+            )
+        });
+        gpg_signing_key_input.update(cx, |input, cx| {
+            input.set_text(gpg_signing_key_draft.clone(), cx);
+        });
+        let gpg_signing_key_input_subscription =
+            cx.observe(&gpg_signing_key_input, |this, input, cx| {
+                let enter_pressed = input.update(cx, |input, _| input.take_enter_pressed());
+                let next = input.read(cx).text().to_string();
+                if this.gpg_signing_key_draft != next {
+                    this.gpg_signing_key_draft = next;
+                    cx.notify();
+                }
+                if enter_pressed {
+                    this.apply_gpg_signing_key(cx);
+                }
+            });
+
+        let gpg_program_input = cx.new(|cx| {
+            components::TextInput::new(
+                components::TextInputOptions {
+                    placeholder: tr("settings.gpg_signing.program_placeholder"),
+                    ..Default::default()
+                },
+                window,
+                cx,
+            )
+        });
+        gpg_program_input.update(cx, |input, cx| {
+            input.set_text(gpg_program_draft.clone(), cx);
+        });
+        let gpg_program_input_subscription = cx.observe(&gpg_program_input, |this, input, cx| {
+            let enter_pressed = input.update(cx, |input, _| input.take_enter_pressed());
+            let next = input.read(cx).text().to_string();
+            if this.gpg_program_draft != next {
+                this.gpg_program_draft = next;
+                cx.notify();
+            }
+            if enter_pressed {
+                this.apply_gpg_program(cx);
+            }
+        });
+
         let external_editor_custom_path_input = cx.new(|cx| {
             components::TextInput::new(
                 components::TextInputOptions {
@@ -1104,6 +1221,31 @@ impl SettingsWindowView {
                 cx.notify();
             },
         );
+
+        let ai_commit_custom_command_input = cx.new(|cx| {
+            let mut input = components::TextInput::new(
+                components::TextInputOptions {
+                    placeholder: tr("settings.ai_commit.custom_command_placeholder"),
+                    ..Default::default()
+                },
+                window,
+                cx,
+            );
+            input.set_theme(theme, cx);
+            input.set_text(ai_commit_custom_command_draft.clone(), cx);
+            input
+        });
+        let ai_commit_custom_command_input_subscription =
+            cx.observe(&ai_commit_custom_command_input, |this, input, cx| {
+                let next = input.read(cx).text().to_string();
+                if this.ai_commit_custom_command_draft == next {
+                    return;
+                }
+                this.ai_commit_custom_command_draft = next;
+                this.persist_ai_commit_settings(cx);
+                this.refresh_ai_commit_availability(cx);
+                cx.notify();
+            });
 
         let ai_commit_model_input = cx.new(|cx| {
             let mut input = components::TextInput::new(
@@ -1274,11 +1416,22 @@ impl SettingsWindowView {
             git_executable_mode,
             git_custom_path_draft,
             git_executable_input,
+            gpg_config,
+            gpg_signing_key_draft,
+            gpg_program_draft,
+            gpg_signing_key_input,
+            gpg_program_input,
+            gpg_save_error: None,
             external_editor_setting,
             external_editor_custom_path_draft,
             external_editor_custom_arguments_draft,
             external_editor_custom_path_input,
             external_editor_custom_arguments_input,
+            ai_commit_source,
+            ai_commit_source_scroll: UniformListScrollHandle::default(),
+            ai_commit_availability: None,
+            ai_commit_custom_command_draft,
+            ai_commit_custom_command_input,
             ai_commit_provider,
             ai_commit_provider_scroll: UniformListScrollHandle::default(),
             ai_commit_models: AiCommitModels::NotFetched,
@@ -1293,11 +1446,15 @@ impl SettingsWindowView {
             hover_resize_edge: None,
             title_drag_state: chrome::TitleBarDragState::default(),
             _git_executable_input_subscription: git_executable_input_subscription,
+            _gpg_signing_key_input_subscription: gpg_signing_key_input_subscription,
+            _gpg_program_input_subscription: gpg_program_input_subscription,
             _external_editor_custom_path_input_subscription:
                 external_editor_custom_path_input_subscription,
             _external_editor_custom_arguments_input_subscription:
                 external_editor_custom_arguments_input_subscription,
             _ai_commit_model_input_subscription: ai_commit_model_input_subscription,
+            _ai_commit_custom_command_input_subscription:
+                ai_commit_custom_command_input_subscription,
             _ai_commit_api_key_input_subscription: ai_commit_api_key_input_subscription,
             _ai_commit_endpoint_input_subscription: ai_commit_endpoint_input_subscription,
             _appearance_subscription: appearance_subscription,
@@ -1308,6 +1465,8 @@ impl SettingsWindowView {
             external_editor_browse_notify_count: 0,
             #[cfg(test)]
             ai_commit_models_test_fetches: 0,
+            #[cfg(test)]
+            gpg_config_test_writes: Vec::new(),
         }
     }
 
@@ -1330,6 +1489,68 @@ impl SettingsWindowView {
         } else {
             Some(section)
         };
+        // Expanding the AI section is the natural moment to (re)check the
+        // selected source: the files and PATH entries it reads may have
+        // changed since the window was last open.
+        if self.expanded_section == Some(SettingsSection::AiCommitMessage)
+            && self.ai_commit_source != crate::ai_commit_sources::AiSource::Manual
+        {
+            self.refresh_ai_commit_availability(cx);
+        }
+        cx.notify();
+    }
+
+    /// Check the selected non-manual source in the background — resolution
+    /// touches the filesystem (config files, PATH) and must not stall a
+    /// render. The result lands in `ai_commit_availability` for the status
+    /// row; `None` while in flight.
+    fn refresh_ai_commit_availability(&mut self, cx: &mut gpui::Context<Self>) {
+        use crate::ai_commit_sources::{check_availability, EnvAccess};
+
+        let source = self.ai_commit_source;
+        let manual = crate::ai_commit::current();
+        let custom_command = self.ai_commit_custom_command_draft.clone();
+        self.ai_commit_availability = None;
+        cx.spawn(async move |this, cx| {
+            let availability = cx
+                .background_spawn(async move {
+                    check_availability(
+                        source,
+                        &manual,
+                        &custom_command,
+                        &EnvAccess::real(),
+                    )
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.ai_commit_availability = Some(availability);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Switch the configuration source. Manual keeps its provider fields;
+    /// every other source resolves credentials live, so the manual drafts
+    /// stay as they are for a later switch back.
+    fn set_ai_commit_source(
+        &mut self,
+        source: crate::ai_commit_sources::AiSource,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self.ai_commit_source == source {
+            return;
+        }
+        self.ai_commit_source = source;
+        // The fetched model list belongs to the manual endpoint; it is stale
+        // the moment another source is selected.
+        self.ai_commit_models = AiCommitModels::NotFetched;
+        self.persist_ai_commit_settings(cx);
+        if source != crate::ai_commit_sources::AiSource::Manual {
+            self.refresh_ai_commit_availability(cx);
+        } else {
+            self.ai_commit_availability = None;
+        }
         cx.notify();
     }
 
@@ -1384,6 +1605,8 @@ impl SettingsWindowView {
             theme_mode: Some(self.theme_mode.key().to_string()),
             language: Some(self.language.key().to_string()),
             avatar_source: Some(crate::avatar_source::current().key().to_string()),
+            ai_commit_source: Some(ai_commit.source.key().to_string()),
+            ai_commit_custom_command: Some(ai_commit.custom_command),
             ai_commit_provider: Some(ai_commit.provider.key().to_string()),
             ai_commit_api_key: Some(ai_commit.api_key),
             ai_commit_model: Some(ai_commit.model),
@@ -1755,6 +1978,70 @@ impl SettingsWindowView {
         self.sync_git_runtime_state(runtime, cx);
     }
 
+    /// Persist one GPG-related global git-config key and fold the result
+    /// into `gpg_config`/`gpg_save_error`. Test builds record the write
+    /// instead of touching the developer's real global config.
+    fn write_gpg_config(
+        &mut self,
+        key: &'static str,
+        value: Option<&str>,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        #[cfg(test)]
+        {
+            self.gpg_config_test_writes
+                .push((key.to_string(), value.map(str::to_string)));
+            self.gpg_save_error = None;
+            cx.notify();
+            return true;
+        }
+
+        #[allow(unreachable_code)]
+        #[cfg(not(test))]
+        {
+            match repositorytree_core::process::git_config_global_set(key, value) {
+                Ok(()) => {
+                    self.gpg_save_error = None;
+                    cx.notify();
+                    true
+                }
+                Err(err) => {
+                    self.gpg_save_error = Some(err.to_string());
+                    cx.notify();
+                    false
+                }
+            }
+        }
+    }
+
+    fn set_gpg_commit_signing(&mut self, enabled: bool, cx: &mut gpui::Context<Self>) {
+        if self.gpg_config.commit_signing_enabled == enabled {
+            return;
+        }
+        // Always an explicit value: git treats a bare `commit.gpgsign` (key
+        // with no value) as true, which is not what a disabled toggle shows.
+        let value = if enabled { "true" } else { "false" };
+        if self.write_gpg_config("commit.gpgsign", Some(value), cx) {
+            self.gpg_config.commit_signing_enabled = enabled;
+        }
+    }
+
+    fn apply_gpg_signing_key(&mut self, cx: &mut gpui::Context<Self>) {
+        let next = self.gpg_signing_key_draft.trim().to_string();
+        let value = (!next.is_empty()).then(|| next.as_str());
+        if self.write_gpg_config("user.signingkey", value, cx) {
+            self.gpg_config.user_signing_key = next;
+        }
+    }
+
+    fn apply_gpg_program(&mut self, cx: &mut gpui::Context<Self>) {
+        let next = self.gpg_program_draft.trim().to_string();
+        let value = (!next.is_empty()).then(|| next.as_str());
+        if self.write_gpg_config("gpg.program", value, cx) {
+            self.gpg_config.gpg_program = next;
+        }
+    }
+
     fn set_git_executable_mode(&mut self, mode: GitExecutableMode, cx: &mut gpui::Context<Self>) {
         if self.git_executable_mode == mode {
             return;
@@ -1968,9 +2255,12 @@ impl SettingsWindowView {
         self.language_option_label(self.language)
     }
 
-    /// Summary value for the AI section row: the provider's name, annotated
-    /// when no API key is set yet.
+    /// Summary value for the AI section row: the selected source's name —
+    /// the manual provider, annotated when no API key is set yet.
     fn ai_commit_summary(&self) -> gpui::SharedString {
+        if self.ai_commit_source != crate::ai_commit_sources::AiSource::Manual {
+            return self.ai_commit_source.label();
+        }
         let label = self.ai_commit_provider.label();
         if self.ai_commit_api_key_draft.trim().is_empty() {
             crate::i18n::t!("settings.ai_commit.summary_unconfigured", provider = label).into()
@@ -1981,13 +2271,16 @@ impl SettingsWindowView {
 
     /// Push the AI section's drafts into the process-global settings and
     /// persist them. The ✨ button reads the global, so every edit keeps it
-    /// in sync.
+    /// in sync. External-source credentials are never part of this — they
+    /// are resolved at generation time.
     fn persist_ai_commit_settings(&mut self, cx: &mut gpui::Context<Self>) {
         crate::ai_commit::set_current(crate::ai_commit::AiCommitSettings {
+            source: self.ai_commit_source,
             provider: self.ai_commit_provider,
             api_key: self.ai_commit_api_key_draft.clone(),
             model: self.ai_commit_model_draft.clone(),
             endpoint: self.ai_commit_endpoint_draft.clone(),
+            custom_command: self.ai_commit_custom_command_draft.clone(),
         });
         self.persist_preferences(cx);
     }
@@ -2035,10 +2328,12 @@ impl SettingsWindowView {
         #[cfg(not(test))]
         {
             let settings = crate::ai_commit::AiCommitSettings {
+                source: self.ai_commit_source,
                 provider: self.ai_commit_provider,
                 api_key: self.ai_commit_api_key_draft.clone(),
                 model: self.ai_commit_model_draft.clone(),
                 endpoint: self.ai_commit_endpoint_draft.clone(),
+                custom_command: self.ai_commit_custom_command_draft.clone(),
             };
             cx.spawn(async move |pane, cx| {
                 let result = crate::ai_commit::fetch_models(&settings).await;
@@ -3348,6 +3643,33 @@ impl SettingsWindowView {
                 )
                 .on_click(cx.listener(move |this, _e: &ClickEvent, _window, cx| {
                     this.set_avatar_source(source, cx);
+                }))
+                .into_any_element()
+            })
+            .collect()
+    }
+
+    fn render_ai_commit_source_option_rows(
+        this: &mut Self,
+        range: Range<usize>,
+        _window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> Vec<AnyElement> {
+        let theme = this.theme;
+        range
+            .filter_map(|ix| {
+                crate::ai_commit_sources::AiSource::ALL.get(ix).copied()
+            })
+            .map(|source| {
+                this.option_row(
+                    format!("settings_window_ai_commit_source_{}", source.key()),
+                    source.label(),
+                    None,
+                    this.ai_commit_source == source,
+                    theme,
+                )
+                .on_click(cx.listener(move |this, _e: &ClickEvent, _window, cx| {
+                    this.set_ai_commit_source(source, cx);
                 }))
                 .into_any_element()
             })
@@ -4784,6 +5106,137 @@ impl Render for SettingsWindowView {
 
                     general_card = general_card.child(ai_commit_row);
                     if self.expanded_section == Some(SettingsSection::AiCommitMessage) {
+                        use crate::ai_commit_sources::AiSource;
+
+                        // The source dropdown leads — it decides which of the
+                        // sections below appear at all.
+                        general_card = general_card.child(
+                            div()
+                                .px_2()
+                                .pt_1()
+                                .text_xs()
+                                .text_color(theme.colors.foreground.secondary)
+                                .child(tr_str("settings.ai_commit.source_heading")),
+                        );
+                        let source_count = AiSource::ALL.len();
+                        let list = uniform_list(
+                            "settings_window_ai_commit_source_list",
+                            source_count,
+                            cx.processor(Self::render_ai_commit_source_option_rows),
+                        )
+                        .w_full()
+                        .min_w(px(0.0))
+                        .h_full()
+                        .min_h(px(0.0))
+                        .track_scroll(&self.ai_commit_source_scroll);
+                        let list = restrict_scroll_to_vertical_axis(list).into_any_element();
+                        general_card = general_card.child(self.dropdown_list_container(
+                            "settings_window_ai_commit_source_list_container",
+                            "settings_window_ai_commit_source_scrollbar",
+                            self.ai_commit_source_scroll.clone(),
+                            source_count,
+                            SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
+                            SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
+                            list,
+                            theme,
+                        ));
+
+                        if self.ai_commit_source != AiSource::Manual {
+                            // Availability of the selected source, computed in
+                            // the background; blank while the check is in
+                            // flight.
+                            let (status_text, status_color) = match &self.ai_commit_availability {
+                                None => (
+                                    tr("settings.ai_commit.checking"),
+                                    theme.colors.foreground.secondary,
+                                ),
+                                Some(availability) if availability.detected => (
+                                    tr("settings.ai_commit.available"),
+                                    theme.colors.status.success.foreground,
+                                ),
+                                Some(availability) => {
+                                    let text = match &availability.message {
+                                        Some((key, Some(detail))) => {
+                                            crate::i18n::t!(*key, detail = detail).into_owned()
+                                        }
+                                        Some((key, None)) => {
+                                            crate::i18n::t!(*key).into_owned()
+                                        }
+                                        None => String::new(),
+                                    };
+                                    (
+                                        SharedString::from(text),
+                                        theme.colors.foreground.secondary,
+                                    )
+                                }
+                            };
+                            general_card = general_card.child(
+                                div()
+                                    .id("settings_window_ai_commit_availability")
+                                    .px_2()
+                                    .pb_1()
+                                    .text_xs()
+                                    .text_color(status_color)
+                                    .child(status_text),
+                            );
+                            let hint_key = if self.ai_commit_source.is_cli() {
+                                "settings.ai_commit.privacy_hint_cli"
+                            } else {
+                                "settings.ai_commit.privacy_hint_external"
+                            };
+                            general_card = general_card.child(
+                                div()
+                                    .id("settings_window_ai_commit_source_hint")
+                                    .px_2()
+                                    .pb_1()
+                                    .text_xs()
+                                    .text_color(theme.colors.foreground.secondary)
+                                    .child(tr(hint_key)),
+                            );
+                        }
+
+                        if self.ai_commit_source == AiSource::Custom {
+                            general_card = general_card.child(
+                                self.detail_container(
+                                    "settings_window_ai_commit_custom_container",
+                                    theme,
+                                )
+                                .child(
+                                    div()
+                                        .px_2()
+                                        .pt_1()
+                                        .text_xs()
+                                        .text_color(theme.colors.foreground.secondary)
+                                        .child(tr_str("settings.ai_commit.custom_command")),
+                                )
+                                .child(
+                                    div()
+                                        .px_2()
+                                        .pb_1()
+                                        .w_full()
+                                        .min_w(px(0.0))
+                                        .child(self.ai_commit_custom_command_input.clone()),
+                                )
+                                .child(
+                                    div()
+                                        .px_2()
+                                        .pb_1()
+                                        .text_xs()
+                                        .text_color(theme.colors.foreground.secondary)
+                                        .child(tr_str("settings.ai_commit.custom_command_hint")),
+                                ),
+                            );
+                        }
+
+                        if self.ai_commit_source == AiSource::Manual {
+                        general_card = general_card.child(
+                            div()
+                                .px_2()
+                                .pt_1()
+                                .text_xs()
+                                .text_color(theme.colors.foreground.secondary)
+                                .child(tr_str("settings.ai_commit.provider_heading")),
+                        );
                         let provider_count = crate::ai_commit::AiProvider::ALL.len();
                         let list = uniform_list(
                             "settings_window_ai_commit_provider_list",
@@ -4949,6 +5402,7 @@ impl Render for SettingsWindowView {
                                     .text_color(theme.colors.foreground.secondary)
                                     .child(tr_str("settings.ai_commit.privacy_hint")),
                             );
+                        }
                     }
 
                     general_card = general_card
@@ -5853,6 +6307,145 @@ impl Render for SettingsWindowView {
                         );
                     }
 
+                    let gpg_commit_signing_row = self
+                        .toggle_row(
+                            "settings_window_gpg_commit_signing",
+                            tr_str("settings.gpg_signing.commit_signing"),
+                            self.gpg_config.commit_signing_enabled,
+                            theme,
+                        )
+                        .on_click(cx.listener(|this, _e: &ClickEvent, _window, cx| {
+                            this.set_gpg_commit_signing(
+                                !this.gpg_config.commit_signing_enabled,
+                                cx,
+                            );
+                        }));
+
+                    let gpg_signing_key_apply = components::Button::new(
+                        "settings_window_gpg_signing_key_apply",
+                        tr("settings.gpg_signing.apply"),
+                    )
+                    .style(components::ButtonStyle::Filled)
+                    .on_click(theme, cx, |this, _e, _window, cx| {
+                        this.apply_gpg_signing_key(cx);
+                    });
+
+                    let gpg_program_apply = components::Button::new(
+                        "settings_window_gpg_program_apply",
+                        tr("settings.gpg_signing.apply"),
+                    )
+                    .style(components::ButtonStyle::Filled)
+                    .on_click(theme, cx, |this, _e, _window, cx| {
+                        this.apply_gpg_program(cx);
+                    });
+
+                    let mut gpg_signing_card = self
+                        .card(
+                            "settings_window_gpg_signing",
+                            tr_str("settings.nav.gpg_signing"),
+                            theme,
+                        )
+                        .child(
+                            div()
+                                .id("settings_window_gpg_signing_scope_note")
+                                .px_2()
+                                .pb_1()
+                                .text_xs()
+                                .text_color(theme.colors.foreground.secondary)
+                                .child(tr("settings.gpg_signing.scope_note")),
+                        )
+                        .child(gpg_commit_signing_row)
+                        .child(
+                            self.detail_container(
+                                "settings_window_gpg_signing_key_container",
+                                theme,
+                            )
+                            .child(
+                                div()
+                                    .px_2()
+                                    .pt_1()
+                                    .text_xs()
+                                    .text_color(theme.colors.foreground.secondary)
+                                    .child(tr_str("settings.gpg_signing.signing_key_label")),
+                            )
+                            .child(
+                                div()
+                                    .px_2()
+                                    .pb_1()
+                                    .w_full()
+                                    .min_w(px(0.0))
+                                    .flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .child(
+                                        div()
+                                            .flex_1()
+                                            .min_w(px(0.0))
+                                            .child(self.gpg_signing_key_input.clone()),
+                                    )
+                                    .child(gpg_signing_key_apply),
+                            )
+                            .child(
+                                div()
+                                    .px_2()
+                                    .pb_1()
+                                    .text_xs()
+                                    .text_color(theme.colors.foreground.secondary)
+                                    .child(tr_str("settings.gpg_signing.signing_key_hint")),
+                            ),
+                        )
+                        .child(
+                            self.detail_container("settings_window_gpg_program_container", theme)
+                                .child(
+                                    div()
+                                        .px_2()
+                                        .pt_1()
+                                        .text_xs()
+                                        .text_color(theme.colors.foreground.secondary)
+                                        .child(tr_str("settings.gpg_signing.program_label")),
+                                )
+                                .child(
+                                    div()
+                                        .px_2()
+                                        .pb_1()
+                                        .w_full()
+                                        .min_w(px(0.0))
+                                        .flex()
+                                        .items_center()
+                                        .gap_2()
+                                        .child(
+                                            div()
+                                                .flex_1()
+                                                .min_w(px(0.0))
+                                                .child(self.gpg_program_input.clone()),
+                                        )
+                                        .child(gpg_program_apply),
+                                )
+                                .child(
+                                    div()
+                                        .px_2()
+                                        .pb_1()
+                                        .text_xs()
+                                        .text_color(theme.colors.foreground.secondary)
+                                        .child(tr_str("settings.gpg_signing.program_hint")),
+                                ),
+                        );
+
+                    if let Some(error) = self.gpg_save_error.clone() {
+                        gpg_signing_card = gpg_signing_card.child(
+                            div()
+                                .id("settings_window_gpg_save_error")
+                                .px_2()
+                                .pb_1()
+                                .text_xs()
+                                .text_color(theme.colors.status.danger.foreground)
+                                .child(format!(
+                                    "{}: {error}",
+                                    tr_str("settings.gpg_signing.save_failed")
+                                )),
+                        );
+                    }
+
                     let environment_card = self
                         .card(
                             "settings_window_environment",
@@ -5954,6 +6547,7 @@ impl Render for SettingsWindowView {
                         SettingsCategory::GitLog => git_log_card,
                         SettingsCategory::Tags => tags_card,
                         SettingsCategory::GitExecutable => git_executable_card,
+                        SettingsCategory::GpgSigning => gpg_signing_card,
                         SettingsCategory::Environment => environment_card,
                         SettingsCategory::Links => links_card,
                     };
@@ -7339,6 +7933,74 @@ mod tests {
             options.prompt.as_ref().map(ToString::to_string),
             Some("Select external code editor".to_string())
         );
+    }
+
+    #[gpui::test]
+    fn gpg_signing_category_renders_and_records_config_writes(cx: &mut gpui::TestAppContext) {
+        let _visual_guard = lock_visual_test();
+        let (store, events) = AppStore::new(std::sync::Arc::new(TestBackend));
+        let (_main_view, cx) =
+            cx.add_window_view(|window, cx| RepositoryTreeView::new(store, events, None, window, cx));
+
+        cx.update(|window, app| {
+            let _ = window.draw(app);
+            open_settings_window(app);
+        });
+        cx.run_until_parked();
+
+        let settings_window = cx.update(|_window, app| {
+            app.windows()
+                .into_iter()
+                .find_map(|window| window.downcast::<SettingsWindowView>())
+                .expect("settings window should be open")
+        });
+        let mut settings_cx = gpui::VisualTestContext::from_window(*settings_window.deref(), cx);
+        settings_cx.run_until_parked();
+
+        let _ = settings_window.update(&mut settings_cx, |settings, _window, cx| {
+            settings.select_category(SettingsCategory::GpgSigning, cx);
+        });
+        settings_cx.run_until_parked();
+        settings_cx.update(|window, app| {
+            let _ = window.draw(app);
+        });
+
+        assert!(
+            settings_cx.debug_bounds("settings_window_gpg_signing").is_some(),
+            "GPG signing card should render for its category"
+        );
+
+        let _ = settings_window.update(&mut settings_cx, |settings, _window, cx| {
+            // Test builds start from an empty config: the toggle writes an
+            // explicit value, and empty drafts clear their keys.
+            settings.set_gpg_commit_signing(true, cx);
+            settings.apply_gpg_signing_key(cx);
+            settings.gpg_program_draft = "/opt/gnupg/bin/gpg".to_string();
+            settings.apply_gpg_program(cx);
+
+            assert_eq!(
+                settings.gpg_config_test_writes,
+                vec![
+                    ("commit.gpgsign".to_string(), Some("true".to_string())),
+                    ("user.signingkey".to_string(), None),
+                    ("gpg.program".to_string(), Some("/opt/gnupg/bin/gpg".to_string())),
+                ],
+                "each control should write its own global git-config key"
+            );
+            assert!(settings.gpg_config.commit_signing_enabled);
+            assert_eq!(settings.gpg_config.user_signing_key, "");
+            assert_eq!(settings.gpg_config.gpg_program, "/opt/gnupg/bin/gpg");
+            assert!(settings.gpg_save_error.is_none());
+
+            // Toggling back off stays explicit — a bare `commit.gpgsign`
+            // key would read as true in git.
+            settings.set_gpg_commit_signing(false, cx);
+            assert_eq!(
+                settings.gpg_config_test_writes.last(),
+                Some(&("commit.gpgsign".to_string(), Some("false".to_string())))
+            );
+            assert!(!settings.gpg_config.commit_signing_enabled);
+        });
     }
 
     #[gpui::test]
@@ -9106,6 +9768,141 @@ mod tests {
                     assert_eq!(settings.ai_commit_models, AiCommitModels::NotFetched);
                 })
                 .expect("settings window should remain readable");
+        });
+    }
+
+    #[gpui::test]
+    fn ai_commit_source_selection_gates_fields_and_reports_availability(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        use crate::ai_commit_sources::AiSource;
+
+        let _visual_guard = lock_visual_test();
+        // `ai_commit::current()` is a process global; serialize against the
+        // other AI settings tests and restore the default on exit.
+        struct RestoreAiSettings;
+        impl Drop for RestoreAiSettings {
+            fn drop(&mut self) {
+                crate::ai_commit::set_current(crate::ai_commit::AiCommitSettings::default());
+            }
+        }
+        let _restore = {
+            let _lock = crate::ai_commit::lock_test_settings();
+            crate::ai_commit::set_current(crate::ai_commit::AiCommitSettings::default());
+            RestoreAiSettings
+        };
+
+        let (store, events) = AppStore::new(std::sync::Arc::new(TestBackend));
+        let (_main_view, cx) =
+            cx.add_window_view(|window, cx| RepositoryTreeView::new(store, events, None, window, cx));
+
+        cx.update(|window, app| {
+            let _ = window.draw(app);
+            open_settings_window(app);
+        });
+        cx.run_until_parked();
+
+        let settings_window = cx.update(|_window, app| {
+            app.windows()
+                .into_iter()
+                .find_map(|window| window.downcast::<SettingsWindowView>())
+                .expect("settings window should be open")
+        });
+
+        // The fresh window sits on manual, with no availability in flight.
+        cx.update(|_window, app| {
+            let _ = settings_window.read_with(app, |settings, _cx| {
+                assert_eq!(settings.ai_commit_source, AiSource::Manual);
+                assert!(settings.ai_commit_availability.is_none());
+            });
+        });
+
+        // Switching to an external source persists the choice, keeps the
+        // manual drafts for a later switch back, and produces an
+        // availability verdict in the background. The verdict itself depends
+        // on the machine's real ~/.claude — only its shape is asserted.
+        cx.update(|_window, app| {
+            let _ = settings_window.update(app, |settings, _window, cx| {
+                settings.set_ai_commit_source(AiSource::ClaudeCode, cx);
+            });
+        });
+        cx.run_until_parked();
+        cx.update(|_window, app| {
+            assert_eq!(crate::ai_commit::current().source, AiSource::ClaudeCode);
+            let _ = settings_window.read_with(app, |settings, _cx| {
+                let availability = settings
+                    .ai_commit_availability
+                    .clone()
+                    .expect("availability should settle after the background check");
+                if !availability.detected {
+                    assert_eq!(
+                        availability.message.map(|(key, _)| key),
+                        Some("settings.ai_commit.missing.claude_code")
+                    );
+                }
+                // The summary now names the source, not the manual provider.
+                assert_eq!(settings.ai_commit_summary(), AiSource::ClaudeCode.label());
+            });
+        });
+
+        // Switching back to manual clears the verdict and restores the
+        // manual drafts untouched.
+        cx.update(|_window, app| {
+            let _ = settings_window.update(app, |settings, _window, cx| {
+                settings.set_ai_commit_source(AiSource::Manual, cx);
+            });
+        });
+        cx.run_until_parked();
+        cx.update(|_window, app| {
+            let current = crate::ai_commit::current();
+            assert_eq!(current.source, AiSource::Manual);
+            assert_eq!(current.provider, crate::ai_commit::AiProvider::Anthropic);
+            let _ = settings_window.read_with(app, |settings, _cx| {
+                assert!(settings.ai_commit_availability.is_none());
+            });
+        });
+
+        // A custom command is required for the custom source: empty reports
+        // missing, typing one flips the verdict to detected.
+        cx.update(|_window, app| {
+            let _ = settings_window.update(app, |settings, _window, cx| {
+                settings.set_ai_commit_source(AiSource::Custom, cx);
+            });
+        });
+        cx.run_until_parked();
+        cx.update(|_window, app| {
+            let _ = settings_window.read_with(app, |settings, _cx| {
+                let availability = settings
+                    .ai_commit_availability
+                    .clone()
+                    .expect("custom availability should settle");
+                assert!(!availability.detected);
+                assert_eq!(
+                    availability.message.map(|(key, _)| key),
+                    Some("settings.ai_commit.missing.custom_empty")
+                );
+            });
+        });
+        cx.update(|_window, app| {
+            let _ = settings_window.update(app, |settings, _window, cx| {
+                settings.ai_commit_custom_command_input.update(cx, |input, cx| {
+                    input.set_text("my-tool --flag {PROMPT}", cx);
+                });
+            });
+        });
+        cx.run_until_parked();
+        cx.update(|_window, app| {
+            assert_eq!(
+                crate::ai_commit::current().custom_command,
+                "my-tool --flag {PROMPT}"
+            );
+            let _ = settings_window.read_with(app, |settings, _cx| {
+                let availability = settings
+                    .ai_commit_availability
+                    .clone()
+                    .expect("custom availability should re-settle after typing");
+                assert!(availability.detected);
+            });
         });
     }
 

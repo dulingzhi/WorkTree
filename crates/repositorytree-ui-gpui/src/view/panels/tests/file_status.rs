@@ -1618,6 +1618,7 @@ fn show_commit_details_message(
             repo.status = Loadable::Ready(repositorytree_core::domain::RepoStatus::default().into());
             repo.log = Loadable::Ready(Arc::new(repositorytree_core::domain::LogPage {
                 commits: vec![repositorytree_core::domain::Commit {
+                    signed: false,
                     id: repositorytree_core::domain::CommitId(current_sha.into()),
                     parent_ids: repositorytree_core::domain::CommitParentIds::new(),
                     summary: "current".into(),
@@ -1839,6 +1840,7 @@ fn commit_details_message_sha_click_menu_navigate_reveals_referenced_commit(
             repo.log = Loadable::Ready(Arc::new(repositorytree_core::domain::LogPage {
                 commits: vec![
                     repositorytree_core::domain::Commit {
+                        signed: false,
                         id: repositorytree_core::domain::CommitId(current_sha.into()),
                         parent_ids: repositorytree_core::domain::CommitParentIds::new(),
                         summary: "current".into(),
@@ -1846,6 +1848,7 @@ fn commit_details_message_sha_click_menu_navigate_reveals_referenced_commit(
                         time: std::time::SystemTime::UNIX_EPOCH,
                     },
                     repositorytree_core::domain::Commit {
+                        signed: false,
                         id: repositorytree_core::domain::CommitId(target_sha.into()),
                         parent_ids: repositorytree_core::domain::CommitParentIds::new(),
                         summary: "target".into(),
@@ -1945,6 +1948,7 @@ fn commit_details_message_click_beside_a_sha_opens_no_menu(cx: &mut gpui::TestAp
             repo.log = Loadable::Ready(Arc::new(repositorytree_core::domain::LogPage {
                 commits: vec![
                     repositorytree_core::domain::Commit {
+                        signed: false,
                         id: repositorytree_core::domain::CommitId(current_sha.into()),
                         parent_ids: repositorytree_core::domain::CommitParentIds::new(),
                         summary: "current".into(),
@@ -1952,6 +1956,7 @@ fn commit_details_message_click_beside_a_sha_opens_no_menu(cx: &mut gpui::TestAp
                         time: std::time::SystemTime::UNIX_EPOCH,
                     },
                     repositorytree_core::domain::Commit {
+                        signed: false,
                         id: repositorytree_core::domain::CommitId(target_sha.into()),
                         parent_ids: repositorytree_core::domain::CommitParentIds::new(),
                         summary: "target".into(),
@@ -2037,6 +2042,7 @@ fn commit_details_message_sha_retained_details_are_inert_after_selection_changes
             repo.log = Loadable::Ready(Arc::new(repositorytree_core::domain::LogPage {
                 commits: vec![
                     repositorytree_core::domain::Commit {
+                        signed: false,
                         id: repositorytree_core::domain::CommitId(retained_sha.into()),
                         parent_ids: repositorytree_core::domain::CommitParentIds::new(),
                         summary: "retained".into(),
@@ -2044,6 +2050,7 @@ fn commit_details_message_sha_retained_details_are_inert_after_selection_changes
                         time: std::time::SystemTime::UNIX_EPOCH,
                     },
                     repositorytree_core::domain::Commit {
+                        signed: false,
                         id: repositorytree_core::domain::CommitId(selected_sha.into()),
                         parent_ids: repositorytree_core::domain::CommitParentIds::new(),
                         summary: "selected".into(),
@@ -2051,6 +2058,7 @@ fn commit_details_message_sha_retained_details_are_inert_after_selection_changes
                         time: std::time::SystemTime::UNIX_EPOCH,
                     },
                     repositorytree_core::domain::Commit {
+                        signed: false,
                         id: repositorytree_core::domain::CommitId(target_sha.into()),
                         parent_ids: repositorytree_core::domain::CommitParentIds::new(),
                         summary: "target".into(),
@@ -2150,6 +2158,7 @@ fn commit_details_message_sha_click_opens_the_menu_without_navigating(
             repo.status = Loadable::Ready(repositorytree_core::domain::RepoStatus::default().into());
             repo.log = Loadable::Ready(Arc::new(repositorytree_core::domain::LogPage {
                 commits: vec![repositorytree_core::domain::Commit {
+                    signed: false,
                     id: repositorytree_core::domain::CommitId(current_sha.into()),
                     parent_ids: repositorytree_core::domain::CommitParentIds::new(),
                     summary: "current".into(),
@@ -2235,6 +2244,7 @@ fn commit_details_message_sha_double_click_selects_instead_of_opening_the_menu(
             repo.status = Loadable::Ready(repositorytree_core::domain::RepoStatus::default().into());
             repo.log = Loadable::Ready(Arc::new(repositorytree_core::domain::LogPage {
                 commits: vec![repositorytree_core::domain::Commit {
+                    signed: false,
                     id: repositorytree_core::domain::CommitId(current_sha.into()),
                     parent_ids: repositorytree_core::domain::CommitParentIds::new(),
                     summary: "current".into(),
@@ -2312,6 +2322,7 @@ fn commit_details_parent_sha_click_menu_navigate_reveals_referenced_commit(
             repo.log = Loadable::Ready(Arc::new(repositorytree_core::domain::LogPage {
                 commits: vec![
                     repositorytree_core::domain::Commit {
+                        signed: false,
                         id: repositorytree_core::domain::CommitId(current_sha.into()),
                         parent_ids: repositorytree_core::domain::CommitParentIds::new(),
                         summary: "current".into(),
@@ -2319,6 +2330,7 @@ fn commit_details_parent_sha_click_menu_navigate_reveals_referenced_commit(
                         time: std::time::SystemTime::UNIX_EPOCH,
                     },
                     repositorytree_core::domain::Commit {
+                        signed: false,
                         id: repositorytree_core::domain::CommitId(parent_sha.into()),
                         parent_ids: repositorytree_core::domain::CommitParentIds::new(),
                         summary: "parent".into(),
@@ -2418,6 +2430,7 @@ fn commit_details_parent_sha_dash_has_no_link_menu(cx: &mut gpui::TestAppContext
             repo.status = Loadable::Ready(repositorytree_core::domain::RepoStatus::default().into());
             repo.log = Loadable::Ready(Arc::new(repositorytree_core::domain::LogPage {
                 commits: vec![repositorytree_core::domain::Commit {
+                    signed: false,
                     id: repositorytree_core::domain::CommitId(current_sha.into()),
                     parent_ids: repositorytree_core::domain::CommitParentIds::new(),
                     summary: "current".into(),

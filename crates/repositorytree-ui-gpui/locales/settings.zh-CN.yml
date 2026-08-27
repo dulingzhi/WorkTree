@@ -12,6 +12,7 @@ settings:
     git_log: Git 历史
     tags: 标签
     git_executable: Git 可执行文件
+    gpg_signing: GPG 签名
     environment: 环境
     links: 链接
     no_match: 没有匹配的设置
@@ -60,6 +61,34 @@ settings:
     provider_anthropic: "Anthropic"
     provider_openai: "OpenAI 兼容"
     summary_unconfigured: "%{provider}（未填 API Key）"
+    source_heading: 配置来源
+    provider_heading: 提供商
+    source:
+      manual: 手动（API Key）
+      claude_code: Claude Code 配置
+      codex: Codex CLI
+      copilot: GitHub Copilot（GitHub Models）
+      env: 环境变量
+      cli_claude: claude CLI
+      cli_codex: codex CLI
+      cli_gemini: gemini CLI
+      cli_ollama: ollama CLI
+      custom: 自定义命令
+    checking: 正在检查所选来源…
+    available: "✓ 已检测到可用来源。"
+    custom_command: 命令模板
+    custom_command_placeholder: "my-tool --flag {PROMPT}"
+    custom_command_hint: "{PROMPT} 会被替换为完整提示词（最近提交示例 + 暂存差异）并作为单个参数传入；不经过 shell。"
+    privacy_hint_external: 凭证在生成时从所选来源实时读取，RepositoryTree 不会保存。
+    privacy_hint_cli: 生成时提示词（最近提交示例 + 暂存差异）作为单个参数传给命令。
+    missing:
+      manual: 手动来源尚未配置 API Key。
+      claude_code: "在 %{detail} 或环境变量中未找到 ANTHROPIC_API_KEY。"
+      codex: "在 %{detail} 或环境变量中未找到 OPENAI_API_KEY。"
+      copilot: "未找到 GitHub token（gh hosts.yml、GH_TOKEN 或 GITHUB_TOKEN）。请求返回 403 时请执行：gh auth refresh -s models:read"
+      env: 未设置 ANTHROPIC_API_KEY 或 OPENAI_API_KEY。
+      cli: "在 PATH 中未找到 %{detail}。"
+      custom_empty: 自定义命令为空。
     model: 模型
     api_key: API Key
     api_key_placeholder: "sk-…"
@@ -132,6 +161,17 @@ settings:
     custom_label: 自定义 Git 可执行文件
     enter_hint: 编辑路径后按 Enter 可立即应用。
     scope_note: 仅应用于 RepositoryTree 主浏览器窗口。Git 调用的命令模式仍使用系统 PATH 中的 git。gpg 等辅助工具由 Git 从应用环境中解析，除非在 Git 中另行配置。
+  gpg_signing:
+    commit_signing: 使用 GPG 签名提交
+    signing_key_label: 签名密钥
+    signing_key_placeholder: 密钥 ID，如 3AA5C34371567BD2
+    signing_key_hint: "git user.signingkey —— 密钥 ID 或私钥文件路径；留空即清除。"
+    program_label: GPG 程序
+    program_placeholder: gpg
+    program_hint: "git gpg.program —— git 签名时调用的程序；留空即取消设置。"
+    apply: 应用
+    save_failed: 保存失败
+    scope_note: 读写 git 全局配置（commit.gpgsign、user.signingkey、gpg.program）。此处创建的提交会自动遵循；已签名提交在历史列表中显示对勾标记。
   git:
     detected_runtime: 检测到的运行时
     status_supported: "Git >= %{version}"

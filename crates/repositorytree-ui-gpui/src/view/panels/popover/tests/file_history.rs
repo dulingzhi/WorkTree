@@ -12,6 +12,7 @@ type RowsInputBump = (&'static str, fn(&mut PopoverHost));
 
 fn commit(ix: usize) -> repositorytree_core::domain::Commit {
     repositorytree_core::domain::Commit {
+        signed: false,
         // Commit ids are content hashes, so a distinct one per row is what a
         // real page looks like — and what the cache signature reads.
         id: CommitId(format!("{ix:0>40}").into()),

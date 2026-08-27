@@ -17,6 +17,7 @@ fn repo_with_authors(repo_id: RepoId, log_rev: u64, authors: &[&str]) -> RepoSta
                 .iter()
                 .enumerate()
                 .map(|(ix, author)| Commit {
+                    signed: false,
                     id: CommitId(format!("{ix:016x}").into()),
                     parent_ids: CommitParentIds::new(),
                     summary: "msg".into(),

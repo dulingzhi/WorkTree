@@ -289,6 +289,7 @@ mod tests {
 
     fn commit(author: &str) -> Commit {
         Commit {
+            signed: false,
             id: CommitId("deadbeefdeadbeef".into()),
             parent_ids: CommitParentIds::new(),
             summary: "msg".into(),

@@ -1520,6 +1520,7 @@ mod tests {
 
     fn commit(id: &str, parents: &[&str], summary: &str) -> Commit {
         Commit {
+            signed: false,
             id: commit_id(id),
             parent_ids: parents.iter().map(|parent| commit_id(parent)).collect(),
             summary: summary.into(),

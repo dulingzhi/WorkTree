@@ -14,6 +14,7 @@ settings:
     git_log: Git log
     tags: Tags
     git_executable: Git executable
+    gpg_signing: GPG signing
     environment: Environment
     links: Links
     no_match: No matching settings
@@ -62,6 +63,34 @@ settings:
     provider_anthropic: "Anthropic"
     provider_openai: "OpenAI compatible"
     summary_unconfigured: "%{provider} (no API key)"
+    source_heading: Configuration source
+    provider_heading: Provider
+    source:
+      manual: "Manual (API key)"
+      claude_code: "Claude Code settings"
+      codex: "Codex CLI"
+      copilot: "GitHub Copilot (GitHub Models)"
+      env: "Environment variables"
+      cli_claude: "claude CLI"
+      cli_codex: "codex CLI"
+      cli_gemini: "gemini CLI"
+      cli_ollama: "ollama CLI"
+      custom: "Custom command"
+    checking: "Checking the selected source…"
+    available: "✓ Source detected."
+    custom_command: Command template
+    custom_command_placeholder: "my-tool --flag {PROMPT}"
+    custom_command_hint: "{PROMPT} is replaced by the full prompt (recent commit examples + staged diff) and passed as a single argument; no shell is involved."
+    privacy_hint_external: "Credentials are read from the source at generation time and are never stored by RepositoryTree."
+    privacy_hint_cli: "At generation time the prompt (recent commit examples + staged diff) is passed to the command as a single argument."
+    missing:
+      manual: "No API key configured for the manual provider."
+      claude_code: "No ANTHROPIC_API_KEY in %{detail} or the environment."
+      codex: "No OPENAI_API_KEY in %{detail} or the environment."
+      copilot: "No GitHub token found (gh hosts.yml, GH_TOKEN, or GITHUB_TOKEN). If requests answer 403, run: gh auth refresh -s models:read"
+      env: "Neither ANTHROPIC_API_KEY nor OPENAI_API_KEY is set."
+      cli: "%{detail} was not found on PATH."
+      custom_empty: "The custom command is empty."
     model: Model
     api_key: API key
     api_key_placeholder: "sk-…"
@@ -134,6 +163,17 @@ settings:
     custom_label: Custom Git executable
     enter_hint: Press Enter after editing the path to apply it immediately.
     scope_note: Applies to the main RepositoryTree browser window. Git-invoked command modes keep using git from System PATH. Helper tools such as gpg are resolved by Git from the app environment unless configured in Git.
+  gpg_signing:
+    commit_signing: Sign commits with GPG
+    signing_key_label: Signing key
+    signing_key_placeholder: Key ID, e.g. 3AA5C34371567BD2
+    signing_key_hint: "git user.signingkey — key ID or path to the secret key file. Empty clears the key."
+    program_label: GPG program
+    program_placeholder: gpg
+    program_hint: "git gpg.program — program git runs for signing. Empty unsets it."
+    apply: Apply
+    save_failed: Save failed
+    scope_note: Reads and writes git's global config (commit.gpgsign, user.signingkey, gpg.program). Commits created here follow it automatically; signed commits show a check mark in history.
   git:
     detected_runtime: Detected runtime
     status_supported: "Git >= %{version}"

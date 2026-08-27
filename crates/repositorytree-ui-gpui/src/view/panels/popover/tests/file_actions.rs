@@ -40,6 +40,7 @@ fn commit_menu_test_repo(repo_id: RepoId, commit_id: &CommitId) -> RepoState {
     repo.log = Loadable::Ready(
         repositorytree_core::domain::LogPage {
             commits: vec![repositorytree_core::domain::Commit {
+                signed: false,
                 id: commit_id.clone(),
                 parent_ids: repositorytree_core::domain::CommitParentIds::new(),
                 summary: "Hello".into(),

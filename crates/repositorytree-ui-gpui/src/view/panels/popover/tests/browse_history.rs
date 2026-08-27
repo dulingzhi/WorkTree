@@ -20,6 +20,7 @@ fn browse_history_menu_exposes_full_commit_message_tooltip(cx: &mut gpui::TestAp
             repo.log = Loadable::Ready(
                 repositorytree_core::domain::LogPage {
                     commits: vec![repositorytree_core::domain::Commit {
+                        signed: false,
                         id: commit_id.clone(),
                         parent_ids: repositorytree_core::domain::CommitParentIds::new(),
                         summary: "Fix the thing".into(),

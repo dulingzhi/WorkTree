@@ -89,6 +89,63 @@ impl GitRuntimeState {
     }
 }
 
+/// Read one string value from the user's *global* git config. `None` when the
+/// key is unset, empty, or git could not be run — a settings surface reads
+/// these for display, so an unreadable config must degrade to defaults.
+pub fn git_config_global_get(key: &str) -> Option<String> {
+    git_config_get_with(git_command(), key)
+}
+
+/// The reader half, split out so tests can point it at a scratch config file
+/// via the command's environment instead of mutating process-wide state.
+fn git_config_get_with(mut cmd: std::process::Command, key: &str) -> Option<String> {
+    let output = cmd
+        .args(["config", "--global", "--get", key])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    let text = text.trim();
+    (!text.is_empty()).then(|| text.to_string())
+}
+
+/// Write (`Some`) or unset (`None`) one value in the user's *global* git
+/// config. Unsetting a key that was never set is a success, matching how the
+/// settings surface treats "absent" and "cleared" as the same state.
+pub fn git_config_global_set(key: &str, value: Option<&str>) -> std::io::Result<()> {
+    git_config_set_with(git_command(), key, value)
+}
+
+/// The writer half, split out for the same reason as
+/// [`git_config_get_with`].
+fn git_config_set_with(
+    mut cmd: std::process::Command,
+    key: &str,
+    value: Option<&str>,
+) -> std::io::Result<()> {
+    cmd.args(["config", "--global"]);
+    match value {
+        Some(value) => {
+            cmd.arg(key).arg(value);
+        }
+        None => {
+            cmd.arg("--unset").arg(key);
+        }
+    }
+    let output = cmd.output()?;
+    if output.status.success()
+        || (value.is_none() && output.status.code() == Some(5))
+    {
+        return Ok(());
+    }
+    Err(std::io::Error::other(format!(
+        "git config --global {key} failed: {}",
+        String::from_utf8_lossy(&output.stderr).trim()
+    )))
+}
+
 fn git_runtime_slot() -> &'static RwLock<GitRuntimeState> {
     static SLOT: OnceLock<RwLock<GitRuntimeState>> = OnceLock::new();
     SLOT.get_or_init(|| RwLock::new(probe_git_runtime(GitExecutablePreference::SystemPath)))
@@ -694,6 +751,39 @@ mod tests {
             2,
             "refresh should re-run the current runtime probe"
         );
+    }
+
+    #[test]
+    fn git_config_global_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("gitconfig");
+        fs::write(&config_path, b"").unwrap();
+
+        // Route every command at the scratch config via GIT_CONFIG_GLOBAL, so
+        // the test never touches (or races) the developer's real global config.
+        let command = || {
+            let mut cmd = git_command();
+            cmd.env("GIT_CONFIG_GLOBAL", &config_path);
+            cmd
+        };
+
+        assert_eq!(
+            git_config_get_with(command(), "user.signingkey"),
+            None,
+            "unset key should read as None"
+        );
+
+        git_config_set_with(command(), "user.signingkey", Some("ABC1234DEF")).unwrap();
+        assert_eq!(
+            git_config_get_with(command(), "user.signingkey"),
+            Some("ABC1234DEF".to_string())
+        );
+
+        git_config_set_with(command(), "user.signingkey", None).unwrap();
+        assert_eq!(git_config_get_with(command(), "user.signingkey"), None);
+
+        // Unsetting an absent key is still a success.
+        git_config_set_with(command(), "user.signingkey", None).unwrap();
     }
 
     #[test]

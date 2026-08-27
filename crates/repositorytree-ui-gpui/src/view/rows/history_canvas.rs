@@ -420,6 +420,15 @@ pub(super) fn history_commit_row_canvas(
     summary: HistoryTextVm,
     when: HistoryTextVm,
     short_sha: HistoryTextVm,
+    // The commit carries a cryptographic signature — a small check is painted
+    // left of the sha (the "verified" convention), in the success colour.
+    signed: bool,
+    // Bisect decorations for an active session: the commit's verdict
+    // (✗ bad / ✓ good / ⊘ skip) and whether it is the candidate currently
+    // checked out (◆). Painted left of the sha, further out than the signed
+    // check so the two stack without colliding.
+    bisect_mark: Option<repositorytree_core::services::BisectVerdict>,
+    bisect_current: bool,
     // Whether the row builder's remote-avatar overlay owns the avatar slot
     // (the image has resolved — see `history_table_row`). Decided once per
     // row build and passed in so prepaint and paint never disagree.
@@ -1121,6 +1130,79 @@ pub(super) fn history_commit_row_canvas(
                             window,
                             cx,
                         );
+                        // Left of the sha, walking outward: the signature
+                        // check, then the bisect verdict, then the candidate
+                        // marker. Each is shaped once per row build.
+                        let mut tag_x = origin_x - px(4.0);
+                        let mut paint_tag = |glyph: &str,
+                                             cache_key: u64,
+                                             color: gpui::Rgba,
+                                             window: &mut Window,
+                                             cx: &mut gpui::App|
+                         -> Pixels {
+                            let shaped = shape_truncated_line_cached(
+                                window,
+                                &base_style,
+                                xxs_font,
+                                &gpui::SharedString::from(glyph),
+                                cache_key,
+                                sha_text_bounds.size.width.max(px(0.0)),
+                                color,
+                                None,
+                            );
+                            tag_x = (tag_x - shaped.width).max(sha_text_bounds.left());
+                            let x = tag_x;
+                            let _ = shaped.paint(
+                                point(x, center_y(xxs_line_height)),
+                                xxs_line_height,
+                                gpui::TextAlign::Left,
+                                None,
+                                window,
+                                cx,
+                            );
+                            tag_x -= px(4.0);
+                            x
+                        };
+                        // Signed commits carry a check left of the sha — the
+                        // same "verified" cue GitHub uses, presence only.
+                        if signed {
+                            paint_tag(
+                                "✓",
+                                u64::from(b'v'),
+                                theme.colors.status.success.foreground,
+                                window,
+                                cx,
+                            );
+                        }
+                        if let Some(verdict) = bisect_mark {
+                            let (glyph, key, color) = match verdict {
+                                repositorytree_core::services::BisectVerdict::Good => (
+                                    "✓",
+                                    u64::from(b'g'),
+                                    theme.colors.status.success.foreground,
+                                ),
+                                repositorytree_core::services::BisectVerdict::Bad => (
+                                    "✗",
+                                    u64::from(b'b'),
+                                    theme.colors.status.danger.foreground,
+                                ),
+                                repositorytree_core::services::BisectVerdict::Skip => (
+                                    "⊘",
+                                    u64::from(b's'),
+                                    theme.colors.foreground.secondary,
+                                ),
+                            };
+                            paint_tag(glyph, key, color, window, cx);
+                        }
+                        if bisect_current {
+                            paint_tag(
+                                "◆",
+                                u64::from(b'c'),
+                                theme.colors.status.warning.foreground,
+                                window,
+                                cx,
+                            );
+                        }
                     },
                 );
             }

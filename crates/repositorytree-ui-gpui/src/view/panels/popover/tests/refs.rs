@@ -35,6 +35,7 @@ fn tag_menu_lists_delete_entries_for_commit_tags(cx: &mut gpui::TestAppContext) 
             repo.log = Loadable::Ready(
                 repositorytree_core::domain::LogPage {
                     commits: vec![repositorytree_core::domain::Commit {
+                        signed: false,
                         id: commit_id.clone(),
                         parent_ids: repositorytree_core::domain::CommitParentIds::new(),
                         summary: "Hello".into(),
@@ -889,6 +890,23 @@ fn remote_menu_lists_fetch_and_prune_actions(cx: &mut gpui::TestAppContext) {
         assert!(matches!(
             prune_tags,
             Some(ContextMenuAction::PruneLocalTags { repo_id: rid }) if rid == repo_id
+        ));
+
+        let ssh_key = model.items.iter().find_map(|item| match item {
+            ContextMenuItem::Entry { label, action, .. } if label.as_ref() == "Set SSH key…" => {
+                Some((**action).clone())
+            }
+            _ => None,
+        });
+        assert!(matches!(
+            ssh_key,
+            Some(ContextMenuAction::OpenPopover {
+                kind:
+                    PopoverKind::Repo {
+                        repo_id: rid,
+                        kind: RepoPopoverKind::Remote(RemotePopoverKind::SshKeyPrompt { name }),
+                    },
+            }) if rid == repo_id && name == "origin"
         ));
     });
 }
@@ -1928,4 +1946,150 @@ fn local_branch_menu_offers_fast_forward_only_with_upstream(cx: &mut gpui::TestA
         }
         _ => panic!("expected Change tracking upstream… entry opening the picker"),
     }
+}
+
+/// "Archive to ZIP…" rides on the commit, tag, and branch context menus, each
+/// carrying the git-visible revision plus the save dialog's suggested name.
+#[gpui::test]
+fn commit_tag_and_branch_menus_offer_archive_zip(cx: &mut gpui::TestAppContext) {
+    let (store, events) = AppStore::new(Arc::new(TestBackend));
+    let (view, cx) =
+        cx.add_window_view(|window, cx| RepositoryTreeView::new(store, events, None, window, cx));
+
+    let repo_id = RepoId(7);
+    let commit_id = CommitId("0123456789abcdef".into());
+    let workdir = std::env::temp_dir().join(format!(
+        "repositorytree_ui_test_{}_archive_menu",
+        std::process::id()
+    ));
+
+    cx.update(|_window, app| {
+        view.update(app, |this, cx| {
+            let mut repo = RepoState::new_opening(
+                repo_id,
+                repositorytree_core::domain::RepoSpec {
+                    workdir: workdir.clone(),
+                },
+            );
+            repo.log = Loadable::Ready(
+                repositorytree_core::domain::LogPage {
+                    commits: vec![repositorytree_core::domain::Commit {
+                        signed: false,
+                        id: commit_id.clone(),
+                        parent_ids: repositorytree_core::domain::CommitParentIds::new(),
+                        summary: "Hello".into(),
+                        author: "Alice".into(),
+                        time: SystemTime::UNIX_EPOCH,
+                    }],
+                    next_cursor: None,
+                }
+                .into(),
+            );
+            repo.tags = Loadable::Ready(Arc::new(vec![repositorytree_core::domain::Tag {
+                name: "v1.0.0".to_string(),
+                target: commit_id.clone(),
+                created_at: None,
+            }]));
+            repo.branches = Loadable::Ready(Arc::new(vec![repositorytree_core::domain::Branch {
+                name: "feat/badges".to_string(),
+                target: commit_id.clone(),
+                upstream: None,
+                divergence: None,
+            }]));
+
+            let state = Arc::new(AppState {
+                repos: vec![repo],
+                active_repo: Some(repo_id),
+                ..Default::default()
+            });
+            this.state = Arc::clone(&state);
+            this._ui_model
+                .update(cx, |model, cx| model.set_state(state, cx));
+            cx.notify();
+        });
+    });
+
+    let archive_entry = |model: &ContextMenuModel| {
+        model.items.iter().find_map(|item| match item {
+            ContextMenuItem::Entry { label, action, .. }
+                if label.as_ref() == "Archive to ZIP…" =>
+            {
+                Some((**action).clone())
+            }
+            _ => None,
+        })
+    };
+
+    cx.update(|_window, app| {
+        let (commit_model, tag_model, branch_model) = view
+            .update(app, |this, cx| {
+                this.popover_host.update(cx, |host, cx| {
+                    let commit_model = host
+                        .context_menu_model(
+                            &PopoverKind::CommitMenu {
+                                repo_id,
+                                commit_id: commit_id.clone(),
+                            },
+                            cx,
+                        )
+                        .expect("commit menu");
+                    let tag_model = host
+                        .context_menu_model(
+                            &PopoverKind::TagMenu {
+                                repo_id,
+                                commit_id: commit_id.clone(),
+                            },
+                            cx,
+                        )
+                        .expect("tag menu");
+                    let branch_model = host
+                        .context_menu_model(
+                            &PopoverKind::BranchMenu {
+                                repo_id,
+                                section: BranchSection::Local,
+                                name: "feat/badges".to_string(),
+                            },
+                            cx,
+                        )
+                        .expect("branch menu");
+                    (commit_model, tag_model, branch_model)
+                })
+            });
+
+        match archive_entry(&commit_model).expect("commit menu archive entry") {
+            ContextMenuAction::ArchiveZip {
+                revision,
+                suggested_name,
+                ..
+            } => {
+                assert_eq!(revision, commit_id.as_ref());
+                assert_eq!(suggested_name, "archive-01234567.zip");
+            }
+            _ => panic!("commit archive entry has the wrong action"),
+        }
+        match archive_entry(&tag_model).expect("tag menu archive entry") {
+            ContextMenuAction::ArchiveZip {
+                revision,
+                suggested_name,
+                ..
+            } => {
+                assert_eq!(revision, "v1.0.0");
+                assert_eq!(suggested_name, "archive-v1.0.0.zip");
+            }
+            _ => panic!("tag archive entry has the wrong action"),
+        }
+        match archive_entry(&branch_model).expect("branch menu archive entry") {
+            ContextMenuAction::ArchiveZip {
+                revision,
+                suggested_name,
+                ..
+            } => {
+                // The revision is the ref git understands; the suggested file
+                // name keeps only the last path segment.
+                assert_eq!(revision, "feat/badges");
+                assert_eq!(suggested_name, "archive-badges.zip");
+            }
+            _ => panic!("branch archive entry has the wrong action"),
+        }
+    });
 }
