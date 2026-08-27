@@ -6,8 +6,8 @@ use crate::util::{
     unix_seconds_to_system_time_or_epoch,
 };
 use repositorytree_core::domain::{
-    Commit, CommitDetails, CommitFileChange, CommitId, CommitParentIds, EMPTY_TREE_ID, HistoryMode,
-    LogCursor, LogPage, RecentCommitMessage, ReflogEntry, StashEntry,
+    Commit, CommitDetails, CommitFileChange, CommitId, CommitParentIds, ContributorCommit,
+    EMPTY_TREE_ID, HistoryMode, LogCursor, LogPage, RecentCommitMessage, ReflogEntry, StashEntry,
 };
 use repositorytree_core::error::{Error, ErrorKind, GitFailure, GitFailureId};
 use repositorytree_core::services::{CancellationToken, LogChunk, Result};
@@ -17,6 +17,7 @@ use gix::traverse::commit::simple::CommitTimeOrder;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::SystemTime;
 
 const RECENT_COMMIT_MESSAGES_MAX_LIMIT: usize = 100;
 /// How much history [`GixRepo::author_email_map_impl`] walks — enough that
@@ -248,6 +249,9 @@ fn commit_from_walk_parts(
     let summary_bytes = commit.message.lines().next().unwrap_or_default();
     let summary = bstr_to_arc_str(summary_bytes);
 
+    let signed = commit.extra_headers().pgp_signature().is_some()
+        || commit.extra_headers().find("gpgsigssh").is_some();
+
     let author = match author_name {
         Some(name) => decode_state.author_cache.intern(name.as_ref()),
         None => Arc::from("unknown"),
@@ -282,6 +286,7 @@ fn commit_from_walk_parts(
         summary,
         author,
         time,
+        signed,
     }))
 }
 
@@ -1401,6 +1406,55 @@ impl GixRepo {
         Ok(emails)
     }
 
+    /// Every commit no older than `since` across local branches and remotes,
+    /// as bare (author, time) pairs. One format-only git invocation — the
+    /// same shape [`Self::author_email_map_impl`] uses — bounded by
+    /// `--since` so the pipe stays as short as the window.
+    pub(super) fn contributor_commits_since_impl(
+        &self,
+        since: SystemTime,
+    ) -> Result<Vec<ContributorCommit>> {
+        let since_unix = match since.duration_since(SystemTime::UNIX_EPOCH) {
+            Ok(duration) => duration.as_secs() as i64,
+            Err(error) => -(error.duration().as_secs() as i64),
+        };
+        let mut cmd = self.git_workdir_cmd();
+        cmd.arg("log")
+            .arg("--branches")
+            .arg("--remotes")
+            // Git's raw date format ("<seconds> <offset>") pins the cutoff to
+            // an exact instant where a spelled-out date would depend on the
+            // environment's timezone.
+            .arg(format!("--since={since_unix} +0000"))
+            .arg("--pretty=format:%an%x1f%ct%x1e");
+        let output = run_git_capture(cmd, "git log contributor commits")?;
+
+        let mut commits = Vec::new();
+        for record in output.split('\x1e') {
+            let record = record.trim_matches(|c| c == '\n' || c == '\r');
+            let Some((name, seconds)) = record.split_once('\x1f') else {
+                continue;
+            };
+            let Ok(seconds) = seconds.trim().parse::<i64>() else {
+                continue;
+            };
+            let time = unix_seconds_to_system_time_or_epoch(seconds);
+            // The walk bounds itself, but git's `--since` prunes by traversal
+            // date, so an out-of-order commit can slip through; the exact
+            // cutoff is the caller's, not git's approximation.
+            if time < since {
+                continue;
+            }
+            let author: Arc<str> = if name.is_empty() {
+                Arc::from("unknown")
+            } else {
+                Arc::from(name)
+            };
+            commits.push(ContributorCommit { author, time });
+        }
+        Ok(commits)
+    }
+
     pub(super) fn log_head_page_impl(
         &self,
         limit: usize,
@@ -1462,6 +1516,64 @@ impl GixRepo {
             limit,
             cursor,
             Some(cancellation),
+            Some(&mut chunks),
+        )
+    }
+
+    /// The ref-filtered variant of [`Self::log_history_mode_page_streaming_impl`]:
+    /// the walk is seeded from the commits `refs` point at, so the history
+    /// list shows a branch's (or tag's, or several refs' union) past without
+    /// a checkout. Refs must be full names; an unresolvable one fails the
+    /// whole walk — like `git log <ref>`, which also refuses — rather than
+    /// quietly showing a subset. The resume-token cache already keys on the
+    /// tips, so pagination of a filtered walk stays O(page).
+    pub(super) fn log_history_mode_refs_page_streaming_impl(
+        &self,
+        mode: HistoryMode,
+        refs: &[String],
+        author: Option<&str>,
+        limit: usize,
+        cursor: Option<&LogCursor>,
+        cancellation: &CancellationToken,
+        on_chunk: &mut dyn FnMut(LogChunk),
+    ) -> Result<LogPage> {
+        cancellation.check_cancelled()?;
+        if limit == 0 {
+            return Ok(empty_log_page());
+        }
+        let mut chunks = ChunkEmitter::new(on_chunk);
+
+        // Normalized once, here, exactly like the HEAD walk, so the matcher
+        // and the resume-token cache downstream see one spelling of it.
+        let author = AuthorFilter::new(author);
+        let author = author.as_ref();
+
+        let repo = self._repo.to_thread_local();
+        let mut tips: Vec<gix::ObjectId> = Vec::with_capacity(refs.len());
+        for name in refs {
+            let commit = repo
+                .rev_parse_single(name.as_str())
+                .map_err(|e| {
+                    Error::new(ErrorKind::Backend(format!("gix rev-parse {name}: {e}")))
+                })?
+                .object()
+                .map_err(|e| {
+                    Error::new(ErrorKind::Backend(format!("gix object {name}: {e}")))
+                })?
+                .peel_to_commit()
+                .map_err(|e| {
+                    Error::new(ErrorKind::Backend(format!("gix peel {name}: {e}")))
+                })?;
+            tips.push(commit.id().detach());
+        }
+
+        self.log_paged_page(
+            mode,
+            Arc::from(tips),
+            limit,
+            cursor,
+            Some(cancellation),
+            author,
             Some(&mut chunks),
         )
     }
@@ -1961,6 +2073,49 @@ impl GixRepo {
         Ok(messages)
     }
 
+    /// Cross-history commit search, mirroring the C# CommitSearchService's
+    /// remote tier: two `git log --all` passes — message (`--grep`) first, then
+    /// author — both case-insensitive, merged newest-first per pass with
+    /// message matches ranked ahead of author-only ones, capped at `limit`.
+    /// The needle stays a git regex (`--regexp-ignore-case` only lowers case),
+    /// same as the C# service it replaces.
+    pub(super) fn search_commits_impl(&self, query: &str, limit: usize) -> Result<Vec<Commit>> {
+        let query = query.trim();
+        if query.is_empty() || limit == 0 {
+            return Ok(Vec::new());
+        }
+
+        let mut seen = FxHashSet::default();
+        let mut commits = Vec::new();
+        for filter in ["--grep", "--author"] {
+            if commits.len() >= limit {
+                break;
+            }
+            let mut cmd = self.git_workdir_cmd();
+            cmd.arg("log")
+                .arg("--all")
+                .arg(format!("-n{limit}"))
+                .arg("--regexp-ignore-case")
+                .arg(format!("{filter}={query}"))
+                .arg("--pretty=format:%H%x1f%P%x1f%an%x1f%ct%x1f%s%x1e");
+
+            let page = run_git_parsed_stdout(cmd, "git log search", false, |stdout| {
+                parse_git_log_pretty_records_from_reader(stdout)
+            })?;
+            for commit in page.commits {
+                if commits.len() >= limit {
+                    break;
+                }
+                if !seen.insert(commit.id.clone()) {
+                    continue;
+                }
+                commits.push(commit);
+            }
+        }
+
+        Ok(commits)
+    }
+
     pub(super) fn reflog_head_impl(&self, limit: usize) -> Result<Vec<ReflogEntry>> {
         if limit == 0 {
             return Ok(Vec::new());
@@ -2378,10 +2533,77 @@ mod tests {
     }
 
     #[test]
+    fn search_commits_matches_message_and_author_and_dedups() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let workdir = tmp.path();
+        init_test_repo(workdir);
+
+        commit_file(workdir, "a.txt", "one\n", "fix: the widget");
+        commit_file(workdir, "b.txt", "two\n", "add feature");
+        write_file(workdir, "c.txt", "three\n");
+        git_success(workdir, &["add", "c.txt"]);
+        git_success(
+            workdir,
+            &[
+                "-c",
+                "user.name=Other Author",
+                "-c",
+                "user.email=other@example.com",
+                "commit",
+                "-m",
+                "unrelated words",
+            ],
+        );
+
+        let repo = open_repo(workdir);
+
+        // Message pass, case-insensitive. The widget commit is the root, so
+        // its parent list is the empty %P field.
+        let hits = repo
+            .search_commits_impl("WIDGET", 10)
+            .expect("search by message");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].summary.as_ref(), "fix: the widget");
+        assert_eq!(hits[0].author.as_ref(), "Test User");
+        assert!(hits[0].parent_ids.is_empty());
+
+        // A non-root commit parses its %P parents.
+        let hits = repo.search_commits_impl("feature", 10).expect("second search");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].summary.as_ref(), "add feature");
+        assert_eq!(hits[0].parent_ids.len(), 1);
+
+        // Author pass: the query is in no message, only in one author name.
+        let hits = repo
+            .search_commits_impl("other author", 10)
+            .expect("search by author");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].summary.as_ref(), "unrelated words");
+        assert_eq!(hits[0].author.as_ref(), "Other Author");
+        assert!(hits[0].parent_ids.len() == 1);
+
+        // A needle every commit matches through either pass — including the
+        // first two through author *and* message — yields each commit once.
+        let hits = repo.search_commits_impl("e", 10).expect("search both passes");
+        assert_eq!(hits.len(), 3);
+
+        // The limit caps the merged list, message pass first.
+        let hits = repo.search_commits_impl("e", 2).expect("capped search");
+        assert_eq!(hits.len(), 2);
+
+        // Blank queries search nothing.
+        assert!(repo
+            .search_commits_impl("   ", 10)
+            .expect("blank query")
+            .is_empty());
+    }
+
+    #[test]
     fn apply_first_parent_resume_hint_uses_first_parent_of_last_commit() {
         let mut page = LogPage {
             commits: vec![
                 Commit {
+                    signed: false,
                     id: CommitId("c1".into()),
                     parent_ids: CommitParentIds::from_vec(vec![CommitId("p0".into())]),
                     summary: Arc::from("one"),
@@ -2389,6 +2611,7 @@ mod tests {
                     time: std::time::SystemTime::UNIX_EPOCH,
                 },
                 Commit {
+                    signed: false,
                     id: CommitId("c2".into()),
                     parent_ids: CommitParentIds::from_vec(vec![
                         CommitId("p1".into()),
@@ -2420,6 +2643,7 @@ mod tests {
     fn apply_first_parent_resume_hint_clears_stale_resume_hint_when_no_parent_exists() {
         let mut page = LogPage {
             commits: vec![Commit {
+                signed: false,
                 id: CommitId("c1".into()),
                 parent_ids: CommitParentIds::new(),
                 summary: Arc::from("one"),

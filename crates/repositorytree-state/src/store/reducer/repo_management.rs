@@ -381,6 +381,13 @@ pub(super) fn open_repo(id_alloc: &AtomicU64, state: &mut AppState, path: PathBu
             .get(&workdir_key)
             .cloned()
             .flatten();
+        if let Some(refs) = session_preferences
+            .repo_history_ref_filters
+            .get(&workdir_key)
+            .cloned()
+        {
+            repo_state.set_history_ref_filters(refs);
+        }
         if let Some(enabled) = session_preferences
             .repo_fetch_prune_deleted_remote_tracking_branches
             .get(&workdir_key)
@@ -475,6 +482,13 @@ pub(super) fn restore_session(
                 .get(&workdir_key)
                 .cloned()
                 .flatten();
+            if let Some(refs) = session_preferences
+                .repo_history_ref_filters
+                .get(&workdir_key)
+                .cloned()
+            {
+                repo_state.set_history_ref_filters(refs);
+            }
             if let Some(enabled) = session_preferences
                 .repo_fetch_prune_deleted_remote_tracking_branches
                 .get(&workdir_key)
@@ -1141,6 +1155,7 @@ pub(super) fn repo_opened_ok(
             repo_state.set_diff_target(None);
             repo_state.diff_state.diff = Loadable::NotLoaded;
             repo_state.diff_state.diff_file = Loadable::NotLoaded;
+            repo_state.diff_state.diff_file_lfs = Loadable::NotLoaded;
             repo_state.diff_state.diff_preview_text_file = Loadable::NotLoaded;
             repo_state.diff_state.submodule_summary = Loadable::NotLoaded;
             repo_state.diff_state.inline_submodule_diff = None;

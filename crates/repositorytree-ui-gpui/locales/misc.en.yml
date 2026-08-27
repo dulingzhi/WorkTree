@@ -43,6 +43,8 @@ misc:
     no_commits: "No commits."
     author_tooltip: "Filter history by author — suggestions from loaded history"
     author_filter_tooltip: "Author filter: %{name} — suggestions from loaded history"
+    ref_filter_tooltip: "Filter history by branches and tags"
+    ref_filter_tooltip_active: "Ref filter: %{count} selected — history shows only commits reachable from them"
     mode_tooltip: "History mode (Full reachable / First-parent / No merges / Merges only / All branches)"
     scanning: "Scanning history… %{count} commits"
     column_message: MESSAGE

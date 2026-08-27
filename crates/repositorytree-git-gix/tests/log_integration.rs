@@ -336,6 +336,136 @@ fn history_modes_preserve_expected_order_on_canonical_graph() {
     );
 }
 
+/// Ref-filtered history is restriction semantics, not `git log HEAD <refs>`:
+/// the named refs *replace* the tips, so a filter on `feature` shows feature's
+/// history alone — HEAD's own commits are gone, which is the point of the
+/// filter.
+fn refs_page(
+    opened: &dyn repositorytree_core::services::GitRepository,
+    mode: HistoryMode,
+    refs: &[&str],
+) -> repositorytree_core::services::Result<repositorytree_core::domain::LogPage> {
+    let cancellation = repositorytree_core::services::CancellationToken::new();
+    let refs: Vec<String> = refs.iter().map(|r| r.to_string()).collect();
+    opened.log_history_mode_refs_page_streaming(mode, &refs, None, 20, None, &cancellation, &mut |_| {})
+}
+
+fn ref_walk_summaries(
+    opened: &dyn repositorytree_core::services::GitRepository,
+    mode: HistoryMode,
+    refs: &[&str],
+) -> Vec<String> {
+    refs_page(opened, mode, refs)
+        .unwrap()
+        .commits
+        .iter()
+        .map(|commit| commit.summary.to_string())
+        .collect()
+}
+
+#[test]
+fn ref_filtered_history_walks_only_from_the_named_refs() {
+    let fixture = HistoryModeFixture::new();
+    let backend = GixBackend;
+    let opened = backend.open(fixture.repo()).unwrap();
+
+    // feature's history alone: HEAD (the merge, main) is not reachable from
+    // refs/heads/feature.
+    assert_eq!(
+        ref_walk_summaries(&*opened, HistoryMode::FullReachable, &["refs/heads/feature"]),
+        vec!["feature", "base"]
+    );
+    assert_eq!(
+        ref_walk_summaries(&*opened, HistoryMode::FullReachable, &["refs/heads/side"]),
+        vec!["side", "base"]
+    );
+    assert_eq!(
+        ref_walk_summaries(&*opened, HistoryMode::FullReachable, &["refs/heads/main"]),
+        vec!["merge feature", "main", "feature", "base"]
+    );
+
+    // Two refs union their reachable sets.
+    let mut summaries = ref_walk_summaries(
+        &*opened,
+        HistoryMode::FullReachable,
+        &["refs/heads/main", "refs/heads/side"],
+    );
+    summaries.sort();
+    assert_eq!(
+        summaries,
+        vec!["base", "feature", "main", "merge feature", "side"]
+    );
+}
+
+#[test]
+fn ref_filtered_history_accepts_remote_and_tag_refs() {
+    let fixture = HistoryModeFixture::new();
+    // A tag on the side tip and a remote-tracking ref pointing at main: both
+    // spellings the popover offers, both must resolve.
+    run_git(
+        fixture.repo(),
+        &["tag", "v-side", fixture.side_id.as_str()],
+    );
+    run_git(
+        fixture.repo(),
+        &[
+            "update-ref",
+            "refs/remotes/origin/main",
+            fixture.main_id.as_str(),
+        ],
+    );
+    let backend = GixBackend;
+    let opened = backend.open(fixture.repo()).unwrap();
+
+    assert_eq!(
+        ref_walk_summaries(&*opened, HistoryMode::FullReachable, &["refs/tags/v-side"]),
+        vec!["side", "base"]
+    );
+    assert_eq!(
+        ref_walk_summaries(
+            &*opened,
+            HistoryMode::FullReachable,
+            &["refs/remotes/origin/main"]
+        ),
+        vec!["main", "base"]
+    );
+}
+
+/// An unresolvable ref errors the whole walk — `git log <gone>` does the same —
+/// rather than silently pruning it, so a stale session filter surfaces instead
+/// of quietly showing less history than asked for.
+#[test]
+fn ref_filtered_history_errors_on_an_unresolvable_ref() {
+    let fixture = HistoryModeFixture::new();
+    let backend = GixBackend;
+    let opened = backend.open(fixture.repo()).unwrap();
+
+    let error = refs_page(
+        &*opened,
+        HistoryMode::FullReachable,
+        &["refs/heads/main", "refs/heads/never-existed"],
+    )
+    .expect_err("a filter naming a missing ref must fail the walk");
+    assert!(
+        error.to_string().contains("refs/heads/never-existed"),
+        "the error should name the ref that failed to resolve: {error}"
+    );
+}
+
+#[test]
+fn ref_filtered_history_composes_with_first_parent_mode() {
+    let fixture = HistoryModeFixture::new();
+    let backend = GixBackend;
+    let opened = backend.open(fixture.repo()).unwrap();
+
+    // The mode still shapes the walk: first-parent from main's tip keeps the
+    // merge and drops feature's lane, which the plain ref walk includes.
+    assert_eq!(
+        ref_walk_summaries(&*opened, HistoryMode::FirstParent, &["refs/heads/main"]),
+        vec!["merge feature", "main", "base"]
+    );
+}
+
 #[test]
 fn no_merges_history_mode_paginates_without_repeating_filtered_commits() {
     let fixture = HistoryModeFixture::new();

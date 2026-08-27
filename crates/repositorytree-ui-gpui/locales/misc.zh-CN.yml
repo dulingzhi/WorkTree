@@ -33,6 +33,8 @@ misc:
     no_commits: "没有提交。"
     author_tooltip: "按作者筛选历史 —— 建议来自已加载的历史记录"
     author_filter_tooltip: "作者筛选：%{name} —— 建议来自已加载的历史记录"
+    ref_filter_tooltip: "按分支和标签筛选历史"
+    ref_filter_tooltip_active: "引用筛选：已选 %{count} 项 —— 仅显示从所选分支/标签可达的提交"
     mode_tooltip: "历史模式（全部可达 / 仅第一父提交 / 排除合并 / 仅合并提交 / 所有分支）"
     scanning: "正在扫描历史… %{count} 个提交"
     column_message: 信息

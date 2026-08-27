@@ -2315,6 +2315,7 @@ fn closing_active_repo_refreshes_open_neighbor_with_cancelled_loads() {
         let log_request = crate::model::PendingLogLoad {
             scope: repo1_state.history_state.history_scope,
             author: None,
+            refs: Vec::new(),
             limit: 50,
             cursor: None,
         };

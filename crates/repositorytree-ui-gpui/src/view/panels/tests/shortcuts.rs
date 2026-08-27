@@ -591,6 +591,7 @@ fn shortcut_fixture_repo(
     repo.log = Loadable::Ready(
         repositorytree_core::domain::LogPage {
             commits: vec![repositorytree_core::domain::Commit {
+                signed: false,
                 id: commit_id.clone(),
                 parent_ids: repositorytree_core::domain::CommitParentIds::new(),
                 summary: "Initial commit".into(),
@@ -931,6 +932,7 @@ fn author_filter_repo_with_authors(repo_id: RepoId, authors: &[&str]) -> RepoSta
         .iter()
         .enumerate()
         .map(|(index, author)| repositorytree_core::domain::Commit {
+            signed: false,
             id: CommitId(format!("deadbeefdeadbee{index}").into()),
             parent_ids: repositorytree_core::domain::CommitParentIds::new(),
             summary: format!("commit {index}").into(),
@@ -960,6 +962,7 @@ fn author_filter_repo_with_many_authors(repo_id: RepoId, count: usize) -> RepoSt
         repositorytree_core::domain::LogPage {
             commits: (0..count)
                 .map(|ix| repositorytree_core::domain::Commit {
+                    signed: false,
                     id: CommitId(format!("{ix:016x}").into()),
                     parent_ids: repositorytree_core::domain::CommitParentIds::new(),
                     summary: "msg".into(),
@@ -973,6 +976,16 @@ fn author_filter_repo_with_many_authors(repo_id: RepoId, count: usize) -> RepoSt
     );
     repo.log = log_page.clone();
     repo.history_state.log = log_page;
+    repo
+}
+
+fn ref_filter_fixture_repo(repo_id: RepoId, filters: &[&str]) -> RepoState {
+    let workdir = std::env::temp_dir().join(format!(
+        "repositorytree_ui_test_{}_ref_filter",
+        std::process::id()
+    ));
+    let mut repo = shortcut_fixture_repo(repo_id, &workdir, &CommitId("deadbeefdeadbeef".into()));
+    repo.history_state.history_ref_filters = filters.iter().map(|f| f.to_string()).collect();
     repo
 }
 
@@ -1122,6 +1135,102 @@ fn history_author_filter_keeps_its_header_highlighted(cx: &mut gpui::TestAppCont
         active.as_deref(),
         Some("history_author_filter_header"),
         "the AUTHOR header must stay highlighted while its dropdown is open"
+    );
+}
+
+/// The funnel shows how many refs restrict the walk, so a reader can tell a
+/// filtered history from the repo's full one at a glance.
+#[gpui::test]
+fn history_ref_filter_header_shows_the_active_filter_count(cx: &mut gpui::TestAppContext) {
+    let _visual_guard = crate::test_support::lock_visual_test();
+    let (store, events) = AppStore::new(Arc::new(TestBackend));
+    let (view, cx) = cx.add_window_view(|window, cx| {
+        super::super::RepositoryTreeView::new(store, events, None, window, cx)
+    });
+
+    let repo_id = RepoId(733);
+    apply_state(
+        cx,
+        &view,
+        app_state_with_active_repo(ref_filter_fixture_repo(
+            repo_id,
+            &["refs/heads/dev", "refs/tags/v1"],
+        )),
+    );
+    draw_and_drain_test_window(cx);
+
+    assert!(
+        cx.debug_bounds("history_ref_filter_header").is_some(),
+        "the funnel sits next to the history mode dropdown"
+    );
+    assert!(
+        cx.debug_bounds("history_ref_filter_count_2").is_some(),
+        "the funnel carries the count of active ref filters"
+    );
+}
+
+/// Without filters there is no badge: the funnel reads as inert, the way the
+/// mode dropdown does when nothing is restricted.
+#[gpui::test]
+fn history_ref_filter_header_hides_the_count_without_filters(cx: &mut gpui::TestAppContext) {
+    let _visual_guard = crate::test_support::lock_visual_test();
+    let (store, events) = AppStore::new(Arc::new(TestBackend));
+    let (view, cx) = cx.add_window_view(|window, cx| {
+        super::super::RepositoryTreeView::new(store, events, None, window, cx)
+    });
+
+    let repo_id = RepoId(734);
+    apply_state(
+        cx,
+        &view,
+        app_state_with_active_repo(ref_filter_fixture_repo(repo_id, &[])),
+    );
+    draw_and_drain_test_window(cx);
+
+    assert!(
+        cx.debug_bounds("history_ref_filter_header").is_some(),
+        "the funnel renders even when nothing is filtered"
+    );
+    assert!(
+        cx.debug_bounds("history_ref_filter_count_0").is_none(),
+        "no filter means no count badge"
+    );
+}
+
+/// The funnel stays highlighted while its popover is up, matching the author
+/// header: it opts into keeping the invoker active explicitly.
+#[gpui::test]
+fn history_ref_filter_keeps_its_header_highlighted(cx: &mut gpui::TestAppContext) {
+    let _visual_guard = crate::test_support::lock_visual_test();
+    let (store, events) = AppStore::new(Arc::new(TestBackend));
+    let (view, cx) = cx.add_window_view(|window, cx| {
+        super::super::RepositoryTreeView::new(store, events, None, window, cx)
+    });
+
+    let repo_id = RepoId(735);
+    apply_state(
+        cx,
+        &view,
+        app_state_with_active_repo(ref_filter_fixture_repo(
+            repo_id,
+            &["refs/heads/dev"],
+        )),
+    );
+
+    let invoker: SharedString = "history_ref_filter_header".into();
+    cx.update(|_window, app| {
+        view.update(app, |this, cx| {
+            this.set_active_context_menu_invoker(Some(invoker.clone()), cx);
+        });
+    });
+    open_popover_for_test(cx, &view, PopoverKind::HistoryRefFilter { repo_id });
+    draw_and_drain_test_window(cx);
+
+    let active = cx.update(|_window, app| view.read(app).active_context_menu_invoker.clone());
+    assert_eq!(
+        active.as_deref(),
+        Some("history_ref_filter_header"),
+        "the funnel must stay highlighted while its popover is open"
     );
 }
 
@@ -1561,7 +1670,7 @@ fn repo_operation_context_menu_shortcuts_match_expected_actions(cx: &mut gpui::T
             },
         )
     });
-    assert_declared_shortcuts(&stash_model, &["A", "P"]);
+    assert_declared_shortcuts(&stash_model, &["A", "P", "B"]);
     assert_shortcut_action!(
         stash_model,
         "A",
@@ -1576,6 +1685,13 @@ fn repo_operation_context_menu_shortcuts_match_expected_actions(cx: &mut gpui::T
         ContextMenuAction::PopStash {
             repo_id: rid,
             index
+        } if *rid == repo_id && *index == 3
+    );
+    assert_shortcut_action!(
+        stash_model,
+        "B",
+        ContextMenuAction::OpenPopover {
+            kind: PopoverKind::StashBranchPrompt { repo_id: rid, index },
         } if *rid == repo_id && *index == 3
     );
 }
@@ -4828,7 +4944,7 @@ fn commit_message_text_input_secondary_f_activates_diff_search(cx: &mut gpui::Te
 }
 
 #[gpui::test]
-fn commit_message_text_input_secondary_f_without_visible_diff_is_noop(
+fn commit_message_text_input_secondary_f_without_visible_diff_opens_commit_search(
     cx: &mut gpui::TestAppContext,
 ) {
     let (store, events) = AppStore::new(Arc::new(TestBackend));
@@ -4866,9 +4982,15 @@ fn commit_message_text_input_secondary_f_without_visible_diff_is_noop(
         !diff_search_active(cx, &view),
         "expected secondary-f to avoid activating diff search when no diff is visible"
     );
+    // With nothing to page through, secondary-f falls back to the commit
+    // search picker — Ctrl+F still means "search" in a repo with no diff.
+    let popover = cx.update(|_window, app| crate::view::test_support::popover_kind(view.read(app), app));
     assert!(
-        commit_message_input_is_focused(cx, &view),
-        "expected secondary-f with no visible diff to leave focus unchanged"
+        matches!(
+            popover,
+            Some(crate::view::PopoverKind::CommitSearchPicker { repo_id: id }) if id == repo_id
+        ),
+        "expected secondary-f with no visible diff to open the commit search picker, got {popover:?}"
     );
 }
 
@@ -6464,6 +6586,7 @@ fn history_horizontal_wheel_does_not_scroll_vertically(cx: &mut gpui::TestAppCon
     let mut repo = shortcut_fixture_repo(repo_id, &workdir, &commit_id);
     let commits = (0..160)
         .map(|ix| repositorytree_core::domain::Commit {
+            signed: false,
             id: CommitId(format!("{ix:040x}").into()),
             parent_ids: repositorytree_core::domain::CommitParentIds::new(),
             summary: format!("Commit {ix:03}").into(),

@@ -350,8 +350,8 @@ impl HistoryView {
             return true;
         }
         if show_working_tree_summary_row && next_list_ix == 0 {
-            self.store.dispatch(Msg::ClearCommitSelection { repo_id });
-            self.store.dispatch(Msg::ClearDiffSelection { repo_id });
+            self.store
+                .dispatch(Msg::SelectWorkingTreeSummary { repo_id });
             super::set_history_selected_list_index_cache(
                 &mut self.history_selected_list_index_cache,
                 repo_id,
@@ -359,7 +359,7 @@ impl HistoryView {
                 stashes_rev,
                 history_scope,
                 &plan,
-                None,
+                Some(CommitId::uncommitted()),
                 0,
             );
             self.dismiss_history_refs_hover(_cx);
@@ -463,6 +463,29 @@ impl HistoryView {
             })
             .unwrap_or_else(|| crate::i18n::tr_str("misc.history_panel.author_tooltip").to_string())
             .into();
+        let ref_filter_invoker: SharedString = "history_ref_filter_header".into();
+        let ref_filter_anchor_bounds: Rc<RefCell<Option<Bounds<Pixels>>>> = Rc::new(RefCell::new(None));
+        let ref_filter_anchor_bounds_for_prepaint = Rc::clone(&ref_filter_anchor_bounds);
+        let ref_filter_anchor_bounds_for_click = Rc::clone(&ref_filter_anchor_bounds);
+        let ref_filter_count = self
+            .active_repo()
+            .map(|r| r.history_state.history_ref_filters.len())
+            .unwrap_or(0);
+        let ref_filter_active = ref_filter_count > 0;
+        let ref_filter_open = self
+            .active_context_menu_invoker
+            .as_ref()
+            .is_some_and(|id| id.as_ref() == ref_filter_invoker.as_ref());
+        let ref_filter_tooltip: SharedString = if ref_filter_active {
+            crate::i18n::t!(
+                "misc.history_panel.ref_filter_tooltip_active",
+                count = ref_filter_count
+            )
+            .into_owned()
+        } else {
+            crate::i18n::tr_str("misc.history_panel.ref_filter_tooltip").to_string()
+        }
+        .into();
 
         let ui_scale_percent = self.ui_scale_percent;
         let active_col_resize = self.history_col_resize;
@@ -667,6 +690,101 @@ impl HistoryView {
                                         theme,
                                         crate::i18n::tr("misc.history_panel.mode_tooltip"),
                                     ),
+                            ),
+                    )
+                    // The ref filter's funnel, next to the mode dropdown in the
+                    // same cell: the two controls shape the same walk, and a
+                    // count badge on the funnel says how far it is restricted.
+                    .child(
+                        div()
+                            .on_children_prepainted(move |children_bounds, _w, _cx| {
+                                if let Some(bounds) = children_bounds.first() {
+                                    *ref_filter_anchor_bounds_for_prepaint.borrow_mut() =
+                                        Some(*bounds);
+                                }
+                            })
+                            .child(
+                                div()
+                                    .id("history_ref_filter_header")
+                                    .debug_selector(|| "history_ref_filter_header".to_string())
+                                    .flex()
+                                    .flex_none()
+                                    .items_center()
+                                    .gap_1()
+                                    .px_1()
+                                    .h(scaled_px(18.0))
+                                    .line_height(scaled_px(18.0))
+                                    .rounded(px(theme.radii.row))
+                                    .when(ref_filter_open, |d| {
+                                        d.bg(theme.colors.interaction.pressed_background)
+                                    })
+                                    .hover(move |s| {
+                                        if ref_filter_open {
+                                            s.bg(theme.colors.interaction.pressed_background)
+                                        } else {
+                                            s.bg(with_alpha(
+                                                theme.colors.interaction.hover_background,
+                                                0.55,
+                                            ))
+                                        }
+                                    })
+                                    .active(move |s| {
+                                        s.bg(theme.colors.interaction.pressed_background)
+                                    })
+                                    .cursor(CursorStyle::PointingHand)
+                                    .child(svg_icon(
+                                        "icons/filter.svg",
+                                        if ref_filter_active {
+                                            theme.colors.accent.foreground
+                                        } else {
+                                            icon_muted
+                                        },
+                                        scaled_px(12.0),
+                                    ))
+                                    .when(ref_filter_active, |d| {
+                                        d.child(
+                                            div()
+                                                .text_color(theme.colors.accent.foreground)
+                                                .debug_selector(move || {
+                                                    format!("history_ref_filter_count_{ref_filter_count}")
+                                                })
+                                                .child(ref_filter_count.to_string()),
+                                        )
+                                    })
+                                    .when_some(scope_repo_id, |this, repo_id| {
+                                        let ref_filter_invoker = ref_filter_invoker.clone();
+                                        let ref_filter_anchor_bounds_for_click =
+                                            Rc::clone(&ref_filter_anchor_bounds_for_click);
+                                        this.on_click(cx.listener(
+                                            move |this, e: &ClickEvent, window, cx| {
+                                                this.activate_context_menu_invoker(
+                                                    ref_filter_invoker.clone(),
+                                                    cx,
+                                                );
+                                                if let Some(bounds) =
+                                                    *ref_filter_anchor_bounds_for_click.borrow()
+                                                {
+                                                    this.open_popover_for_bounds(
+                                                        PopoverKind::HistoryRefFilter { repo_id },
+                                                        bounds,
+                                                        window,
+                                                        cx,
+                                                    );
+                                                } else {
+                                                    this.open_popover_at(
+                                                        PopoverKind::HistoryRefFilter { repo_id },
+                                                        e.position(),
+                                                        window,
+                                                        cx,
+                                                    );
+                                                }
+                                            },
+                                        ))
+                                    })
+                                    .when(scope_repo_id.is_none(), |this| {
+                                        this.opacity(0.6).cursor(CursorStyle::Arrow)
+                                    })
+                                    .repositorytree_tooltip(theme, ref_filter_tooltip),
                             ),
                     ),
             )
