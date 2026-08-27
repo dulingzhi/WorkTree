@@ -69,6 +69,11 @@ pub struct PickerPromptItem {
     repository_initials: Option<SharedString>,
     section: Option<SharedString>,
     removable: bool,
+    /// The row matches whatever is typed, bypassing `match_text` filtering.
+    /// For rows whose contents were already filtered somewhere else — a
+    /// server-side search, say — where the reason a row matched may not be
+    /// visible on the row itself.
+    match_any_query: bool,
 }
 
 /// Row and header metrics, taken from Zed's title-bar menus so the two read the
@@ -1032,6 +1037,7 @@ impl PickerPromptItem {
             repository_initials: None,
             section: None,
             removable: false,
+            match_any_query: false,
         }
     }
 
@@ -1068,6 +1074,15 @@ impl PickerPromptItem {
     /// of activating it. Requires [`PickerPrompt::render_with_remove`].
     pub fn removable(mut self) -> Self {
         self.removable = true;
+        self
+    }
+
+    /// Keeps the row visible for every query. For lists the builder already
+    /// filtered on the query's behalf — deep-search results, whose match can
+    /// live in a commit body the row never shows — so `match_text` filtering
+    /// cannot re-drop what the search already vetted.
+    pub fn match_any_query(mut self) -> Self {
+        self.match_any_query = true;
         self
     }
 
@@ -1313,6 +1328,22 @@ fn match_items(items: &[PickerPromptItem], groups: &[usize], query: &str) -> Vec
     let first_upper = needle_bytes[0].to_ascii_uppercase();
 
     for (index, item) in items.iter().enumerate() {
+        // `match_any_query` rows skip the filter entirely, sorted as the
+        // empty-query pass sorts them — first in their group, no highlight
+        // range to render.
+        if item.match_any_query {
+            out.push(Match {
+                index,
+                range: None,
+                sort_key: (
+                    group_of(index),
+                    0,
+                    item.display_text().len(),
+                    item.display_text.clone(),
+                ),
+            });
+            continue;
+        }
         let match_text = item.match_text();
         if match_text.is_empty() {
             continue;
@@ -1850,6 +1881,23 @@ mod tests {
         let matches = match_items(&items, &section_groups(&items), "alphabet soup");
 
         assert!(matches.is_empty());
+    }
+
+    #[test]
+    fn match_items_keeps_match_any_query_rows_without_a_text_match() {
+        // Deep-search rows whose match lives in a commit body the row never
+        // shows: match_text cannot contain the query, and the flag is what
+        // keeps the row listed anyway.
+        let items = vec![
+            PickerPromptItem::plain("does not contain it"),
+            PickerPromptItem::plain("body-only match").match_any_query(),
+        ];
+
+        let matches = match_items(&items, &section_groups(&items), "ticket-1234");
+
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].index, 1);
+        assert_eq!(matches[0].range, None, "no highlight range exists to show");
     }
 
     #[test]

@@ -45,6 +45,9 @@ pub(super) enum RowsCacheOwner {
     Submodule,
     Worktree,
     UpstreamPicker,
+    Remote,
+    Tag,
+    CommitSearch,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
