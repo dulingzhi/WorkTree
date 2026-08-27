@@ -7,8 +7,9 @@ use crate::util::{
 use repositorytree_core::domain::{CommitId, Remote, RemoteBranch, Upstream};
 use repositorytree_core::error::{Error, ErrorKind};
 use repositorytree_core::services::{
-    CancellationToken, CommandOutput, ForcePushLease, PullMode, RemoteUrlKind, Result,
-    SafePushAfterCommitContext, SafePushAfterCommitDecision, SafePushAfterCommitTarget,
+    CancellationToken, CommandOutput, ForcePushLease, MergeRequestPushOptions, PullMode,
+    RemoteUrlKind, Result, SafePushAfterCommitContext, SafePushAfterCommitDecision,
+    SafePushAfterCommitTarget,
 };
 use gix::bstr::ByteSlice as _;
 use rustc_hash::FxHashSet;
@@ -195,10 +196,6 @@ impl GixRepo {
         }))
     }
 
-    fn branch_has_upstream(&self, branch: &str) -> Result<bool> {
-        Ok(self.branch_upstream(branch)?.is_some())
-    }
-
     pub(super) fn list_remotes_impl(&self) -> Result<Vec<Remote>> {
         let repo = self.reopen_repo()?;
         let mut remotes = Vec::new();
@@ -281,6 +278,9 @@ impl GixRepo {
         capture_output: bool,
     ) -> Result<CommandOutput> {
         let mut cmd = self.git_workdir_cmd();
+        // `git fetch --all` carries one global `core.sshCommand`, so the key
+        // is injected only when every remote that has one agrees on it.
+        self.apply_shared_remote_ssh_command(&mut cmd);
         cmd.arg("fetch").arg("--all");
         if prune {
             cmd.arg("--prune");
@@ -311,12 +311,24 @@ impl GixRepo {
         capture_output: bool,
     ) -> Result<CommandOutput> {
         let branch = self.current_branch_name()?;
-        let has_upstream = match branch.as_deref() {
-            Some(branch) => self.branch_has_upstream(branch)?,
-            None => true,
+        // The upstream remote is already resolved here, so its SSH key (if
+        // any) joins the command without an extra config read; the no-upstream
+        // fallback resolves the same remote the explicit refspec below uses.
+        let upstream = match branch.as_deref() {
+            Some(branch) => self.branch_upstream(branch)?,
+            None => None,
+        };
+        let has_upstream = upstream.is_some();
+        let ssh_remote = match (&branch, &upstream) {
+            (_, Some(upstream)) => Some(upstream.remote.clone()),
+            (Some(_), None) => self.preferred_remote_name()?,
+            (None, _) => None,
         };
 
         let mut cmd = self.git_workdir_cmd();
+        if let Some(remote) = ssh_remote.as_deref() {
+            self.apply_remote_ssh_command(&mut cmd, remote);
+        }
         cmd.arg("pull");
         match mode {
             // Be explicit about ff behavior so we don't create merge commits when a fast-forward
@@ -386,6 +398,7 @@ impl GixRepo {
 
         let command_label = format!("git push --set-upstream {remote} HEAD:refs/heads/{branch}");
         let mut cmd = self.git_workdir_cmd();
+        self.apply_remote_ssh_command(&mut cmd, remote);
         cmd.arg("push")
             .arg("--set-upstream")
             .arg("--")
@@ -411,6 +424,7 @@ impl GixRepo {
         };
 
         let mut cmd = self.git_workdir_cmd();
+        self.apply_remote_ssh_command(&mut cmd, remote);
         cmd.arg("push");
         if force_with_lease {
             cmd.arg("--force-with-lease");
@@ -462,6 +476,7 @@ impl GixRepo {
         let command_label = format!("git push {lease_arg} {} {source_ref}", lease.remote);
 
         let mut cmd = self.git_workdir_cmd();
+        self.apply_remote_ssh_command(&mut cmd, &lease.remote);
         cmd.arg("push")
             .arg(&lease_arg)
             .arg("--")
@@ -537,6 +552,7 @@ impl GixRepo {
         };
 
         let mut cmd = self.git_workdir_cmd();
+        self.apply_remote_ssh_command(&mut cmd, &target.remote);
         cmd.arg("push");
         if set_upstream {
             cmd.arg("--set-upstream");
@@ -849,6 +865,81 @@ impl GixRepo {
         self.push_head_to_branch_with_oid_lease_with_output_impl(lease)
     }
 
+    /// Push HEAD carrying `git push -o merge_request.*` options, so GitLab
+    /// opens (or configures) the merge request from the push itself. The
+    /// remote is resolved like a plain push (upstream remote, else preferred
+    /// remote); `push_to_mr_branch` redirects the refspec to `MR/<branch>`.
+    pub(super) fn push_merge_request_with_output_impl(
+        &self,
+        options: &MergeRequestPushOptions,
+    ) -> Result<CommandOutput> {
+        if let Some(target) = &options.target_branch {
+            validate_ref_like_arg(target, "target branch name")?;
+        }
+
+        let branch = self.current_branch_name()?.ok_or_else(|| {
+            Error::new(ErrorKind::Backend(
+                "merge-request push needs a checked-out branch".to_string(),
+            ))
+        })?;
+        let (remote, remote_branch) = match self.branch_upstream(&branch)? {
+            Some(upstream) => (
+                upstream.remote,
+                if options.push_to_mr_branch {
+                    format!("MR/{branch}")
+                } else {
+                    upstream.branch
+                },
+            ),
+            None => {
+                let remote = self.preferred_remote_name()?.ok_or_else(|| {
+                    Error::new(ErrorKind::Backend(
+                        "no git remote is configured for the merge-request push".to_string(),
+                    ))
+                })?;
+                let remote_branch = if options.push_to_mr_branch {
+                    format!("MR/{branch}")
+                } else {
+                    branch.clone()
+                };
+                (remote, remote_branch)
+            }
+        };
+        validate_ref_like_arg(&remote, "remote name")?;
+        validate_ref_like_arg(&remote_branch, "branch name")?;
+
+        let mut push_options: Vec<String> = Vec::new();
+        if options.create {
+            push_options.push("merge_request.create".to_string());
+        }
+        if let Some(target) = &options.target_branch {
+            push_options.push(format!("merge_request.target={target}"));
+        }
+        if options.merge_when_pipeline_succeeds {
+            push_options.push("merge_request.merge_when_pipeline_succeeds".to_string());
+        }
+        if options.remove_source_branch {
+            push_options.push("merge_request.remove_source_branch".to_string());
+        }
+
+        let mut command_label = "git push".to_string();
+        for option in &push_options {
+            command_label.push_str(&format!(" -o {option}"));
+        }
+        command_label.push_str(&format!(" {remote} HEAD:refs/heads/{remote_branch}"));
+
+        let mut cmd = self.git_workdir_cmd();
+        self.apply_remote_ssh_command(&mut cmd, &remote);
+        cmd.arg("push");
+        for option in &push_options {
+            cmd.arg("-o").arg(option);
+        }
+        cmd.arg("--")
+            .arg(&remote)
+            .arg(format!("HEAD:refs/heads/{remote_branch}"));
+        run_git_with_output(cmd, &command_label)
+    }
+
     pub(super) fn pull_branch_with_output_impl(
         &self,
         remote: &str,
@@ -943,6 +1034,94 @@ impl GixRepo {
         let label = match kind {
             RemoteUrlKind::Fetch => format!("git remote set-url {name} {url}"),
             RemoteUrlKind::Push => format!("git remote set-url --push {name} {url}"),
+        };
+        run_git_with_output(cmd, &label)
+    }
+
+    /// The per-remote SSH key path recorded in the repository's git config
+    /// (`remote.<name>.sshkey`, the C# RepositoryTree storage convention).
+    /// `None` when unset or unreadable — a missing key must never block the
+    /// network command that wanted it.
+    pub(super) fn remote_ssh_key(&self, remote: &str) -> Option<String> {
+        let key_config = format!("remote.{remote}.sshkey");
+        let mut cmd = self.git_workdir_cmd();
+        cmd.arg("config").arg("--get").arg(&key_config);
+        run_git_capture(cmd, &format!("git config --get {key_config}"))
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+    }
+
+    /// Every SSH key path recorded across remotes
+    /// (`git config --get-regexp '^remote\..*\.sshkey$'`).
+    fn remote_ssh_keys(&self) -> Vec<String> {
+        let mut cmd = self.git_workdir_cmd();
+        cmd.arg("config")
+            .arg("--get-regexp")
+            .arg(r"^remote\..*\.sshkey$");
+        let Ok(output) = run_git_capture(cmd, "git config --get-regexp remote.*.sshkey") else {
+            return Vec::new();
+        };
+        output
+            .lines()
+            .filter_map(|line| line.split_once(' ').map(|(_, value)| value.trim().to_string()))
+            .filter(|value| !value.is_empty())
+            .collect()
+    }
+
+    /// Prepends the `-c core.sshCommand=…` override for `remote`'s recorded
+    /// key, when one exists. Must run before the git subcommand is appended.
+    fn apply_remote_ssh_command(&self, cmd: &mut Command, remote: &str) {
+        if let Some(key) = self.remote_ssh_key(remote) {
+            cmd.arg("-c")
+                .arg(format!("core.sshCommand=ssh -i {}", quoted_ssh_key_path(&key)));
+        }
+    }
+
+    /// Same as [`Self::apply_remote_ssh_command`] for commands that touch
+    /// every remote at once: the override is only valid when no two remotes
+    /// recorded different keys.
+    fn apply_shared_remote_ssh_command(&self, cmd: &mut Command) {
+        let mut keys = self.remote_ssh_keys();
+        keys.sort();
+        keys.dedup();
+        if keys.len() == 1
+            && let Some(key) = keys.first()
+        {
+            cmd.arg("-c")
+                .arg(format!("core.sshCommand=ssh -i {}", quoted_ssh_key_path(key)));
+        }
+    }
+
+    pub(super) fn set_remote_ssh_key_with_output_impl(
+        &self,
+        name: &str,
+        key: Option<&str>,
+    ) -> Result<CommandOutput> {
+        validate_ref_like_arg(name, "remote name")?;
+        let key_config = format!("remote.{name}.sshkey");
+        let mut cmd = self.git_workdir_cmd();
+        let label = match key.map(str::trim).filter(|key| !key.is_empty()) {
+            Some(key) => {
+                // A leading '-' would be read back as a git option by the
+                // config command itself; refuse instead of quoting.
+                validate_ref_like_arg(key, "ssh key path")?;
+                cmd.arg("config").arg(&key_config).arg(key);
+                format!("git config {key_config} <key>")
+            }
+            None => {
+                // Clearing an unset key is already the requested state.
+                if self.remote_ssh_key(name).is_none() {
+                    return Ok(CommandOutput {
+                        command: format!("git config --unset {key_config}"),
+                        stdout: String::new(),
+                        stderr: String::new(),
+                        exit_code: Some(0),
+                    });
+                }
+                cmd.arg("config").arg("--unset").arg(&key_config);
+                format!("git config --unset {key_config}")
+            }
         };
         run_git_with_output(cmd, &label)
     }
@@ -1042,6 +1221,7 @@ impl GixRepo {
 
         let label = format!("git push --delete {remote} {branch}");
         let mut cmd = self.git_workdir_cmd();
+        self.apply_remote_ssh_command(&mut cmd, remote);
         cmd.arg("push")
             .arg("--delete")
             .arg("--")
@@ -1074,6 +1254,7 @@ impl GixRepo {
 
         let label = format!("git push --delete {remote} {}", branches.join(" "));
         let mut cmd = self.git_workdir_cmd();
+        self.apply_remote_ssh_command(&mut cmd, remote);
         cmd.arg("push").arg("--delete").arg("--").arg(remote);
         for branch in branches {
             cmd.arg(branch);
@@ -1364,5 +1545,34 @@ feature/no-upstream\t\n";
         assert!(!simple_called.get());
         assert!(with_output_called.get());
         assert_eq!(output, expected);
+    }
+}
+
+/// Quotes `path` for the `core.sshCommand` value, which git executes through
+/// the shell: single quotes around the path, embedded quotes escaped.
+fn quoted_ssh_key_path(path: &str) -> String {
+    format!("'{}'", path.replace('\'', "'\\''"))
+}
+
+#[cfg(test)]
+mod ssh_tests {
+    use super::quoted_ssh_key_path;
+
+    #[test]
+    fn plain_path_is_single_quoted() {
+        assert_eq!(quoted_ssh_key_path("/home/me/.ssh/id_ed25519"), "'/home/me/.ssh/id_ed25519'");
+    }
+
+    #[test]
+    fn path_with_spaces_stays_one_argument() {
+        assert_eq!(
+            quoted_ssh_key_path("/Users/me/My Keys/id_rsa"),
+            "'/Users/me/My Keys/id_rsa'",
+        );
+    }
+
+    #[test]
+    fn embedded_single_quotes_are_escaped() {
+        assert_eq!(quoted_ssh_key_path("/path/to/bob's key"), "'/path/to/bob'\\''s key'");
     }
 }

@@ -50,6 +50,22 @@ pub(super) fn model(_this: &PopoverHost, repo_id: RepoId, name: &str) -> Context
 
     items.push(ContextMenuItem::Separator);
     items.push(ContextMenuItem::Entry {
+        label: "Set SSH key…".into(),
+        icon: Some("icons/cog.svg".into()),
+        shortcut: None,
+        disabled: false,
+        action: Box::new(ContextMenuAction::OpenPopover {
+            kind: PopoverKind::remote(
+                repo_id,
+                RemotePopoverKind::SshKeyPrompt {
+                    name: name.to_owned(),
+                },
+            ),
+        }),
+    });
+
+    items.push(ContextMenuItem::Separator);
+    items.push(ContextMenuItem::Entry {
         label: "Remove remote…".into(),
         icon: Some("icons/trash.svg".into()),
         shortcut: None,
