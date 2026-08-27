@@ -22,6 +22,8 @@ use crate::http;
 
 /// How long one GitHub API request may take. Same ceiling as ordinary
 /// fetches; PR listings are small documents.
+// Only the `cfg(not(test))` network paths call this; test builds stub them out.
+#[cfg_attr(test, allow(dead_code))]
 const GITHUB_API_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Open pull requests per load. Fifty comfortably covers what an interactive
@@ -31,6 +33,7 @@ const PULL_REQUESTS_PER_PAGE: usize = 50;
 /// Ceiling on the per-PR combined-status pass that follows a listing: one
 /// request per PR head, so a busy repository must not turn one reload into
 /// fifty API calls.
+#[cfg_attr(test, allow(dead_code))]
 pub(super) const PULL_REQUEST_CHECKS_CAP: usize = 20;
 
 /// Owner/repo of a GitHub repository, e.g. `RepositoryTree/RepositoryTree`.
@@ -66,6 +69,7 @@ pub(super) fn github_slug_from_remotes(remotes: &[Remote]) -> Option<RepoSlug> {
 /// The GitHub token the AI commit sources resolve (gh's hosts file, then
 /// `GH_TOKEN`/`GITHUB_TOKEN`), if any. Reading it per request keeps a login
 /// performed after launch effective without a restart.
+#[cfg_attr(test, allow(dead_code))]
 pub(super) fn github_token() -> Option<String> {
     read_gh_token(&EnvAccess::real())
 }
@@ -107,6 +111,7 @@ fn github_headers(token: Option<&str>) -> Vec<(&'static str, String)> {
 /// List the repository's open pull requests. Runs from UI-driven async
 /// context (the sidebar pane spawns it); results return to the store via
 /// `InternalMsg::PullRequestsLoaded`.
+#[cfg_attr(test, allow(dead_code))]
 pub(super) async fn fetch_pull_requests(slug: &RepoSlug) -> Result<Vec<PullRequest>, Error> {
     let token = github_token();
     let response = http::get_json(
@@ -124,6 +129,7 @@ pub(super) async fn fetch_pull_requests(slug: &RepoSlug) -> Result<Vec<PullReque
 /// commit reports no statuses at all — common for repositories whose CI is
 /// all check-runs (GitHub Actions) — and renders as "no chip" rather than a
 /// misleading "pending". The check-runs rollup is a deferred follow-up.
+#[cfg_attr(test, allow(dead_code))]
 pub(super) async fn fetch_pull_request_checks(
     slug: &RepoSlug,
     sha: &str,

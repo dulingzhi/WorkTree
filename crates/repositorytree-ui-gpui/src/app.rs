@@ -2043,6 +2043,12 @@ mod tests {
         Action, Context, FocusHandle, InteractiveElement, IntoElement, Render, Styled, Window, div,
     };
 
+    /// The File-menu entries the native-menu assertions compare against;
+    /// only the tests read them, so they live here.
+    const OPEN_REPOSITORY: &str = "Open repository";
+    const CLONE_REPOSITORY: &str = "Clone repository";
+    const INITIALIZE_REPOSITORY: &str = "Initialize repository";
+
     use crate::test_support::lock_visual_test;
     use repositorytree_core::error::{Error, ErrorKind};
     use repositorytree_core::services::{GitRepository, Result};
@@ -2107,15 +2113,15 @@ mod tests {
             vec![
                 ("New Window".to_string(), NewWindow.name().to_string()),
                 (
-                    crate::menu_labels::OPEN_REPOSITORY.to_string(),
+                    OPEN_REPOSITORY.to_string(),
                     OpenRepository.name().to_string(),
                 ),
                 (
-                    crate::menu_labels::CLONE_REPOSITORY.to_string(),
+                    CLONE_REPOSITORY.to_string(),
                     CloneRepository.name().to_string(),
                 ),
                 (
-                    crate::menu_labels::INITIALIZE_REPOSITORY.to_string(),
+                    INITIALIZE_REPOSITORY.to_string(),
                     InitializeRepository.name().to_string(),
                 ),
                 (

@@ -1,4 +1,4 @@
-use repositorytree_core::domain::{CommitId, DiffArea, DiffTarget};
+use repositorytree_core::domain::{CommitId, DiffTarget};
 use repositorytree_core::services::GitBackend;
 use repositorytree_git_gix::GixBackend;
 #[path = "support/test_git_env.rs"]

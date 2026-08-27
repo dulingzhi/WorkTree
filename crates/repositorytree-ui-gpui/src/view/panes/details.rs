@@ -928,6 +928,9 @@ impl DetailsPaneView {
         }
     }
 
+    // Only the `cfg(not(test))` generation spawn calls this; test builds
+    // exercise the state machine up to the recording seam instead.
+    #[cfg_attr(test, allow(dead_code))]
     fn finish_ai_commit_generation(
         &mut self,
         result: std::result::Result<String, String>,

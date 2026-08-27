@@ -7085,7 +7085,9 @@ fn checkout_pull_request_reuses_existing_local_branch_without_moving_it() {
     run_git(&seed, &["push", "-u", "origin", "main"]);
     let main_tip = run_git_output(&seed, &["rev-parse", "main"]);
 
-    let pr_tip_sha = {
+    // The tip itself is never asserted — the review commit's parent is
+    // the PR tip by construction.
+    let _ = {
         run_git(&seed, &["checkout", "-b", "pr-work"]);
         write(&seed, "pr.txt", "pull request change\n");
         run_git(&seed, &["add", "pr.txt"]);

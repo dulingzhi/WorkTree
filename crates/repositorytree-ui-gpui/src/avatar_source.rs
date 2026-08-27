@@ -177,6 +177,8 @@ static AVATARS: LazyLock<Mutex<HashMap<String, AvatarEntry>>> =
 static RESOLVING: LazyLock<Mutex<HashSet<String>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
 
 /// How long a cached avatar is served without going back to the network.
+// Only the `cfg(not(test))` network paths call this; test builds stub them out.
+#[cfg_attr(test, allow(dead_code))]
 const AVATAR_CACHE_TTL: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
 /// The resolved remote image for `email`, when the active source yields a URL
@@ -276,6 +278,7 @@ fn store_failed_if_empty(url: &str) {
         .or_insert(AvatarEntry::Failed);
 }
 
+#[cfg_attr(test, allow(dead_code))]
 fn cache_file_is_fresh(path: &std::path::Path) -> bool {
     let modified = std::fs::metadata(path)
         .and_then(|meta| meta.modified())

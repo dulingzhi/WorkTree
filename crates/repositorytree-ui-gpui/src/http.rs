@@ -22,6 +22,8 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 /// How long an AI commit-message generation may take. Model latency has
 /// little in common with the fetch-style requests above, so it gets its own
 /// agent and a far looser ceiling.
+// Only the `cfg(not(test))` network paths call this; test builds stub them out.
+#[cfg_attr(test, allow(dead_code))]
 pub(crate) const AI_REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Ceiling on a response body.
@@ -119,6 +121,7 @@ pub(crate) fn client() -> Arc<dyn HttpClient> {
 /// quota) in the body, and the caller surfaces that text to the user. ureq's
 /// default turns e.g. a 404 into `Err(StatusCode)` and drops the body on the
 /// floor.
+#[cfg_attr(test, allow(dead_code))]
 fn ai_agent(timeout: Duration) -> ureq::Agent {
     ureq::Agent::config_builder()
         .timeout_global(Some(timeout))
@@ -133,6 +136,7 @@ fn ai_agent(timeout: Duration) -> ureq::Agent {
 /// thread-pool approach, but with the caller's timeout (AI generation runs
 /// far longer than fetches) and request headers (each provider authenticates
 /// differently).
+#[cfg_attr(test, allow(dead_code))]
 pub(crate) async fn post_json(
     url: String,
     headers: Vec<(&'static str, String)>,
@@ -156,6 +160,7 @@ pub(crate) async fn post_json(
 /// of [`post_json`] for listing models. The shared GET on the app's
 /// [`HttpClient`] takes no headers, and providers reject unauthenticated
 /// model listings.
+#[cfg_attr(test, allow(dead_code))]
 pub(crate) async fn get_json(
     url: String,
     headers: Vec<(&'static str, String)>,
@@ -174,6 +179,7 @@ pub(crate) async fn get_json(
     .await
 }
 
+#[cfg_attr(test, allow(dead_code))]
 fn finish_response(
     response: ureq::http::Response<ureq::Body>,
     url: &str,

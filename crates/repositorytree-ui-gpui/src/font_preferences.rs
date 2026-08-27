@@ -449,6 +449,7 @@ pub(crate) fn wait_for_system_font_catalog(timeout: std::time::Duration) -> bool
     // the scan as finished and let waiters fall through to the fallback.
     #[cfg(test)]
     {
+        let _ = timeout;
         return true;
     }
 
