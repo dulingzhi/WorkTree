@@ -17,3 +17,4 @@ pub mod process;
 pub mod services;
 pub mod squash;
 pub mod text_utils;
+pub mod undo;

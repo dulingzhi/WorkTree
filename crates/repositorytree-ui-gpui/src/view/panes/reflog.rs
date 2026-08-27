@@ -574,6 +574,11 @@ impl ReflogPaneView {
             .get(&repo_id)
             .map(|panel| panel.query_input.clone());
         let text_color = theme.colors.interaction.selected_foreground;
+        let undo_available =
+            !matches!(
+                panels::resolve_undo(self.state.repos.iter().find(|repo| repo.id == repo_id)),
+                panels::UndoResolution::Nothing
+            );
 
         let close = div()
             .id("reflog_panel_tab_close")
@@ -647,6 +652,37 @@ impl ReflogPaneView {
             .border_b_1()
             .border_color(theme.colors.stroke.subtle)
             .child(leading)
+            .child({
+                // "Undo…" keeps a permanent home in the header — dimmed rather
+                // than hidden when nothing is undoable — so the affordance
+                // doesn't flicker as reflog entries stream in.
+                let tooltip: gpui::SharedString = if undo_available {
+                    crate::i18n::tr("panels.undo.button").into()
+                } else {
+                    crate::i18n::tr("panels.undo.button_nothing_tooltip").into()
+                };
+                components::Button::new(
+                    "reflog_undo_button",
+                    crate::i18n::tr("panels.undo.button"),
+                )
+                .start_slot(svg_icon(
+                    "icons/undo.svg",
+                    theme.colors.foreground.secondary,
+                    px(12.0),
+                ))
+                .style(components::ButtonStyle::Subtle)
+                .disabled(!undo_available)
+                .on_click_with_bounds(theme, cx, move |this, _e, bounds, window, cx| {
+                    this.open_popover_at(
+                        PopoverKind::UndoLastActionPrompt { repo_id },
+                        bounds.bottom_left(),
+                        window,
+                        cx,
+                    );
+                })
+                .debug_selector(|| "reflog_undo_button".to_string())
+                .repositorytree_tooltip(theme, tooltip)
+            })
             .child(
                 div()
                     .id("reflog_panel_filter")
@@ -1097,6 +1133,36 @@ mod view_tests {
             trailing_gap <= px(5.0),
             "the filter box should be flush with the header's trailing edge \
              (gap was {trailing_gap:?})"
+        );
+    }
+
+    /// The undo affordance lives between the entry count and the filter box:
+    /// always rendered, dimmed when the reflog offers nothing to reverse.
+    #[gpui::test]
+    fn the_header_carries_the_undo_button_before_the_filter(cx: &mut gpui::TestAppContext) {
+        let _visual_guard = crate::test_support::lock_visual_test();
+        let (_pane, _repo_id, cx) = open_pane(cx, reflog_entries(8));
+        cx.update(|window, app| {
+            let _ = window.draw(app);
+        });
+
+        let tab = cx
+            .debug_bounds("reflog_panel_tab")
+            .expect("the header should carry the Reflog tab");
+        let undo = cx
+            .debug_bounds("reflog_undo_button")
+            .expect("the header should carry the Undo button");
+        let filter = cx
+            .debug_bounds("reflog_panel_filter")
+            .expect("the header should carry the filter box");
+
+        assert!(
+            undo.left() >= tab.right(),
+            "the Undo button should follow the tab"
+        );
+        assert!(
+            filter.left() >= undo.right(),
+            "the Undo button should precede the filter box"
         );
     }
 
