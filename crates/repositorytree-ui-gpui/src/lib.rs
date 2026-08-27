@@ -1,4 +1,5 @@
 mod ai_commit;
+mod ai_commit_sources;
 mod app;
 mod assets;
 mod avatar_source;

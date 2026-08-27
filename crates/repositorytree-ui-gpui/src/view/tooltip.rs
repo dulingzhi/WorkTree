@@ -194,6 +194,8 @@ impl RepositoryTreeView {
                             avatar_source: None,
                             // AI commit settings are owned by the settings
                             // window too.
+                            ai_commit_source: None,
+                            ai_commit_custom_command: None,
                             ai_commit_provider: None,
                             ai_commit_api_key: None,
                             ai_commit_model: None,

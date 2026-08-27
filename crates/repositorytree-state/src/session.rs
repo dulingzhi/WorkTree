@@ -38,6 +38,14 @@ pub struct UiSession {
     /// Commit-author avatar source key; `None` means the built-in initials
     /// circles (no network).
     pub avatar_source: Option<String>,
+    /// AI commit-message generation: configuration-source key
+    /// (`ai_commit_sources::AiSource`). `None` means manual. External-tool
+    /// sources resolve credentials live and never persist them — only the
+    /// manual provider fields below are stored.
+    pub ai_commit_source: Option<String>,
+    /// Template for the custom-command source; only read when the source is
+    /// `custom`.
+    pub ai_commit_custom_command: Option<String>,
     /// AI commit-message generation: provider key (`ai_commit::AiProvider`),
     /// then its credentials. `None`/empty keeps the feature unconfigured.
     pub ai_commit_provider: Option<String>,
@@ -188,6 +196,8 @@ struct UiSessionFile {
     theme_mode: Option<String>,
     language: Option<String>,
     avatar_source: Option<String>,
+    ai_commit_source: Option<String>,
+    ai_commit_custom_command: Option<String>,
     ai_commit_provider: Option<String>,
     ai_commit_api_key: Option<String>,
     ai_commit_model: Option<String>,
@@ -237,6 +247,7 @@ struct UiSessionFile {
     repo_history_modes: Option<BTreeMap<String, HistoryModeSetting>>,
     repo_history_scopes: Option<BTreeMap<String, HistoryScopeSetting>>,
     repo_history_author_filters: Option<BTreeMap<String, Option<String>>>,
+    repo_history_ref_filters: Option<BTreeMap<String, Vec<String>>>,
     repo_fetch_prune_deleted_remote_tracking_branches: Option<BTreeMap<String, bool>>,
     survey_prompt: Option<SurveyPromptSession>,
 }
@@ -317,6 +328,8 @@ pub fn load_from_path(path: &Path) -> UiSession {
         theme_mode: file.theme_mode,
         language: file.language,
         avatar_source: file.avatar_source,
+        ai_commit_source: file.ai_commit_source,
+        ai_commit_custom_command: file.ai_commit_custom_command,
         ai_commit_provider: file.ai_commit_provider,
         ai_commit_api_key: file.ai_commit_api_key,
         ai_commit_model: file.ai_commit_model,
@@ -375,6 +388,7 @@ pub(crate) struct RepoSessionPreferences {
     pub(crate) repo_history_modes: BTreeMap<String, HistoryMode>,
     pub(crate) repo_history_scopes: BTreeMap<String, LogScope>,
     pub(crate) repo_history_author_filters: BTreeMap<String, Option<String>>,
+    pub(crate) repo_history_ref_filters: BTreeMap<String, Vec<String>>,
     pub(crate) repo_fetch_prune_deleted_remote_tracking_branches: BTreeMap<String, bool>,
 }
 
@@ -407,6 +421,7 @@ pub(crate) fn load_repo_session_preferences_from_path(
             .map(|(k, v)| (k, v.into()))
             .collect(),
         repo_history_author_filters: file.repo_history_author_filters.unwrap_or_default(),
+        repo_history_ref_filters: file.repo_history_ref_filters.unwrap_or_default(),
         repo_fetch_prune_deleted_remote_tracking_branches: file
             .repo_fetch_prune_deleted_remote_tracking_branches
             .unwrap_or_default(),
@@ -767,6 +782,8 @@ pub struct UiSettings {
     pub theme_mode: Option<String>,
     pub language: Option<String>,
     pub avatar_source: Option<String>,
+    pub ai_commit_source: Option<String>,
+    pub ai_commit_custom_command: Option<String>,
     pub ai_commit_provider: Option<String>,
     pub ai_commit_api_key: Option<String>,
     pub ai_commit_model: Option<String>,
@@ -859,6 +876,12 @@ pub fn persist_ui_settings_to_path(settings: UiSettings, path: &Path) -> io::Res
         }
         if let Some(avatar_source) = settings.avatar_source {
             file.avatar_source = Some(avatar_source);
+        }
+        if let Some(source) = settings.ai_commit_source {
+            file.ai_commit_source = Some(source);
+        }
+        if let Some(command) = settings.ai_commit_custom_command {
+            file.ai_commit_custom_command = Some(command);
         }
         if let Some(provider) = settings.ai_commit_provider {
             file.ai_commit_provider = Some(provider);
@@ -1249,6 +1272,33 @@ pub fn persist_repo_history_author_filter_to_path(
             stored.insert(workdir_key, Some(author.to_owned()));
         } else {
             stored.remove(&workdir_key);
+        }
+        file.version = CURRENT_SESSION_FILE_VERSION;
+        persist_to_path(session_file_path, &file)
+    })
+}
+
+/// Persists the history ref filters for `workdir`. An empty list clears the
+/// stored entry; otherwise the sorted, deduplicated ref names are stored.
+pub fn persist_repo_history_ref_filters_to_path(
+    workdir: &Path,
+    refs: &[String],
+    session_file_path: &Path,
+) -> io::Result<()> {
+    with_session_file_persist_lock(|| {
+        let mut file = load_file(session_file_path).unwrap_or_default();
+        let stored = file
+            .repo_history_ref_filters
+            .get_or_insert_with(BTreeMap::new);
+        let workdir_key = path_storage_key(workdir);
+        let existing = stored.get(&workdir_key).cloned().unwrap_or_default();
+        if existing == refs {
+            return Ok(());
+        }
+        if refs.is_empty() {
+            stored.remove(&workdir_key);
+        } else {
+            stored.insert(workdir_key, refs.to_vec());
         }
         file.version = CURRENT_SESSION_FILE_VERSION;
         persist_to_path(session_file_path, &file)
@@ -2119,6 +2169,51 @@ mod tests {
     }
 
     #[test]
+    fn history_ref_filters_round_trip_and_clear() {
+        let dir = unique_session_test_dir("history-ref-filters");
+        let session_file = dir.join("session.json");
+        let repo_a = dir.join("repo-a");
+        let repo_b = dir.join("repo-b");
+
+        persist_repo_history_ref_filters_to_path(
+            &repo_a,
+            &["refs/heads/dev".to_string(), "refs/tags/v1".to_string()],
+            &session_file,
+        )
+        .expect("persist ref filters");
+        // An empty list is the cleared state, and clearing a repo that never
+        // had filters still succeeds without inventing an entry.
+        persist_repo_history_ref_filters_to_path(&repo_b, &[], &session_file)
+            .expect("clear ref filters");
+
+        let loaded = load_repo_session_preferences_from_path(&session_file);
+        assert_eq!(
+            loaded.repo_history_ref_filters.get(&path_storage_key(&repo_a)),
+            Some(&vec![
+                "refs/heads/dev".to_string(),
+                "refs/tags/v1".to_string()
+            ])
+        );
+        assert!(
+            !loaded
+                .repo_history_ref_filters
+                .contains_key(&path_storage_key(&repo_b)),
+            "an empty list leaves no stored entry"
+        );
+
+        // Clearing repo_a removes its entry rather than storing an empty list,
+        // so an old session file never grows a tombstone per repository.
+        persist_repo_history_ref_filters_to_path(&repo_a, &[], &session_file)
+            .expect("clear ref filters");
+        let cleared = load_repo_session_preferences_from_path(&session_file);
+        assert!(
+            cleared.repo_history_ref_filters.is_empty(),
+            "clearing the only filtered repo empties the map, got {:?}",
+            cleared.repo_history_ref_filters
+        );
+    }
+
+    #[test]
     fn persist_ui_settings_round_trips_avatar_source() {
         let dir = env::temp_dir().join(format!(
             "repositorytree-session-avatar-source-test-{}-{}",
@@ -2182,6 +2277,8 @@ mod tests {
 
         persist_ui_settings_to_path(
             UiSettings {
+                ai_commit_source: Some("claude-code".to_string()),
+                ai_commit_custom_command: Some("my-tool {PROMPT}".to_string()),
                 ai_commit_provider: Some("openai".to_string()),
                 ai_commit_api_key: Some("sk-test".to_string()),
                 ai_commit_model: Some("gpt-4o-mini".to_string()),
@@ -2192,6 +2289,15 @@ mod tests {
         )
         .expect("persist ai commit settings");
         let loaded = load_from_path(&session_file);
+        assert_eq!(
+            loaded.ai_commit_source,
+            Some("claude-code".to_string()),
+            "the source choice persists; credentials stay manual-only"
+        );
+        assert_eq!(
+            loaded.ai_commit_custom_command,
+            Some("my-tool {PROMPT}".to_string())
+        );
         assert_eq!(loaded.ai_commit_provider, Some("openai".to_string()));
         assert_eq!(loaded.ai_commit_api_key, Some("sk-test".to_string()));
         assert_eq!(loaded.ai_commit_model, Some("gpt-4o-mini".to_string()));
@@ -2212,6 +2318,10 @@ mod tests {
         assert_eq!(
             load_from_path(&session_file).ai_commit_api_key,
             Some("sk-test".to_string())
+        );
+        assert_eq!(
+            load_from_path(&session_file).ai_commit_source,
+            Some("claude-code".to_string())
         );
 
         let _ = fs::remove_dir_all(&dir);
