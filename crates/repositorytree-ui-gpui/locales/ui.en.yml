@@ -26,6 +26,8 @@ ui:
       commits: Filter commits
       authors: Filter authors
       remote_branches: Filter remote branches
+      remotes: Filter remotes
+      tags: Filter tags
     repo:
       sort:
         newest: Newest
@@ -43,10 +45,23 @@ ui:
       empty: No worktrees
     submodule:
       empty: No submodules
+    remote:
+      empty: No remotes
+    remote_branch:
+      empty: No remote branches
     stash:
       empty: No stashes
     tag:
       empty: No tags
+    commit_search:
+      section:
+        loaded: Loaded History
+        all_history: All History
+      # Leading part of the picker's search-all row. The typed query follows
+      # as its own (searchable) part, so the trailing space is load-bearing.
+      search_all_prefix: "Search all history for "
+      hint: Matches message and author, newest first
+      empty: No matching commits
     file_history:
       no_commits: No commits
     upstream:
@@ -133,5 +148,40 @@ ui:
     description_optional: "Description (optional)"
     stash_message: "Stash message"
     commit_subject: "Commit subject"
+    mr_push_target: "Target branch (blank = default branch)"
   prompt:
     export_patch_folder: "Export patch to folder"
+
+  # Statistics popover (command palette: Statistics…). Weekday labels are
+  # Sunday-first to match the bars; month labels are the short forms.
+  statistics:
+    title: Statistics
+    close: Close
+    period:
+      week: Week
+      month: Month
+      year: Year
+    summary: "%{commits} commits · %{contributors} contributors"
+    contributors: Contributors
+    empty: "No commits in this period."
+    weekday:
+      "0": Sun
+      "1": Mon
+      "2": Tue
+      "3": Wed
+      "4": Thu
+      "5": Fri
+      "6": Sat
+    month:
+      "1": Jan
+      "2": Feb
+      "3": Mar
+      "4": Apr
+      "5": May
+      "6": Jun
+      "7": Jul
+      "8": Aug
+      "9": Sep
+      "10": Oct
+      "11": Nov
+      "12": Dec

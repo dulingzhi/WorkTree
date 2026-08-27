@@ -18,6 +18,8 @@ ui:
       commits: 筛选提交
       authors: 筛选作者
       remote_branches: 筛选远程分支
+      remotes: 筛选远程仓库
+      tags: 筛选标签
     repo:
       sort:
         newest: 最新
@@ -35,10 +37,21 @@ ui:
       empty: 没有工作树
     submodule:
       empty: 没有子模块
+    remote:
+      empty: 没有远程仓库
+    remote_branch:
+      empty: 没有远程分支
     stash:
       empty: 没有贮藏
     tag:
       empty: 没有标签
+    commit_search:
+      section:
+        loaded: 已加载的历史
+        all_history: 全部历史
+      search_all_prefix: "在全部历史中搜索 "
+      hint: 匹配提交信息和作者，按时间倒序
+      empty: 没有匹配的提交
     file_history:
       no_commits: 没有提交
     upstream:
@@ -123,5 +136,40 @@ ui:
     description_optional: "描述（可选）"
     stash_message: "贮藏说明"
     commit_subject: "提交主题"
+    mr_push_target: "目标分支（留空 = 默认分支）"
   prompt:
     export_patch_folder: "导出补丁到文件夹"
+
+  # 统计弹窗（命令面板：统计…）。星期标签按周日开头排列，与柱状图一致；
+  # 月份标签使用短格式。
+  statistics:
+    title: 统计
+    close: 关闭
+    period:
+      week: 周
+      month: 月
+      year: 年
+    summary: "%{commits} 次提交 · %{contributors} 位贡献者"
+    contributors: 贡献者
+    empty: 该时间段内没有提交。
+    weekday:
+      "0": 周日
+      "1": 周一
+      "2": 周二
+      "3": 周三
+      "4": 周四
+      "5": 周五
+      "6": 周六
+    month:
+      "1": 1月
+      "2": 2月
+      "3": 3月
+      "4": 4月
+      "5": 5月
+      "6": 6月
+      "7": 7月
+      "8": 8月
+      "9": 9月
+      "10": 10月
+      "11": 11月
+      "12": 12月
