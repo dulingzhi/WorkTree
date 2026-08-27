@@ -55,7 +55,7 @@ impl GixRepo {
         cmd
     }
 
-    fn build_unified_diff_command(&self, target: &DiffTarget) -> Command {
+    pub(super) fn build_unified_diff_command(&self, target: &DiffTarget) -> Command {
         let mut cmd = self.unified_diff_config_command();
 
         match target {
@@ -117,7 +117,7 @@ impl GixRepo {
     /// Run a unified-diff command and collect its stdout. Shared by every
     /// caller so the "exit 1 means differences, not failure" rule and the
     /// UTF-8 requirement stay in one place.
-    fn run_unified_diff(&self, cmd: Command) -> Result<String> {
+    pub(super) fn run_unified_diff(&self, cmd: Command) -> Result<String> {
         let label = "git diff";
         let output = run_git_raw_output(cmd, label)?;
 

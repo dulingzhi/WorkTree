@@ -10,6 +10,13 @@ diff:
     no_file_contents: 没有可用的文件内容。
     no_differences: 无差异。
     processing_file: 正在处理文件…
+  lfs:
+    title: "LFS 指针变更"
+    hint: "内容存储在 Git LFS；上方 diff 跟踪的是指针。"
+    old: 旧
+    new: 新
+    oid_absent: "—"
+    size_absent: "—"
   pane:
     diff: 差异
     preview: 预览

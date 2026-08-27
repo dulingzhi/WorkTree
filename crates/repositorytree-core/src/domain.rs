@@ -42,6 +42,17 @@ impl CommitId {
     pub fn is_uncommitted(&self) -> bool {
         is_uncommitted_commit_id(&self.0)
     }
+
+    /// The id of the working tree's virtual "uncommitted changes" node.
+    ///
+    /// The all-zeros object id git itself emits for working-tree lines, so every
+    /// `is_uncommitted` check in blame/diff code recognizes it. Held in
+    /// `selected_commit` while the history list's uncommitted-changes row is
+    /// selected — never inside `multi_selection`, whose entries must always name
+    /// real commits for the selection-driven commands (cherry-pick, squash, …).
+    pub fn uncommitted() -> Self {
+        Self("0000000000000000000000000000000000000000".into())
+    }
 }
 
 /// Whether `id` is git's all-zero "not committed yet" object id, emitted by
@@ -61,6 +72,10 @@ pub struct Commit {
     pub summary: Arc<str>,
     pub author: Arc<str>,
     pub time: SystemTime,
+    /// The commit carries a cryptographic signature (`gpgsig` for OpenPGP,
+    /// `gpgsigssh` for SSH). Presence only — verifying the signature is a
+    /// separate, per-commit operation.
+    pub signed: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -68,6 +83,18 @@ pub struct RecentCommitMessage {
     pub id: CommitId,
     pub summary: Arc<str>,
     pub message: String,
+}
+
+/// One commit's contribution to the statistics window: just enough to bucket
+/// it by local calendar date and rank its author. Deliberately anonymous about
+/// everything else — the statistics walk touches every commit in the window
+/// across branches and remotes, so each entry stays two fields.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContributorCommit {
+    /// Author name, spelled the way the history list spells it.
+    pub author: Arc<str>,
+    /// Commit time (the date git orders history by).
+    pub time: SystemTime,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
@@ -186,6 +213,40 @@ pub struct UpstreamDivergence {
 pub struct Remote {
     pub name: String,
     pub url: Option<String>,
+}
+
+/// One open pull request of the repo's GitHub remote, listed in the sidebar.
+/// The fields are what the list row and the checkout action need — everything
+/// else the API returns is dropped at the parse boundary.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PullRequest {
+    pub number: u64,
+    pub title: String,
+    pub author: String,
+    /// The PR author's branch name (the `head` side), shown as a hint when
+    /// the title alone is ambiguous.
+    pub head_ref: String,
+    /// The head commit the list was fetched against; the combined-status
+    /// lookup and the checkout both key off it (the checkout re-fetches, so
+    /// a PR updated after the list load still checks out its newest tip).
+    pub head_sha: CommitId,
+    pub base_ref: String,
+    pub draft: bool,
+    /// Combined CI state of `head_sha` (`None` until the status pass lands —
+    /// or forever, when no token is configured and the status pass is
+    /// skipped for rate-limit reasons).
+    pub checks: Option<PullRequestChecksState>,
+}
+
+/// The CI verdict for one pull request head — GitHub's combined status, not
+/// individual check runs. Named in full because bare `Status` in this
+/// codebase means file status.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum PullRequestChecksState {
+    Success,
+    Failure,
+    Pending,
+    Error,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -697,6 +758,26 @@ pub struct FileDiffImage {
     pub new: Option<Vec<u8>>,
 }
 
+/// One side of a Git LFS pointer file — the small text object git stores in
+/// the object database in place of the actual content. Fields are optional
+/// because a pointer diff can expose one without the other (a `size`-only
+/// change leaves both `oid`s as context lines).
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct LfsPointer {
+    /// `oid sha256:<hex>` from the pointer header.
+    pub oid: Option<String>,
+    /// `size <bytes>` from the pointer header.
+    pub size: Option<u64>,
+}
+
+/// The old/new pointer pair parsed from a unified diff of pointer files.
+/// `None` on a side means that side has no pointer (file absent there).
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct LfsPointerChange {
+    pub old: Option<LfsPointer>,
+    pub new: Option<LfsPointer>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DiffLine {
     pub kind: DiffLineKind,
@@ -1170,6 +1251,7 @@ diff --git a/src/lib.rs b/src/lib.rs\n\
     fn commit_struct_is_constructible() {
         let now = SystemTime::UNIX_EPOCH + Duration::from_secs(1);
         let commit = Commit {
+            signed: false,
             id: CommitId("1".into()),
             parent_ids: smallvec::smallvec![CommitId("0".into())],
             summary: "test".into(),

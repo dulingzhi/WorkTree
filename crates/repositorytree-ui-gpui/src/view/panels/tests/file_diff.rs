@@ -17947,3 +17947,86 @@ fn diff_search_scrolls_sideways_to_a_match_far_along_a_long_line(cx: &mut gpui::
         "search_horizontal_reveal",
     );
 }
+
+#[gpui::test]
+fn lfs_pointer_panel_replaces_text_and_image_diff(cx: &mut gpui::TestAppContext) {
+    let (store, events) = AppStore::new(Arc::new(TestBackend));
+    let (view, cx) = cx.add_window_view(|window, cx| {
+        super::super::RepositoryTreeView::new(store, events, None, window, cx)
+    });
+    let repo_id = repositorytree_state::model::RepoId(70721);
+    let path = PathBuf::from("art.bin");
+    let workdir = std::env::temp_dir().join(format!(
+        "repositorytree_ui_test_{}_lfs_pointer_root",
+        std::process::id()
+    ));
+    let _ = std::fs::create_dir_all(&workdir);
+
+    let target = repositorytree_core::domain::DiffTarget::Commit {
+        commit_id: repositorytree_core::domain::CommitId("deadbeef".into()),
+        path: Some(path.clone()),
+    };
+    let unified = "\
+diff --git a/art.bin b/art.bin
+--- a/art.bin
++++ b/art.bin
+@@ -1,3 +1,3 @@
+ version https://git-lfs.github.com/spec/v1
+-oid sha256:1111111111111111111111111111111111111111111111111111111111111111
+-size 4096
++oid sha256:2222222222222222222222222222222222222222222222222222222222222222
++size 8192
+";
+    let diff = repositorytree_core::domain::Diff::from_unified(target.clone(), unified);
+    let pointer_change = repositorytree_core::domain::LfsPointerChange {
+        old: Some(repositorytree_core::domain::LfsPointer {
+            oid: Some("1".repeat(64)),
+            size: Some(4096),
+        }),
+        new: Some(repositorytree_core::domain::LfsPointer {
+            oid: Some("2".repeat(64)),
+            size: Some(8192),
+        }),
+    };
+
+    cx.update(|_window, app| {
+        view.update(app, |this, cx| {
+            let mut repo = opening_repo_state(repo_id, &workdir);
+            repo.diff_state.diff_target = Some(target.clone());
+            repo.diff_state.diff_state_rev = 1;
+            repo.diff_state.diff_rev = 1;
+            repo.diff_state.diff_file_rev = 1;
+            repo.diff_state.diff = repositorytree_state::model::Loadable::Ready(Arc::new(diff));
+            // No text is ever loaded for an LFS path — the worker redirected
+            // the load — so the panel must render from the pointer change
+            // alone.
+            // Production shape: the text load resolves (keeping the file
+            // view's cache machinery current), then the LFS result lands and
+            // the panel takes over rendering.
+            repo.diff_state.diff_file = repositorytree_state::model::Loadable::Ready(Some(
+                Arc::new(repositorytree_core::domain::FileDiffText::new(
+                    path.clone(),
+                    Some("version https://git-lfs.github.com/spec/v1\n".to_string()),
+                    Some("version https://git-lfs.github.com/spec/v1\n".to_string()),
+                )),
+            ));
+            repo.diff_state.diff_file_lfs = repositorytree_state::model::Loadable::Ready(Some(
+                Arc::new(pointer_change),
+            ));
+            push_test_state(this, app_state_with_repo(repo, repo_id), cx);
+        });
+    });
+
+    wait_for_main_pane_condition(
+        cx,
+        &view,
+        "the file diff view to activate",
+        |pane| pane.is_file_diff_view_active(),
+        |pane| format!("file_diff_active={}", pane.is_file_diff_view_active()),
+    );
+    draw_and_drain_test_window(cx);
+    assert!(
+        cx.debug_bounds("diff_lfs_panel").is_some(),
+        "the LFS pointer panel must render in place of the text diff"
+    );
+}

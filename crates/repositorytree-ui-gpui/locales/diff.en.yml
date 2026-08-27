@@ -14,6 +14,13 @@ diff:
     no_file_contents: "No file contents available."
     no_differences: "No differences."
     processing_file: "Processing file..."
+  lfs:
+    title: "LFS pointer change"
+    hint: "Content is stored in Git LFS; the diff above tracks the pointer."
+    old: Old
+    new: New
+    oid_absent: "—"
+    size_absent: "—"
   pane:
     diff: Diff
     preview: Preview

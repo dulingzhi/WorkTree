@@ -2,7 +2,7 @@ use super::helpers::*;
 use super::*;
 use crate::kit::text_model::TextModelSnapshot;
 use crate::view::branch_sidebar::BranchSection;
-use repositorytree_core::domain::{Diff, FileDiffImage, FileDiffText, LogScope};
+use repositorytree_core::domain::{Diff, FileDiffImage, FileDiffText, LfsPointerChange, LogScope};
 use repositorytree_core::mergetool_trace::{
     self, MergetoolTraceEvent, MergetoolTraceSideStats, MergetoolTraceStage,
 };
@@ -4261,6 +4261,18 @@ impl MainPaneView {
             self.active_repo()
                 .map(|repo| &repo.diff_state.diff_file_image)
         }
+    }
+
+    pub(in crate::view) fn rendered_file_lfs_diff_loadable(
+        &self,
+    ) -> Option<
+        &repositorytree_state::model::Loadable<
+            Option<repositorytree_state::model::Shared<LfsPointerChange>>,
+        >,
+    > {
+        // Inline submodule diffs keep the plain text path — the submodule
+        // workdir's LFS wiring is not introspected, so no panel there.
+        self.active_repo().map(|repo| &repo.diff_state.diff_file_lfs)
     }
 
     pub(in crate::view) fn rendered_file_diff_rev(&self) -> u64 {

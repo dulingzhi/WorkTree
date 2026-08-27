@@ -83,6 +83,49 @@ impl MainPaneView {
                 .rendered_preview_modes
                 .get(RenderedPreviewKind::Markdown)
                 == RenderedPreviewMode::Rendered;
+        // LFS-filtered paths have no useful text form (the worktree file is a
+        // pointer), so the pointer panel takes priority over both the image
+        // and text views — the C# version shows it for every LFS file.
+        let wants_lfs = self
+            .rendered_file_lfs_diff_loadable()
+            .is_some_and(|lfs| !matches!(lfs, Loadable::NotLoaded));
+
+        if wants_lfs {
+            // Cloned so the mutable `self` call below is free of the
+            // loadable borrow; the Arc hop makes this cheap.
+            let lfs_state = self.rendered_file_lfs_diff_loadable().cloned();
+            return match lfs_state {
+                Some(Loadable::Loading) => components::empty_state(
+                    theme,
+                    crate::i18n::tr("diff.pane.diff"),
+                    crate::i18n::tr("diff.common.loading"),
+                )
+                .into_any_element(),
+                Some(Loadable::Error(e)) => components::empty_state(
+                    theme,
+                    crate::i18n::tr("diff.pane.diff"),
+                    e,
+                )
+                .into_any_element(),
+                Some(Loadable::Ready(None)) => components::empty_state(
+                    theme,
+                    crate::i18n::tr("diff.pane.diff"),
+                    crate::i18n::tr("diff.common.no_differences"),
+                )
+                .into_any_element(),
+                Some(Loadable::Ready(Some(change))) => {
+                    self.render_lfs_pointer_change(theme, &change, cx)
+                }
+                // Guarded by `wants_lfs`; `None` (inline submodule) also
+                // cannot occur because the flag was computed false there.
+                Some(Loadable::NotLoaded) | None => components::empty_state(
+                    theme,
+                    crate::i18n::tr("diff.pane.diff"),
+                    crate::i18n::tr("diff.common.select_a_file"),
+                )
+                .into_any_element(),
+            };
+        }
 
         if wants_image {
             enum DiffFileImageState {
