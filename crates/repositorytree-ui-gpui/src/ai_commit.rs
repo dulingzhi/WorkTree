@@ -355,6 +355,93 @@ pub(crate) fn build_explanation_request(
 #[cfg_attr(test, allow(dead_code))]
 const CLI_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
+/// The system prompt for the MR push prompt's "generate description"
+/// action — the same providers as the commit ✨, a third job. The commits
+/// and diffstat say what changed; the description is for the reviewer
+/// opening the merge request.
+pub(crate) const MR_DESCRIPTION_SYSTEM_PROMPT: &str = "You are writing the description for a merge request (GitLab) or pull request (GitHub). \
+Given the target branch, the commits between it and HEAD, and a diffstat, write the description in markdown: \
+a short opening paragraph summarizing the change, then a '## Changes' section of grouped bullets, \
+and a brief '## Testing' section only when the changes imply one. \
+Ground every claim in the provided commits and diffstat; do not invent details. \
+Reply with ONLY the markdown description.";
+
+/// Assemble the MR description user content: the target, the locale the
+/// answer should be written in first, the commits, and the diffstat under
+/// the same truncation budget as commit diffs.
+pub(crate) fn build_mr_description_user_content(
+    target: &str,
+    commits: &[(String, String)],
+    diff_stat: &str,
+    locale: &str,
+) -> String {
+    let commit_lines = commits
+        .iter()
+        .map(|(sha, subject)| format!("- {sha} {subject}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        "Write the merge request description for HEAD merging into \"{target}\". \
+Write it in the language of this locale: {locale}.\n\n--- Commits ({}) ---\n{commit_lines}\n\n--- Diffstat vs {target} ---\n{}",
+        commits.len(),
+        truncate_diff(diff_stat),
+    )
+}
+
+/// The single prompt text handed to a CLI generator, mirroring
+/// [`build_cli_prompt`]'s shape.
+pub(crate) fn build_mr_description_cli_prompt(
+    target: &str,
+    commits: &[(String, String)],
+    diff_stat: &str,
+    locale: &str,
+) -> String {
+    format!(
+        "{}\n\n{}",
+        MR_DESCRIPTION_SYSTEM_PROMPT,
+        build_mr_description_user_content(target, commits, diff_stat, locale)
+    )
+}
+
+/// Build the provider-specific request for one MR description.
+pub(crate) fn build_mr_description_request(
+    settings: &AiCommitSettings,
+    target: &str,
+    commits: &[(String, String)],
+    diff_stat: &str,
+    locale: &str,
+) -> AiCommitRequest {
+    let user_content = build_mr_description_user_content(target, commits, diff_stat, locale);
+    let model = settings.effective_model();
+    match settings.provider {
+        AiProvider::Anthropic => AiCommitRequest {
+            url: settings.endpoint_url(),
+            headers: settings.auth_headers(),
+            body: serde_json::json!({
+                "model": model,
+                "max_tokens": MAX_OUTPUT_TOKENS,
+                "system": MR_DESCRIPTION_SYSTEM_PROMPT,
+                "messages": [{ "role": "user", "content": user_content }],
+            })
+            .to_string(),
+        },
+        AiProvider::OpenAiCompatible => AiCommitRequest {
+            url: settings.endpoint_url(),
+            headers: settings.auth_headers(),
+            body: serde_json::json!({
+                "model": model,
+                "messages": [
+                    { "role": "system", "content": MR_DESCRIPTION_SYSTEM_PROMPT },
+                    { "role": "user", "content": user_content },
+                ],
+                "max_tokens": MAX_OUTPUT_TOKENS,
+                "temperature": 0.3,
+            })
+            .to_string(),
+        },
+    }
+}
+
 /// Run one CLI generation: spawn, collect stdout/stderr, kill on timeout,
 /// and sanitize stdout as the reply. The prompt arrives as a single argv
 /// element — no shell is involved, so its contents need no escaping.
@@ -583,6 +670,27 @@ pub(crate) async fn generate_explanation(
         settings,
         build_explanation_cli_prompt(patch, locale),
         |resolved| build_explanation_request(resolved, patch, locale),
+    )
+    .await
+}
+
+/// One MR/PR description, over the same source dispatch. The reply shares
+/// the commit path's sanitization and empty-reply rejection; it lands in an
+/// editable field, not a commit message, so markdown survives.
+#[cfg(not(test))]
+pub(crate) async fn generate_mr_description(
+    settings: &AiCommitSettings,
+    target: &str,
+    commits: &[(String, String)],
+    diff_stat: &str,
+    locale: &str,
+) -> Result<String, String> {
+    generate_from_source(
+        settings,
+        build_mr_description_cli_prompt(target, commits, diff_stat, locale),
+        |resolved| {
+            build_mr_description_request(resolved, target, commits, diff_stat, locale)
+        },
     )
     .await
 }
@@ -1093,5 +1201,74 @@ mod tests {
         let body: serde_json::Value = serde_json::from_str(&openai.body).unwrap();
         assert_eq!(body["messages"][0]["role"], "system");
         assert_eq!(body["messages"][0]["content"], EXPLAIN_SYSTEM_PROMPT);
+    }
+
+    fn mr_commits() -> Vec<(String, String)> {
+        vec![
+            ("abc1234".to_string(), "Fix widget focus ring".to_string()),
+            ("def5678".to_string(), "Add focus regression test".to_string()),
+        ]
+    }
+
+    #[test]
+    fn mr_description_prompt_carries_target_locale_and_context() {
+        let prompt = build_mr_description_cli_prompt(
+            "main",
+            &mr_commits(),
+            " src/widget.rs | 12 ++++++---\n 2 files changed",
+            "zh-CN",
+        );
+        assert!(
+            prompt.starts_with(MR_DESCRIPTION_SYSTEM_PROMPT),
+            "the CLI prompt leads with the MR description system prompt"
+        );
+        assert!(prompt.contains("locale: zh-CN"));
+        assert!(prompt.contains("merging into \"main\""));
+        assert!(prompt.contains("- abc1234 Fix widget focus ring"));
+        assert!(prompt.contains("Commits (2)"));
+        assert!(prompt.contains("src/widget.rs | 12"));
+    }
+
+    #[test]
+    fn mr_description_prompt_truncates_a_huge_diffstat() {
+        let long = "file.rs | 1000 ++++++++++\n".repeat(MAX_DIFF_LENGTH / 8);
+        let content =
+            build_mr_description_user_content("main", &mr_commits(), &long, "en");
+        assert!(
+            content.contains("\n[truncated]"),
+            "the diffstat shares the commit path's diff budget"
+        );
+    }
+
+    #[test]
+    fn mr_description_request_swaps_the_system_prompt() {
+        let request = build_mr_description_request(
+            &settings(AiProvider::Anthropic),
+            "main",
+            &mr_commits(),
+            " src/widget.rs | 12 ++++++---",
+            "en",
+        );
+        let body: serde_json::Value = serde_json::from_str(&request.body).unwrap();
+        assert_eq!(body["system"], MR_DESCRIPTION_SYSTEM_PROMPT);
+        assert_ne!(body["system"], SYSTEM_PROMPT);
+        assert_ne!(body["system"], EXPLAIN_SYSTEM_PROMPT);
+        assert!(
+            body["messages"][0]["content"]
+                .as_str()
+                .unwrap()
+                .contains("abc1234")
+        );
+
+        let openai = build_mr_description_request(
+            &settings(AiProvider::OpenAiCompatible),
+            "main",
+            &mr_commits(),
+            "stat",
+            "en",
+        );
+        let body: serde_json::Value = serde_json::from_str(&openai.body).unwrap();
+        assert_eq!(body["messages"][0]["role"], "system");
+        assert_eq!(body["messages"][0]["content"], MR_DESCRIPTION_SYSTEM_PROMPT);
     }
 }

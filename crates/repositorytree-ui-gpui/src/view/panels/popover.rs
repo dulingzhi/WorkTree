@@ -29,6 +29,7 @@ mod hunk_explanation;
 mod merge_abort_confirm;
 mod merge_commit_confirm;
 mod merge_request_push;
+mod merge_request_push_description;
 mod picker_nav;
 mod picker_row_menu;
 mod pull_reconcile_prompt;
@@ -384,6 +385,11 @@ pub(in super::super) struct PopoverHost {
     /// re-applied every time the prompt opens; `merge_request.create` itself
     /// is implicit — the dialog exists to create one.
     mr_push_target_input: Entity<components::TextInput>,
+    /// The AI-generated (or hand-written) MR description. Prepare-and-copy
+    /// only: GitLab push options carry no reliable multiline description.
+    mr_push_description_input: Entity<components::TextInput>,
+    mr_push_description_generating: bool,
+    mr_push_description_error: Option<SharedString>,
     mr_push_merge_when_pipeline_succeeds: bool,
     mr_push_remove_source_branch: bool,
     mr_push_push_to_mr_branch: bool,
@@ -1450,6 +1456,18 @@ impl PopoverHost {
             )
         });
 
+        let mr_push_description_input = cx.new(|cx| {
+            components::TextInput::new(
+                components::TextInputOptions {
+                    placeholder: crate::i18n::tr("ui.placeholder.mr_push_description"),
+                    multiline: true,
+                    ..Default::default()
+                },
+                window,
+                cx,
+            )
+        });
+
         // The subject input re-renders the host on every keystroke so the
         // Squash button's disabled state (driven by whether the message is
         // empty) stays current, and submits on Enter.
@@ -1966,6 +1984,9 @@ impl PopoverHost {
             stash_include_untracked_focus_handle,
             stash_keep_index_focus_handle,
             mr_push_target_input,
+            mr_push_description_input,
+            mr_push_description_generating: false,
+            mr_push_description_error: None,
             mr_push_merge_when_pipeline_succeeds: false,
             // GitLab-side default from the C# client's push dialog.
             mr_push_remove_source_branch: true,
@@ -2961,6 +2982,105 @@ impl PopoverHost {
         self.dismiss_inline_popover(window, cx);
     }
 
+    /// Generate the MR description with the configured AI source. Guarded
+    /// feedback — provider not configured — surfaces as a warning toast, the
+    /// same contract as the commit ✨.
+    pub(super) fn start_mr_description_generation(&mut self, cx: &mut gpui::Context<Self>) {
+        let Some(PopoverKind::MergeRequestPushPrompt { repo_id }) = self.popover.clone() else {
+            return;
+        };
+        if self.mr_push_description_generating {
+            return;
+        }
+        if !crate::ai_commit::current().is_configured() {
+            self.push_toast(
+                components::ToastKind::Warning,
+                crate::i18n::tr_str("misc.ai_commit.not_configured").to_string(),
+                cx,
+            );
+            return;
+        }
+        let Some(repo) = self.state.repos.iter().find(|repo| repo.id == repo_id) else {
+            return;
+        };
+        let workdir = repo.spec.workdir.clone();
+        let target_input = self
+            .mr_push_target_input
+            .read_with(cx, |input, _| input.text().to_string());
+        self.mr_push_description_generating = true;
+        self.mr_push_description_error = None;
+        cx.notify();
+
+        // The request itself needs git and the network; test builds exercise
+        // the state machine through `finish_mr_description_generation`.
+        #[cfg(not(test))]
+        {
+            let settings = crate::ai_commit::current();
+            let locale = rust_i18n::locale();
+            cx.spawn(async move |this, cx| {
+                // Collecting context runs git — keep it off the executor.
+                let context = smol::unblock(move || {
+                    let origin_head =
+                        merge_request_push::git_output(
+                            &workdir,
+                            &["symbolic-ref", "refs/remotes/origin/HEAD"],
+                        )
+                        .ok();
+                    let Some(target) = merge_request_push::resolve_mr_description_target(
+                        &target_input,
+                        origin_head.as_deref(),
+                    ) else {
+                        return Err(
+                            crate::i18n::tr_str("input.mr_push.target_required").to_string(),
+                        );
+                    };
+                    merge_request_push::collect_mr_description_context(&workdir, &target)
+                        .map(|context| (target, context))
+                })
+                .await;
+                let result = match context {
+                    Err(message) => Err(message),
+                    Ok((target, (commits, diff_stat))) => {
+                        crate::ai_commit::generate_mr_description(
+                            &settings,
+                            &target,
+                            &commits,
+                            &diff_stat,
+                            &locale,
+                        )
+                        .await
+                    }
+                };
+                let _ = this.update(cx, |host, cx| {
+                    host.finish_mr_description_generation(result, cx)
+                });
+            })
+            .detach();
+        }
+    }
+
+    /// Landing seam for the generated description: success fills the
+    /// editable field, failure shows inline next to it. Test builds call
+    /// this directly.
+    pub(super) fn finish_mr_description_generation(
+        &mut self,
+        result: Result<String, String>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.mr_push_description_generating = false;
+        match result {
+            Ok(description) => {
+                self.mr_push_description_error = None;
+                self.mr_push_description_input.update(cx, |input, cx| {
+                    input.set_text(description, cx);
+                    cx.notify();
+                });
+            }
+            Err(message) => self.mr_push_description_error = Some(message.into()),
+        }
+        cx.notify();
+    }
+
     fn submit_stash_branch(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
         let Some(PopoverKind::StashBranchPrompt { repo_id, index }) = self.popover.clone() else {
             return;
@@ -3571,6 +3691,14 @@ impl PopoverHost {
                     self.mr_push_merge_when_pipeline_succeeds = false;
                     self.mr_push_remove_source_branch = true;
                     self.mr_push_push_to_mr_branch = false;
+                    self.mr_push_description_generating = false;
+                    self.mr_push_description_error = None;
+                    self.mr_push_description_input.update(cx, |input, cx| {
+                        input.clear_transient_key_presses();
+                        input.set_theme(theme, cx);
+                        input.set_text("", cx);
+                        cx.notify();
+                    });
                     self.mr_push_target_input.update(cx, |input, cx| {
                         input.clear_transient_key_presses();
                         input.set_theme(theme, cx);

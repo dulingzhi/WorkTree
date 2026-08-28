@@ -100,12 +100,13 @@
 
 **目标**：从「功能完备」走向「可扩展」——插件化与 agent 工作流。
 
-1. **扩展系统 v1** `L`
+1. **扩展系统 v1** `L` ⏸（2026-08-28 经决策搁置，后续迭代再启）
    借鉴 C# `IPlugin` 的接口形状（Name/OnActivate/RegisterCommand/三事件），但**不能照搬反射 DLL 模型**（Rust 跨平台不适用）：先做声明式——外置配置注册命令面板条目 + 脚本命令 + RepositoryOpened/BeforeCommit/AfterCommit 钩子；进程内/WASM 留二期。
 2. **agent 工作台** `L`
    claude code / codex 会话进内嵌 alacritty：启停、会话列表、per-repo-tab 工作目录；会话期间 worktree 自动快照 diff——「agent 改了什么」以标准 diff 呈现，接行级暂存做路径级接受/拒绝。
-3. **AI PR/MR 描述生成** `M`
+3. **AI PR/MR 描述生成** `M` ✅（2026-08-28）
    依赖迭代 03 的 MR/PR 创建；复用 provider 矩阵与 commit 格式示例能力。
+   实现为 MR 推送弹窗的描述区（prepare-and-copy 语义——GitLab push options 没有可靠的多行 description 通道，推送不携带，生成→可编辑→Copy 粘贴进 GitLab）：`input.mr_push` 新增 ✨ Generate with AI（未配置源点击时 warning toast，与 commit ✨ 同一「点击时守卫」契约）→ `start_mr_description_generation` 后台 `git log --pretty=%h|%s target..HEAD`（50 条封顶）+ `git diff --stat target...HEAD`（UI 层经 `core::process::git_command`，smol::unblock；目标分支 = 输入框值，空则回退 `symbolic-ref refs/remotes/origin/HEAD` 解析远程默认分支，再不行报「先填目标」）→ `ai_commit::generate_mr_description`（第三个共享 `generate_from_source` 的生成器：`MR_DESCRIPTION_SYSTEM_PROMPT`（markdown：概述段 + ## Changes 分组 + 仅可推断时 ## Testing，禁止编造）+ locale 强制 + diffstat 走 truncate_diff 预算）→ `finish_mr_description_generation` 接缝（成功填入可编辑多行输入、失败行内红字、generating 防抖 + spinner；重开弹窗即重置）。目标分支名过 `target_branch_is_safe`（拒 `-` 开头/`..`/`:`/空白，仿 validate_ref_like_arg 意图）。测试：ai_commit +3（prompt 携带 target/locale/commits、超长 diffstat 截断、双 provider system prompt 换装）、纯函数 +3（log 解析与封顶/畸形记录跳过、目标解析优先级、安全校验）、GPUI +2（生成落稿与重开重置、失败行内展示）；基线 ui-gpui 3400。顺延：GitLab `merge_request.description` push-option 携带（多行经 push options 的传输/解析待实测验证）、GitHub 侧建 PR 后的描述直填。
 4. **（机动）覆盖率 overlay** `M`
    lcov/llvm-cov 导入 + diff 行覆盖标注；仓库自身 llvm-cov 流水线经验现成。
 

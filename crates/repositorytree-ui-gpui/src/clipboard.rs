@@ -12,6 +12,7 @@ pub(crate) enum CopySource {
     TerminalContextMenu,
     TerminalProtocol,
     ContextMenu,
+    MrDescription,
 }
 
 impl CopySource {
@@ -30,6 +31,7 @@ impl CopySource {
             Self::TerminalContextMenu => "terminal-context-menu",
             Self::TerminalProtocol => "terminal-protocol",
             Self::ContextMenu => "context-menu",
+            Self::MrDescription => "mr-description",
         }
     }
 }

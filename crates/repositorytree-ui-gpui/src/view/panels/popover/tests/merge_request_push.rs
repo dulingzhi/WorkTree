@@ -189,3 +189,146 @@ fn mr_push_toggle_clicks_flip_options_without_closing(cx: &mut gpui::TestAppCont
     let is_open = cx.update(|_window, app| view.read(app).popover_host.read(app).is_open());
     assert!(is_open, "toggling options keeps the prompt open");
 }
+
+#[gpui::test]
+fn mr_push_prompt_description_generation_lands_and_resets(cx: &mut gpui::TestAppContext) {
+    let (store, events, _repo, _workdir) = create_tracking_store("mr-push-description");
+    let repo_id = store.snapshot().active_repo.expect("expected active repo");
+    let (view, cx) =
+        cx.add_window_view(|window, cx| RepositoryTreeView::new(store, events, None, window, cx));
+
+    cx.update(|window, app| {
+        view.update(app, |this, cx| {
+            this.popover_host.update(cx, |host, cx| {
+                host.open_popover_at(
+                    PopoverKind::MergeRequestPushPrompt { repo_id },
+                    gpui::point(gpui::px(120.0), gpui::px(72.0)),
+                    window,
+                    cx,
+                );
+            });
+        });
+        let _ = window.draw(app);
+    });
+
+    assert!(
+        cx.debug_bounds("mr_push_description_input").is_some(),
+        "the description field should render under the push options"
+    );
+    assert!(
+        cx.debug_bounds("mr_push_generate_description").is_some(),
+        "the AI generate action should be offered"
+    );
+    assert!(
+        cx.debug_bounds("mr_push_description_error").is_none(),
+        "no error row before anything failed"
+    );
+
+    // The generation itself is network work; the landing seam is the test
+    // surface, same contract as the AI commit path.
+    cx.update(|_window, app| {
+        view.update(app, |this, cx| {
+            this.popover_host.update(cx, |host, cx| {
+                host.mr_push_description_generating = true;
+                host.finish_mr_description_generation(
+                    Ok("## Changes\n- Fix the focus ring".to_string()),
+                    cx,
+                );
+            });
+        });
+    });
+    cx.update(|window, app| {
+        let _ = window.draw(app);
+    });
+
+    let landed = cx.update(|_window, app| {
+        view.update(app, |this, cx| {
+            this.popover_host.read_with(cx, |host, _| {
+                (
+                    host.mr_push_description_generating,
+                    host.mr_push_description_error.is_none(),
+                    host.mr_push_description_input
+                        .read_with(cx, |input, _| input.text().to_string()),
+                )
+            })
+        })
+    });
+    assert_eq!(
+        landed,
+        (false, true, "## Changes\n- Fix the focus ring".to_string()),
+        "a successful generation fills the editable field and clears the guard"
+    );
+
+    // Reopening starts clean: the description is per-push, not sticky.
+    cx.update(|window, app| {
+        view.update(app, |this, cx| {
+            this.popover_host.update(cx, |host, cx| {
+                host.open_popover_at(
+                    PopoverKind::MergeRequestPushPrompt { repo_id },
+                    gpui::point(gpui::px(120.0), gpui::px(72.0)),
+                    window,
+                    cx,
+                );
+            });
+        });
+        let _ = window.draw(app);
+    });
+    let reopened = cx.update(|_window, app| {
+        view.update(app, |this, cx| {
+            this.popover_host.read_with(cx, |host, _| {
+                host.mr_push_description_input
+                    .read_with(cx, |input, _| input.text().to_string())
+            })
+        })
+    });
+    assert_eq!(reopened, "", "the description resets on reopen");
+}
+
+#[gpui::test]
+fn mr_push_prompt_description_failure_lands_inline(cx: &mut gpui::TestAppContext) {
+    let (store, events, _repo, _workdir) = create_tracking_store("mr-push-description-err");
+    let repo_id = store.snapshot().active_repo.expect("expected active repo");
+    let (view, cx) =
+        cx.add_window_view(|window, cx| RepositoryTreeView::new(store, events, None, window, cx));
+
+    cx.update(|window, app| {
+        view.update(app, |this, cx| {
+            this.popover_host.update(cx, |host, cx| {
+                host.open_popover_at(
+                    PopoverKind::MergeRequestPushPrompt { repo_id },
+                    gpui::point(gpui::px(120.0), gpui::px(72.0)),
+                    window,
+                    cx,
+                );
+                host.mr_push_description_generating = true;
+                host.finish_mr_description_generation(
+                    Err("no credentials for the source".to_string()),
+                    cx,
+                );
+            });
+        });
+        let _ = window.draw(app);
+    });
+
+    assert!(
+        cx.debug_bounds("mr_push_description_error").is_some(),
+        "a failed generation shows its error inline"
+    );
+    let state = cx.update(|_window, app| {
+        view.update(app, |this, cx| {
+            this.popover_host.read_with(cx, |host, _| {
+                (
+                    host.mr_push_description_generating,
+                    host.mr_push_description_error
+                        .as_ref()
+                        .map(|error| error.to_string()),
+                )
+            })
+        })
+    });
+    assert_eq!(
+        state,
+        (false, Some("no credentials for the source".to_string())),
+        "the guard clears while the error stays for the retry"
+    );
+}
