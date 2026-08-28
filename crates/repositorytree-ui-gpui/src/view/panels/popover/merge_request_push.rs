@@ -55,8 +55,7 @@ pub(super) fn target_branch_is_safe(target: &str) -> bool {
 /// Run one git invocation in `workdir` and collect stdout, mapping a
 /// non-zero exit to the trimmed stderr. Blocking — callers wrap it in
 /// `smol::unblock`.
-#[cfg(not(test))]
-pub(super) fn git_output(workdir: &std::path::Path, args: &[&str]) -> Result<String, String> {
+pub(in crate::view) fn git_output(workdir: &std::path::Path, args: &[&str]) -> Result<String, String> {
     let mut command = repositorytree_core::process::git_command();
     command.current_dir(workdir).args(args);
     let output = command

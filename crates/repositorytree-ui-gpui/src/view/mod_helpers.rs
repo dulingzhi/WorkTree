@@ -5766,6 +5766,9 @@ pub struct RepositoryTreeView {
     pub(super) change_tracking_view: ChangeTrackingView,
     pub(super) terminal_preferences: TerminalPreferences,
     pub(super) terminal_sessions: FxHashMap<RepoId, RepoTerminalSession>,
+    /// Agent workbench sessions (claude code / codex): one per repo,
+    /// keyed alongside the terminal session that hosts them.
+    pub(super) agent_sessions: FxHashMap<RepoId, agent_workbench::AgentSessionState>,
     pub(super) terminal_panel_height: Pixels,
     pub(super) terminal_panel_resize: Option<TerminalPanelResizeState>,
     pub(super) next_terminal_session_seq: u64,

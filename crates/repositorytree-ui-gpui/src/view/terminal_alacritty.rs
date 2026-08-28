@@ -219,7 +219,27 @@ pub(super) fn spawn_alacritty_terminal(
     window_id: u64,
 ) -> Result<SpawnedAlacTerminal, String> {
     let shell_program = resolve_embedded_shell_program()?;
-    let shell_program_str = shell_program.to_string_lossy().to_string();
+    spawn_alacritty_terminal_inner(workdir, window_id, shell_program, Vec::new())
+}
+
+/// Spawn a terminal running a specific program (the agent workbench's
+/// claude/codex sessions) instead of the user's shell.
+pub(super) fn spawn_alacritty_terminal_with_command(
+    workdir: &std::path::Path,
+    window_id: u64,
+    program: std::path::PathBuf,
+    args: Vec<String>,
+) -> Result<SpawnedAlacTerminal, String> {
+    spawn_alacritty_terminal_inner(workdir, window_id, program, args)
+}
+
+fn spawn_alacritty_terminal_inner(
+    workdir: &std::path::Path,
+    window_id: u64,
+    program: std::path::PathBuf,
+    args: Vec<String>,
+) -> Result<SpawnedAlacTerminal, String> {
+    let shell_program_str = program.to_string_lossy().to_string();
 
     let env: Vec<(String, String)> = vec![
         ("TERM".to_string(), "xterm-256color".to_string()),
@@ -234,7 +254,7 @@ pub(super) fn spawn_alacritty_terminal(
     let (events_tx, events_rx) = smol::channel::unbounded();
 
     let pty_options = tty::Options {
-        shell: Some(tty::Shell::new(shell_program_str, Vec::<String>::new())),
+        shell: Some(tty::Shell::new(shell_program_str, args)),
         working_directory: Some(workdir.to_path_buf()),
         drain_on_exit: true,
         #[cfg(target_os = "windows")]

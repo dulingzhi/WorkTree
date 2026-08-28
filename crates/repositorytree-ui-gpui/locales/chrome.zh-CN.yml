@@ -121,3 +121,9 @@ chrome:
   worktree:
     detached: （分离头指针）
     fallback_name: 工作树
+
+  agent:
+    not_installed: "%{name} 未安装或不在 PATH 上"
+    no_baseline: "无法解析 agent 会话的基线提交"
+    no_session: "当前仓库没有运行中的 agent 会话"
+    baseline_label: "Agent 会话起点（%{agent}）"

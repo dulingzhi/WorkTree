@@ -1918,6 +1918,7 @@ impl RepositoryTreeView {
                     }
                 }
             }
+            self.agent_sessions.remove(&repo_id);
         }
         if !self.active_repo_has_open_terminal() {
             self.deactivate_terminal_cursor_blink();
@@ -1990,6 +1991,164 @@ impl RepositoryTreeView {
         self.sync_terminal_indicator_views(cx);
         self.focus_terminal_view(repo_id, window, cx);
         cx.notify();
+    }
+
+    /// Start an agent session (claude code / codex) for the active repo:
+    /// capture the baseline the agent's changes will be measured against,
+    /// then spawn its terminal in the repo's workdir. Refuses to start
+    /// without the executable or a resolvable baseline.
+    pub(in crate::view) fn start_agent_session(
+        &mut self,
+        kind: agent_workbench::AgentKind,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(repo) = self.active_repo() else {
+            return;
+        };
+        let repo_id = repo.id;
+        let workdir = repo.spec.workdir.clone();
+
+        let search_paths = agent_workbench::system_search_paths();
+        let Some(program) =
+            agent_workbench::find_executable_in_paths(kind.executable(), &search_paths)
+        else {
+            self.push_toast(
+                components::ToastKind::Error,
+                crate::i18n::t!(
+                    "chrome.agent.not_installed",
+                    name = kind.executable()
+                )
+                .to_string(),
+                cx,
+            );
+            return;
+        };
+
+        // The baseline is captured before the agent can write anything:
+        // the pre-session dirty state as a stash-create commit, else HEAD.
+        let stash_create = panels::git_output(
+            &workdir,
+            &["stash", "create"],
+        )
+        .unwrap_or_default();
+        let head = panels::git_output(
+            &workdir,
+            &["rev-parse", "HEAD"],
+        )
+        .unwrap_or_default();
+        let Some(baseline) = agent_workbench::resolve_agent_baseline(&stash_create, &head) else {
+            self.push_toast(
+                components::ToastKind::Error,
+                crate::i18n::tr_str("chrome.agent.no_baseline").to_string(),
+                cx,
+            );
+            return;
+        };
+
+        if !self.terminal_sessions.contains_key(&repo_id) {
+            let repo_name = terminal_repo_name(&workdir);
+            self.open_terminal_for_repo(repo_id, workdir.clone(), repo_name, window, cx);
+        }
+        let Some(instance) = self.spawn_agent_terminal_instance(&workdir, program, kind, cx)
+        else {
+            return;
+        };
+        let session_seq = instance.session_seq;
+        let Some(session) = self.terminal_sessions.get_mut(&repo_id) else {
+            return;
+        };
+        session.instances.push(instance);
+        session.active_index = session.instances.len() - 1;
+
+        self.agent_sessions.insert(
+            repo_id,
+            agent_workbench::AgentSessionState { kind, baseline },
+        );
+        self.spawn_terminal_event_task(repo_id, session_seq, cx);
+        self.reset_terminal_cursor_blink(cx);
+        self.sync_terminal_indicator_views(cx);
+        self.focus_terminal_view(repo_id, window, cx);
+        cx.notify();
+    }
+
+    /// Show what the running agent changed: the diff from the session's
+    /// baseline to the live working tree, in the standard diff view with
+    /// its line-level staging for path-level accept (reject stays a
+    /// checkout from the baseline, same as any restore).
+    pub(in crate::view) fn view_agent_changes(&mut self, cx: &mut gpui::Context<Self>) {
+        let Some(repo_id) = self.active_repo_id() else {
+            return;
+        };
+        let Some(session) = self.agent_sessions.get(&repo_id) else {
+            self.push_toast(
+                components::ToastKind::Warning,
+                crate::i18n::tr_str("chrome.agent.no_session").to_string(),
+                cx,
+            );
+            return;
+        };
+        let from = session.baseline.clone();
+        let from_label = crate::i18n::t!(
+            "chrome.agent.baseline_label",
+            agent = session.kind.display_label()
+        )
+        .to_string();
+        self.store.dispatch(Msg::CompareWithWorkingTree {
+            repo_id,
+            from,
+            from_label,
+        });
+        cx.notify();
+    }
+
+    /// Like [`Self::spawn_terminal_instance`] but running an agent command
+    /// instead of the user's shell, with the agent as the seeded tab title.
+    fn spawn_agent_terminal_instance(
+        &mut self,
+        workdir: &std::path::Path,
+        program: std::path::PathBuf,
+        kind: agent_workbench::AgentKind,
+        cx: &mut gpui::Context<Self>,
+    ) -> Option<TerminalInstance> {
+        let window_id = 0u64;
+        let spawned =
+            match spawn_alacritty_terminal_with_command(workdir, window_id, program, Vec::new()) {
+                Ok(spawned) => spawned,
+                Err(err) => {
+                    self.push_toast(
+                        components::ToastKind::Error,
+                        crate::i18n::t!("chrome.terminal.spawn_failed", err = err).to_string(),
+                        cx,
+                    );
+                    return None;
+                }
+            };
+
+        let session_seq = self.next_terminal_session_seq;
+        self.next_terminal_session_seq = self.next_terminal_session_seq.wrapping_add(1).max(1);
+        let focus_handle = cx.focus_handle().tab_index(0).tab_stop(false);
+        let theme = self.theme;
+
+        let term_lock = spawned.term_lock;
+        let pty_sender = spawned.pty_sender.clone();
+        let events_rx = spawned.events_rx;
+
+        let viewport = cx.new(|_cx| {
+            TerminalViewportView::new(theme, focus_handle.clone(), term_lock, pty_sender.clone())
+        });
+
+        Some(TerminalInstance {
+            focus_handle,
+            pty_sender: Some(pty_sender),
+            child_pid: spawned.child_pid,
+            events_rx: Some(events_rx),
+            connected: true,
+            exit_status: None,
+            viewport,
+            session_seq,
+            title: kind.display_label().to_string().into(),
+        })
     }
 
     /// Spawn a PTY + alacritty terminal and wrap it in a `TerminalInstance`.
@@ -2142,6 +2301,9 @@ impl RepositoryTreeView {
                 shutdown_terminal_instance(instance, false);
             }
         }
+        // The agent session's terminal died with the terminal session; its
+        // baseline is meaningless without the terminal that produced it.
+        self.agent_sessions.remove(&repo_id);
         if !self.active_repo_has_open_terminal() {
             self.deactivate_terminal_cursor_blink();
         }

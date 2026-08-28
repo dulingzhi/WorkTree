@@ -160,6 +160,7 @@ mod diff_text_selection;
 mod diff_utils;
 mod file_diff_display;
 mod github;
+mod agent_workbench;
 mod file_icons;
 mod fingerprint;
 mod history_graph;
@@ -901,6 +902,23 @@ impl RepositoryTreeView {
                 {
                     self.import_coverage_file(repo_id, window, cx);
                 }
+            }
+            "agent-claude" => {
+                if let Some(window) = window {
+                    self.start_agent_session(
+                        agent_workbench::AgentKind::ClaudeCode,
+                        window,
+                        cx,
+                    );
+                }
+            }
+            "agent-codex" => {
+                if let Some(window) = window {
+                    self.start_agent_session(agent_workbench::AgentKind::Codex, window, cx);
+                }
+            }
+            "agent-changes" => {
+                self.view_agent_changes(cx);
             }
             "clear-coverage" => {
                 if let Some(repo_id) = self.active_repo_id() {
@@ -2153,7 +2171,8 @@ impl RepositoryTreeView {
             show_timezone,
             change_tracking_view,
             terminal_preferences,
-            terminal_sessions: FxHashMap::default(),
+    terminal_sessions: FxHashMap::default(),
+            agent_sessions: FxHashMap::default(),
             terminal_panel_height: px(TERMINAL_PANEL_DEFAULT_HEIGHT_PX),
             terminal_panel_resize: None,
             next_terminal_session_seq: 1,

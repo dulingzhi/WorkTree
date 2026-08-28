@@ -60,11 +60,9 @@ impl CoverageReport {
         for line in text.lines() {
             let line = line.trim();
             if let Some(path) = line.strip_prefix("SF:") {
-                if current.is_some() {
-                    // An unterminated record: lcov writers close them, but a
-                    // truncated export should not poison the next one.
-                    current = None;
-                }
+                // A fresh SF replaces any unterminated record: lcov writers
+                // close them, but a truncated export should not poison the
+                // next one.
                 current = Some((normalize_coverage_path(path), FileCoverage::default()));
             } else if let Some(data) = line.strip_prefix("DA:") {
                 let Some((path, file)) = current.as_mut() else {

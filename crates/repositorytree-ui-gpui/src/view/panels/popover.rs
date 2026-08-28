@@ -28,7 +28,7 @@ mod history_ref_filter;
 mod hunk_explanation;
 mod merge_abort_confirm;
 mod merge_commit_confirm;
-mod merge_request_push;
+pub(in crate::view) mod merge_request_push;
 mod merge_request_push_description;
 mod picker_nav;
 mod picker_row_menu;
@@ -3013,6 +3013,10 @@ impl PopoverHost {
 
         // The request itself needs git and the network; test builds exercise
         // the state machine through `finish_mr_description_generation`.
+        #[cfg(test)]
+        {
+            let _ = (&workdir, &target_input);
+        }
         #[cfg(not(test))]
         {
             let settings = crate::ai_commit::current();

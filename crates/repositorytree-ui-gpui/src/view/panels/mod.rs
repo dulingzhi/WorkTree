@@ -745,6 +745,7 @@ pub(super) use popover::PopoverHost;
 pub(in crate::view) use popover::undo_last_action::{UndoResolution, resolve_undo};
 #[cfg(feature = "benchmarks")]
 pub(in crate::view) use popover::{benchmark_branch_checkout_rows, benchmark_workspace_rows};
+pub(in crate::view) use popover::merge_request_push::git_output;
 /// Layout guards outside this module assert against the tab padding, so they
 /// follow the constant instead of hardcoding the current value.
 #[cfg(test)]
