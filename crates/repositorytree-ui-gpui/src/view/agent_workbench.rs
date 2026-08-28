@@ -119,6 +119,33 @@ pub(in crate::view) struct AgentSessionState {
     pub kind: AgentKind,
     pub baseline: CommitId,
     pub worktree_path: std::path::PathBuf,
+    /// The repo tab of the agent worktree, once opened by "view changes".
+    /// The diff view resolves the session through it (the worktree tab's
+    /// repo id is not the repo id the session is keyed by).
+    pub worktree_repo_id: Option<RepoId>,
+}
+
+/// The inputs the diff view needs to offer path-level reject while an agent
+/// compare is on screen: a working-tree-tracking range whose base is the
+/// session's baseline, with a concrete file selected. `None` for any other
+/// diff target — a user's own compare must not grow the button.
+pub(in crate::view) fn agent_restore_context(
+    session: &AgentSessionState,
+    diff_target: Option<&DiffTarget>,
+) -> Option<(std::path::PathBuf, std::path::PathBuf)> {
+    let DiffTarget::CommitRange {
+        from_commit_id,
+        to_commit_id: None,
+        path: Some(path),
+        ..
+    } = diff_target?
+    else {
+        return None;
+    };
+    if *from_commit_id != session.baseline {
+        return None;
+    }
+    Some((session.worktree_path.clone(), path.clone()))
 }
 
 #[cfg(test)]
@@ -181,6 +208,62 @@ mod tests {
         assert_eq!(available, vec![AgentKind::ClaudeCode]);
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    fn session_with_worktree() -> AgentSessionState {
+        AgentSessionState {
+            kind: AgentKind::ClaudeCode,
+            baseline: CommitId("aaaa111122223333444455556666777788889999".into()),
+            worktree_path: std::path::PathBuf::from("/repos/agent-1"),
+            worktree_repo_id: Some(RepoId(7)),
+        }
+    }
+
+    #[test]
+    fn agent_restore_context_matches_only_the_sessions_own_compare() {
+        let session = session_with_worktree();
+        let range = |to: Option<&str>, path: Option<&str>| {
+            DiffTarget::CommitRange {
+                from_commit_id: session.baseline.clone(),
+                to_commit_id: to.map(|sha| CommitId(sha.into())),
+                path: path.map(std::path::PathBuf::from),
+            }
+        };
+
+        let target = range(None, Some("src/lib.rs"));
+        assert_eq!(
+            agent_restore_context(&session, Some(&target)),
+            Some((
+                std::path::PathBuf::from("/repos/agent-1"),
+                std::path::PathBuf::from("src/lib.rs")
+            )),
+            "the session's own working-tree compare with a file selected offers restore"
+        );
+
+        let whole_range = range(None, None);
+        assert_eq!(
+            agent_restore_context(&session, Some(&whole_range)),
+            None,
+            "no single file on screen — nothing to restore"
+        );
+
+        let committed = range(Some("bbbb111122223333444455556666777788889999"), Some("src/lib.rs"));
+        assert_eq!(agent_restore_context(&session, Some(&committed)), None);
+
+        let mut other_base = range(None, Some("src/lib.rs"));
+        if let DiffTarget::CommitRange {
+            from_commit_id, ..
+        } = &mut other_base
+        {
+            *from_commit_id = CommitId("cccc111122223333444455556666777788889999".into());
+        }
+        assert_eq!(
+            agent_restore_context(&session, Some(&other_base)),
+            None,
+            "a user's own compare against another base keeps the toolbar clean"
+        );
+
+        assert_eq!(agent_restore_context(&session, None), None);
     }
 
     #[test]

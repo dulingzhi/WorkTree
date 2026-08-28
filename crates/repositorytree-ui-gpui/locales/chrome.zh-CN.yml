@@ -127,4 +127,6 @@ chrome:
     no_baseline: "无法解析 agent 会话的基线提交"
     no_session: "当前仓库没有运行中的 agent 会话"
     worktree_failed: "无法创建 agent 工作树 %{path}：{err}"
+    restore_file: "从基线恢复此文件"
+    restore_failed: "无法从基线恢复 %{path}：{err}"
     baseline_label: "Agent 会话起点（%{agent}）"

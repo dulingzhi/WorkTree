@@ -137,4 +137,6 @@ chrome:
     no_baseline: "Could not resolve a baseline commit for the agent session"
     no_session: "No agent session is running for this repository"
     worktree_failed: "Could not create the agent worktree %{path}: {err}"
+    restore_file: "Restore file from baseline"
+    restore_failed: "Could not restore %{path} from the baseline: {err}"
     baseline_label: "Agent session start (%{agent})"

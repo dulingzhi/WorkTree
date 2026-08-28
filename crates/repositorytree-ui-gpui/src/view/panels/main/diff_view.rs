@@ -2578,6 +2578,50 @@ impl MainPaneView {
                 }),
             );
         }
+        // Path-level reject for the agent compare: restore the file on
+        // screen from the session baseline, inside the agent worktree.
+        // Resolved through the root view because the session is keyed by
+        // the main repo while this pane is showing the worktree's tab.
+        let agent_restore = self
+            .root_view
+            .upgrade()
+            .and_then(|root| {
+                let root_view = root.read(cx);
+                let active_id = root_view.active_repo_id()?;
+                let session = root_view
+                    .agent_sessions
+                    .values()
+                    .find(|session| session.worktree_repo_id == Some(active_id))?;
+                let target = root_view
+                    .state
+                    .repos
+                    .iter()
+                    .find(|repo| repo.id == active_id)?
+                    .diff_state
+                    .diff_target
+                    .clone()?;
+                let (worktree, path) =
+                    agent_workbench::agent_restore_context(session, Some(&target))?;
+                Some((active_id, worktree, session.baseline.clone(), path))
+            });
+        if let Some((repo_id, worktree, baseline, path)) = agent_restore {
+            controls = controls.child(
+                components::Button::new(
+                    "agent_restore_file",
+                    crate::i18n::tr("chrome.agent.restore_file"),
+                )
+                .style(components::ButtonStyle::Outlined)
+                .on_click(theme, cx, move |this, _e, _w, cx| {
+                    this.restore_agent_file_from_baseline(
+                        repo_id,
+                        worktree.clone(),
+                        baseline.clone(),
+                        path.clone(),
+                        cx,
+                    );
+                }),
+            );
+        }
         let is_simple_conflict_strategy = matches!(
             self.conflict_resolver.strategy,
             Some(
@@ -4060,5 +4104,55 @@ impl MainPaneView {
             )
             .when_some(diff_search_overlay, |d, overlay| d.child(overlay))
             .child(DiffTextSelectionTracker { view: cx.entity() })
+    }
+}
+
+impl MainPaneView {
+    /// Path-level reject for an agent compare: restore one file from the
+    /// session baseline inside the agent worktree (never HEAD — the
+    /// baseline is the point that preserves the pre-session state).
+    fn restore_agent_file_from_baseline(
+        &mut self,
+        repo_id: RepoId,
+        worktree: std::path::PathBuf,
+        baseline: CommitId,
+        path: std::path::PathBuf,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let baseline_arg = baseline.0.as_ref().to_string();
+        let path_arg = path.display().to_string();
+        let path_display = path_arg.clone();
+        cx.spawn(async move |this, cx| {
+            let result = smol::unblock(move || {
+                crate::view::panels::git_output(
+                    &worktree,
+                    &["checkout", baseline_arg.as_str(), "--", path_arg.as_str()],
+                )
+            })
+            .await;
+            let _ = this.update(cx, |this, cx| {
+                match result {
+                    Ok(_) => {
+                        this.store.dispatch(Msg::ReloadRepo { repo_id });
+                    }
+                    Err(error) => {
+                        let _ = this.root_view.update(cx, |root, cx| {
+                            root.push_toast(
+                                components::ToastKind::Error,
+                                crate::i18n::t!(
+                                    "chrome.agent.restore_failed",
+                                    path = path_display.as_str(),
+                                    err = error
+                                )
+                                .to_string(),
+                                cx,
+                            );
+                        });
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
     }
 }

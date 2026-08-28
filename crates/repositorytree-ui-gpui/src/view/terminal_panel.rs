@@ -2079,6 +2079,7 @@ impl RepositoryTreeView {
                 kind,
                 baseline,
                 worktree_path,
+                worktree_repo_id: None,
             },
         );
         self.spawn_terminal_event_task(repo_id, session_seq, cx);
@@ -2121,9 +2122,13 @@ impl RepositoryTreeView {
 
         // Opening (or re-opening, which re-activates) the worktree's tab is
         // async; the compare dispatch follows once the repo exists.
+        #[cfg(test)]
+        {
+            let _ = (&worktree_path, &from, &agent_label, &store);
+        }
         #[cfg(not(test))]
         {
-            cx.spawn(async move |_this, _cx| {
+            cx.spawn(async move |this, cx| {
                 store.dispatch(Msg::OpenRepo(worktree_path.clone()));
                 let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
                 loop {
@@ -2134,6 +2139,13 @@ impl RepositoryTreeView {
                         .find(|repo| repo.spec.workdir == worktree_path)
                         .map(|repo| repo.id)
                     {
+                        // Remember the worktree tab so the diff view can
+                        // resolve this session from it later.
+                        let _ = this.update(cx, |root, _| {
+                            if let Some(session) = root.agent_sessions.get_mut(&repo_id) {
+                                session.worktree_repo_id = Some(target_id);
+                            }
+                        });
                         store.dispatch(Msg::CompareWithWorkingTree {
                             repo_id: target_id,
                             from,
@@ -2155,6 +2167,7 @@ impl RepositoryTreeView {
         }
         cx.notify();
     }
+
 
     /// Like [`Self::spawn_terminal_instance`] but running an agent command
     /// instead of the user's shell, with the agent as the seeded tab title.
