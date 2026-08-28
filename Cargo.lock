@@ -6016,7 +6016,7 @@ checksum = "19b30a45b0cd0bcca8037f3d0dc3421eaf95327a17cad11964fb8179b4fc4832"
 
 [[package]]
 name = "repositorytree"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "clap",
  "embed-resource",
@@ -6039,7 +6039,7 @@ dependencies = [
 
 [[package]]
 name = "repositorytree-core"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "chardetng",
  "encoding_rs",
@@ -6054,14 +6054,14 @@ dependencies = [
 
 [[package]]
 name = "repositorytree-git"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "repositorytree-core",
 ]
 
 [[package]]
 name = "repositorytree-git-gix"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "gix",
  "repositorytree-core",
@@ -6073,7 +6073,7 @@ dependencies = [
 
 [[package]]
 name = "repositorytree-state"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "gix",
  "notify",
@@ -6089,14 +6089,14 @@ dependencies = [
 
 [[package]]
 name = "repositorytree-tree-sitter-alloc"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "tree-sitter",
 ]
 
 [[package]]
 name = "repositorytree-ui-gpui"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "alacritty_terminal",
  "anyhow",
