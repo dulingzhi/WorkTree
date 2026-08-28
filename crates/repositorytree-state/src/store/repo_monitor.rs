@@ -215,9 +215,25 @@ pub(super) fn record_stop_send_failure(repo_id: RepoId, context: &'static str) {
     send_stop_or_log(&tx, repo_id, context);
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// Once a coalesced burst's worktree path set exceeds this many unique
+/// paths, a path-targeted rescan costs more than the full scan it would
+/// spare — the burst falls back to the coarse refresh.
+const INCREMENTAL_STATUS_PATH_CAP: usize = 64;
+
+/// What a debounce window flushes: the coarsely merged change flags plus,
+/// while every coalesced event was purely worktree-side with known paths
+/// and the set stayed under the cap, those paths (absolute, as the watcher
+/// reported them; the flush converts them to worktree-relative).
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct FlushedChange {
+    change: RepoExternalChange,
+    worktree_paths: Option<Vec<PathBuf>>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct DebouncedChange {
     pending: Option<RepoExternalChange>,
+    worktree_paths: Option<Vec<PathBuf>>,
     first_event_at: Option<Instant>,
     last_event_at: Option<Instant>,
     debounce: Duration,
@@ -228,6 +244,7 @@ impl DebouncedChange {
     fn new(debounce: Duration, max_delay: Duration) -> Self {
         Self {
             pending: None,
+            worktree_paths: None,
             first_event_at: None,
             last_event_at: None,
             debounce,
@@ -239,14 +256,36 @@ impl DebouncedChange {
         self.pending.is_some()
     }
 
-    fn push(&mut self, change: RepoExternalChange, now: Instant) -> Option<RepoExternalChange> {
+    fn push(
+        &mut self,
+        change: RepoExternalChange,
+        worktree_paths: Vec<PathBuf>,
+        now: Instant,
+    ) -> Option<FlushedChange> {
         self.pending = Some(merge_change(self.pending.unwrap_or(change), change));
+        // The path set survives only while every coalesced event carried
+        // one (a purely worktree-side event always does — the classifier
+        // collects exactly those paths) and the merged set stays under the
+        // incremental cap. A coarser event empties its side, which drops
+        // the accumulation to `None`: the flush refreshes coarsely. (After
+        // such an event a later worktree push may re-seed the set; the
+        // merged flags still carry the coarse lanes, so the consumer's
+        // routing ignores the paths — they are advisory, never load-bearing.)
+        let accumulated = self.worktree_paths.get_or_insert_with(Vec::new);
+        if worktree_paths.is_empty() {
+            self.worktree_paths = None;
+        } else {
+            accumulated.extend(worktree_paths);
+            if accumulated.len() > INCREMENTAL_STATUS_PATH_CAP {
+                self.worktree_paths = None;
+            }
+        }
         self.first_event_at.get_or_insert(now);
         self.last_event_at = Some(now);
         self.take_if_max_delay_elapsed(now)
     }
 
-    fn take_if_max_delay_elapsed(&mut self, now: Instant) -> Option<RepoExternalChange> {
+    fn take_if_max_delay_elapsed(&mut self, now: Instant) -> Option<FlushedChange> {
         let first = self.first_event_at?;
         if now.duration_since(first) >= self.max_delay {
             self.take()
@@ -267,7 +306,7 @@ impl DebouncedChange {
         Some(due.saturating_duration_since(now))
     }
 
-    fn take_if_due(&mut self, now: Instant) -> Option<RepoExternalChange> {
+    fn take_if_due(&mut self, now: Instant) -> Option<FlushedChange> {
         if !self.is_pending() {
             return None;
         }
@@ -275,11 +314,19 @@ impl DebouncedChange {
         if timeout.is_zero() { self.take() } else { None }
     }
 
-    fn take(&mut self) -> Option<RepoExternalChange> {
+    fn take(&mut self) -> Option<FlushedChange> {
         let pending = self.pending.take();
+        let mut worktree_paths = self.worktree_paths.take();
+        if let Some(paths) = &mut worktree_paths {
+            paths.sort();
+            paths.dedup();
+        }
         self.first_event_at = None;
         self.last_event_at = None;
-        pending
+        pending.map(|change| FlushedChange {
+            change,
+            worktree_paths,
+        })
     }
 }
 
@@ -878,12 +925,34 @@ fn repo_monitor_thread(
 
     let mut debouncer = DebouncedChange::new(debounce, max_delay);
 
-    let flush = |change: RepoExternalChange| {
+    // Worktree-relative conversion for a flush's path set: paths outside
+    // the workdir (or the workdir itself) cannot target a rescan, so any
+    // such path drops the whole set to the coarse refresh.
+    let relativize_paths = |paths: Option<Vec<PathBuf>>| {
+        paths.and_then(|paths| {
+            let relative: Option<Vec<PathBuf>> =
+                paths.iter().map(|p| p.strip_prefix(&workdir).ok().map(Path::to_path_buf)).collect();
+            relative.map(|mut relative| {
+                relative.retain(|p| !p.as_os_str().is_empty());
+                relative.sort();
+                relative.dedup();
+                (!relative.is_empty()).then_some(relative).unwrap_or_default()
+            })
+        })
+    };
+
+    let flush = |flushed: FlushedChange| {
         let active = active_repo_id.load(Ordering::Relaxed);
         if active == repo_id.0 {
-            trace_repo_monitor_flush("flush", repo_id, change, active);
+            trace_repo_monitor_flush("flush", repo_id, flushed.change, active);
             msg_tx.send_repo_monitor_or_log(
-                Msg::RepoExternallyChanged { repo_id, change },
+                Msg::RepoExternallyChanged {
+                    repo_id,
+                    change: flushed.change,
+                    worktree_paths: relativize_paths(flushed.worktree_paths)
+                        .filter(|paths| !paths.is_empty())
+                        .map(std::sync::Arc::from),
+                },
                 "repo monitor flush",
             );
         } else {
@@ -891,20 +960,26 @@ fn repo_monitor_thread(
                 "repo_monitor_flush_gated_out source=flush repo_id={:?} active={} change={:?}",
                 repo_id,
                 active,
-                change
+                flushed.change
             );
         }
     };
 
-    let flush_if_active = |pending: Option<RepoExternalChange>| {
-        let Some(change) = pending else {
+    let flush_if_active = |pending: Option<FlushedChange>| {
+        let Some(flushed) = pending else {
             return;
         };
         let active = active_repo_id.load(Ordering::Relaxed);
         if active == repo_id.0 {
-            trace_repo_monitor_flush("flush_if_active", repo_id, change, active);
+            trace_repo_monitor_flush("flush_if_active", repo_id, flushed.change, active);
             msg_tx.send_repo_monitor_or_log(
-                Msg::RepoExternallyChanged { repo_id, change },
+                Msg::RepoExternallyChanged {
+                    repo_id,
+                    change: flushed.change,
+                    worktree_paths: relativize_paths(flushed.worktree_paths)
+                        .filter(|paths| !paths.is_empty())
+                        .map(std::sync::Arc::from),
+                },
                 "repo monitor flush_if_active",
             );
         } else {
@@ -912,7 +987,7 @@ fn repo_monitor_thread(
                 "repo_monitor_flush_gated_out source=flush_if_active repo_id={:?} active={} change={:?}",
                 repo_id,
                 active,
-                change
+                flushed.change
             );
         }
     };
@@ -974,7 +1049,9 @@ fn repo_monitor_thread(
                         );
                         if let Some(change) = classified.change {
                             let now = Instant::now();
-                            if let Some(to_flush) = debouncer.push(change, now) {
+                            if let Some(to_flush) =
+                                debouncer.push(change, classified.worktree_paths.clone(), now)
+                            {
                                 flush(to_flush);
                             }
                         }
@@ -1008,7 +1085,9 @@ fn repo_monitor_thread(
                     }
                     Err(_) => {
                         let now = Instant::now();
-                        if let Some(to_flush) = debouncer.push(RepoExternalChange::all(), now) {
+                        if let Some(to_flush) =
+                            debouncer.push(RepoExternalChange::all(), Vec::new(), now)
+                        {
                             flush(to_flush);
                         }
                     }
@@ -1528,9 +1607,14 @@ fn merge_change(a: RepoExternalChange, b: RepoExternalChange) -> RepoExternalCha
 /// Result of classifying a watcher event: the (optional) coalesced change to refresh, and whether
 /// the ignore configuration changed (so the caller can re-initiate the worktree watches without
 /// re-scanning the paths or re-loading the rules — this function already reloaded them in place).
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct ClassifiedEvent {
     change: Option<RepoExternalChange>,
+    /// The worktree-side event paths behind a `worktree`-only change —
+    /// the incremental status lane's input. Empty for any coarser
+    /// classification (or an ignored-path-only event, which classifies to
+    /// no change at all).
+    worktree_paths: Vec<PathBuf>,
     gitignore_changed: bool,
 }
 
@@ -1538,6 +1622,7 @@ impl ClassifiedEvent {
     fn none() -> Self {
         Self {
             change: None,
+            worktree_paths: Vec::new(),
             gitignore_changed: false,
         }
     }
@@ -1567,6 +1652,7 @@ fn classify_repo_event(
     if event.need_rescan() {
         return ClassifiedEvent {
             change: Some(RepoExternalChange::all()),
+            worktree_paths: Vec::new(),
             gitignore_changed,
         };
     }
@@ -1574,6 +1660,7 @@ fn classify_repo_event(
     if gitignore_changed {
         return ClassifiedEvent {
             change: Some(RepoExternalChange::worktree()),
+            worktree_paths: Vec::new(),
             gitignore_changed: true,
         };
     }
@@ -1581,6 +1668,7 @@ fn classify_repo_event(
     if event.paths.is_empty() {
         return ClassifiedEvent {
             change: Some(RepoExternalChange::all()),
+            worktree_paths: Vec::new(),
             gitignore_changed: false,
         };
     }
@@ -1589,6 +1677,7 @@ fn classify_repo_event(
     let mut saw_index = false;
     let mut saw_git_state = false;
     let mut saw_tags = false;
+    let mut worktree_paths = Vec::new();
     let is_dir_hint = path_dir_hint(event);
 
     for path in &event.paths {
@@ -1609,6 +1698,7 @@ fn classify_repo_event(
                 continue;
             }
             saw_worktree = true;
+            worktree_paths.push(path.clone());
         }
     }
 
@@ -1620,6 +1710,7 @@ fn classify_repo_event(
     };
     ClassifiedEvent {
         change: (!change.is_empty()).then_some(change),
+        worktree_paths,
         gitignore_changed: false,
     }
 }
@@ -1744,6 +1835,17 @@ fn path_dir_hint(event: &notify::Event) -> Option<bool> {
 
 #[cfg(test)]
 mod tests {
+    fn flushed(
+        change: super::RepoExternalChange,
+        worktree_paths: Option<Vec<std::path::PathBuf>>,
+    ) -> super::FlushedChange {
+        super::FlushedChange {
+            change,
+            worktree_paths,
+        }
+    }
+
+
     use super::*;
     use notify::EventKind;
     use notify::event::{AccessKind, AccessMode, CreateKind, DataChange, ModifyKind, RemoveKind};
@@ -2058,13 +2160,14 @@ mod tests {
         let base = Instant::now();
         let mut d = DebouncedChange::new(Duration::from_millis(100), Duration::from_millis(250));
 
-        assert_eq!(d.push(RepoExternalChange::Worktree, base), None);
+        assert_eq!(d.push(RepoExternalChange::Worktree, vec![PathBuf::from("a")], base), None);
         assert!(d.is_pending());
 
         // Another event resets debounce window.
         assert_eq!(
             d.push(
                 RepoExternalChange::Worktree,
+                vec![PathBuf::from("a")],
                 base + Duration::from_millis(50)
             ),
             None
@@ -2077,18 +2180,19 @@ mod tests {
         // Due by debounce at 150ms from base (last at 50ms + 100ms).
         assert_eq!(
             d.take_if_due(base + Duration::from_millis(150)),
-            Some(RepoExternalChange::Worktree)
+            Some(flushed(RepoExternalChange::Worktree, Some(vec![PathBuf::from("a")])))
         );
         assert!(!d.is_pending());
 
         // Continuous events should flush by max_delay.
-        assert_eq!(d.push(RepoExternalChange::GitState, base), None);
+        assert_eq!(d.push(RepoExternalChange::GitState, Vec::new(), base), None);
         assert_eq!(
             d.push(
                 RepoExternalChange::GitState,
+                Vec::new(),
                 base + Duration::from_millis(300)
             ),
-            Some(RepoExternalChange::GitState)
+            Some(flushed(RepoExternalChange::GitState, None))
         );
         assert!(!d.is_pending());
     }
@@ -2944,7 +3048,7 @@ mod tests {
         let mut d = DebouncedChange::new(Duration::from_millis(500), Duration::from_millis(100));
 
         assert_eq!(d.take_if_due(base), None);
-        assert_eq!(d.push(RepoExternalChange::Worktree, base), None);
+        assert_eq!(d.push(RepoExternalChange::Worktree, vec![PathBuf::from("a")], base), None);
 
         let timeout = d
             .next_timeout(base + Duration::from_millis(90))
@@ -3248,4 +3352,120 @@ mod tests {
             "branch ref file should produce tags: false"
         );
     }
+}
+
+#[test]
+fn classify_collects_worktree_paths_and_drops_them_for_git_or_ignored() {
+    use notify::event::EventKind;
+    let workdir = std::path::Path::new("/tmp/repo");
+
+    let worktree_event = |path: &str| notify::Event {
+        kind: EventKind::Any,
+        paths: vec![workdir.join(path)],
+        attrs: Default::default(),
+    };
+
+    let classified = classify_repo_event(
+        workdir,
+        Some(&workdir.join(".git")),
+        &mut GitignoreRules::default(),
+        &worktree_event("src/lib.rs"),
+    );
+    assert_eq!(classified.change, Some(RepoExternalChange::worktree()));
+    assert_eq!(
+        classified.worktree_paths,
+        vec![workdir.join("src/lib.rs")],
+        "the worktree-side path travels with the change"
+    );
+
+    // A .git-side event classifies coarsely with no path set.
+    let classified = classify_repo_event(
+        workdir,
+        Some(&workdir.join(".git")),
+        &mut GitignoreRules::default(),
+        &notify::Event {
+            kind: EventKind::Any,
+            paths: vec![workdir.join(".git").join("index")],
+            attrs: Default::default(),
+        },
+    );
+    assert_eq!(
+        classified.change,
+        Some(RepoExternalChange {
+            index: true,
+            ..Default::default()
+        })
+    );
+    assert!(classified.worktree_paths.is_empty());
+}
+
+#[test]
+fn coalescer_accumulates_paths_until_a_coarse_event_or_the_cap() {
+    let base = Instant::now();
+    let mut d = DebouncedChange::new(Duration::from_millis(100), Duration::from_secs(5));
+
+    // Two worktree events accumulate, deduplicated.
+    assert_eq!(
+        d.push(
+            RepoExternalChange::Worktree,
+            vec![PathBuf::from("/tmp/repo/a"), PathBuf::from("/tmp/repo/b")],
+            base
+        ),
+        None
+    );
+    assert_eq!(
+        d.push(
+            RepoExternalChange::Worktree,
+            vec![PathBuf::from("/tmp/repo/a")],
+            base + Duration::from_millis(10)
+        ),
+        None
+    );
+    let flushed = d.take().expect("a pending flush");
+    assert_eq!(flushed.change, RepoExternalChange::Worktree);
+    assert_eq!(
+        flushed.worktree_paths,
+        Some(vec![PathBuf::from("/tmp/repo/a"), PathBuf::from("/tmp/repo/b")]),
+        "the coalesced burst carries its unique worktree paths"
+    );
+
+    // A coarse event in the same window drops the set for the whole flush.
+    assert_eq!(
+        d.push(
+            RepoExternalChange::Worktree,
+            vec![PathBuf::from("/tmp/repo/a")],
+            base
+        ),
+        None
+    );
+    assert_eq!(
+        d.push(RepoExternalChange::GitState, Vec::new(), base + Duration::from_millis(10)),
+        None
+    );
+    let flushed = d.take().expect("a pending flush");
+    assert_eq!(
+        flushed.change,
+        RepoExternalChange {
+            worktree: true,
+            git_state: true,
+            ..Default::default()
+        }
+    );
+    assert_eq!(
+        flushed.worktree_paths, None,
+        "any coarse event sends the window's flush down the coarse path"
+    );
+
+    // Over the cap, the set drops rather than feeding an oversized rescan.
+    let mut d = DebouncedChange::new(Duration::from_millis(100), Duration::from_secs(5));
+    let many: Vec<PathBuf> = (0..=INCREMENTAL_STATUS_PATH_CAP)
+        .map(|ix| PathBuf::from(format!("/tmp/repo/f{ix}")))
+        .collect();
+    assert_eq!(
+        d.push(RepoExternalChange::Worktree, many, base),
+        None
+    );
+    let flushed = d.take().expect("a pending flush");
+    assert_eq!(flushed.change, RepoExternalChange::Worktree);
+    assert_eq!(flushed.worktree_paths, None);
 }

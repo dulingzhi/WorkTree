@@ -727,7 +727,11 @@ impl AppStore {
                                 &mut repos,
                                 &id_alloc,
                                 app_state,
-                                Msg::RepoExternallyChanged { repo_id, change },
+                                Msg::RepoExternallyChanged {
+                                repo_id,
+                                change,
+                                worktree_paths: None,
+                            },
                             );
                             reducer_diagnostics::record_reducer_pass(reduce_started.elapsed());
                             effects

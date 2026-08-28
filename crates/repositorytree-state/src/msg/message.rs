@@ -198,6 +198,11 @@ pub enum Msg {
     RepoExternallyChanged {
         repo_id: RepoId,
         change: RepoExternalChange,
+        /// The worktree-relative path set behind the change, when the
+        /// coalesced burst was small, purely worktree-side, and precisely
+        /// known — the incremental status lane's input. `None` (or empty)
+        /// means refresh coarsely.
+        worktree_paths: Option<std::sync::Arc<[std::path::PathBuf]>>,
     },
     /// The file-system watcher could not fully watch the worktree, so live change detection is
     /// degraded. The repository still refreshes when the window regains focus; the `reason` carries

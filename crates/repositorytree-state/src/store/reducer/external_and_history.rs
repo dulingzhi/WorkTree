@@ -144,6 +144,7 @@ pub(super) fn repo_externally_changed(
     state: &mut AppState,
     repo_id: crate::model::RepoId,
     change: RepoExternalChange,
+    worktree_paths: Option<std::sync::Arc<[std::path::PathBuf]>>,
 ) -> Vec<Effect> {
     let sidebar_shows_this_files_tree =
         state.sidebar_mode == SidebarMode::Files && state.active_repo == Some(repo_id);
@@ -186,12 +187,31 @@ pub(super) fn repo_externally_changed(
             // between the staged and unstaged sections; refreshing only the staged lane would
             // leave the file lingering (stale) in the unstaged section (or vice-versa).
             append_requested_status_refresh_effects(repo_state, &mut effects);
-        } else if change.worktree
-            && repo_state
-                .loads_in_flight
-                .request(RepoLoadsInFlight::WORKTREE_STATUS)
-        {
-            effects.push(Effect::LoadWorktreeStatus { repo_id });
+        } else if change.worktree {
+            // A small, purely worktree-side burst with a known path set
+            // merges into the settled snapshot instead of rescanning the
+            // whole worktree; the lane manages the same in-flight bit and
+            // falls back to a full scan by itself when it cannot merge.
+            let incremental = worktree_paths
+                .as_ref()
+                .is_some_and(|paths| !paths.is_empty())
+                && matches!(repo_state.status, Loadable::Ready(_));
+            if incremental
+                && repo_state
+                    .loads_in_flight
+                    .request(RepoLoadsInFlight::WORKTREE_STATUS)
+            {
+                effects.push(Effect::LoadStatusForPaths {
+                    repo_id,
+                    paths: worktree_paths.clone().unwrap_or_default(),
+                });
+            } else if !incremental
+                && repo_state
+                    .loads_in_flight
+                    .request(RepoLoadsInFlight::WORKTREE_STATUS)
+            {
+                effects.push(Effect::LoadWorktreeStatus { repo_id });
+            }
         }
         effects
     };

@@ -104,6 +104,7 @@ fn repo_load_trace_names_repo_activation_and_refresh_messages() {
         repo_load_trace::msg_name(&Msg::RepoExternallyChanged {
             repo_id,
             change: crate::msg::RepoExternalChange::GitState,
+            worktree_paths: None,
         }),
         "RepoExternallyChanged"
     );
@@ -119,6 +120,7 @@ fn repo_load_trace_names_repo_activation_and_refresh_messages() {
         repo_load_trace::msg_external_change(&Msg::RepoExternallyChanged {
             repo_id,
             change: crate::msg::RepoExternalChange::GitState,
+            worktree_paths: None,
         }),
         Some(crate::msg::RepoExternalChange::GitState)
     );
@@ -190,6 +192,7 @@ fn external_worktree_change_refreshes_status_and_selected_diff() {
         Msg::RepoExternallyChanged {
             repo_id: RepoId(1),
             change: crate::msg::RepoExternalChange::Worktree,
+            worktree_paths: None,
         },
     );
 
@@ -298,6 +301,7 @@ fn external_index_change_refreshes_both_staged_and_unstaged_lanes() {
         Msg::RepoExternallyChanged {
             repo_id,
             change: crate::msg::RepoExternalChange::Index,
+            worktree_paths: None,
         },
     );
 
@@ -375,6 +379,7 @@ fn external_index_change_reloads_open_working_tree_diff() {
         Msg::RepoExternallyChanged {
             repo_id,
             change: crate::msg::RepoExternalChange::Index,
+            worktree_paths: None,
         },
     );
 
@@ -448,6 +453,7 @@ fn external_index_change_must_not_refresh_only_the_staged_lane() {
         Msg::RepoExternallyChanged {
             repo_id,
             change: crate::msg::RepoExternalChange::Index,
+            worktree_paths: None,
         },
     );
 
@@ -492,6 +498,7 @@ fn external_git_state_change_preserves_pending_force_push_lease_and_clears_recen
         Msg::RepoExternallyChanged {
             repo_id,
             change: crate::msg::RepoExternalChange::GitState,
+            worktree_paths: None,
         },
     );
 
@@ -643,6 +650,7 @@ fn external_git_state_change_refreshes_history_and_selected_diff() {
         Msg::RepoExternallyChanged {
             repo_id: RepoId(1),
             change: crate::msg::RepoExternalChange::GitState,
+            worktree_paths: None,
         },
     );
 
@@ -724,6 +732,7 @@ fn external_git_state_refresh_is_coalesced_and_replayed_once() {
         Msg::RepoExternallyChanged {
             repo_id: RepoId(1),
             change: crate::msg::RepoExternalChange::GitState,
+            worktree_paths: None,
         },
     );
 
@@ -759,6 +768,7 @@ fn external_git_state_refresh_is_coalesced_and_replayed_once() {
         Msg::RepoExternallyChanged {
             repo_id: RepoId(1),
             change: crate::msg::RepoExternalChange::GitState,
+            worktree_paths: None,
         },
     );
     assert!(
@@ -902,6 +912,7 @@ fn external_worktree_refresh_replays_coalesced_change_then_settles() {
         Msg::RepoExternallyChanged {
             repo_id,
             change: crate::msg::RepoExternalChange::Worktree,
+            worktree_paths: None,
         },
     );
     assert!(
@@ -916,6 +927,7 @@ fn external_worktree_refresh_replays_coalesced_change_then_settles() {
         Msg::RepoExternallyChanged {
             repo_id,
             change: crate::msg::RepoExternalChange::Worktree,
+            worktree_paths: None,
         },
     );
     assert!(
@@ -976,6 +988,7 @@ fn external_worktree_refresh_replays_coalesced_change_then_settles() {
         Msg::RepoExternallyChanged {
             repo_id,
             change: crate::msg::RepoExternalChange::Worktree,
+            worktree_paths: None,
         },
     );
     assert!(
@@ -1017,6 +1030,7 @@ fn external_worktree_refresh_coalesces_status_while_status_is_in_flight() {
         Msg::RepoExternallyChanged {
             repo_id: RepoId(1),
             change: crate::msg::RepoExternalChange::Worktree,
+            worktree_paths: None,
         },
     );
     assert!(
@@ -1041,6 +1055,7 @@ fn external_worktree_refresh_coalesces_status_while_status_is_in_flight() {
         Msg::RepoExternallyChanged {
             repo_id: RepoId(1),
             change: crate::msg::RepoExternalChange::Worktree,
+            worktree_paths: None,
         },
     );
     assert!(
@@ -1180,6 +1195,7 @@ fn repo_externally_changed_worktree_keeps_blame_until_content_changes() {
         Msg::RepoExternallyChanged {
             repo_id,
             change: crate::msg::RepoExternalChange::Worktree,
+            worktree_paths: None,
         },
     );
 
@@ -1218,6 +1234,7 @@ fn repo_externally_changed_git_state_invalidates_loaded_blame() {
         Msg::RepoExternallyChanged {
             repo_id,
             change: crate::msg::RepoExternalChange::all(),
+            worktree_paths: None,
         },
     );
 
@@ -2740,6 +2757,7 @@ fn external_tags_change_reloads_tags() {
                 tags: true,
                 ..Default::default()
             },
+            worktree_paths: None,
         },
     );
 
@@ -2781,6 +2799,7 @@ fn external_git_state_change_without_tags_flag_does_not_reload_tags() {
         Msg::RepoExternallyChanged {
             repo_id,
             change: crate::msg::RepoExternalChange::GitState,
+            worktree_paths: None,
         },
     );
 
@@ -2826,6 +2845,7 @@ fn external_tags_change_without_git_state_flag_reloads_tags() {
                 tags: true,
                 ..Default::default()
             },
+            worktree_paths: None,
         },
     );
 
@@ -3668,6 +3688,7 @@ fn an_index_only_change_does_not_rescan_the_other_worktrees() {
         Msg::RepoExternallyChanged {
             repo_id,
             change: crate::msg::RepoExternalChange::Index,
+            worktree_paths: None,
         },
     );
     assert_eq!(
@@ -3684,6 +3705,7 @@ fn an_index_only_change_does_not_rescan_the_other_worktrees() {
         Msg::RepoExternallyChanged {
             repo_id,
             change: crate::msg::RepoExternalChange::GitState,
+            worktree_paths: None,
         },
     );
     assert_eq!(
@@ -3746,6 +3768,7 @@ fn worktree_change_refreshes_the_visible_file_browser_without_blanking_it() {
         Msg::RepoExternallyChanged {
             repo_id,
             change: crate::msg::RepoExternalChange::Worktree,
+            worktree_paths: None,
         },
     );
 
@@ -3779,6 +3802,7 @@ fn worktree_change_only_marks_the_hidden_file_browser_stale() {
         Msg::RepoExternallyChanged {
             repo_id,
             change: crate::msg::RepoExternalChange::Worktree,
+            worktree_paths: None,
         },
     );
 
@@ -3813,6 +3837,7 @@ fn commit_browsing_ignores_worktree_changes() {
         Msg::RepoExternallyChanged {
             repo_id,
             change: crate::msg::RepoExternalChange::all(),
+            worktree_paths: None,
         },
     );
 
@@ -3835,6 +3860,7 @@ fn a_burst_of_worktree_changes_coalesces_into_one_walk_at_a_time() {
             Msg::RepoExternallyChanged {
                 repo_id,
                 change: crate::msg::RepoExternalChange::Worktree,
+                worktree_paths: None,
             },
         )
     };
@@ -3873,6 +3899,7 @@ fn a_reply_for_an_abandoned_source_still_releases_the_lane() {
         Msg::RepoExternallyChanged {
             repo_id,
             change: crate::msg::RepoExternalChange::Worktree,
+            worktree_paths: None,
         },
     );
     assert_eq!(file_browser_loads(&effects), 1);
@@ -4310,4 +4337,72 @@ fn bisect_state_loaded_stores_snapshot_and_replays_re_requests() {
         }),
     );
     assert!(matches!(state.repos[0].bisect, Loadable::Error(_)));
+}
+
+#[test]
+fn worktree_external_change_with_paths_uses_the_targeted_lane() {
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+
+    let repo_id = RepoId(1);
+    repos.insert(repo_id, Arc::new(DummyRepo::new("/tmp/repo")));
+    let mut repo = RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    );
+    // The targeted lane only merges onto a settled snapshot.
+    repo.set_status(Loadable::Ready(std::sync::Arc::new(RepoStatus::default())));
+    state.repos.push(repo);
+
+    let paths: std::sync::Arc<[PathBuf]> = vec![PathBuf::from("src/lib.rs")].into();
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::RepoExternallyChanged {
+            repo_id,
+            change: crate::msg::RepoExternalChange::Worktree,
+            worktree_paths: Some(std::sync::Arc::clone(&paths)),
+        },
+    );
+    assert!(
+        effects.iter().any(|effect| matches!(
+            effect,
+            Effect::LoadStatusForPaths { repo_id: candidate, paths: p }
+                if *candidate == repo_id && **p == *paths
+        )),
+        "a small purely-worktree burst with a known path set rescans just those paths"
+    );
+    assert!(
+        !has_worktree_status_effect(&effects, repo_id),
+        "the coarse worktree rescan is not stacked on top"
+    );
+
+    // Without paths (or without a settled snapshot) the coarse lane answers.
+    let mut repos2: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    repos2.insert(repo_id, Arc::new(DummyRepo::new("/tmp/repo")));
+    let mut state2 = AppState::default();
+    state2.repos.push(RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    ));
+    let effects = reduce(
+        &mut repos2,
+        &id_alloc,
+        &mut state2,
+        Msg::RepoExternallyChanged {
+            repo_id,
+            change: crate::msg::RepoExternalChange::Worktree,
+            worktree_paths: Some(paths),
+        },
+    );
+    assert!(
+        has_worktree_status_effect(&effects, repo_id),
+        "no settled snapshot to merge onto — the coarse worktree lane answers"
+    );
 }

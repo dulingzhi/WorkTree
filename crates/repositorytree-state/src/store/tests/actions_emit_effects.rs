@@ -4188,6 +4188,7 @@ fn safe_push_after_commit_published_amend_lease_survives_followup_git_state_refr
         Msg::RepoExternallyChanged {
             repo_id,
             change: crate::msg::RepoExternalChange::GitState,
+            worktree_paths: None,
         },
     );
 
@@ -4365,6 +4366,7 @@ fn stale_recent_commit_messages_loaded_after_head_change_is_ignored() {
         Msg::RepoExternallyChanged {
             repo_id,
             change: crate::msg::RepoExternalChange::GitState,
+            worktree_paths: None,
         },
     );
     assert!(matches!(

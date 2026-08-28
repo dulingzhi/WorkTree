@@ -2380,12 +2380,20 @@ pub(super) fn status_for_paths_loaded(
     match result {
         // The targeted lane only ever merges onto a settled full snapshot;
         // anything else (or an unmergeable shape) falls back to a full scan,
-        // which cannot route back here — no retry loop.
+        // whose landing finishes this lane's in-flight bit — no retry loop.
         Ok(StatusForPaths::Lists { unstaged, staged })
             if matches!(repo_state.status, Loadable::Ready(_)) =>
         {
             repo_state.patch_status_for_paths(&paths, unstaged, staged);
             resync_working_tree_details_if_selected(repo_state);
+            // A change folded while the targeted scan was in flight re-runs
+            // the lane coarsely: the folded burst's paths are unknown here.
+            finish_status_lane_replay(
+                repo_state,
+                RepoLoadsInFlight::WORKTREE_STATUS,
+                Effect::LoadWorktreeStatus { repo_id },
+                &mut effects,
+            );
         }
         Ok(_) | Err(_) => effects.push(Effect::LoadStatus { repo_id }),
     }

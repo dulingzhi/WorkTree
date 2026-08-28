@@ -946,9 +946,16 @@ fn reduce_inner(
         }
         Msg::ReloadRepo { repo_id } => external_and_history::reload_repo(state, repo_id),
         Msg::RepoActivated { .. } => Vec::new(),
-        Msg::RepoExternallyChanged { repo_id, change } => {
-            external_and_history::repo_externally_changed(state, repo_id, change)
-        }
+        Msg::RepoExternallyChanged {
+            repo_id,
+            change,
+            worktree_paths,
+        } => external_and_history::repo_externally_changed(
+            state,
+            repo_id,
+            change,
+            worktree_paths,
+        ),
         Msg::RepoWatchDegraded { repo_id: _, reason } => {
             let message = match reason {
                 crate::msg::RepoWatchDegradedReason::TooManyFolders { dir_count } => rust_i18n::t!(
@@ -3659,6 +3666,7 @@ mod comparison_tests {
                 Msg::RepoExternallyChanged {
                     repo_id,
                     change: crate::msg::RepoExternalChange::Worktree,
+                    worktree_paths: None,
                 },
             );
             assert!(
@@ -3701,6 +3709,7 @@ mod comparison_tests {
             Msg::RepoExternallyChanged {
                 repo_id,
                 change: crate::msg::RepoExternalChange::Worktree,
+                worktree_paths: None,
             },
         );
         assert!(
@@ -3728,6 +3737,7 @@ mod comparison_tests {
             Msg::RepoExternallyChanged {
                 repo_id,
                 change: crate::msg::RepoExternalChange::Worktree,
+                worktree_paths: None,
             },
         );
         assert!(
