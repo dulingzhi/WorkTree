@@ -40,6 +40,7 @@ palette:
     agent-claude: "Agent：启动 Claude Code 会话"
     agent-codex: "Agent：启动 Codex 会话"
     agent-changes: "Agent：查看 agent 改了什么"
+    agent-sessions: "Agent：会话…"
     clear-coverage: "清除覆盖率 overlay"
     import-coverage-prompt: "选择一个 lcov / llvm-cov 导出文件"
     coverage-imported: "覆盖率已导入：%{files} 个文件、%{lines} 行%{percent}——已在 diff 行号栏标注"

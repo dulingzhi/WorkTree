@@ -47,6 +47,7 @@ mod rows_cache;
 mod search_inputs;
 mod squash_prompt;
 mod stage_conflict_markers_confirm;
+mod agent_sessions;
 mod statistics;
 mod stash_drop_confirm;
 mod stash_branch_prompt;
@@ -937,6 +938,7 @@ pub(in super::super) fn popover_width_spec(kind: &PopoverKind) -> Option<Popover
         | PopoverKind::CreateTagPrompt { .. }
         | PopoverKind::SquashPrompt { .. } => Some(DIALOG_420_WIDTH),
         PopoverKind::MergeRequestPushPrompt { .. } => Some(DIALOG_440_WIDTH),
+        PopoverKind::AgentSessions { .. } => Some(DIALOG_440_WIDTH),
         PopoverKind::UndoLastActionPrompt { .. } => Some(DIALOG_440_WIDTH),
         PopoverKind::AssumeUnchangedManager { .. } => Some(DIALOG_540_WIDTH),
         PopoverKind::Statistics { .. } => Some(DIALOG_540_WIDTH),
@@ -4627,6 +4629,9 @@ impl PopoverHost {
                 assume_unchanged_manager::panel(self, repo_id, cx)
             }
             PopoverKind::Statistics { repo_id } => statistics::panel(self, repo_id, cx),
+        PopoverKind::AgentSessions { repo_id } => {
+            agent_sessions::panel(self, repo_id, cx)
+        }
             PopoverKind::UndoLastActionPrompt { repo_id } => {
                 undo_last_action::panel(self, repo_id, cx)
             }

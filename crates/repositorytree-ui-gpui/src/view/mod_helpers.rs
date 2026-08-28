@@ -4814,6 +4814,11 @@ pub(super) enum PopoverKind {
         repo_id: RepoId,
         number: u64,
     },
+    /// The agent workbench's sessions roster: one card for the running
+    /// session (view changes / stop) plus start entries for each agent.
+    AgentSessions {
+        repo_id: RepoId,
+    },
     HistoryBranchFilter {
         repo_id: RepoId,
     },

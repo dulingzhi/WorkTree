@@ -289,6 +289,14 @@ pub(crate) const COMMANDS: &[CommandEntry] = &[
         requires_repo: true,
     },
     CommandEntry {
+        id: "agent-sessions",
+        label: "palette.cmd.agent-sessions",
+        shortcut: Shortcut::None,
+        category: "palette.cat.repository",
+        keywords: "agent session roster claude codex workbench stop start",
+        requires_repo: true,
+    },
+    CommandEntry {
         id: "agent-changes",
         label: "palette.cmd.agent-changes",
         shortcut: Shortcut::None,
@@ -1322,6 +1330,7 @@ mod tests {
             "show-statistics",
             "import-coverage",
             "agent-claude",
+            "agent-sessions",
             "agent-codex",
             "agent-changes",
             "clear-coverage",

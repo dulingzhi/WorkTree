@@ -51,6 +51,7 @@ palette:
     agent-claude: "Agent: Start Claude Code session"
     agent-codex: "Agent: Start Codex session"
     agent-changes: "Agent: Show what the agent changed"
+    agent-sessions: "Agent: Sessions…"
     clear-coverage: "Clear coverage overlay"
     import-coverage-prompt: "Choose an lcov / llvm-cov export"
     coverage-imported: "Coverage imported: %{files} files, %{lines} lines%{percent} — annotated in the diff gutter"

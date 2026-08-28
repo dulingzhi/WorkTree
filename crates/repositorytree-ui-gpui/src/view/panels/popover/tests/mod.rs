@@ -48,6 +48,7 @@ impl GitBackend for TestBackend {
 }
 
 mod add_repo_menu;
+mod agent_sessions;
 mod app_menu;
 mod assume_unchanged;
 mod author_filter;

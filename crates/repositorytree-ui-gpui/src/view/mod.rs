@@ -920,6 +920,17 @@ impl RepositoryTreeView {
             "agent-changes" => {
                 self.view_agent_changes(cx);
             }
+            "agent-sessions" => {
+                if let Some(repo_id) = self.active_repo_id()
+                    && let Some(window) = window
+                {
+                    self.open_popover_centered(
+                        PopoverKind::AgentSessions { repo_id },
+                        window,
+                        cx,
+                    );
+                }
+            }
             "clear-coverage" => {
                 if let Some(repo_id) = self.active_repo_id() {
                     self.store.dispatch(Msg::ClearCoverage { repo_id });
