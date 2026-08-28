@@ -39,14 +39,14 @@
 
 **目标**：关掉所有半接线入口，把 C# 版最近一年最重要的 AI 子系统对齐过来，搜索补上日常最高频的缺口。
 
-1. **命令面板接线** `S`
+1. **命令面板接线** `S` ✅（2026-08-27）
    10 个空 handler 接已就绪的后端与弹窗（checkout-remote-branch、delete-remote-branch、merge、delete-tag、remove-remote、edit-remote-url、remove-submodule、remove-worktree、discard-all）。验收：palette 可发现并执行全部条目 + handler 注册测试。
 2. **跨历史提交搜索** `M` ✅（2026-08-27）
    按 C# `CommitSearchService` 的两级设计移植：已加载列表内存快筛（subject/作者/SHA + 高亮）→ 全历史 `git log --all --grep/--author`（上限 2000）；入口 palette `search-commits` + Ctrl+F。实测走 subprocess `git log`（与 blame 同通道，复用 pretty-record 解析器），两级 UI 为 CommitSearchPicker：本地命中即时过滤、尾部动作行触发深搜、结果独立分组且不被输入过滤误删（`match_any_query`）。2026-08-28 对齐 C# 语义：Ctrl+F **默认开提交搜索**（C# 无条件开 histories 搜索；本工程 diff 视图会整块替换提交列表，若「有 diff 可见即归 diff 搜索」则提交列表实际永远够不到快捷键）——diff 侧仅在自身上下文保留：搜索浮层已开（翻页中）或 diff 面板持有焦点；已打开的 CommitSearchPicker 吞掉按键，不会在弹窗背后激活 diff 搜索。
 3. **AI commit 两项对齐** `M` ✅（2026-08-27）
    (a) 最近 10 条 commit subject 作格式示例进 prompt——按 C# `CommitPromptBuilder` 规格完成：system prompt / 4k 截断（补上 `[truncated]` 标记）/ 示例块不计入截断预算 / 输出清洗全套对齐，state 侧 `LoadAiCommitContext` 一并带出 subjects；
    (b) provider 矩阵扩展 ✅：`ai_commit_sources` 模块落地 C# 配置来源设计——10 种来源（manual / claude-code / codex / copilot / env / cli-claude / cli-codex / cli-gemini / cli-ollama / custom）；resolver 链（`~/.claude/settings.json` env 块、`~/.codex/auth.json` + config.toml 极简 TOML、gh hosts.yml + GH_TOKEN/GITHUB_TOKEN → GitHub Models、环境变量），凭证生成时实时解析、永不落盘；CLI 生成器走 `smol::process`（{PROMPT} 单参数 argv、60s 超时 kill_on_drop、stdout 清洗）；设置页 Source 下拉 + 非 manual 来源可用性状态行（后台检查）+ custom 命令模板输入；session 持久化 `ai_commit_source` / `ai_commit_custom_command`。
-4. **修 2 个已知失败测试** `S`
+4. **修 2 个已知失败测试** `S` ✅（2026-08-27）
    `file_and_diff_context_menu_shortcuts_match_expected_actions`、`multi_cherry_pick_rejects_merge_commits_before_starting`。
 
 ---
@@ -114,6 +114,23 @@
 
 ---
 
+## 迭代 05 — v0.6.0「agent 深化 + 性能基建」（4–6 周）
+
+**目标**：把 agent 工作台从 v1 的「能跑」推进到日常主力——隔离的专用 worktree、对称的接受/拒绝；清掉大仓库日常操作的性能主项（全量 status）；GitHub PR 链路补上「建」的一环。扩展系统维持 ⏸ 搁置。
+
+1. **agent 工作台 v2** `L`
+   专用 agent worktree：每会话一个 linked worktree（`<repo>/worktrees/agent-<n>`，复用既有 worktree 创建/信任管线），agent 与主工作树互不干扰，用户照常在主树工作；会话结束保留，走既有 worktree 管理 UI 合并/清理。会话列表面板（启停、切换、查看改动）；diff 视图在 agent 比较模式下补「从基线恢复此文件」按钮，接齐路径级拒绝（v1 拒绝无入口，只有手动 checkout）。
+2. **增量 status** `M/L`
+   取代每次全量 worktree_status：文件系统事件收集变更路径集合（防抖合并、滤 .git 噪声）→ 只重扫受影响路径并与上次结果合并；冷启动与事件丢失兜底仍走全量。先做 watcher 选型 spike（见决策点 D5）。当前每次 status/暂存/提交触发全量重扫，是 agent 会话期间（高频外部改动）与大仓库的最大卡顿源。
+3. **GitHub 建 PR 轻闭环** `S`
+   零 API 优先（D3 local-first 边界内）：推送后 toast 动作与 PR 节右键「Create pull request」打开 prefilled compare URL（`/{o}/{r}/compare/{base}...{head}`，新建分支回落 `/pull/new/{branch}`）；`gh` 在 PATH 时可选增强 `gh pr create --web`（带上标题/描述，衔接迭代 04 的 AI 描述生成）。
+4. **桌面小件包** `S/M`（合计）
+   hunk 解释流式输出 + 取消；历史 ref 过滤弹窗搜索框（接 PickerPrompt 模式）；LFS 图片 smudge 预览（`lfs_smudge_bytes` 已入 trait，差 UI）；GPG CommitDetails 签名徽章（约 55 处字面量）；clone 对话框选 SSH key。
+5. **（机动）diff_view.rs 测试第一期** `M`
+   4,050 行零测试的分期起点：行渲染、选择、行级暂存交互的纯函数/接缝测试骨架，优先覆盖 coverage overlay 与 agent 比较新踩过的路径。
+
+---
+
 ## 持续轨道（跨迭代，不占席位）
 
 | 轨道 | 内容 |
@@ -130,3 +147,4 @@
 - **D2 · 扩展系统形态**：C# 的反射加载 DLL 在 Rust 侧不可行；声明式命令/钩子是安全起点，进程内扩展（WASM/ABI 稳定化）成本高，二期再议。
 - **D3 · GitHub 集成与 local-first 的边界**：首批主动外呼 API——默认可关闭、数据最小化、请求内容设置页可见，写进产品原则。
 - **D4 · 统计窗口图表**：GPUI 无现成图表库，自绘工作量 ≈ 半个迭代小项；若排序靠后可先出纯表格版。
+- **D5 · 增量 status 的 watcher 方案**：notify（跨平台 crate，FSEvents/inotify/ReadDirectoryChangesW 统一封装）+ 防抖，还是 macOS 直用 FSEvents？`.git` 内部噪声、事件合并语义、大目录树 watch 开销需 spike 实测（本仓库自身就是好基准）。
