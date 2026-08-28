@@ -54,6 +54,10 @@ pub enum ConflictPayload {
     Text(Arc<str>),
     /// Non-UTF8 binary content.
     Binary(Arc<[u8]>),
+    /// A submodule commit pointer: the side's "content" is the gitlink's
+    /// commit id, carried as its hex text. Like binary payloads it has no
+    /// mergeable content — a submodule conflict is always a side pick.
+    Submodule(Arc<str>),
     /// Side is absent (file deleted or not present on this branch).
     Absent,
 }
@@ -209,7 +213,7 @@ impl ConflictPayload {
     /// Returns the text content if this payload is `Text`.
     pub fn as_text(&self) -> Option<&str> {
         match self {
-            ConflictPayload::Text(s) => Some(s),
+            ConflictPayload::Text(s) | ConflictPayload::Submodule(s) => Some(s),
             _ => None,
         }
     }
@@ -221,7 +225,7 @@ impl ConflictPayload {
     /// For absent payloads this returns `None`.
     pub fn as_bytes(&self) -> Option<&[u8]> {
         match self {
-            ConflictPayload::Text(s) => Some(s.as_bytes()),
+            ConflictPayload::Text(s) | ConflictPayload::Submodule(s) => Some(s.as_bytes()),
             ConflictPayload::Binary(bytes) => Some(bytes.as_ref()),
             ConflictPayload::Absent => None,
         }
@@ -238,8 +242,13 @@ impl ConflictPayload {
     }
 
     /// Returns `true` if this is binary content.
+    /// "No mergeable text" — binary payloads and submodule pointers both
+    /// resolve as a side pick, never a text merge.
     pub fn is_binary(&self) -> bool {
-        matches!(self, ConflictPayload::Binary(_))
+        matches!(
+            self,
+            ConflictPayload::Binary(_) | ConflictPayload::Submodule(_)
+        )
     }
 
     /// Try to create from raw bytes: if valid UTF-8, produce `Text`; otherwise `Binary`.
@@ -270,6 +279,9 @@ impl ConflictPayload {
     pub fn into_stage_parts(self) -> ConflictStageParts {
         match self {
             ConflictPayload::Text(text) => (None, Some(text)),
+            ConflictPayload::Submodule(pointer) => {
+                (Some(pointer.as_bytes().to_vec().into()), Some(pointer))
+            }
             ConflictPayload::Binary(bytes) => (Some(bytes), None),
             ConflictPayload::Absent => (None, None),
         }
@@ -626,7 +638,9 @@ impl ConflictSession {
 
     fn payload_as_side_text(payload: &ConflictPayload) -> Option<ConflictRegionText> {
         match payload {
-            ConflictPayload::Text(text) => Some(ConflictRegionText::shared(text.clone())),
+            ConflictPayload::Text(text) | ConflictPayload::Submodule(text) => {
+                Some(ConflictRegionText::shared(text.clone()))
+            }
             ConflictPayload::Absent => Some(ConflictRegionText::from(String::new())),
             ConflictPayload::Binary(_) => None,
         }
@@ -634,7 +648,9 @@ impl ConflictSession {
 
     fn payload_as_base_text(payload: &ConflictPayload) -> Option<Option<ConflictRegionText>> {
         match payload {
-            ConflictPayload::Text(text) => Some(Some(ConflictRegionText::shared(text.clone()))),
+            ConflictPayload::Text(text) | ConflictPayload::Submodule(text) => {
+                Some(Some(ConflictRegionText::shared(text.clone())))
+            }
             ConflictPayload::Absent => Some(None),
             ConflictPayload::Binary(_) => None,
         }
@@ -776,14 +792,20 @@ impl ConflictSession {
         }
 
         let session = self;
-        let ConflictPayload::Text(ours_text) = &session.ours else {
+        // Submodule pointers never reach the text-merge plan: their session
+        // strategy is a side pick, so this projection is not built for them.
+        let (ConflictPayload::Text(ours_text) | ConflictPayload::Submodule(ours_text)) =
+            &session.ours
+        else {
             return;
         };
-        let ConflictPayload::Text(theirs_text) = &session.theirs else {
+        let (ConflictPayload::Text(theirs_text) | ConflictPayload::Submodule(theirs_text)) =
+            &session.theirs
+        else {
             return;
         };
         let base_text = match &session.base {
-            ConflictPayload::Text(text) => Some(text.as_ref()),
+            ConflictPayload::Text(text) | ConflictPayload::Submodule(text) => Some(text.as_ref()),
             ConflictPayload::Absent => None,
             ConflictPayload::Binary(_) => return,
         };

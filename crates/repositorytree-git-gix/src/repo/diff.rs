@@ -712,20 +712,18 @@ impl GixRepo {
         &self,
         path: &Path,
     ) -> Result<Option<ConflictFileStages>> {
-        let full_path = if path.is_absolute() {
-            path.to_path_buf()
-        } else {
-            self.spec.workdir.join(path)
-        };
-        if std::fs::metadata(&full_path).is_ok_and(|m| m.is_dir()) {
-            return Ok(None);
-        }
-
+        // No index conflict stages for this path means nothing to load.
+        // That covers plain directories — and used to swallow submodule
+        // conflicts, whose worktree path is a directory but whose index
+        // stages are gitlink pointers very much worth loading.
         let repo = self._repo.to_thread_local();
         let repo_path = to_repo_path(path, &self.spec.workdir)?;
+        let stage_data = gix_index_conflict_stage_data(&repo, &repo_path)?;
+        if stage_data.conflict_kind.is_none() {
+            return Ok(None);
+        }
         Ok(Some(conflict_file_stages_from_stage_data(
-            &repo_path,
-            gix_index_conflict_stage_data(&repo, &repo_path)?,
+            &repo_path, stage_data,
         )))
     }
 
@@ -736,6 +734,9 @@ impl GixRepo {
         let Some(conflict_kind) = stage_data.conflict_kind else {
             return Ok(None);
         };
+        // A gitlink conflict has two commit pointers as its stages — there
+        // is no text to merge, exactly like a binary side pick.
+        let is_submodule = stage_data.is_gitlink;
 
         let stages = conflict_file_stages_from_stage_data(&repo_path, stage_data);
         let current =
@@ -744,6 +745,14 @@ impl GixRepo {
         let base = ConflictPayload::from_stage_parts(stages.base_bytes, stages.base);
         let ours = ConflictPayload::from_stage_parts(stages.ours_bytes, stages.ours);
         let theirs = ConflictPayload::from_stage_parts(stages.theirs_bytes, stages.theirs);
+        // Gitlink stages render as their commit ids, but they are pointers,
+        // not text — retagging them keeps the strategy (and every payload
+        // consumer) honest about there being nothing to merge.
+        let (base, ours, theirs) = if is_submodule {
+            (submodule_pointer(base), submodule_pointer(ours), submodule_pointer(theirs))
+        } else {
+            (base, ours, theirs)
+        };
 
         let is_binary = base.is_binary() || ours.is_binary() || theirs.is_binary();
         let strategy = ConflictResolverStrategy::for_conflict(conflict_kind, is_binary);
@@ -1698,5 +1707,14 @@ mod tests {
                 "{label} side should decode the GBK comment"
             );
         }
+    }
+}
+
+/// Retag a gitlink stage's text payload as a submodule pointer, leaving
+/// absent sides absent and anything unexpected untouched.
+fn submodule_pointer(payload: ConflictPayload) -> ConflictPayload {
+    match payload {
+        ConflictPayload::Text(pointer) => ConflictPayload::Submodule(pointer),
+        other => other,
     }
 }

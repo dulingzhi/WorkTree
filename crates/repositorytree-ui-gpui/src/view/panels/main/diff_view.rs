@@ -2511,7 +2511,21 @@ impl MainPaneView {
                 _ => None,
             })
             .unwrap_or(false);
-        let conflict_strategy = Self::conflict_resolver_strategy(conflict_kind, is_binary_conflict);
+        let conflict_strategy = {
+            // The loaded session's strategy is authoritative when it is for
+            // this path: it sees payload facts the local recomputation
+            // cannot — a submodule conflict's stages are commit pointers
+            // rendered as short sha text, not text to merge — so it routes
+            // those to the side-pick resolver instead of a bogus text
+            // merge. The recomputation stays as the pre-session fallback.
+            let session_strategy = repo.and_then(|repo| {
+                let session = repo.conflict_state.conflict_session.as_ref()?;
+                let path = conflict_target_path.as_deref()?;
+                (session.path.as_path() == path).then_some(session.strategy)
+            });
+            session_strategy
+                .or_else(|| Self::conflict_resolver_strategy(conflict_kind, is_binary_conflict))
+        };
         let is_conflict_resolver = conflict_strategy.is_some();
         let is_conflict_compare = conflict_target_path.is_some() && conflict_strategy.is_none();
         let conflict_rendered_preview_active = self.is_conflict_rendered_preview_active();

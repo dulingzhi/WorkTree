@@ -363,6 +363,11 @@ fn conflict_file_side_from_payload(
 ) -> (Option<Arc<[u8]>>, Option<Arc<str>>) {
     match payload {
         ConflictPayload::Text(text) => (None, Some(text.clone())),
+        // The pointer id doubles as its bytes so the side-pick view can both
+        // show it and treat the side as present.
+        ConflictPayload::Submodule(pointer) => {
+            (Some(pointer.as_bytes().to_vec().into()), Some(pointer.clone()))
+        }
         ConflictPayload::Binary(bytes) => (Some(bytes.clone()), None),
         ConflictPayload::Absent => (None, None),
     }

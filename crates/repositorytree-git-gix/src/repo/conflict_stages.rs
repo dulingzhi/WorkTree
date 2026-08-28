@@ -6,6 +6,11 @@ use std::path::Path;
 #[derive(Default)]
 pub(super) struct ConflictStageData {
     pub(super) conflict_kind: Option<FileConflictKind>,
+    /// Any stage is a gitlink (submodule pointer). Gitlink "content" is the
+    /// submodule commit id — an object in the submodule's ODB, unreadable
+    /// here — so the payload is synthesized from the id and the conflict is
+    /// a side pick between two pointers, never a text merge.
+    pub(super) is_gitlink: bool,
     pub(super) base_bytes: Option<Vec<u8>>,
     pub(super) ours_bytes: Option<Vec<u8>>,
     pub(super) theirs_bytes: Option<Vec<u8>>,
@@ -131,31 +136,49 @@ pub(super) fn gix_index_conflict_stage_data(
     let path_key = gix::path::os_str_into_bstr(path.as_os_str())
         .map_err(|_| Error::new(ErrorKind::Unsupported("path is not valid UTF-8")))?;
 
-    let base_id = index
-        .entry_by_path_and_stage(path_key, gix::index::entry::Stage::Base)
-        .map(|entry| entry.id);
-    let ours_id = index
-        .entry_by_path_and_stage(path_key, gix::index::entry::Stage::Ours)
-        .map(|entry| entry.id);
-    let theirs_id = index
-        .entry_by_path_and_stage(path_key, gix::index::entry::Stage::Theirs)
-        .map(|entry| entry.id);
+    let base_entry = index.entry_by_path_and_stage(path_key, gix::index::entry::Stage::Base);
+    let ours_entry = index.entry_by_path_and_stage(path_key, gix::index::entry::Stage::Ours);
+    let theirs_entry = index.entry_by_path_and_stage(path_key, gix::index::entry::Stage::Theirs);
 
     let mut stage_mask = 0u8;
-    if base_id.is_some() {
+    if base_entry.is_some() {
         stage_mask |= 0b001;
     }
-    if ours_id.is_some() {
+    if ours_entry.is_some() {
         stage_mask |= 0b010;
     }
-    if theirs_id.is_some() {
+    if theirs_entry.is_some() {
         stage_mask |= 0b100;
     }
 
+    let is_gitlink = [base_entry, ours_entry, theirs_entry]
+        .into_iter()
+        .flatten()
+        .any(|entry| entry.mode.is_submodule());
+
     Ok(ConflictStageData {
         conflict_kind: conflict_kind_from_stage_mask(stage_mask),
-        base_bytes: gix_blob_bytes_from_object_id_optional(repo, path, 1, base_id)?,
-        ours_bytes: gix_blob_bytes_from_object_id_optional(repo, path, 2, ours_id)?,
-        theirs_bytes: gix_blob_bytes_from_object_id_optional(repo, path, 3, theirs_id)?,
+        is_gitlink,
+        base_bytes: stage_payload_bytes(repo, path, 1, base_entry)?,
+        ours_bytes: stage_payload_bytes(repo, path, 2, ours_entry)?,
+        theirs_bytes: stage_payload_bytes(repo, path, 3, theirs_entry)?,
     })
+}
+
+/// One stage's payload: the blob's bytes, except for gitlinks, where the
+/// entry id (the submodule commit) is the only readable content this
+/// repository has.
+fn stage_payload_bytes(
+    repo: &gix::Repository,
+    path: &Path,
+    stage: u8,
+    entry: Option<&gix::index::Entry>,
+) -> Result<Option<Vec<u8>>> {
+    let Some(entry) = entry else {
+        return Ok(None);
+    };
+    if entry.mode.is_submodule() {
+        return Ok(Some(entry.id.to_hex().to_string().into_bytes()));
+    }
+    gix_blob_bytes_from_object_id_optional(repo, path, stage, Some(entry.id))
 }
