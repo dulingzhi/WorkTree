@@ -13,6 +13,7 @@ layout:
     empty_title: 提交
     no_repository: "未打开仓库。"
     commit_sha: 提交 SHA
+    signed: "已签名的提交"
     commit_date: 提交日期
     parent_commit_sha: 父提交 SHA
     committed_files: "已提交文件（%{count}）"

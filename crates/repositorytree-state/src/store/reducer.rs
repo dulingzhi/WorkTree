@@ -3395,6 +3395,7 @@ mod comparison_tests {
             committed_at_unix: 0,
             parent_ids: Vec::new(),
             files: Vec::new(),
+            signed: false,
         }
     }
 

@@ -6839,7 +6839,7 @@ mod tests {
                 committed_at_unix: 0,
                 parent_ids: vec![],
                 files: vec![],
-            }));
+            signed: false,}));
         repo.branches = Loadable::Ready(Arc::new(vec![branch("feature", "c00")]));
         repo.branches_rev = 1;
         repo.remote_branches = Loadable::Ready(Arc::new(Vec::new()));

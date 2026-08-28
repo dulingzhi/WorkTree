@@ -2761,7 +2761,7 @@ mod tests {
             committed_at_unix: 0,
             parent_ids: Vec::new(),
             files: Vec::new(),
-        }));
+        signed: false,}));
         repo.diff_state.diff = Loadable::Ready(Arc::new(Diff {
             target: DiffTarget::Commit {
                 commit_id: CommitId("c1".into()),

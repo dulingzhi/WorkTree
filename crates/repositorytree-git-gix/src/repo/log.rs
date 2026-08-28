@@ -1879,6 +1879,12 @@ impl GixRepo {
             .map(|parent| CommitId(oid_to_arc_str(parent)))
             .collect::<Vec<_>>();
         let files = commit_file_changes(&repo, &commit, &parent_oids)?;
+        // `gix::Commit` reads headers through its decoded form.
+        let decoded = commit.decode().map_err(|e| {
+            Error::new(ErrorKind::Backend(format!("gix decode commit {spec}: {e}")))
+        })?;
+        let signed = decoded.extra_headers().pgp_signature().is_some()
+            || decoded.extra_headers().find("gpgsigssh").is_some();
 
         Ok(CommitDetails {
             id: id.clone(),
@@ -1890,6 +1896,7 @@ impl GixRepo {
             committed_at_unix,
             parent_ids,
             files,
+            signed,
         })
     }
 

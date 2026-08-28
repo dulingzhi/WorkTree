@@ -145,6 +145,9 @@ pub struct CommitDetails {
     pub committed_at_unix: i64,
     pub parent_ids: Vec<CommitId>,
     pub files: Vec<CommitFileChange>,
+    /// A gpgsig/gpgsigssh header exists on the commit (existence, not a
+    /// verified signature) — mirrors `Commit::signed` for the details pane.
+    pub signed: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

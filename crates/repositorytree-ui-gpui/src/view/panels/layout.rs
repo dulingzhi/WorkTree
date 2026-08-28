@@ -1946,9 +1946,39 @@ impl DetailsPaneView {
                                         .child(commit_details_selectable_row(
                                             theme,
                                             tr_str("layout.commit_details.commit_sha"),
-                                            commit_details_monospace_value(
-                                                self.commit_details_sha_input.clone(),
-                                            ),
+                                            // The signed badge rides beside the
+                                            // sha, mirroring the history row's
+                                            // existence marker (green ✓).
+                                            if details.signed {
+                                                div()
+                                                    .flex()
+                                                    .items_center()
+                                                    .gap_2()
+                                                    .min_w(px(0.0))
+                                                    .child(commit_details_monospace_value(
+                                                        self.commit_details_sha_input.clone(),
+                                                    ))
+                                                    .child(
+                                                        div()
+                                                            .id("commit_details_signed_badge")
+                                                            .debug_selector(|| {
+                                                                "commit_details_signed_badge".to_string()
+                                                            })
+                                                            .flex_none()
+                                                            .text_xs()
+                                                            .text_color(theme.colors.status.success.foreground)
+                                                            .repositorytree_tooltip(
+                                                                theme,
+                                                                tr("layout.commit_details.signed"),
+                                                            )
+                                                            .child("✓"),
+                                                    )
+                                                    .into_any_element()
+                                            } else {
+                                                commit_details_monospace_value(
+                                                    self.commit_details_sha_input.clone(),
+                                                )
+                                            },
                                         ))
                                         .child(commit_details_selectable_row(
                                             theme,

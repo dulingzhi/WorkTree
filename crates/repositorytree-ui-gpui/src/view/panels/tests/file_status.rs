@@ -653,7 +653,7 @@ fn committed_deleted_file_preview_uses_preview_text_file_without_patch_fallback(
                         additions: None,
                         deletions: None,
                     }],
-                },
+                signed: false,},
             ));
             repo.history_state.commit_details_rev =
                 repo.history_state.commit_details_rev.wrapping_add(1);
@@ -1514,7 +1514,7 @@ fn commit_details_metadata_fields_are_selectable(cx: &mut gpui::TestAppContext) 
                     committed_at_unix: 0,
                     parent_ids: vec![repositorytree_core::domain::CommitId(parent_sha.clone().into())],
                     files: vec![],
-                },
+                signed: false,},
             ));
 
             let next_state = app_state_with_repo(repo, repo_id);
@@ -1641,7 +1641,7 @@ fn show_commit_details_message(
                     committed_at_unix: 0,
                     parent_ids: vec![],
                     files: vec![],
-                }));
+                signed: false,}));
 
             let next_state = app_state_with_repo(repo, repo_id);
             this.store
@@ -1872,7 +1872,7 @@ fn commit_details_message_sha_click_menu_navigate_reveals_referenced_commit(
                     committed_at_unix: 0,
                     parent_ids: vec![],
                     files: vec![],
-                },
+                signed: false,},
             ));
 
             let next_state = app_state_with_repo(repo, repo_id);
@@ -1980,7 +1980,7 @@ fn commit_details_message_click_beside_a_sha_opens_no_menu(cx: &mut gpui::TestAp
                     committed_at_unix: 0,
                     parent_ids: vec![],
                     files: vec![],
-                }));
+                signed: false,}));
             let next_state = app_state_with_repo(repo, repo_id);
             this.store
                 .replace_snapshot_for_test(Arc::clone(&next_state));
@@ -2082,7 +2082,7 @@ fn commit_details_message_sha_retained_details_are_inert_after_selection_changes
                     committed_at_unix: 0,
                     parent_ids: vec![],
                     files: vec![],
-                },
+                signed: false,},
             ));
 
             let next_state = app_state_with_repo(repo, repo_id);
@@ -2181,7 +2181,7 @@ fn commit_details_message_sha_click_opens_the_menu_without_navigating(
                     committed_at_unix: 0,
                     parent_ids: vec![],
                     files: vec![],
-                },
+                signed: false,},
             ));
 
             let next_state = app_state_with_repo(repo, repo_id);
@@ -2267,7 +2267,7 @@ fn commit_details_message_sha_double_click_selects_instead_of_opening_the_menu(
                     committed_at_unix: 0,
                     parent_ids: vec![],
                     files: vec![],
-                },
+                signed: false,},
             ));
 
             let next_state = app_state_with_repo(repo, repo_id);
@@ -2354,7 +2354,7 @@ fn commit_details_parent_sha_click_menu_navigate_reveals_referenced_commit(
                     committed_at_unix: 0,
                     parent_ids: vec![repositorytree_core::domain::CommitId(parent_sha.into())],
                     files: vec![],
-                }));
+                signed: false,}));
 
             let next_state = app_state_with_repo(repo, repo_id);
             this.store
@@ -2453,7 +2453,7 @@ fn commit_details_parent_sha_dash_has_no_link_menu(cx: &mut gpui::TestAppContext
                     committed_at_unix: 0,
                     parent_ids: vec![],
                     files: vec![],
-                }));
+                signed: false,}));
 
             let next_state = app_state_with_repo(repo, repo_id);
             this.store
@@ -2523,7 +2523,7 @@ fn commit_details_added_file_copy_path_works_after_left_clicking_menu_entry(
                         additions: None,
                         deletions: None,
                     }],
-                },
+                signed: false,},
             ));
 
             let next_state = app_state_with_repo(repo, repo_id);
@@ -2647,7 +2647,7 @@ fn commit_details_file_right_click_only_opens_menu_for_added_modified_and_delete
                             deletions: None,
                         })
                         .collect(),
-                },
+                signed: false,},
             ));
 
             let next_state = app_state_with_repo(repo, repo_id);
@@ -2939,7 +2939,7 @@ fn commit_details_file_list_keeps_visible_viewport_when_overflowing(cx: &mut gpu
                         "89abcdef0123456789abcdef0123456789abcdef".into(),
                     )],
                     files,
-                },
+                signed: false,},
             ));
 
             let next_state = app_state_with_repo(repo, repo_id);
@@ -3033,7 +3033,7 @@ fn ui_scale_commit_details_file_list_content_height_scales(cx: &mut gpui::TestAp
                         "89abcdef0123456789abcdef0123456789abcdef".into(),
                     )],
                     files,
-                },
+                signed: false,},
             ));
 
             let next_state = app_state_with_repo(repo, repo_id);
@@ -3168,7 +3168,7 @@ fn details_row_renderers_begin_separate_alignment_groups_for_status_and_commit_f
                             deletions: None,
                         },
                     ],
-                },
+                signed: false,},
             ));
             repo.history_state.commit_details_rev =
                 repo.history_state.commit_details_rev.wrapping_add(1);

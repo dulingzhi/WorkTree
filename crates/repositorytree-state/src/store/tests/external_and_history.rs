@@ -25,6 +25,7 @@ fn commit_details_for(id: &CommitId, message: &str) -> repositorytree_core::doma
         committed_at_unix: 0,
         parent_ids: vec![],
         files: vec![],
+        signed: false,
     }
 }
 

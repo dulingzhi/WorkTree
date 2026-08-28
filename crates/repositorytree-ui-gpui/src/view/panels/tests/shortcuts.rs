@@ -2433,7 +2433,7 @@ fn commit_details_file_navigation_scrolls_selected_row_into_view(cx: &mut gpui::
         committed_at_unix: 0,
         parent_ids: vec![],
         files: files.clone(),
-    }));
+    signed: false,}));
     repo.diff_state.diff_target = Some(DiffTarget::Commit {
         commit_id: commit_id.clone(),
         path: Some(files[start_ix].path.clone()),
@@ -2635,7 +2635,7 @@ fn commit_details_text_input_f4_navigates_files_without_stealing_focus(
         committed_at_unix: 0,
         parent_ids: vec![],
         files: files.clone(),
-    }));
+    signed: false,}));
     repo.diff_state.diff_target = Some(DiffTarget::Commit {
         commit_id: commit_id.clone(),
         path: Some(files[0].path.clone()),

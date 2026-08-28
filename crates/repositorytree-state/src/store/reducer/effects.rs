@@ -1342,6 +1342,7 @@ fn working_tree_details(repo_state: &RepoState) -> CommitDetails {
         committed_at_unix: 0,
         parent_ids: repo_state.head_commit_id().into_iter().collect(),
         files: files(staged).into_iter().chain(files(unstaged)).collect(),
+        signed: false,
     }
 }
 
@@ -3066,6 +3067,7 @@ mod tests {
             committed_at_unix: 0,
             parent_ids: Vec::new(),
             files: Vec::new(),
+            signed: false,
         }
     }
 

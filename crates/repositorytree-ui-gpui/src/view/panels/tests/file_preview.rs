@@ -1268,7 +1268,7 @@ fn committed_deleted_minified_utf8_json_preview_streams_from_indexed_source(
                         additions: None,
                         deletions: None,
                     }],
-                },
+                signed: false,},
             ));
             repo.history_state.commit_details_rev = 1;
 

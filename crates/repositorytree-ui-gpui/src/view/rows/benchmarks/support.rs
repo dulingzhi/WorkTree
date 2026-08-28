@@ -361,7 +361,7 @@ pub(crate) fn build_repo_switch_repo_state(
                     deletions: None,
                 })
                 .collect(),
-        }));
+        signed: false,}));
         repo.history_state.commit_details_rev = 1;
     }
 
@@ -786,8 +786,8 @@ pub(crate) fn build_synthetic_commit_details(files: usize, depth: usize) -> Comm
         files,
         depth,
         "Synthetic benchmark commit details message\n\nWith body.".to_string(),
-    )
-}
+    ),
+signed: false,}
 
 pub(crate) fn build_synthetic_commit_details_with_message(
     files: usize,
@@ -832,8 +832,8 @@ pub(crate) fn build_synthetic_commit_details_with_message(
         committed_at_unix: 0,
         parent_ids: vec![CommitId("c".repeat(40).into())],
         files: out,
+signed: false,
     }
-}
 
 /// Like `build_synthetic_commit_details` but with a different commit ID
 /// (the `id_char` is repeated 40 times to form the ID hex string).
@@ -845,8 +845,8 @@ pub(crate) fn build_synthetic_commit_details_with_id(
     let mut details = build_synthetic_commit_details(files, depth);
     details.id = CommitId(id_char.repeat(40).into());
     details.parent_ids = vec![CommitId("d".repeat(40).into())];
-    details
-}
+    details,
+signed: false,}
 
 /// Like `build_synthetic_commit_details` but every file path is globally unique
 /// (no `ix % 128` clamping on directory names). This produces files that all
@@ -891,8 +891,8 @@ pub(crate) fn build_synthetic_commit_details_unique_paths(
         committed_at_unix: 0,
         parent_ids: vec![CommitId("d".repeat(40).into())],
         files: out,
+signed: false,
     }
-}
 
 pub(crate) fn build_synthetic_commit_message(min_bytes: usize, line_bytes: usize) -> String {
     let min_bytes = min_bytes.max(1);

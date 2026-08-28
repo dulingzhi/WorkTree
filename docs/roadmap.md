@@ -129,6 +129,7 @@
    实现扩展为**双 forge**（用户指示 GitLab 与 GitHub 同等）：`view/forge_request.rs` 复用 permalink 的 forge 识别（github.com / gitlab.com；自托管 GitLab 不猜测——Generic host 无已知网页形状，entry 禁用并顺延）。URL 形态：GitHub `{root}/compare/{base}...{head}`（无 base 回落 `/pull/new/{head}`）、GitLab `{root}/-/merge_requests/new?merge_request[source_branch]=…&merge_request[target_branch]=…`（查询分量百分号编码，`/` 保留可读）；分支名过 `branch_is_url_safe`（拒 `-` 开头/`..`/空白/`:?#[]\^~`）。入口两处：palette「Create pull request on the web…」与 push 菜单常驻项（forge 可解析 + 分支已检出才启用）→ 根视图 `open_create_request_page`（head = 当前分支；target = `symbolic-ref --short refs/remotes/origin/HEAD` 解析的默认分支，非 origin 前缀/不安全则不预填——网页表单自行兜底；失败 toast chrome.forge_request.*）。测试：forge_request +5（slug 双 forge/自托管排除/无 URL、GitHub 双形态 URL、GitLab 预填/无 base、branch 安全、查询编码）、push 菜单 GPUI +1（GitHub/GitLab 启用、自托管/无 URL 禁用——**坑：store dispatch 异步，seed 后必须 wait_until 快照落地再 sync_store_snapshot，否则读到上一用例的 remotes**）；基线 ui-gpui 3415。顺延：推送后 toast 动作按钮（toast 无 action 槽）、`gh pr create --web` 增强带 AI 标题/描述、自托管 GitLab host 配置。
 4. **桌面小件包** `S/M`（合计）
    hunk 解释流式输出 + 取消；历史 ref 过滤弹窗搜索框（接 PickerPrompt 模式）；LFS 图片 smudge 预览（`lfs_smudge_bytes` 已入 trait，差 UI）；GPG CommitDetails 签名徽章（约 55 处字面量）；clone 对话框选 SSH key。
+   GPG CommitDetails 签名徽章 ✅（2026-08-28）：`CommitDetails.signed`（gix 侧经 decode() 读 extra_headers，与 log 走相同的 gpgsig/gpgsigssh 存在性判定；合成 uncommitted details 恒 false）→ 详情面板 SHA 行右侧绿 ✓ 徽章 + tooltip（`layout.commit_details.signed`），selector `commit_details_signed_badge`。
 5. **（机动）diff_view.rs 测试第一期** `M`
    4,050 行零测试的分期起点：行渲染、选择、行级暂存交互的纯函数/接缝测试骨架，优先覆盖 coverage overlay 与 agent 比较新踩过的路径。
 

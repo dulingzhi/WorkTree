@@ -83,7 +83,7 @@ impl GitRepository for ReadyOpenRepo {
             committed_at_unix: 0,
             parent_ids: Vec::new(),
             files: Vec::new(),
-        })
+        signed: false,})
     }
 
     fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
@@ -336,7 +336,7 @@ impl GitRepository for BlockingDiffRepo {
             committed_at_unix: 0,
             parent_ids: Vec::new(),
             files: Vec::new(),
-        })
+        signed: false,})
     }
 
     fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
