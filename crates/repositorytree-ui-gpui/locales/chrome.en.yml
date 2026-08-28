@@ -145,3 +145,7 @@ chrome:
     stop_session: "Stop session"
     start: "Start %{agent}"
     baseline_label: "Agent session start (%{agent})"
+
+  forge_request:
+    no_remote: "No GitHub or GitLab remote found for this repository"
+    no_branch: "Checkout a branch first — the request needs a source branch"

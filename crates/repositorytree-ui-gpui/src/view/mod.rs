@@ -161,6 +161,7 @@ mod diff_utils;
 mod file_diff_display;
 mod github;
 mod agent_workbench;
+mod forge_request;
 mod file_icons;
 mod fingerprint;
 mod history_graph;
@@ -815,6 +816,81 @@ impl RepositoryTreeView {
             .detach();
     }
 
+    /// Open the forge's prefilled create-request page for the current
+    /// branch (GitHub compare/pull-new, GitLab merge-request form). Zero
+    /// API: only the browser opens.
+    fn open_create_request_page(&mut self, cx: &mut gpui::Context<Self>) {
+        let Some(repo) = self
+            .state
+            .repos
+            .iter()
+            .find(|repo| Some(repo.id) == self.state.active_repo)
+        else {
+            return;
+        };
+        let Some(remotes) = repo.remotes.ready() else {
+            self.push_toast(
+                components::ToastKind::Error,
+                crate::i18n::tr_str("chrome.forge_request.no_remote").to_string(),
+                cx,
+            );
+            return;
+        };
+        let Some((kind, base)) = forge_request::forge_request_base_from_remotes(remotes) else {
+            self.push_toast(
+                components::ToastKind::Error,
+                crate::i18n::tr_str("chrome.forge_request.no_remote").to_string(),
+                cx,
+            );
+            return;
+        };
+        let Some(head) = repo.head_branch.ready() else {
+            self.push_toast(
+                components::ToastKind::Error,
+                crate::i18n::tr_str("chrome.forge_request.no_branch").to_string(),
+                cx,
+            );
+            return;
+        };
+        if !forge_request::branch_is_url_safe(head.as_str()) {
+            self.push_toast(
+                components::ToastKind::Error,
+                crate::i18n::tr_str("chrome.forge_request.no_branch").to_string(),
+                cx,
+            );
+            return;
+        }
+        // The default target branch, when the remote advertises one; a miss
+        // only means the form opens without a prefilled target.
+        let default_branch = panels::git_output(
+            &repo.spec.workdir,
+            &["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+        )
+        .ok()
+        .and_then(|output| {
+            let reference = output.trim();
+            // "origin/main" -> "main"; anything else is not a branch name.
+            reference
+                .split_once('/')
+                .filter(|(remote, _)| *remote == "origin")
+                .map(|(_, branch)| branch.to_string())
+        })
+        .filter(|branch| forge_request::branch_is_url_safe(branch));
+        let url = forge_request::create_request_url(
+            kind,
+            &base.web_root,
+            head.as_str(),
+            default_branch.as_deref(),
+        );
+        if let Err(err) = crate::view::platform_open::open_url(&url) {
+            self.push_toast(
+                components::ToastKind::Error,
+                format!("Failed to open link: {err}"),
+                cx,
+            );
+        }
+    }
+
     fn execute_command(
         &mut self,
         command_id: &str,
@@ -919,6 +995,9 @@ impl RepositoryTreeView {
             }
             "agent-changes" => {
                 self.view_agent_changes(cx);
+            }
+            "create-pr" => {
+                self.open_create_request_page(cx);
             }
             "agent-sessions" => {
                 if let Some(repo_id) = self.active_repo_id()

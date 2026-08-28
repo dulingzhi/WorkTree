@@ -106,6 +106,7 @@
 "Push": "推送"
 "Pull and re-push on failure": "推送失败时拉回再试"
 "Push with merge request…": "带合并请求推送…"
+"Create pull request on the web…": "在网页上创建拉取/合并请求…"
 "Push after commit": "提交后推送"
 "Refresh worktrees": "刷新工作树"
 "Remove…": "移除…"

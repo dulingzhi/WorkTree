@@ -1637,6 +1637,11 @@ impl PopoverHost {
                     cx,
                 );
             }
+            ContextMenuAction::CreateWebRequestPage { repo_id: _ } => {
+                let _ = self.root_view.update(cx, |root, cx| {
+                    root.open_create_request_page(cx);
+                });
+            }
             ContextMenuAction::OpenWebUrl { url } => {
                 if let Err(err) = crate::view::platform_open::open_url(&url) {
                     self.push_toast(

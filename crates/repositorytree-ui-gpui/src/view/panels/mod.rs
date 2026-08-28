@@ -255,6 +255,11 @@ pub(in crate::view) enum ContextMenuAction {
         remote: String,
         number: u64,
     },
+    /// Open the forge's prefilled create-request page (GitHub compare /
+    /// GitLab merge-request form) for the current branch.
+    CreateWebRequestPage {
+        repo_id: RepoId,
+    },
     DeleteBranch {
         repo_id: RepoId,
         name: String,

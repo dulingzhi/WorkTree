@@ -273,6 +273,14 @@ pub(crate) const COMMANDS: &[CommandEntry] = &[
         requires_repo: true,
     },
     CommandEntry {
+        id: "create-pr",
+        label: "palette.cmd.create-pr",
+        shortcut: Shortcut::None,
+        category: "palette.cat.repository",
+        keywords: "pull request merge request github gitlab create web browser",
+        requires_repo: true,
+    },
+    CommandEntry {
         id: "agent-claude",
         label: "palette.cmd.agent-claude",
         shortcut: Shortcut::None,
@@ -1329,6 +1337,7 @@ mod tests {
             "manage-assume-unchanged",
             "show-statistics",
             "import-coverage",
+            "create-pr",
             "agent-claude",
             "agent-sessions",
             "agent-codex",

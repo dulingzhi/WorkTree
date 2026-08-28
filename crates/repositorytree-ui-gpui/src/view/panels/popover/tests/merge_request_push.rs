@@ -1,6 +1,7 @@
 use super::*;
 
 use super::branch::{create_tracking_store, wait_until};
+use repositorytree_state::msg::InternalMsg;
 
 fn click(cx: &mut gpui::VisualTestContext, selector: &'static str) {
     let bounds = cx
@@ -330,5 +331,94 @@ fn mr_push_prompt_description_failure_lands_inline(cx: &mut gpui::TestAppContext
         state,
         (false, Some("no credentials for the source".to_string())),
         "the guard clears while the error stays for the retry"
+    );
+}
+
+/// The push menu's create-request entry is enabled for known forges
+/// (GitHub and GitLab alike) and disabled when the remote's forge has no
+/// known web shape.
+#[gpui::test]
+fn push_menu_create_request_entry_follows_the_remote_forge(cx: &mut gpui::TestAppContext) {
+    let (store, events, _repo, _workdir) = create_tracking_store("push-menu-create-pr");
+    let repo_id = store.snapshot().active_repo.expect("expected active repo");
+    let store_for_view = store.clone();
+    let (view, cx) =
+        cx.add_window_view(|window, cx| RepositoryTreeView::new(store_for_view, events, None, window, cx));
+    cx.update(|window, app| {
+        let _ = window.draw(app);
+    });
+
+    // The entry reads the current branch and the remotes; both arrive through
+    // the store, so the test seeds them there and syncs the view.
+    let entry_disabled = |cx: &mut gpui::VisualTestContext, url: Option<&str>| {
+        store
+            .dispatch(Msg::Internal(InternalMsg::HeadBranchLoaded {
+                repo_id,
+                result: Ok("feat/widget".to_string()),
+            }));
+        store.dispatch(Msg::Internal(InternalMsg::RemotesLoaded {
+            repo_id,
+            result: Ok(vec![repositorytree_core::domain::Remote {
+                name: "origin".to_string(),
+                url: url.map(str::to_string),
+            }]),
+        }));
+        // Store dispatch is asynchronous: wait until the seeded remotes are
+        // the snapshot's truth before syncing the view, or the model reads
+        // the previous case's list.
+        wait_until("seeded remotes to land in the snapshot", || {
+            store
+                .snapshot()
+                .repos
+                .iter()
+                .find(|repo| repo.id == repo_id)
+                .and_then(|repo| repo.remotes.ready())
+                .is_some_and(|remotes| {
+                    remotes.len() == 1
+                        && remotes[0].name == "origin"
+                        && remotes[0].url.as_deref() == url
+                })
+        });
+        cx.update(|window, app| {
+            view.update(app, |this, cx| {
+                crate::view::test_support::sync_store_snapshot(this, cx)
+            });
+            let _ = window.draw(app);
+        });
+        cx.update(|_window, app| {
+            view.update(app, |this, cx| {
+                this.popover_host
+                    .update(cx, |host, cx| host.context_menu_model(&PopoverKind::PushPicker, cx))
+                    .expect("push menu model")
+                    .items
+                    .iter()
+                    .find_map(|item| match item {
+                        ContextMenuItem::Entry { label, disabled, .. }
+                            if label.as_ref() == "Create pull request on the web…" =>
+                        {
+                            Some(*disabled)
+                        }
+                        _ => None,
+                    })
+                    .expect("the create-request entry is offered")
+            })
+        })
+    };
+
+    assert!(
+        !entry_disabled(cx, Some("https://github.com/acme/widgets.git")),
+        "a GitHub remote enables the entry"
+    );
+    assert!(
+        !entry_disabled(cx, Some("https://gitlab.com/acme/widgets.git")),
+        "a GitLab remote enables it just the same"
+    );
+    assert!(
+        entry_disabled(cx, Some("https://git.acme.dev/widgets.git")),
+        "a self-hosted forge has no known web shape — the entry stays disabled"
+    );
+    assert!(
+        entry_disabled(cx, None),
+        "no remote URL — nothing to build a request page from"
     );
 }

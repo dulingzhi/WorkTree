@@ -135,3 +135,7 @@ chrome:
     stop_session: "停止会话"
     start: "启动 %{agent}"
     baseline_label: "Agent 会话起点（%{agent}）"
+
+  forge_request:
+    no_remote: "此仓库没有 GitHub 或 GitLab 远程"
+    no_branch: "请先检出分支——请求需要源分支"
