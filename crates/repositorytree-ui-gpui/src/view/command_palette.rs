@@ -265,6 +265,22 @@ pub(crate) const COMMANDS: &[CommandEntry] = &[
         requires_repo: true,
     },
     CommandEntry {
+        id: "import-coverage",
+        label: "palette.cmd.import-coverage",
+        shortcut: Shortcut::None,
+        category: "palette.cat.repository",
+        keywords: "lcov llvm-cov coverage tests overlay annotate",
+        requires_repo: true,
+    },
+    CommandEntry {
+        id: "clear-coverage",
+        label: "palette.cmd.clear-coverage",
+        shortcut: Shortcut::None,
+        category: "palette.cat.repository",
+        keywords: "lcov llvm-cov coverage overlay remove",
+        requires_repo: true,
+    },
+    CommandEntry {
         id: "undo-last-action",
         label: "palette.cmd.undo-last-action",
         shortcut: Shortcut::None,
@@ -1280,6 +1296,8 @@ mod tests {
             "cleanup-repository",
             "manage-assume-unchanged",
             "show-statistics",
+            "import-coverage",
+            "clear-coverage",
             "undo-last-action",
             // View toggles
             "toggle-sidebar",

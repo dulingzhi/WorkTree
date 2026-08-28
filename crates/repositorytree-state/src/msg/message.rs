@@ -603,6 +603,15 @@ pub enum Msg {
         revision: String,
         dest: PathBuf,
     },
+    /// Land a coverage report parsed UI-side (the file picker and reading
+    /// both live there); the reducer only stores it for the diff overlay.
+    SetCoverage {
+        repo_id: RepoId,
+        report: Arc<repositorytree_core::coverage::CoverageReport>,
+    },
+    ClearCoverage {
+        repo_id: RepoId,
+    },
     CleanupRepo {
         repo_id: RepoId,
     },

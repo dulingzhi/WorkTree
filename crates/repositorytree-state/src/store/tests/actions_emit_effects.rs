@@ -5573,3 +5573,58 @@ fn bisect_commands_emit_effects_track_in_flight_and_summarize() {
         Some("Bisect: Reset")
     );
 }
+
+#[test]
+fn coverage_set_and_clear_store_the_report_without_effects() {
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+
+    let repo_id = RepoId(1);
+    repos.insert(repo_id, Arc::new(DummyRepo::new("/tmp/repo")));
+    state.repos.push(RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    ));
+
+    let report = std::sync::Arc::new(
+        repositorytree_core::coverage::CoverageReport::parse_lcov(
+            "SF:src/lib.rs\nDA:1,2\nDA:2,0\nend_of_record\n",
+        )
+        .unwrap(),
+    );
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::SetCoverage {
+            repo_id,
+            report: std::sync::Arc::clone(&report),
+        },
+    );
+    assert!(effects.is_empty(), "storing a report runs no git work");
+    assert_eq!(state.repos[0].coverage.as_deref(), Some(report.as_ref()));
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::ClearCoverage { repo_id },
+    );
+    assert!(effects.is_empty());
+    assert!(state.repos[0].coverage.is_none());
+
+    // Both messages ignore unknown repos rather than panicking.
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::ClearCoverage {
+            repo_id: RepoId(999),
+        },
+    );
+    assert!(effects.is_empty());
+}

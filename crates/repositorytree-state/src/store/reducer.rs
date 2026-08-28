@@ -1336,6 +1336,18 @@ fn reduce_inner(
             begin_local_action(state, repo_id);
             actions_emit_effects::cleanup_repo(repo_id)
         }
+        Msg::SetCoverage { repo_id, report } => {
+            if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+                repo_state.set_coverage(Some(report));
+            }
+            Vec::new()
+        }
+        Msg::ClearCoverage { repo_id } => {
+            if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+                repo_state.set_coverage(None);
+            }
+            Vec::new()
+        }
         Msg::ApplyPatch { repo_id, patch } => {
             begin_local_action(state, repo_id);
             actions_emit_effects::apply_patch(repo_id, patch)

@@ -1205,6 +1205,10 @@ pub struct RepoState {
     /// git backend involvement).
     pub pull_requests: Loadable<Arc<Vec<PullRequest>>>,
     pub pull_requests_rev: u64,
+    /// Imported line coverage for the diff view's overlay. Session-scoped
+    /// on purpose: reports are large and regenerable, so they never
+    /// persist.
+    pub coverage: Option<Arc<repositorytree_core::coverage::CoverageReport>>,
     pub remote_branches: Loadable<Arc<Vec<RemoteBranch>>>,
     pub remote_branches_rev: u64,
     pub worktree_status: Loadable<Arc<Vec<FileStatus>>>,
@@ -1359,6 +1363,7 @@ impl RepoState {
             remote_tags_rev: 0,
             remotes: Loadable::NotLoaded,
             pull_requests: Loadable::NotLoaded,
+            coverage: None,
             pull_requests_rev: 0,
             remotes_rev: 0,
             remote_branches: Loadable::NotLoaded,
@@ -1501,6 +1506,15 @@ impl RepoState {
         self.pull_requests = pull_requests;
         self.pull_requests_rev = self.pull_requests_rev.wrapping_add(1);
         self.bump_branch_sidebar_rev();
+    }
+
+    /// Replace (or clear) the imported coverage report. No rev protocol:
+    /// the report is a whole-file replacement, never incrementally updated.
+    pub(crate) fn set_coverage(
+        &mut self,
+        coverage: Option<Arc<repositorytree_core::coverage::CoverageReport>>,
+    ) {
+        self.coverage = coverage;
     }
 
     /// Lands the CI verdict for one PR of the loaded list. No-op when the

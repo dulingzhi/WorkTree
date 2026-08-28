@@ -47,6 +47,11 @@ palette:
     cleanup-repository: Cleanup Repository (GC)
     manage-assume-unchanged: Assume-Unchanged Files…
     show-statistics: Statistics…
+    import-coverage: "Import coverage file…"
+    clear-coverage: "Clear coverage overlay"
+    import-coverage-prompt: "Choose an lcov / llvm-cov export"
+    coverage-imported: "Coverage imported: %{files} files, %{lines} lines%{percent} — annotated in the diff gutter"
+    coverage-cleared: "Coverage overlay cleared"
     undo-last-action: Undo Last Action…
     toggle-sidebar: Toggle Sidebar
     toggle-details: Toggle Details Pane

@@ -745,6 +745,75 @@ impl RepositoryTreeView {
         }
     }
 
+    /// Pick an lcov/llvm-cov export, parse it off the UI thread, and land it
+    /// in the store for the diff overlay. Cancelling the dialog cancels the
+    /// import, the same contract as the archive export.
+    fn import_coverage_file(
+        &mut self,
+        repo_id: RepoId,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(_workdir) = self
+            .state
+            .repos
+            .iter()
+            .find(|repo| repo.id == repo_id)
+            .map(|repo| repo.spec.workdir.clone())
+        else {
+            return;
+        };
+        let rx = cx.prompt_for_paths(gpui::PathPromptOptions {
+            files: true,
+            directories: false,
+            multiple: false,
+            prompt: Some(crate::i18n::tr("palette.cmd.import-coverage-prompt")),
+        });
+        let weak = cx.weak_entity();
+        window
+            .spawn(cx, async move |cx| {
+                let Ok(Ok(Some(paths))) = rx.await else {
+                    return;
+                };
+                let Some(path) = paths.into_iter().next() else {
+                    return;
+                };
+                let result = smol::unblock(move || {
+                    std::fs::read_to_string(&path)
+                        .map_err(|err| format!("{}: {err}", path.display()))
+                        .and_then(|text| {
+                            repositorytree_core::coverage::CoverageReport::parse_lcov(&text)
+                        })
+                })
+                .await;
+                let _ = weak.update(cx, |this, cx| match result {
+                    Ok(report) => {
+                        let summary = report.summarize();
+                        let percent = summary
+                            .covered_percent()
+                            .map(|percent| format!(" ({percent}%)"))
+                            .unwrap_or_default();
+                        let message = crate::i18n::t!(
+                            "palette.cmd.coverage-imported",
+                            files = summary.files,
+                            lines = summary.lines,
+                            percent = percent
+                        )
+                        .to_string();
+                        this.store.dispatch(Msg::SetCoverage {
+                            repo_id,
+                            report: std::sync::Arc::new(report),
+                        });
+                        this.push_toast(components::ToastKind::Success, message, cx);
+                    }
+                    Err(message) => {
+                        this.push_toast(components::ToastKind::Error, message, cx);
+                    }
+                });
+            })
+            .detach();
+    }
+
     fn execute_command(
         &mut self,
         command_id: &str,
@@ -822,6 +891,23 @@ impl RepositoryTreeView {
                     self.open_popover_centered(
                         PopoverKind::Statistics { repo_id },
                         window,
+                        cx,
+                    );
+                }
+            }
+            "import-coverage" => {
+                if let Some(repo_id) = self.active_repo_id()
+                    && let Some(window) = window
+                {
+                    self.import_coverage_file(repo_id, window, cx);
+                }
+            }
+            "clear-coverage" => {
+                if let Some(repo_id) = self.active_repo_id() {
+                    self.store.dispatch(Msg::ClearCoverage { repo_id });
+                    self.push_toast(
+                        components::ToastKind::Success,
+                        crate::i18n::tr_str("palette.cmd.coverage-cleared").to_string(),
                         cx,
                     );
                 }

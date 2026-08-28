@@ -943,6 +943,34 @@ impl MainPaneView {
         )
     }
 
+    /// The coverage overlay inputs for the file on screen: the imported
+    /// report plus the diff target's concrete path. `None` when no report
+    /// is imported or the target spans a whole commit with no single file
+    /// selected — there is nothing honest to annotate then.
+    fn diff_coverage_context(
+        &self,
+    ) -> Option<(
+        std::sync::Arc<repositorytree_core::coverage::CoverageReport>,
+        String,
+    )> {
+        let repo = self.active_repo()?;
+        let report = repo.coverage.clone()?;
+        let path = match repo.diff_state.diff_target.as_ref()? {
+            DiffTarget::WorkingTree { path, .. } => path,
+            DiffTarget::Commit {
+                path: Some(path), ..
+            } => path,
+            DiffTarget::CommitRange {
+                path: Some(path), ..
+            } => path,
+            _ => return None,
+        };
+        let normalized = repositorytree_core::coverage::normalize_coverage_path(
+            &path.to_string_lossy(),
+        );
+        (!normalized.is_empty()).then_some((report, normalized))
+    }
+
     pub(in super::super) fn render_diff_rows(
         this: &mut Self,
         range: Range<usize>,
@@ -965,6 +993,8 @@ impl MainPaneView {
             px(0.0)
         };
         let blame_ctx = this.blame_render_ctx();
+        let coverage = this.diff_coverage_context();
+        let coverage = coverage.as_ref().map(|(report, path)| (report.as_ref(), path.as_str()));
 
         if this.is_collapsed_diff_projection_active() {
             let theme = this.theme;
@@ -1189,6 +1219,7 @@ impl MainPaneView {
                                 annot_hover,
                                 stage_area,
                                 stage_hover,
+                                coverage,
                                 cx,
                             )
                         }
@@ -1509,6 +1540,7 @@ impl MainPaneView {
                         annot_hover,
                         stage_area,
                         stage_hover,
+                        coverage,
                         cx,
                     )
                 })
@@ -1668,6 +1700,7 @@ impl MainPaneView {
                     annot_hover,
                     stage_area,
                     stage_hover,
+                    coverage,
                     cx,
                 )
             })
@@ -1703,6 +1736,9 @@ impl MainPaneView {
     ) -> Vec<AnyElement> {
         let stage_area = this.diff_stage_gutter_area();
         let stage_hover = this.diff_stage_gutter_hover;
+        let coverage = this.diff_coverage_context();
+        let coverage =
+            coverage.as_ref().map(|(report, path)| (report.as_ref(), path.as_str()));
         let min_width =
             this.diff_horizontal_layout_min_width(if matches!(column, PatchSplitColumn::Right) {
                 DiffHorizontalScrollColumn::SplitRight
@@ -1942,6 +1978,7 @@ impl MainPaneView {
                                 annot_hover,
                                 stage_area,
                                 stage_hover,
+                                coverage,
                                 cx,
                             )
                         }
@@ -2082,6 +2119,7 @@ impl MainPaneView {
                     annot_hover,
                     stage_area,
                     stage_hover,
+                    coverage,
                     cx,
                 )
                 })
@@ -2229,6 +2267,7 @@ impl MainPaneView {
                             annot_hover,
                             stage_area,
                             stage_hover,
+                            coverage,
                             cx,
                         )
                     }
@@ -2311,6 +2350,25 @@ impl MainPaneView {
     }
 }
 
+/// The coverage overlay's one surface: the new-side line number's verdict
+/// recolors the gutter. `None` leaves the diff's own gutter color.
+fn coverage_gutter_color(
+    theme: AppTheme,
+    report: &repositorytree_core::coverage::CoverageReport,
+    path: &str,
+    new_line: Option<u32>,
+) -> Option<gpui::Rgba> {
+    let status = report.line_status(path, new_line?)?;
+    Some(match status {
+        repositorytree_core::coverage::CoverageLineStatus::Covered => {
+            theme.colors.status.success.foreground
+        }
+        repositorytree_core::coverage::CoverageLineStatus::Missed => {
+            theme.colors.status.danger.foreground
+        }
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 fn diff_row(
     theme: AppTheme,
@@ -2336,6 +2394,7 @@ fn diff_row(
     annot_hover: Option<(usize, AnnotArea)>,
     stage_area: Option<DiffArea>,
     stage_hover: Option<diff_canvas::DiffStageHover>,
+    coverage: Option<(&repositorytree_core::coverage::CoverageReport, &str)>,
     cx: &mut gpui::Context<MainPaneView>,
 ) -> AnyElement {
     let on_click = cx.listener(move |this, e: &ClickEvent, _w, cx| {
@@ -2458,6 +2517,15 @@ fn diff_row(
     }
 
     let show_row_numbers = wrap.is_none_or(|wrap| wrap.wrap_ix == 0);
+    // Coverage overlay: covered and missed lines recolor the gutter (the
+    // new-side number's verdict; the old side has no coverage meaning).
+    let gutter_fg = if show_row_numbers {
+        coverage
+            .and_then(|(report, path)| coverage_gutter_color(theme, report, path, line.new_line))
+            .unwrap_or(gutter_fg)
+    } else {
+        gutter_fg
+    };
     // Continuation rows of a wrapped line share the line's gutter, so only the
     // first visual row carries the stage button.
     let stage_area = stage_area.filter(|_| show_row_numbers);
@@ -2896,6 +2964,7 @@ fn patch_split_column_row(
     annot_hover: Option<(usize, AnnotArea)>,
     stage_area: Option<DiffArea>,
     stage_hover: Option<diff_canvas::DiffStageHover>,
+    coverage: Option<(&repositorytree_core::coverage::CoverageReport, &str)>,
     cx: &mut gpui::Context<MainPaneView>,
 ) -> AnyElement {
     let line_kind = match (column, visual_kind) {
@@ -2908,6 +2977,17 @@ fn patch_split_column_row(
         _ => DiffLineKind::Context,
     };
     let (mut bg, fg, gutter_fg) = diff_line_colors(theme, line_kind);
+    // Coverage overlay on the split view's right column only: the old side
+    // has no coverage meaning.
+    let gutter_fg = if column == PatchSplitColumn::Right {
+        coverage
+            .and_then(|(report, path)| {
+                coverage_gutter_color(theme, report, path, row.new_line)
+            })
+            .unwrap_or(gutter_fg)
+    } else {
+        gutter_fg
+    };
     if selected {
         bg = focused_diff_line_bg(theme, line_kind);
     }
@@ -3990,5 +4070,35 @@ mod tests {
                 theme.colors.foreground.secondary
             );
         }
+    }
+
+    #[test]
+    fn coverage_gutter_color_marks_hit_and_miss_lines_only() {
+        let theme = AppTheme::repositorytree_dark();
+        let report = repositorytree_core::coverage::CoverageReport::parse_lcov(
+            "SF:src/lib.rs\nDA:1,2\nDA:2,0\nend_of_record\n",
+        )
+        .unwrap();
+
+        assert_eq!(
+            coverage_gutter_color(theme, &report, "src/lib.rs", Some(1)),
+            Some(theme.colors.status.success.foreground),
+            "a covered line reads green in the gutter"
+        );
+        assert_eq!(
+            coverage_gutter_color(theme, &report, "src/lib.rs", Some(2)),
+            Some(theme.colors.status.danger.foreground),
+            "a missed line reads red in the gutter"
+        );
+        assert_eq!(
+            coverage_gutter_color(theme, &report, "src/lib.rs", Some(99)),
+            None,
+            "a line without data leaves the diff's own gutter color"
+        );
+        assert_eq!(
+            coverage_gutter_color(theme, &report, "src/lib.rs", None),
+            None,
+            "rows without a new-side number (removed lines) stay unannotated"
+        );
     }
 }
