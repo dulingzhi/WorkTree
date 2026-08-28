@@ -126,4 +126,5 @@ chrome:
     not_installed: "%{name} 未安装或不在 PATH 上"
     no_baseline: "无法解析 agent 会话的基线提交"
     no_session: "当前仓库没有运行中的 agent 会话"
+    worktree_failed: "无法创建 agent 工作树 %{path}：{err}"
     baseline_label: "Agent 会话起点（%{agent}）"

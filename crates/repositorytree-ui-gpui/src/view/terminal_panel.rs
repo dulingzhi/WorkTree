@@ -1993,10 +1993,14 @@ impl RepositoryTreeView {
         cx.notify();
     }
 
-    /// Start an agent session (claude code / codex) for the active repo:
-    /// capture the baseline the agent's changes will be measured against,
-    /// then spawn its terminal in the repo's workdir. Refuses to start
-    /// without the executable or a resolvable baseline.
+    /// Start an agent session (claude code / codex) for the active repo.
+    /// v2 isolation: the agent runs in a dedicated linked worktree beside
+    /// the main checkout — `git worktree add <path>` branches off HEAD into
+    /// a clean tree, so the user's working tree is never touched and the
+    /// baseline is simply the worktree's creation commit. The terminal
+    /// stays hosted by the main repo tab, with the agent worktree as its
+    /// cwd. The worktree outlives the session: it merges or cleans up
+    /// through the regular worktree management UI.
     pub(in crate::view) fn start_agent_session(
         &mut self,
         kind: agent_workbench::AgentKind,
@@ -2025,19 +2029,9 @@ impl RepositoryTreeView {
             return;
         };
 
-        // The baseline is captured before the agent can write anything:
-        // the pre-session dirty state as a stash-create commit, else HEAD.
-        let stash_create = panels::git_output(
-            &workdir,
-            &["stash", "create"],
-        )
-        .unwrap_or_default();
-        let head = panels::git_output(
-            &workdir,
-            &["rev-parse", "HEAD"],
-        )
-        .unwrap_or_default();
-        let Some(baseline) = agent_workbench::resolve_agent_baseline(&stash_create, &head) else {
+        // The worktree starts clean at HEAD, so HEAD is the whole baseline.
+        let head = panels::git_output(&workdir, &["rev-parse", "HEAD"]).unwrap_or_default();
+        let Some(baseline) = agent_workbench::resolve_agent_baseline("", &head) else {
             self.push_toast(
                 components::ToastKind::Error,
                 crate::i18n::tr_str("chrome.agent.no_baseline").to_string(),
@@ -2045,12 +2039,30 @@ impl RepositoryTreeView {
             );
             return;
         };
+        let unix_seconds = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_secs())
+            .unwrap_or(0);
+        let (worktree_path, _branch) = agent_workbench::agent_worktree_layout(&workdir, unix_seconds);
+        let worktree_arg = worktree_path.to_string_lossy().into_owned();
+        if let Err(error) =
+            panels::git_output(&workdir, &["worktree", "add", worktree_arg.as_str()])
+        {
+            self.push_toast(
+                components::ToastKind::Error,
+                crate::i18n::t!("chrome.agent.worktree_failed", path = worktree_arg.as_str(), err = error)
+                    .to_string(),
+                cx,
+            );
+            return;
+        }
 
         if !self.terminal_sessions.contains_key(&repo_id) {
             let repo_name = terminal_repo_name(&workdir);
             self.open_terminal_for_repo(repo_id, workdir.clone(), repo_name, window, cx);
         }
-        let Some(instance) = self.spawn_agent_terminal_instance(&workdir, program, kind, cx)
+        let Some(instance) =
+            self.spawn_agent_terminal_instance(&worktree_path, program, kind, cx)
         else {
             return;
         };
@@ -2063,19 +2075,33 @@ impl RepositoryTreeView {
 
         self.agent_sessions.insert(
             repo_id,
-            agent_workbench::AgentSessionState { kind, baseline },
+            agent_workbench::AgentSessionState {
+                kind,
+                baseline,
+                worktree_path,
+            },
         );
         self.spawn_terminal_event_task(repo_id, session_seq, cx);
         self.reset_terminal_cursor_blink(cx);
         self.sync_terminal_indicator_views(cx);
+        // Surface the new worktree in the sidebar's worktree section.
+        self.store.dispatch(Msg::EnsureSidebarData {
+            repo_id,
+            request: repositorytree_state::model::SidebarDataRequest {
+                worktrees: true,
+                submodules: false,
+                stashes: false,
+                tags: false,
+            },
+        });
         self.focus_terminal_view(repo_id, window, cx);
         cx.notify();
     }
 
-    /// Show what the running agent changed: the diff from the session's
-    /// baseline to the live working tree, in the standard diff view with
-    /// its line-level staging for path-level accept (reject stays a
-    /// checkout from the baseline, same as any restore).
+    /// Show what the running agent changed: open (or activate) the agent
+    /// worktree's own repo tab and compare its live working tree against
+    /// the session baseline there — the standard diff view, with
+    /// line-level staging for path-level accept.
     pub(in crate::view) fn view_agent_changes(&mut self, cx: &mut gpui::Context<Self>) {
         let Some(repo_id) = self.active_repo_id() else {
             return;
@@ -2088,17 +2114,45 @@ impl RepositoryTreeView {
             );
             return;
         };
+        let worktree_path = session.worktree_path.clone();
         let from = session.baseline.clone();
-        let from_label = crate::i18n::t!(
-            "chrome.agent.baseline_label",
-            agent = session.kind.display_label()
-        )
-        .to_string();
-        self.store.dispatch(Msg::CompareWithWorkingTree {
-            repo_id,
-            from,
-            from_label,
-        });
+        let agent_label = session.kind.display_label();
+        let store = std::sync::Arc::clone(&self.store);
+
+        // Opening (or re-opening, which re-activates) the worktree's tab is
+        // async; the compare dispatch follows once the repo exists.
+        #[cfg(not(test))]
+        {
+            cx.spawn(async move |_this, _cx| {
+                store.dispatch(Msg::OpenRepo(worktree_path.clone()));
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+                loop {
+                    if let Some(target_id) = store
+                        .snapshot()
+                        .repos
+                        .iter()
+                        .find(|repo| repo.spec.workdir == worktree_path)
+                        .map(|repo| repo.id)
+                    {
+                        store.dispatch(Msg::CompareWithWorkingTree {
+                            repo_id: target_id,
+                            from,
+                            from_label: crate::i18n::t!(
+                                "chrome.agent.baseline_label",
+                                agent = agent_label
+                            )
+                            .to_string(),
+                        });
+                        return;
+                    }
+                    if std::time::Instant::now() >= deadline {
+                        return;
+                    }
+                    smol::Timer::after(std::time::Duration::from_millis(50)).await;
+                }
+            })
+            .detach();
+        }
         cx.notify();
     }
 

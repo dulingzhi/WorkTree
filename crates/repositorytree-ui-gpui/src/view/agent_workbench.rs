@@ -95,12 +95,30 @@ pub(in crate::view) fn resolve_agent_baseline(
     (!head.is_empty()).then(|| CommitId(head.to_string().into()))
 }
 
+/// The sibling folder (and, by git's `worktree add <path>` convention, the
+/// branch name) for one agent worktree. Worktrees live beside the main
+/// checkout, matching the workspace picker's suggestion, so the main
+/// working tree's status never sees the folder.
+pub(in crate::view) fn agent_worktree_layout(
+    workdir: &std::path::Path,
+    unix_seconds: u64,
+) -> (std::path::PathBuf, String) {
+    let name = format!("agent-{unix_seconds}");
+    match workdir.parent() {
+        Some(parent) => (parent.join(&name), name),
+        None => (std::path::PathBuf::from(&name), name),
+    }
+}
+
 /// One recorded agent session. The terminal instance itself lives in the
-/// repo's terminal session (closing it ends the session); this records
-/// what is running and the point its changes are measured against.
+/// main repo tab's terminal session (closing it ends the session); the agent
+/// runs in `worktree_path`, whose state is measured against `baseline` (its
+/// creation commit). The worktree outlives the session on purpose — it is
+/// merged or cleaned up through the regular worktree management UI.
 pub(in crate::view) struct AgentSessionState {
     pub kind: AgentKind,
     pub baseline: CommitId,
+    pub worktree_path: std::path::PathBuf,
 }
 
 #[cfg(test)]
@@ -163,6 +181,19 @@ mod tests {
         assert_eq!(available, vec![AgentKind::ClaudeCode]);
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn agent_worktree_layout_places_the_folder_beside_the_checkout() {
+        let (path, branch) =
+            agent_worktree_layout(std::path::Path::new("/repos/widgets"), 1770000000);
+        assert_eq!(path, std::path::PathBuf::from("/repos/agent-1770000000"));
+        assert_eq!(branch, "agent-1770000000");
+
+        // No parent (a root-level workdir): the bare name still works.
+        let (path, branch) = agent_worktree_layout(std::path::Path::new("/"), 5);
+        assert_eq!(path, std::path::PathBuf::from("agent-5"));
+        assert_eq!(branch, "agent-5");
     }
 
     #[test]

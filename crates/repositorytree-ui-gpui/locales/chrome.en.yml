@@ -136,4 +136,5 @@ chrome:
     not_installed: "%{name} is not installed or not on PATH"
     no_baseline: "Could not resolve a baseline commit for the agent session"
     no_session: "No agent session is running for this repository"
+    worktree_failed: "Could not create the agent worktree %{path}: {err}"
     baseline_label: "Agent session start (%{agent})"

@@ -118,8 +118,9 @@
 
 **目标**：把 agent 工作台从 v1 的「能跑」推进到日常主力——隔离的专用 worktree、对称的接受/拒绝；清掉大仓库日常操作的性能主项（全量 status）；GitHub PR 链路补上「建」的一环。扩展系统维持 ⏸ 搁置。
 
-1. **agent 工作台 v2** `L`
+1. **agent 工作台 v2** `L` ◐（2026-08-28 专用 worktree 切片落地）
    专用 agent worktree：每会话一个 linked worktree（`<repo>/worktrees/agent-<n>`，复用既有 worktree 创建/信任管线），agent 与主工作树互不干扰，用户照常在主树工作；会话结束保留，走既有 worktree 管理 UI 合并/清理。会话列表面板（启停、切换、查看改动）；diff 视图在 agent 比较模式下补「从基线恢复此文件」按钮，接齐路径级拒绝（v1 拒绝无入口，只有手动 checkout）。
+   已落地：**专用 worktree 隔离**——启动时 `git worktree add <parent>/agent-<unix秒>`（无 ref：git 自动从 HEAD 建同名分支，工作树天然干净 → 基线即创建时 HEAD，不再需要 stash-create）；终端仍宿主主 repo tab（cwd = agent worktree）；侧栏 worktree 节自动刷新可见。「查看 agent 改动」= 打开/激活 agent worktree 自己的 repo tab（工作树即 agent 的未提交改动）+ 在该 tab 派发 `CompareWithWorkingTree{from: baseline}`（打开异步 → spawn 轮询 store 快照，5s 截止）；会话记录带 `worktree_path`，关终端即结束会话、worktree 保留走既有管理 UI。测试：layout 纯函数 +1（sibling 路径与分支名、无父目录回退）；基线 ui-gpui 3405。**顺延**：会话列表面板、diff 内「从基线恢复此文件」按钮、每 repo 多会话。
 2. **增量 status** `M/L`
    取代每次全量 worktree_status：文件系统事件收集变更路径集合（防抖合并、滤 .git 噪声）→ 只重扫受影响路径并与上次结果合并；冷启动与事件丢失兜底仍走全量。先做 watcher 选型 spike（见决策点 D5）。当前每次 status/暂存/提交触发全量重扫，是 agent 会话期间（高频外部改动）与大仓库的最大卡顿源。
 3. **GitHub 建 PR 轻闭环** `S`
