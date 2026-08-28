@@ -292,6 +292,14 @@ fn send_unavailable_git_effect_result(
                 result: Err(git_unavailable_error(runtime)),
             }))
         }
+        Effect::LoadStatusForPaths { repo_id, .. } => {
+            // No git: the targeted lane cannot answer; the full-scan error
+            // shape keeps the status lane's failure handling in one place.
+            send(Msg::Internal(crate::msg::InternalMsg::StatusLoaded {
+                repo_id,
+                result: Err(git_unavailable_error(runtime)),
+            }))
+        }
         Effect::LoadHeadBranch { repo_id } => {
             send(Msg::Internal(crate::msg::InternalMsg::HeadBranchLoaded {
                 repo_id,
@@ -1740,6 +1748,20 @@ pub(super) fn schedule_effect(
                     repos,
                     msg_tx,
                     repo_id,
+                    cancellation,
+                )
+            }
+        }
+        Effect::LoadStatusForPaths { repo_id, paths } => {
+            if let Some((msg_tx, cancellation)) =
+                repo_load_context(thread_state, repo_task_tokens, msg_tx, repo_id)
+            {
+                repo_load::schedule_load_status_for_paths(
+                    repo_load_executor,
+                    repos,
+                    msg_tx,
+                    repo_id,
+                    paths,
                     cancellation,
                 )
             }

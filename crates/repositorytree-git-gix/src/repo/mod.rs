@@ -631,6 +631,13 @@ impl GitRepository for GixRepo {
         self.checkout_remote_branch_impl(remote, branch, local_branch)
     }
 
+    fn status_for_paths(
+        &self,
+        paths: &[PathBuf],
+    ) -> repositorytree_core::services::Result<repositorytree_core::services::StatusForPaths> {
+        self.status_for_paths_impl(paths)
+    }
+
     fn checkout_pull_request(&self, remote: &str, number: u64) -> Result<()> {
         self.checkout_pull_request_impl(remote, number)
     }

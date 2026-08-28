@@ -70,6 +70,12 @@ pub enum Effect {
     LoadStatus {
         repo_id: RepoId,
     },
+    /// Path-targeted status rescan for an externally changed path set —
+    /// the incremental lane; falls back to a full scan on renames/errors.
+    LoadStatusForPaths {
+        repo_id: RepoId,
+        paths: std::sync::Arc<[std::path::PathBuf]>,
+    },
     LoadHeadBranch {
         repo_id: RepoId,
     },

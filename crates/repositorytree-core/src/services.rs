@@ -130,6 +130,19 @@ pub fn validate_conflict_resolution_text(text: &str) -> ConflictTextValidation {
     }
 }
 
+/// The path-targeted status rescan result.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum StatusForPaths {
+    /// Fresh entries covering exactly the requested paths, per lane.
+    Lists {
+        unstaged: Vec<FileStatus>,
+        staged: Vec<FileStatus>,
+    },
+    /// The targeted scan hit a shape incremental merge does not replicate
+    /// (rename/copy records); a full scan is the honest answer.
+    NeedsFullScan,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ConflictFileStages {
     pub path: PathBuf,
@@ -657,6 +670,14 @@ pub trait GitRepository: Send + Sync {
         Ok(status)
     }
     fn status(&self) -> Result<RepoStatus>;
+    /// Path-targeted status rescan: fresh entries for exactly `paths`
+    /// (repo-relative), both lanes, or a signal that the shape is not
+    /// mergeable (renames) and the caller should fall back to a full scan.
+    fn status_for_paths(&self, _paths: &[PathBuf]) -> Result<StatusForPaths> {
+        Err(Error::new(ErrorKind::Unsupported(
+            "path-targeted status is not implemented for this backend",
+        )))
+    }
     fn status_cancellable(&self, cancellation: &CancellationToken) -> Result<RepoStatus> {
         cancellation.check_cancelled()?;
         let status = self.status()?;

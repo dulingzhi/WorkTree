@@ -2366,6 +2366,32 @@ pub(super) fn remote_branches_loaded(
     effects
 }
 
+pub(super) fn status_for_paths_loaded(
+    state: &mut AppState,
+    repo_id: RepoId,
+    paths: std::sync::Arc<[std::path::PathBuf]>,
+    result: std::result::Result<repositorytree_core::services::StatusForPaths, Error>,
+) -> Vec<Effect> {
+    use repositorytree_core::services::StatusForPaths;
+    let mut effects = Vec::new();
+    let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
+        return effects;
+    };
+    match result {
+        // The targeted lane only ever merges onto a settled full snapshot;
+        // anything else (or an unmergeable shape) falls back to a full scan,
+        // which cannot route back here — no retry loop.
+        Ok(StatusForPaths::Lists { unstaged, staged })
+            if matches!(repo_state.status, Loadable::Ready(_)) =>
+        {
+            repo_state.patch_status_for_paths(&paths, unstaged, staged);
+            resync_working_tree_details_if_selected(repo_state);
+        }
+        Ok(_) | Err(_) => effects.push(Effect::LoadStatus { repo_id }),
+    }
+    effects
+}
+
 pub(super) fn status_loaded(
     state: &mut AppState,
     repo_id: RepoId,

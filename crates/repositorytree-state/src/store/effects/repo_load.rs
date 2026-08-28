@@ -303,6 +303,48 @@ pub(super) fn schedule_load_remote_branches(
     );
 }
 
+pub(super) fn schedule_load_status_for_paths(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    paths: std::sync::Arc<[PathBuf]>,
+    cancellation: CancellationToken,
+) {
+    // The targeted scan is a single short-lived git invocation; the token
+    // stays in the signature so the lane can grow cancellation like its
+    // full-scan sibling without churn at every call site.
+    let _ = &cancellation;
+    let fallback_paths = std::sync::Arc::clone(&paths);
+    spawn_detached_with_repo_or_else(
+        executor,
+        "load-status-for-paths",
+        repos,
+        repo_id,
+        msg_tx,
+        move |repo, msg_tx| {
+            send_or_log(
+                &msg_tx,
+                Msg::Internal(crate::msg::InternalMsg::StatusForPathsLoaded {
+                    repo_id,
+                    paths: std::sync::Arc::clone(&paths),
+                    result: repo.status_for_paths(&paths),
+                }),
+            );
+        },
+        move |msg_tx| {
+            send_or_log(
+                &msg_tx,
+                Msg::Internal(crate::msg::InternalMsg::StatusForPathsLoaded {
+                    repo_id,
+                    paths: fallback_paths,
+                    result: Err(missing_repo_error(repo_id)),
+                }),
+            );
+        },
+    );
+}
+
 pub(super) fn schedule_load_status(
     executor: &TaskExecutor,
     repos: &RepoMap,

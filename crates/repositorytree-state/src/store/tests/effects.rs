@@ -5795,3 +5795,163 @@ fn schedule_effect_dispatches_many_variants_with_repo_present() {
         recv_n_msgs(&msg_rx, expected_messages);
     }
 }
+
+#[test]
+fn status_for_paths_patch_replaces_and_appends_covered_entries() {
+    use crate::msg::InternalMsg;
+    use repositorytree_core::domain::{FileStatus, FileStatusKind};
+    use repositorytree_core::services::StatusForPaths;
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+
+    let repo_id = RepoId(1);
+    repos.insert(repo_id, Arc::new(DummyRepo::new("/tmp/repo")));
+    let mut repo = RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    );
+    let entry = |path: &str, kind| FileStatus {
+        path: PathBuf::from(path),
+        kind,
+        conflict: None,
+    };
+    repo.set_status(Loadable::Ready(std::sync::Arc::new(RepoStatus {
+        unstaged: vec![
+            entry("a.txt", FileStatusKind::Modified),
+            entry("b.txt", FileStatusKind::Modified),
+            entry("c.txt", FileStatusKind::Untracked),
+        ],
+        staged: vec![entry("a.txt", FileStatusKind::Modified)],
+    })));
+    let status_rev_before = repo.status_rev;
+    state.repos.push(repo);
+
+    let paths: std::sync::Arc<[PathBuf]> =
+        vec![PathBuf::from("a.txt"), PathBuf::from("d.txt")].into();
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(InternalMsg::StatusForPathsLoaded {
+            repo_id,
+            paths: paths.clone(),
+            result: Ok(StatusForPaths::Lists {
+                // a.txt changed shape (now deleted); d.txt is newly untracked.
+                unstaged: vec![
+                    entry("a.txt", FileStatusKind::Deleted),
+                    entry("d.txt", FileStatusKind::Untracked),
+                ],
+                staged: vec![],
+            }),
+        }),
+    );
+    assert!(effects.is_empty(), "a mergeable patch runs no further effects");
+    let status = state.repos[0].status.ready().unwrap();
+    assert_eq!(
+        status
+            .unstaged
+            .iter()
+            .map(|e| (e.path.display().to_string(), e.kind))
+            .collect::<Vec<_>>(),
+        vec![
+            ("a.txt".to_string(), FileStatusKind::Deleted),
+            ("b.txt".to_string(), FileStatusKind::Modified),
+            ("c.txt".to_string(), FileStatusKind::Untracked),
+            ("d.txt".to_string(), FileStatusKind::Untracked),
+        ],
+        "covered paths are replaced in place, uncovered ones survive, order matches a full scan"
+    );
+    assert!(
+        status.staged.is_empty(),
+        "a covered path's staged half is replaced too (here: removed)"
+    );
+    assert!(
+        state.repos[0].status_rev > status_rev_before,
+        "a content change bumps the rev the UI fingerprints"
+    );
+
+    // A no-op patch (same content) must not churn the rev.
+    let rev_after_change = state.repos[0].status_rev;
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(InternalMsg::StatusForPathsLoaded {
+            repo_id,
+            paths,
+            result: Ok(StatusForPaths::Lists {
+                unstaged: vec![
+                    entry("a.txt", FileStatusKind::Deleted),
+                    entry("d.txt", FileStatusKind::Untracked),
+                ],
+                staged: vec![],
+            }),
+        }),
+    );
+    assert_eq!(
+        state.repos[0].status_rev, rev_after_change,
+        "re-applying the same patch leaves the snapshot untouched"
+    );
+}
+
+#[test]
+fn status_for_paths_falls_back_to_a_full_scan_when_it_cannot_merge() {
+    use crate::msg::InternalMsg;
+    use repositorytree_core::services::StatusForPaths;
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+
+    let repo_id = RepoId(1);
+    repos.insert(repo_id, Arc::new(DummyRepo::new("/tmp/repo")));
+    state.repos.push(RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    ));
+    let paths: std::sync::Arc<[PathBuf]> = vec![PathBuf::from("a.txt")].into();
+
+    // Renames answer NeedsFullScan.
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(InternalMsg::StatusForPathsLoaded {
+            repo_id,
+            paths: paths.clone(),
+            result: Ok(StatusForPaths::NeedsFullScan),
+        }),
+    );
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::LoadStatus { repo_id: id }] if *id == repo_id
+    ));
+
+    // There is no settled snapshot to merge onto yet.
+    state.repos[0].set_status(Loadable::Ready(std::sync::Arc::new(RepoStatus::default())));
+    state.repos[0].status = Loadable::NotLoaded;
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(InternalMsg::StatusForPathsLoaded {
+            repo_id,
+            paths,
+            result: Ok(StatusForPaths::Lists {
+                unstaged: vec![],
+                staged: vec![],
+            }),
+        }),
+    );
+    assert!(
+        matches!(
+            effects.as_slice(),
+            [Effect::LoadStatus { repo_id: id }] if *id == repo_id
+        ),
+        "nothing settled to merge onto — the full scan answers"
+    );
+}

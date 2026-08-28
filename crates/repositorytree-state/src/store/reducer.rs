@@ -2073,6 +2073,11 @@ fn reduce_inner(
         Msg::Internal(crate::msg::InternalMsg::StatusLoaded { repo_id, result }) => {
             effects::status_loaded(state, repo_id, result)
         }
+        Msg::Internal(crate::msg::InternalMsg::StatusForPathsLoaded {
+            repo_id,
+            paths,
+            result,
+        }) => effects::status_for_paths_loaded(state, repo_id, paths, result),
         Msg::Internal(crate::msg::InternalMsg::HeadBranchLoaded { repo_id, result }) => {
             effects::head_branch_loaded(state, repo_id, result)
         }

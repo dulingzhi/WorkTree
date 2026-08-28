@@ -1145,6 +1145,14 @@ pub enum InternalMsg {
         repo_id: RepoId,
         result: Result<RepoStatus, Error>,
     },
+    StatusForPathsLoaded {
+        repo_id: RepoId,
+        paths: std::sync::Arc<[std::path::PathBuf]>,
+        result: Result<
+            repositorytree_core::services::StatusForPaths,
+            Error,
+        >,
+    },
     HeadBranchLoaded {
         repo_id: RepoId,
         result: Result<String, Error>,

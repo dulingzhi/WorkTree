@@ -1733,6 +1733,74 @@ impl RepoState {
         self.staged_status_rev = self.staged_status_rev.wrapping_add(1);
     }
 
+
+    /// Incremental patch: drop the previous entries for `paths` from both
+    /// lanes and splice in the fresh ones (which cover exactly those
+    /// paths), keeping the backend's path-then-kind-priority ordering so
+    /// the merged list is byte-identical in shape to a full scan's.
+    pub(crate) fn patch_status_for_paths(
+        &mut self,
+        paths: &[std::path::PathBuf],
+        unstaged: Vec<FileStatus>,
+        staged: Vec<FileStatus>,
+    ) {
+        let status_unchanged = matches!(&self.status, Loadable::Ready(_));
+        if !status_unchanged {
+            return;
+        }
+        let next = {
+            let Loadable::Ready(previous) = &self.status else {
+                unreachable!("checked above");
+            };
+            let mut next_unstaged: Vec<FileStatus> = previous
+                .unstaged
+                .iter()
+                .filter(|entry| !paths.contains(&entry.path))
+                .cloned()
+                .collect();
+            next_unstaged.extend(unstaged);
+            let mut next_staged: Vec<FileStatus> = previous
+                .staged
+                .iter()
+                .filter(|entry| !paths.contains(&entry.path))
+                .cloned()
+                .collect();
+            next_staged.extend(staged);
+            Self::sort_status_entries(&mut next_unstaged);
+            Self::sort_status_entries(&mut next_staged);
+            RepoStatus {
+                unstaged: next_unstaged,
+                staged: next_staged,
+            }
+        };
+        let unchanged = matches!(&self.status, Loadable::Ready(prev) if prev.as_ref() == &next);
+        if !unchanged {
+            self.set_status(Loadable::Ready(Arc::new(next)));
+        }
+    }
+
+
+// Mirrors the gix layer's `kind_priority` so a patched list is ordered
+// exactly like the full scan it will eventually be replaced by again.
+fn status_kind_priority(kind: FileStatusKind) -> u8 {
+    match kind {
+        FileStatusKind::Conflicted => 5,
+        FileStatusKind::Renamed => 4,
+        FileStatusKind::Deleted => 3,
+        FileStatusKind::Added => 2,
+        FileStatusKind::Modified => 1,
+        FileStatusKind::Untracked => 0,
+    }
+}
+
+fn sort_status_entries(entries: &mut [FileStatus]) {
+    entries.sort_by(|a, b| {
+        a.path
+            .cmp(&b.path)
+            .then_with(|| Self::status_kind_priority(b.kind).cmp(&Self::status_kind_priority(a.kind)))
+    });
+}
+
     pub(crate) fn set_status(&mut self, status: Loadable<Shared<RepoStatus>>) {
         let next_worktree = match &status {
             Loadable::NotLoaded => Loadable::NotLoaded,

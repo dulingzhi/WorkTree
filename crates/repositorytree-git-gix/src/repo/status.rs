@@ -4,6 +4,7 @@ use super::{
     repo_file_stamp,
 };
 use crate::util::{git_workdir_cmd_for, path_buf_from_git_bytes, run_git_raw_output};
+use repositorytree_core::error::{GitFailure, GitFailureId};
 use repositorytree_core::domain::{
     FileConflictKind, FileStatus, FileStatusKind, RepoStatus, UpstreamDivergence,
 };
@@ -184,6 +185,46 @@ impl GixRepo {
             unstaged,
             has_conflicted_unstaged,
         )
+    }
+
+    pub(super) fn status_for_paths_impl(
+        &self,
+        paths: &[PathBuf],
+    ) -> Result<repositorytree_core::services::StatusForPaths> {
+        use repositorytree_core::services::StatusForPaths;
+        if paths.is_empty() {
+            return Ok(StatusForPaths::Lists {
+                unstaged: Vec::new(),
+                staged: Vec::new(),
+            });
+        }
+        let mut command = git_workdir_cmd_for(&self.spec.workdir);
+        command
+            .arg("--no-optional-locks")
+            .arg("status")
+            .arg("--porcelain=v2")
+            .arg("-z")
+            .arg("--untracked-files=all")
+            .arg("--ignore-submodules=none")
+            .arg("--");
+        let mut args: Vec<String> = paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+        args.sort();
+        args.dedup();
+        for arg in &args {
+            command.arg(arg);
+        }
+        let output = run_git_raw_output(command, "git status --porcelain=v2 -- <paths>")?;
+        if !output.status.success() {
+            return Err(Error::new(ErrorKind::Git(GitFailure::new(
+                "git status --porcelain=v2 -- <paths>",
+                GitFailureId::CommandFailed,
+                output.status.code(),
+                Vec::new(),
+                output.stderr.clone(),
+                None,
+            ))));
+        }
+        Ok(parse_porcelain_v2_for_paths(&output.stdout))
     }
 
     pub(super) fn worktree_status_impl(&self) -> Result<Vec<FileStatus>> {
@@ -1221,6 +1262,115 @@ fn map_porcelain_v2_status_char(ch: char) -> Option<FileStatusKind> {
         'U' => Some(FileStatusKind::Conflicted),
         _ => None,
     }
+}
+
+fn porcelain_v2_unmerged_kind(xy: &str) -> Option<FileConflictKind> {
+    Some(match xy {
+        "DD" => FileConflictKind::BothDeleted,
+        "AU" => FileConflictKind::AddedByUs,
+        "UD" => FileConflictKind::DeletedByThem,
+        "UA" => FileConflictKind::AddedByThem,
+        "DU" => FileConflictKind::DeletedByUs,
+        "AA" => FileConflictKind::BothAdded,
+        "UU" => FileConflictKind::BothModified,
+        _ => return None,
+    })
+}
+
+/// Parse the path-targeted `git status --porcelain=v2 -z` output into the
+/// two lanes. Rename/copy records (`2`) answer `NeedsFullScan`: pairing
+/// their halves against the previous list is not something the merge
+/// replicates, and the full scan is the honest answer.
+fn parse_porcelain_v2_for_paths(
+    output: &[u8],
+) -> repositorytree_core::services::StatusForPaths {
+    use repositorytree_core::services::StatusForPaths;
+    let mut unstaged = Vec::new();
+    let mut staged = Vec::new();
+    for record in output.split(|b| *b == 0) {
+        if record.is_empty() {
+            continue;
+        }
+        match record[0] {
+            b'1' => {
+                // "1 XY sub mH mI mW hH hI <path>" — the path is the remainder.
+                let Ok(text) = std::str::from_utf8(record) else {
+                    continue;
+                };
+                let mut fields = text.splitn(9, ' ');
+                let (_tag, xy, _sub, _mh, _mi, _mw, _hh, _hi) = (
+                    fields.next(),
+                    fields.next(),
+                    fields.next(),
+                    fields.next(),
+                    fields.next(),
+                    fields.next(),
+                    fields.next(),
+                    fields.next(),
+                );
+                let (Some(xy), Some(path)) = (xy, fields.next()) else {
+                    continue;
+                };
+                let mut chars = xy.chars();
+                let x = chars.next();
+                let y = chars.next();
+                if let (Some(path), Some(x)) = (path_buf_from_git_bytes(path.as_bytes(), "porcelain v2 path").ok(), x) {
+                    if let Some(kind) = map_porcelain_v2_status_char(x) {
+                        push_status_entry(&mut staged, path.clone(), kind);
+                    }
+                }
+                if let (Some(y), Some(path)) = (y, path_buf_from_git_bytes(path.as_bytes(), "porcelain v2 path").ok()) {
+                    if let Some(kind) = map_porcelain_v2_status_char(y) {
+                        push_status_entry(&mut unstaged, path, kind);
+                    }
+                }
+            }
+            b'2' => return StatusForPaths::NeedsFullScan,
+            b'u' => {
+                // "u XY sub m1 m2 m3 mW h1 h2 h3 <path>" — 11 fields, the
+                // path is the remainder.
+                let Ok(text) = std::str::from_utf8(record) else {
+                    continue;
+                };
+                let mut fields = text.splitn(11, ' ');
+                let _ = fields.next();
+                let xy = fields.next();
+                let _ = (
+                    fields.next(),
+                    fields.next(),
+                    fields.next(),
+                    fields.next(),
+                    fields.next(),
+                    fields.next(),
+                    fields.next(),
+                    fields.next(),
+                );
+                let path = fields.next();
+                if let (Some(xy), Some(path)) = (xy, path) {
+                    if let Some(kind) = porcelain_v2_unmerged_kind(xy) {
+                        if let Ok(path) = path_buf_from_git_bytes(path.as_bytes(), "porcelain v2 path") {
+                            push_status_entry(&mut unstaged, path, FileStatusKind::Conflicted);
+                            unstaged.last_mut().map(|entry| entry.conflict = Some(kind));
+                        }
+                    }
+                }
+            }
+            b'?' => {
+                // "? <path>" — one space separates the tag even in -z form.
+                let path = record
+                    .get(1..)
+                    .and_then(|rest| rest.strip_prefix(b" "))
+                    .unwrap_or(&record[1..]);
+                if let Ok(path) = path_buf_from_git_bytes(path, "porcelain v2 untracked path") {
+                    push_status_entry(&mut unstaged, path, FileStatusKind::Untracked);
+                }
+            }
+            _ => {}
+        }
+    }
+    sort_and_dedup_status_entries(&mut unstaged);
+    sort_and_dedup_status_entries(&mut staged);
+    StatusForPaths::Lists { unstaged, staged }
 }
 
 fn push_status_entry(entries: &mut Vec<FileStatus>, path: PathBuf, kind: FileStatusKind) {
