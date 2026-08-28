@@ -280,3 +280,63 @@ fn explain_hunk_popover_shows_errors_and_retries_the_same_snapshot(
         "the error is cleared while the retry runs"
     );
 }
+
+#[gpui::test]
+fn explain_hunk_popover_stop_cancels_and_drops_the_late_reply(cx: &mut gpui::TestAppContext) {
+    let (store, events) = AppStore::new(Arc::new(TestBackend));
+    let (view, cx) =
+        cx.add_window_view(|window, cx| RepositoryTreeView::new(store, events, None, window, cx));
+
+    let repo_id = RepoId(42);
+    cx.update(|_window, app| {
+        view.update(app, |this, cx| {
+            let repo = hunk_explanation_fixture_repo(repo_id);
+            push_test_state(this, app_state_with_repo(repo, repo_id), cx);
+        });
+    });
+
+    cx.update(|window, app| {
+        let _ = window.draw(app);
+        let opened = view.update(app, |this, cx| {
+            this.popover_host.update(cx, |host, cx| {
+                host.start_hunk_explanation(repo_id, 3, window, cx)
+            })
+        });
+        assert!(opened);
+    });
+    cx.update(|window, app| {
+        let _ = window.draw(app);
+    });
+    assert!(cx.debug_bounds("hunk_explanation_stop").is_some());
+
+    click_debug_selector(cx, "hunk_explanation_stop");
+
+    cx.update(|_window, app| {
+        assert!(
+            !popover_is_open(&view, app),
+            "stopping closes the explanation popover"
+        );
+        let (requests, _patch) = explanation_seams(&view, app);
+        assert_eq!(requests, 1, "one request was sent before the cancel");
+    });
+
+    // The reply to the cancelled request is dropped, not written into a state
+    // the user already walked away from.
+    cx.update(|_window, app| {
+        view.update(app, |this, cx| {
+            this.popover_host.update(cx, |host, cx| {
+                host.finish_hunk_explanation(Ok("late answer".into()), cx)
+            })
+        })
+    });
+    cx.update(|_window, app| {
+        view.update(app, |this, cx| {
+            this.popover_host.update(cx, |host, _| {
+                assert!(
+                    host.hunk_explanation.is_none(),
+                    "a cancelled explanation never adopts its late reply"
+                );
+            })
+        })
+    });
+}

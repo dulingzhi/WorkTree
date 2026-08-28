@@ -15,6 +15,7 @@ panels:
     section_tags: 标签
     missing_hint: 已不存在
     empty: "没有可筛选的引用"
+    no_match: "没有匹配搜索的 ref"
   action_bar:
     pull: 拉取
     push: 推送
@@ -89,5 +90,6 @@ panels:
   hunk_explanation:
     title: "解释这段改动"
     generating: "正在询问模型…"
+    stop: "停止"
     retry: 重试
     close: 关闭

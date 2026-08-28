@@ -16,6 +16,7 @@ ui:
       submodules: 筛选子模块
       stashes: 筛选贮藏
       commits: 筛选提交
+      refs: "过滤 ref"
       authors: 筛选作者
       remote_branches: 筛选远程分支
       remotes: 筛选远程仓库

@@ -944,6 +944,27 @@ impl PopoverHost {
         input
     }
 
+    /// The ref-filter query box: a plain filter over the listed refs, so a
+    /// keystroke just notifies the host — no picker navigation, no Enter.
+    pub(super) fn ensure_history_ref_filter_search_input(
+        &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> Entity<components::TextInput> {
+        let input = Self::ensure_search_input_entity(
+            &mut self.history_ref_filter_search_input,
+            crate::i18n::tr_str("ui.picker.filter.refs"),
+            window,
+            cx,
+        );
+        if self._history_ref_filter_search_input_subscription.is_none() {
+            self._history_ref_filter_search_input_subscription =
+                Some(cx.observe(&input, |_, _, cx| cx.notify()));
+        }
+        self.reset_picker_search_input(&input, window, cx);
+        input
+    }
+
     pub(super) fn ensure_history_author_filter_search_input(
         &mut self,
         window: &mut Window,

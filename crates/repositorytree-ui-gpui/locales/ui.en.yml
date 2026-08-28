@@ -24,6 +24,7 @@ ui:
       submodules: Filter submodules
       stashes: Filter stashes
       commits: Filter commits
+      refs: "Filter refs"
       authors: Filter authors
       remote_branches: Filter remote branches
       remotes: Filter remotes

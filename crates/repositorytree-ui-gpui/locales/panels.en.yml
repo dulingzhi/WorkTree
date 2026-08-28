@@ -18,6 +18,7 @@ panels:
     section_tags: TAGS
     missing_hint: missing
     empty: "No refs to filter by"
+    no_match: "No refs match the query"
   action_bar:
     pull: Pull
     push: Push
@@ -92,5 +93,6 @@ panels:
   hunk_explanation:
     title: "Explain this change"
     generating: "Asking the model…"
+    stop: "Stop"
     retry: Retry
     close: Close

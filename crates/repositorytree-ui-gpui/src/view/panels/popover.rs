@@ -192,6 +192,7 @@ pub(in super::super) struct PopoverHost {
     _commit_search_picker_search_input_subscription: Option<gpui::Subscription>,
     _file_history_search_input_subscription: Option<gpui::Subscription>,
     _history_author_filter_search_input_subscription: Option<gpui::Subscription>,
+    _history_ref_filter_search_input_subscription: Option<gpui::Subscription>,
     _squash_message_input_subscription: gpui::Subscription,
     _squash_description_input_subscription: gpui::Subscription,
     _prompt_input_subscriptions: Vec<gpui::Subscription>,
@@ -318,6 +319,9 @@ pub(in super::super) struct PopoverHost {
     remote_picker_search_input: Option<Entity<components::TextInput>>,
     file_history_search_input: Option<Entity<components::TextInput>>,
     history_author_filter_search_input: Option<Entity<components::TextInput>>,
+    /// The ref-filter popover's plain query box: narrows the three ref
+    /// sections live, with no Enter semantics — clicks still toggle filters.
+    history_ref_filter_search_input: Option<Entity<components::TextInput>>,
     worktree_picker_search_input: Option<Entity<components::TextInput>>,
     workspace_picker_search_input: Option<Entity<components::TextInput>>,
     upstream_picker_search_input: Option<Entity<components::TextInput>>,
@@ -1874,6 +1878,7 @@ impl PopoverHost {
             _commit_search_picker_search_input_subscription: None,
             _file_history_search_input_subscription: None,
             _history_author_filter_search_input_subscription: None,
+            _history_ref_filter_search_input_subscription: None,
             _stash_picker_search_input_subscription: None,
             _squash_message_input_subscription: squash_message_input_subscription,
             _squash_description_input_subscription: squash_description_input_subscription,
@@ -1942,6 +1947,7 @@ impl PopoverHost {
             remote_picker_search_input: None,
             file_history_search_input: None,
             history_author_filter_search_input: None,
+            history_ref_filter_search_input: None,
             worktree_picker_search_input: None,
             workspace_picker_search_input: None,
             upstream_picker_search_input: None,
@@ -2073,6 +2079,7 @@ impl PopoverHost {
                 &self.remote_picker_search_input,
                 &self.file_history_search_input,
                 &self.history_author_filter_search_input,
+                &self.history_ref_filter_search_input,
                 &self.worktree_picker_search_input,
                 &self.workspace_picker_search_input,
                 &self.upstream_picker_search_input,
@@ -4005,6 +4012,9 @@ impl PopoverHost {
                 }
                 PopoverKind::HistoryAuthorFilter { .. } => {
                     self.ensure_history_author_filter_search_input(window, cx);
+                }
+                PopoverKind::HistoryRefFilter { .. } => {
+                    self.ensure_history_ref_filter_search_input(window, cx);
                 }
                 PopoverKind::PushSetUpstreamPrompt { repo_id, .. } => {
                     let theme = self.theme;

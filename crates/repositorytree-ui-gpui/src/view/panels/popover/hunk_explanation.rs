@@ -125,20 +125,39 @@ impl PopoverHost {
 
     /// Land the reply. The popover may have been closed while the request
     /// ran — the state still updates (a later open resets it first), it just
-    /// has nothing on screen to repaint.
+    /// has nothing on screen to repaint. A cancelled request is dropped: its
+    /// answer would land over whatever the user moved on to.
     pub(super) fn finish_hunk_explanation(
         &mut self,
         result: std::result::Result<String, String>,
         cx: &mut gpui::Context<Self>,
     ) {
-        let phase = match result {
+        let Some(explanation) = self.hunk_explanation.as_mut() else {
+            return;
+        };
+        if explanation.phase != HunkExplanationPhase::Generating {
+            return;
+        }
+        explanation.phase = match result {
             Ok(text) => HunkExplanationPhase::Ready(text),
             Err(message) => HunkExplanationPhase::Error(message),
         };
-        if let Some(explanation) = self.hunk_explanation.as_mut() {
-            explanation.phase = phase;
-            cx.notify();
-        }
+        cx.notify();
+    }
+
+    /// Cancel the in-flight explanation: the popover closes and the state
+    /// drops, so the reply (when it lands) has nothing to write into. The
+    /// underlying request itself is a single-shot CLI/HTTP call — dropping
+    /// its landing is the cancellation this app can honestly offer.
+    pub(super) fn cancel_hunk_explanation(
+        &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.hunk_explanation = None;
+        self.close_popover(cx);
+        let _ = window;
+        cx.notify();
     }
 }
 
@@ -215,7 +234,16 @@ pub(super) fn panel(
                             .debug_selector(|| "hunk_explanation_generating".to_string())
                             .child(crate::i18n::tr("panels.hunk_explanation.generating")),
                     );
-                    actions = div();
+                    let stop = components::Button::new(
+                        "hunk_explanation_stop",
+                        crate::i18n::tr("panels.hunk_explanation.stop"),
+                    )
+                    .style(components::ButtonStyle::Outlined)
+                    .on_click(theme, cx, |this, _e, window, cx| {
+                        this.cancel_hunk_explanation(window, cx);
+                    })
+                    .debug_selector(|| "hunk_explanation_stop".to_string());
+                    actions = div().child(stop);
                 }
                 HunkExplanationPhase::Ready(text) => {
                     dialog = dialog.section(explanation_body(theme, text, cx));

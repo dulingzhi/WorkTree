@@ -21,6 +21,7 @@ pub(super) struct RefRow {
 /// rather than silently dropping them — `git log <gone-branch>` does the same —
 /// so the filter is listed as `missing` instead of vanishing: the checkmark
 /// shows what the walk is being asked for, and one click clears it.
+#[derive(Clone)]
 pub(super) struct RefRows {
     pub(super) local: Vec<RefRow>,
     pub(super) remote: Vec<RefRow>,
@@ -80,6 +81,23 @@ pub(super) fn rows(
         remote,
         tags: tag_rows,
         missing,
+    }
+}
+
+/// Narrow the rows to those whose label (or, for the missing leftovers,
+/// full name) contains the query, case-insensitively. An empty query keeps
+/// everything — pure, so the shape is unit-testable without a popover.
+pub(super) fn filter_rows_by_query(rows: RefRows, query: &str) -> RefRows {
+    let query = query.trim().to_ascii_lowercase();
+    if query.is_empty() {
+        return rows;
+    }
+    let matches = |label: &str| label.to_ascii_lowercase().contains(&query);
+    RefRows {
+        local: rows.local.into_iter().filter(|row| matches(&row.label)).collect(),
+        remote: rows.remote.into_iter().filter(|row| matches(&row.label)).collect(),
+        tags: rows.tags.into_iter().filter(|row| matches(&row.label)).collect(),
+        missing: rows.missing.into_iter().filter(|name| matches(name)).collect(),
     }
 }
 
@@ -228,6 +246,11 @@ pub(super) fn panel(
         .map(|repo| repo.history_state.history_ref_filters.clone())
         .unwrap_or_default();
     let filter_active = !filters.is_empty();
+    let query = this
+        .history_ref_filter_search_input
+        .as_ref()
+        .map(|input| input.read(cx).text().trim().to_string())
+        .unwrap_or_default();
 
     let header = div()
         .px(scaled_px(8.0))
@@ -305,7 +328,7 @@ pub(super) fn panel(
             .into_any_element()
         }
         Some((Loadable::Ready(branches), Loadable::Ready(remote_branches), Loadable::Ready(tags))) => {
-            let rows = rows(branches, remote_branches, tags, &filters);
+            let rows = filter_rows_by_query(rows(branches, remote_branches, tags, &filters), &query);
             let mut list = div().flex().flex_col();
             let mut row_ix = 0usize;
 
@@ -356,7 +379,11 @@ pub(super) fn panel(
                 components::context_menu_label(
                     theme,
                     ui_scale_percent,
-                    crate::i18n::tr("panels.ref_filter.empty"),
+                    if query.is_empty() {
+                        crate::i18n::tr("panels.ref_filter.empty")
+                    } else {
+                        crate::i18n::tr("panels.ref_filter.no_match")
+                    },
                     Some(tooltip_host.clone()),
                     cx,
                 )
@@ -394,6 +421,19 @@ pub(super) fn panel(
                     .text_xs()
                     .text_color(theme.colors.foreground.secondary)
                     .child(crate::i18n::tr("panels.ref_filter.hint")),
+            )
+            .when_some(
+                this.history_ref_filter_search_input.clone(),
+                |popover, search| {
+                    popover.child(
+                        div()
+                            .id("history_ref_filter_search_row")
+                            .debug_selector(|| "history_ref_filter_search".to_string())
+                            .px_2()
+                            .pb(scaled_px(4.0))
+                            .child(search),
+                    )
+                },
             )
             .child(list_body),
     )
@@ -453,6 +493,37 @@ mod tests {
         assert_eq!(rows.remote[1].label, "upstream/release");
         assert_eq!(full_names(&rows.tags), ["refs/tags/v1", "refs/tags/v2"]);
         assert!(rows.missing.is_empty());
+    }
+
+    #[test]
+    fn filter_rows_by_query_narrows_labels_case_insensitively() {
+        let rows = RefRows {
+            local: vec![
+                RefRow { full_name: "refs/heads/main".into(), label: "main".into() },
+                RefRow { full_name: "refs/heads/feat/Widget".into(), label: "feat/Widget".into() },
+            ],
+            remote: vec![RefRow {
+                full_name: "refs/remotes/origin/MAIN".into(),
+                label: "origin/MAIN".into(),
+            }],
+            tags: vec![RefRow { full_name: "refs/tags/v1".into(), label: "v1".into() }],
+            missing: vec!["refs/heads/gone-Main".into()],
+        };
+
+        let filtered = filter_rows_by_query(rows.clone(), "main");
+        assert_eq!(
+            filtered.local.iter().map(|row| row.label.as_str()).collect::<Vec<_>>(),
+            vec!["main"],
+            "the label match is case-insensitive"
+        );
+        assert_eq!(filtered.remote.len(), 1);
+        assert_eq!(filtered.missing, vec!["refs/heads/gone-Main"]);
+        assert!(filtered.tags.is_empty(), "an unmatched section simply empties");
+
+        // An empty (or whitespace) query is a no-op, not a wipe.
+        let untouched = filter_rows_by_query(rows, "  ");
+        assert_eq!(untouched.local.len(), 2);
+        assert_eq!(untouched.tags.len(), 1);
     }
 
     #[test]

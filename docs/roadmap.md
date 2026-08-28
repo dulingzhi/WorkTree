@@ -130,6 +130,8 @@
 4. **桌面小件包** `S/M`（合计）
    hunk 解释流式输出 + 取消；历史 ref 过滤弹窗搜索框（接 PickerPrompt 模式）；LFS 图片 smudge 预览（`lfs_smudge_bytes` 已入 trait，差 UI）；GPG CommitDetails 签名徽章（约 55 处字面量）；clone 对话框选 SSH key。
    GPG CommitDetails 签名徽章 ✅（2026-08-28）：`CommitDetails.signed`（gix 侧经 decode() 读 extra_headers，与 log 走相同的 gpgsig/gpgsigssh 存在性判定；合成 uncommitted details 恒 false）→ 详情面板 SHA 行右侧绿 ✓ 徽章 + tooltip（`layout.commit_details.signed`），selector `commit_details_signed_badge`。
+   ref 过滤搜索框 ✅（2026-08-28）：`ensure_history_ref_filter_search_input`（plain observe→notify 订阅，无 picker Enter/导航语义——点击仍是 toggle）+ 纯函数 `filter_rows_by_query`（label 大小写不敏感包含；missing 按全名；空查询 no-op）+ 空态区分「无 ref」/「无匹配」（`panels.ref_filter.no_match`）；开弹窗即建并清空输入（`ui.picker.filter.refs`），selector `history_ref_filter_search`。
+   hunk 解释取消 ✅（2026-08-28）：Generating 态加 Stop 按钮（`cancel_hunk_explanation`：状态置 None + 关弹窗）；`finish_hunk_explanation` 加防陈旧守卫——非 Generating 态（已取消/已落地）的迟到回复直接丢弃。**token 级真流式仍顺延**（单发 CLI/HTTP 矩阵需重做流式，取消是本 app 能诚实提供的全部）。
 5. **（机动）diff_view.rs 测试第一期** `M`
    4,050 行零测试的分期起点：行渲染、选择、行级暂存交互的纯函数/接缝测试骨架，优先覆盖 coverage overlay 与 agent 比较新踩过的路径。
 
