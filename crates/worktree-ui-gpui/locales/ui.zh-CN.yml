@@ -116,19 +116,19 @@ ui:
     ago_one: "%{unit}前"
     ago_many: "%{value} %{unit}前"
     unit:
-      sec_one: 秒
+      sec_one: 1 秒
       sec_many: 秒
-      min_one: 分钟
+      min_one: 1 分钟
       min_many: 分钟
-      hour_one: 小时
+      hour_one: 1 小时
       hour_many: 小时
-      day_one: 天
+      day_one: 1 天
       day_many: 天
-      week_one: 周
+      week_one: 1 周
       week_many: 周
-      month_one: 个月
+      month_one: 1 个月
       month_many: 个月
-      year_one: 年
+      year_one: 1 年
       year_many: 年
 
   placeholder:
