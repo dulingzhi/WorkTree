@@ -38,6 +38,15 @@ impl GitRepository for DummyRepo {
         &self.spec
     }
 
+    fn lfs_new_side_smudged(
+        &self,
+        _target: &DiffTarget,
+    ) -> Result<Option<Vec<u8>>> {
+        // A deterministic stand-in for `git lfs smudge`: the preview tests
+        // must not require the git-lfs binary.
+        Ok(Some(b"fake-smudged-image-bytes".to_vec()))
+    }
+
     fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
         unimplemented!()
     }

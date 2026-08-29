@@ -631,6 +631,13 @@ impl GitRepository for GixRepo {
         self.checkout_remote_branch_impl(remote, branch, local_branch)
     }
 
+    fn lfs_new_side_smudged(
+        &self,
+        target: &DiffTarget,
+    ) -> Result<Option<Vec<u8>>> {
+        self.lfs_new_side_smudged_impl(target)
+    }
+
     fn status_for_paths(
         &self,
         paths: &[PathBuf],

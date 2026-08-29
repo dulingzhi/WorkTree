@@ -76,6 +76,10 @@ pub enum Effect {
         repo_id: RepoId,
         paths: std::sync::Arc<[std::path::PathBuf]>,
     },
+    LoadLfsImagePreview {
+        repo_id: RepoId,
+        target: DiffTarget,
+    },
     LoadHeadBranch {
         repo_id: RepoId,
     },
@@ -345,6 +349,7 @@ pub enum Effect {
     CloneRepo {
         url: String,
         dest: PathBuf,
+        ssh_key: Option<String>,
         auth: Option<StagedGitAuth>,
     },
     AbortCloneRepo {

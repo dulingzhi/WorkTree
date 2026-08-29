@@ -958,10 +958,16 @@ pub(super) fn fill_reorder_repo_tabs_inline(
     ));
 }
 
-pub(super) fn clone_repo(state: &mut AppState, url: String, dest: PathBuf) -> Vec<Effect> {
+pub(super) fn clone_repo(
+    state: &mut AppState,
+    url: String,
+    dest: PathBuf,
+    ssh_key: Option<String>,
+) -> Vec<Effect> {
     state.clone = Some(CloneOpState {
         url: Arc::<str>::from(url.as_str()),
         dest: Arc::new(dest.clone()),
+        ssh_key: ssh_key.clone(),
         status: CloneOpStatus::Running,
         progress: CloneProgressMeter::default(),
         seq: 0,
@@ -970,6 +976,7 @@ pub(super) fn clone_repo(state: &mut AppState, url: String, dest: PathBuf) -> Ve
     vec![Effect::CloneRepo {
         url,
         dest,
+        ssh_key,
         auth: None,
     }]
 }
@@ -1083,6 +1090,7 @@ pub(super) fn clone_repo_finished(
         state.clone = Some(CloneOpState {
             url: Arc::<str>::from(url.as_str()),
             dest: Arc::new(dest),
+            ssh_key: state.clone.as_ref().and_then(|op| op.ssh_key.clone()),
             status: match result {
                 Ok(_) => CloneOpStatus::FinishedOk,
                 Err(e) => CloneOpStatus::FinishedErr(format_failure_summary(

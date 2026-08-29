@@ -366,6 +366,7 @@ fn clone_finished_auth_error_sets_clone_retry_prompt() {
         AuthRetryOperation::Clone {
             url,
             dest: dest.clone(),
+            ssh_key: None,
         }
     );
     assert!(prompt.reason.contains("could not read Username"));
@@ -399,6 +400,7 @@ fn clone_finished_ssh_publickey_error_sets_passphrase_prompt() {
         AuthRetryOperation::Clone {
             url,
             dest: dest.clone(),
+            ssh_key: None,
         }
     );
     assert!(prompt.reason.contains("Permission denied (publickey)"));
@@ -702,6 +704,7 @@ fn submit_auth_prompt_replays_clone_operation() {
         operation: AuthRetryOperation::Clone {
             url: url.clone(),
             dest: dest.clone(),
+            ssh_key: None,
         },
     });
 
@@ -720,6 +723,7 @@ fn submit_auth_prompt_replays_clone_operation() {
         [Effect::CloneRepo {
             url: effect_url,
             dest: effect_dest,
+            ssh_key: None,
             ..
         }] if effect_url == &url && effect_dest == &dest
     ));
@@ -750,6 +754,7 @@ fn submit_auth_prompt_clears_repo_scoped_clone_banner_before_retry() {
         operation: AuthRetryOperation::Clone {
             url: url.clone(),
             dest: dest.clone(),
+            ssh_key: None,
         },
     });
 
@@ -768,6 +773,7 @@ fn submit_auth_prompt_clears_repo_scoped_clone_banner_before_retry() {
         [Effect::CloneRepo {
             url: effect_url,
             dest: effect_dest,
+            ssh_key: None,
             ..
         }] if effect_url == &url && effect_dest == &dest
     ));
@@ -799,6 +805,7 @@ fn submit_auth_prompt_preserves_non_clone_banner_when_replaying_clone() {
         operation: AuthRetryOperation::Clone {
             url: url.clone(),
             dest: dest.clone(),
+            ssh_key: None,
         },
     });
 
@@ -817,6 +824,7 @@ fn submit_auth_prompt_preserves_non_clone_banner_when_replaying_clone() {
         [Effect::CloneRepo {
             url: effect_url,
             dest: effect_dest,
+            ssh_key: None,
             ..
         }] if effect_url == &url && effect_dest == &dest
     ));

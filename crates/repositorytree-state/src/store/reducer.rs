@@ -296,6 +296,7 @@ fn auth_prompt_for_commit(
 fn auth_prompt_for_clone(
     url: &str,
     dest: &std::path::Path,
+    ssh_key: Option<&str>,
     error: &repositorytree_core::error::Error,
 ) -> Option<AuthPromptState> {
     let kind = util::detect_auth_prompt_kind(error)?;
@@ -305,6 +306,7 @@ fn auth_prompt_for_clone(
         operation: AuthRetryOperation::Clone {
             url: url.to_string(),
             dest: dest.to_path_buf(),
+            ssh_key: ssh_key.map(str::to_string),
         },
     })
 }
@@ -335,7 +337,9 @@ fn retry_msg_for_auth_operation(operation: AuthRetryOperation) -> Option<Msg> {
                 push_after_commit,
             }
         }),
-        AuthRetryOperation::Clone { url, dest } => Some(Msg::CloneRepo { url, dest }),
+        AuthRetryOperation::Clone { url, dest, ssh_key } => {
+            Some(Msg::CloneRepo { url, dest, ssh_key })
+        }
     }
 }
 
@@ -1306,7 +1310,11 @@ fn reduce_inner(
             begin_local_action(state, repo_id);
             actions_emit_effects::delete_branches(repo_id, names, force)
         }
-        Msg::CloneRepo { url, dest } => repo_management::clone_repo(state, url, dest),
+        Msg::CloneRepo {
+            url,
+            dest,
+            ssh_key,
+        } => repo_management::clone_repo(state, url, dest, ssh_key),
         Msg::AbortCloneRepo { dest } => repo_management::abort_clone_repo(state, dest),
         Msg::Internal(crate::msg::InternalMsg::CloneRepoProgress { dest, line }) => {
             repo_management::clone_repo_progress(state, dest, line)
@@ -1315,7 +1323,13 @@ fn reduce_inner(
             let auth_prompt = result
                 .as_ref()
                 .err()
-                .and_then(|error| auth_prompt_for_clone(&url, &dest, error));
+                .and_then(|error| {
+                let ssh_key = state
+                    .clone
+                    .as_ref()
+                    .and_then(|op| op.ssh_key.clone());
+                auth_prompt_for_clone(&url, &dest, ssh_key.as_deref(), error)
+            });
             let effects = repo_management::clone_repo_finished(state, url, dest, result);
             if let Some(prompt) = auth_prompt {
                 util::clear_staged_git_auth_env();
@@ -1338,6 +1352,18 @@ fn reduce_inner(
         } => {
             begin_local_action(state, repo_id);
             actions_emit_effects::archive_zip(repo_id, revision, dest)
+        }
+        Msg::LoadLfsImagePreview { repo_id, target } => {
+            if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id)
+                && repo_state.diff_state.diff_target.as_ref() == Some(&target)
+            {
+                if !matches!(repo_state.diff_state.lfs_image_preview, Loadable::Loading) {
+                    repo_state.diff_state.lfs_image_preview = Loadable::Loading;
+                    repo_state.bump_diff_state_rev();
+                    return vec![Effect::LoadLfsImagePreview { repo_id, target }];
+                }
+            }
+            Vec::new()
         }
         Msg::CleanupRepo { repo_id } => {
             begin_local_action(state, repo_id);
@@ -2375,6 +2401,11 @@ fn reduce_inner(
             target,
             result,
         }) => diff_selection::diff_file_lfs_loaded(state, repo_id, target, result),
+        Msg::Internal(crate::msg::InternalMsg::LfsImagePreviewLoaded {
+            repo_id,
+            target,
+            result,
+        }) => diff_selection::lfs_image_preview_loaded(state, repo_id, target, result),
         Msg::Internal(crate::msg::InternalMsg::DiffPreviewTextFileLoaded {
             repo_id,
             target,

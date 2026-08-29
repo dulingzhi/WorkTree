@@ -1390,6 +1390,7 @@ fn build_network_baseline_state(url: &str, dest: &Path) -> AppState {
         Msg::CloneRepo {
             url: url.to_string(),
             dest: dest.to_path_buf(),
+            ssh_key: None,
         },
     );
     state

@@ -292,6 +292,13 @@ fn send_unavailable_git_effect_result(
                 result: Err(git_unavailable_error(runtime)),
             }))
         }
+        Effect::LoadLfsImagePreview { repo_id, target } => {
+            send(Msg::Internal(crate::msg::InternalMsg::LfsImagePreviewLoaded {
+                repo_id,
+                target,
+                result: Err(git_unavailable_error(runtime)),
+            }))
+        }
         Effect::LoadStatusForPaths { repo_id, .. } => {
             // No git: the targeted lane cannot answer; the full-scan error
             // shape keeps the status lane's failure handling in one place.
@@ -1752,6 +1759,20 @@ pub(super) fn schedule_effect(
                 )
             }
         }
+        Effect::LoadLfsImagePreview { repo_id, target } => {
+            if let Some((msg_tx, cancellation)) =
+                repo_load_context(thread_state, repo_task_tokens, msg_tx, repo_id)
+            {
+                repo_load::schedule_load_lfs_image_preview(
+                    repo_load_executor,
+                    repos,
+                    msg_tx,
+                    repo_id,
+                    target,
+                );
+                let _ = cancellation;
+            }
+        }
         Effect::LoadStatusForPaths { repo_id, paths } => {
             if let Some((msg_tx, cancellation)) =
                 repo_load_context(thread_state, repo_task_tokens, msg_tx, repo_id)
@@ -2410,8 +2431,13 @@ pub(super) fn schedule_effect(
         } => {
             repo_actions::schedule_delete_branches(executor, repos, msg_tx, repo_id, names, force);
         }
-        Effect::CloneRepo { url, dest, auth } => {
-            clone::schedule_clone_repo(executor, msg_tx, url, dest, auth)
+        Effect::CloneRepo {
+            url,
+            dest,
+            ssh_key,
+            auth,
+        } => {
+            clone::schedule_clone_repo(executor, msg_tx, url, dest, ssh_key, auth)
         }
         Effect::AbortCloneRepo { dest } => clone::schedule_abort_clone_repo(msg_tx, dest),
         Effect::ExportPatch {

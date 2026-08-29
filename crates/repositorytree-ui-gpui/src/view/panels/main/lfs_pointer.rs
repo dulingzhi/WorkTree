@@ -13,6 +13,7 @@ impl MainPaneView {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let oid_font = crate::font_preferences::current_editor_font_family(cx);
+        let preview_section = self.render_lfs_image_preview_section(theme, change, cx);
 
         let pointer_row =
             |label: &'static str, pointer: Option<&LfsPointer>| -> gpui::Div {
@@ -84,9 +85,120 @@ impl MainPaneView {
                     .child(pointer_row(
                         crate::i18n::tr_str("diff.lfs.new"),
                         change.new.as_ref(),
-                    )),
+                    ))
+                    .when_some(preview_section, |panel, section| panel.child(section)),
             )
             .into_any_element()
+    }
+
+    /// The image preview under the pointer rows. Smudging may download the
+    /// object from the LFS server, so the load starts only from the button —
+    /// never on opening the file.
+    fn render_lfs_image_preview_section(
+        &mut self,
+        theme: AppTheme,
+        change: &LfsPointerChange,
+        cx: &mut gpui::Context<Self>,
+    ) -> Option<AnyElement> {
+        // Only an image path offers a preview, and only a present new side
+        // has anything to show.
+        change.new.as_ref()?;
+        let (repo_id, target, path) = {
+            let repo = self.active_repo()?;
+            let target = repo.diff_state.diff_target.clone()?;
+            let path = match &target {
+                DiffTarget::WorkingTree { path, .. } => path.clone(),
+                DiffTarget::Commit {
+                    path: Some(path), ..
+                }
+                | DiffTarget::CommitRange {
+                    path: Some(path), ..
+                } => path.clone(),
+                _ => return None,
+            };
+            (repo.id, target, path)
+        };
+        let format = crate::view::diff_utils::image_format_for_path(&path)?;
+        let ui_scale_percent = crate::ui_scale::current(cx).percent;
+        let scaled_px =
+            move |value: f32| crate::ui_scale::design_px_from_percent(value, ui_scale_percent);
+        let preview = self
+            .active_repo()
+            .map(|repo| &repo.diff_state.lfs_image_preview);
+
+        let body = match preview {
+            Some(Loadable::NotLoaded) => div()
+                .id("lfs_image_load")
+                .debug_selector(|| "lfs_image_load".to_string())
+                .child(
+                    components::Button::new(
+                        "lfs_image_load_btn",
+                        crate::i18n::tr("diff.lfs.load_preview"),
+                    )
+                    .style(components::ButtonStyle::Outlined)
+                    .on_click(theme, cx, move |this, _e, _w, cx| {
+                        this.store.dispatch(Msg::LoadLfsImagePreview {
+                            repo_id,
+                            target: target.clone(),
+                        });
+                        cx.notify();
+                    }),
+                )
+                .into_any_element(),
+            Some(Loadable::Loading) => div()
+                .id("lfs_image_loading")
+                .debug_selector(|| "lfs_image_loading".to_string())
+                .flex()
+                .items_center()
+                .gap(scaled_px(6.0))
+                .child(crate::view::icons::svg_spinner(
+                    ("lfs_image_spinner", repo_id.0),
+                    theme.colors.foreground.secondary,
+                    px(12.0),
+                ))
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(theme.colors.foreground.secondary)
+                        .child(crate::i18n::tr("diff.lfs.loading_preview")),
+                )
+                .into_any_element(),
+            Some(Loadable::Error(message)) => div()
+                .id("lfs_image_error")
+                .debug_selector(|| "lfs_image_error".to_string())
+                .text_sm()
+                .text_color(theme.colors.status.danger.foreground)
+                .line_clamp(2)
+                .child(message.clone())
+                .into_any_element(),
+            Some(Loadable::Ready(image)) => match image.as_ref().and_then(|image| image.new.as_ref())
+            {
+                Some(bytes) => gpui::img(std::sync::Arc::new(gpui::Image::from_bytes(
+                    format,
+                    bytes.clone(),
+                )))
+                    .max_w_full()
+                    .max_h(scaled_px(320.0))
+                    .object_fit(gpui::ObjectFit::Contain)
+                    .debug_selector(|| "lfs_image_preview".to_string())
+                    .into_any_element(),
+                None => return None,
+            },
+            None => return None,
+        };
+        Some(
+            div()
+                .mt_2()
+                .pt_2()
+                .border_t_1()
+                .border_color(theme.colors.stroke.subtle)
+                .flex()
+                .flex_col()
+                .items_start()
+                .gap(scaled_px(4.0))
+                .child(body)
+                .into_any_element(),
+        )
     }
 }
 

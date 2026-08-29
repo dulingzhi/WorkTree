@@ -150,6 +150,7 @@ ui:
     stash_message: "Stash message"
     commit_subject: "Commit subject"
     mr_push_target: "Target branch (blank = default branch)"
+    clone_ssh_key: "/path/to/ssh/key (optional)"
   prompt:
     export_patch_folder: "Export patch to folder"
 

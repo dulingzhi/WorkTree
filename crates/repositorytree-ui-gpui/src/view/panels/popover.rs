@@ -332,6 +332,9 @@ pub(in super::super) struct PopoverHost {
 
     clone_repo_url_input: Entity<components::TextInput>,
     clone_repo_parent_dir_input: Entity<components::TextInput>,
+    /// Optional per-clone SSH key path: rides the clone as
+    /// `core.sshCommand` and persists onto the new `origin` remote.
+    clone_ssh_key_input: Entity<components::TextInput>,
     rebase_onto_input: Entity<components::TextInput>,
     create_tag_input: Entity<components::TextInput>,
     create_tag_message_input: Entity<components::TextInput>,
@@ -1301,6 +1304,17 @@ impl PopoverHost {
             )
         });
 
+        let clone_ssh_key_input = cx.new(|cx| {
+            components::TextInput::new(
+                components::TextInputOptions {
+                    placeholder: crate::i18n::tr("ui.placeholder.clone_ssh_key"),
+                    ..Default::default()
+                },
+                window,
+                cx,
+            )
+        });
+
         let rebase_onto_input = cx.new(|cx| {
             components::TextInput::new(
                 components::TextInputOptions {
@@ -1644,7 +1658,7 @@ impl PopoverHost {
                 }
             },
         ));
-        for input in [&clone_repo_url_input, &clone_repo_parent_dir_input] {
+        for input in [&clone_repo_url_input, &clone_repo_parent_dir_input, &clone_ssh_key_input] {
             prompt_input_subscriptions.push(Self::prompt_enter_subscription(
                 input,
                 window,
@@ -1957,6 +1971,7 @@ impl PopoverHost {
             picker_prompt_scroll: ScrollHandle::new(),
             clone_repo_url_input,
             clone_repo_parent_dir_input,
+            clone_ssh_key_input,
             rebase_onto_input,
             create_tag_input,
             create_tag_message_input,
@@ -2570,7 +2585,12 @@ impl PopoverHost {
 
         let repo_name = clone_repo_name_from_url(&url);
         let dest = std::path::PathBuf::from(parent).join(repo_name);
-        self.store.dispatch(Msg::CloneRepo { url, dest });
+        let ssh_key = self
+            .clone_ssh_key_input
+            .read_with(cx, |input, _| input.text().trim().to_string());
+        let ssh_key = (!ssh_key.is_empty()).then_some(ssh_key);
+        self.store
+            .dispatch(Msg::CloneRepo { url, dest, ssh_key });
         self.close_popover(cx);
     }
 

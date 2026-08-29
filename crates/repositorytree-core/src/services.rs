@@ -1371,6 +1371,15 @@ pub trait GitRepository: Send + Sync {
 
     /// Turn LFS pointer bytes into the actual content by piping them through
     /// `git lfs smudge`.
+    /// The new side of an LFS pointer change, smudged to its real content —
+    /// the bytes an image preview renders. `Ok(None)` when the change has no
+    /// new pointer side.
+    fn lfs_new_side_smudged(&self, _target: &DiffTarget) -> Result<Option<Vec<u8>>> {
+        Err(Error::new(ErrorKind::Unsupported(
+            "lfs new-side smudge is not implemented for this backend",
+        )))
+    }
+
     fn lfs_smudge_bytes(&self, _input: &[u8]) -> Result<Vec<u8>> {
         Err(Error::new(ErrorKind::Unsupported(
             "lfs smudge is not implemented for this backend",

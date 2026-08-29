@@ -578,6 +578,24 @@ impl GixRepo {
         }
     }
 
+    pub(super) fn lfs_new_side_smudged_impl(
+        &self,
+        target: &DiffTarget,
+    ) -> Result<Option<Vec<u8>>> {
+        let Some(change) = self.lfs_pointer_change_impl(target)? else {
+            return Ok(None);
+        };
+        let Some(new) = change.new.as_ref() else {
+            return Ok(None);
+        };
+        let Some(oid) = new.oid.as_deref() else {
+            return Ok(None);
+        };
+        let pointer = lfs_pointer_text(oid, new.size.unwrap_or(0));
+        let bytes = self.lfs_smudge_bytes_impl(pointer.as_bytes())?;
+        Ok(Some(bytes))
+    }
+
     pub(super) fn diff_file_image_impl(
         &self,
         target: &DiffTarget,
@@ -1716,5 +1734,25 @@ fn submodule_pointer(payload: ConflictPayload) -> ConflictPayload {
     match payload {
         ConflictPayload::Text(pointer) => ConflictPayload::Submodule(pointer),
         other => other,
+    }
+}
+
+/// The canonical pointer file content for one (oid, size) pair — the exact
+/// bytes `git lfs smudge` expects on stdin, reconstructed because the diff
+/// view holds the parsed change, not the raw pointer file.
+fn lfs_pointer_text(oid: &str, size: u64) -> String {
+    format!(
+        "version https://git-lfs.github.com/spec/v1\noid sha256:{oid}\nsize {size}\n"
+    )
+}
+
+#[cfg(test)]
+mod lfs_pointer_text_tests {
+    #[test]
+    fn pointer_text_matches_the_canonical_lfs_header() {
+        assert_eq!(
+            super::lfs_pointer_text("abc123", 42),
+            "version https://git-lfs.github.com/spec/v1\noid sha256:abc123\nsize 42\n"
+        );
     }
 }

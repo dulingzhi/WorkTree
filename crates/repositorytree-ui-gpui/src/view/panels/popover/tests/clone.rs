@@ -225,6 +225,18 @@ fn clone_repo_popover_tabs_between_inputs_buttons_and_wraps(cx: &mut gpui::TestA
         assert_window_focus(
             window,
             app,
+            host.clone_ssh_key_input.read(app).focus_handle(),
+            "expected Tab to move from Browse to the SSH key",
+        );
+    });
+
+    cx.simulate_keystrokes("tab");
+    cx.run_until_parked();
+    cx.update(|window, app| {
+        let host = view.read(app).popover_host.read(app);
+        assert_window_focus(
+            window,
+            app,
             host.clone_repo_focus.cancel.clone(),
             "expected Tab to move from Browse to Cancel",
         );

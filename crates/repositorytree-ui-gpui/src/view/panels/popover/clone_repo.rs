@@ -81,6 +81,20 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
                     }),
                 ),
         )
+        .child(input_label(
+            theme,
+            crate::i18n::tr_str("input.clone_repo.ssh_key_label"),
+        ))
+        .child(
+            div()
+                .id("clone_ssh_key_row")
+                .debug_selector(|| "clone_ssh_key_input".to_string())
+                .px_2()
+                .pb_1()
+                .w_full()
+                .min_w(px(0.0))
+                .child(this.clone_ssh_key_input.clone()),
+        )
         .child(div().border_t_1().border_color(theme.colors.stroke.default))
         .child(
             div()

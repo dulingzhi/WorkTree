@@ -108,6 +108,7 @@ mod tests {
             progress: CloneProgressMeter { stage, percent },
             seq: 1,
             output_tail: VecDeque::new(),
+            ssh_key: None,
         }
     }
 

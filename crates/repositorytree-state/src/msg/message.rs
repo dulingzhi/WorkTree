@@ -594,6 +594,10 @@ pub enum Msg {
     CloneRepo {
         url: String,
         dest: PathBuf,
+        /// Optional per-clone SSH key (a path): injected as the clone's
+        /// `core.sshCommand` and persisted to the new remote's `sshkey`
+        /// config, so later fetch/pull/push keep using it (02-4 convention).
+        ssh_key: Option<String>,
     },
     AbortCloneRepo {
         dest: PathBuf,
@@ -619,6 +623,13 @@ pub enum Msg {
     },
     CleanupRepo {
         repo_id: RepoId,
+    },
+    /// Load the smudged new side of the on-screen LFS pointer change for an
+    /// image preview. Explicit user intent: smudging may download the object
+    /// from the LFS server, so it never starts implicitly.
+    LoadLfsImagePreview {
+        repo_id: RepoId,
+        target: DiffTarget,
     },
     ApplyPatch {
         repo_id: RepoId,
@@ -1374,6 +1385,11 @@ pub enum InternalMsg {
         repo_id: RepoId,
         target: DiffTarget,
         result: Result<Option<LfsPointerChange>, Error>,
+    },
+    LfsImagePreviewLoaded {
+        repo_id: RepoId,
+        target: DiffTarget,
+        result: Result<Option<FileDiffImage>, Error>,
     },
     DiffPreviewTextFileLoaded {
         repo_id: RepoId,

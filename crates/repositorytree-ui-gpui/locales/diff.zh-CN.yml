@@ -13,6 +13,8 @@ diff:
   lfs:
     title: "LFS 指针变更"
     hint: "内容存储在 Git LFS；上方 diff 跟踪的是指针。"
+    load_preview: "加载预览"
+    loading_preview: "正在加载预览…"
     old: 旧
     new: 新
     oid_absent: "—"

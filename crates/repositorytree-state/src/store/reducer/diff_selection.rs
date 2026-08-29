@@ -565,6 +565,7 @@ pub(super) fn fill_select_diff_inline(
         repo_state.diff_state.diff = Loadable::NotLoaded;
         repo_state.diff_state.diff_file = Loadable::NotLoaded;
         repo_state.diff_state.diff_file_lfs = Loadable::NotLoaded;
+        repo_state.diff_state.lfs_image_preview = Loadable::NotLoaded;
         repo_state.diff_state.diff_preview_text_file = Loadable::NotLoaded;
         repo_state.diff_state.submodule_summary = Loadable::NotLoaded;
         repo_state.diff_state.diff_file_image = Loadable::NotLoaded;
@@ -622,6 +623,7 @@ pub(super) fn select_conflict_diff(
     repo_state.diff_state.diff = Loadable::NotLoaded;
     repo_state.diff_state.diff_file = Loadable::NotLoaded;
     repo_state.diff_state.diff_file_lfs = Loadable::NotLoaded;
+        repo_state.diff_state.lfs_image_preview = Loadable::NotLoaded;
     repo_state.diff_state.diff_preview_text_file = Loadable::NotLoaded;
     repo_state.diff_state.submodule_summary = Loadable::NotLoaded;
     repo_state.diff_state.diff_file_image = Loadable::NotLoaded;
@@ -644,6 +646,7 @@ pub(super) fn clear_diff_selection(state: &mut AppState, repo_id: RepoId) -> Vec
     repo_state.diff_state.diff = Loadable::NotLoaded;
     repo_state.diff_state.diff_file = Loadable::NotLoaded;
     repo_state.diff_state.diff_file_lfs = Loadable::NotLoaded;
+        repo_state.diff_state.lfs_image_preview = Loadable::NotLoaded;
     repo_state.diff_state.diff_preview_text_file = Loadable::NotLoaded;
     repo_state.diff_state.submodule_summary = Loadable::NotLoaded;
     repo_state.diff_state.diff_file_image = Loadable::NotLoaded;
@@ -883,6 +886,7 @@ pub(super) fn diff_file_loaded(
                 // A stale LFS panel must not outlive the text diff that
                 // replaced it (the path lost its filter attribute, say).
                 repo_state.diff_state.diff_file_lfs = Loadable::NotLoaded;
+        repo_state.diff_state.lfs_image_preview = Loadable::NotLoaded;
                 repo_state.bump_diff_state_rev();
                 invalidate_loaded_blame(repo_state);
             }
@@ -892,6 +896,37 @@ pub(super) fn diff_file_loaded(
                     repo_state.diff_state.diff_file_rev.wrapping_add(1);
                 repo_state.diff_state.diff_file = Loadable::Error(e.to_string());
                 repo_state.diff_state.diff_file_lfs = Loadable::NotLoaded;
+        repo_state.diff_state.lfs_image_preview = Loadable::NotLoaded;
+                repo_state.bump_diff_state_rev();
+            }
+        }
+    }
+    Vec::new()
+}
+
+pub(super) fn lfs_image_preview_loaded(
+    state: &mut AppState,
+    repo_id: RepoId,
+    target: DiffTarget,
+    result: std::result::Result<Option<FileDiffImage>, Error>,
+) -> Vec<Effect> {
+    if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id)
+        && repo_state.diff_state.diff_target.as_ref() == Some(&target)
+    {
+        match result {
+            Ok(v) => {
+                if matches!(&repo_state.diff_state.lfs_image_preview,
+                    Loadable::Ready(cur) if cur.as_deref() == v.as_ref())
+                {
+                    return Vec::new();
+                }
+                repo_state.diff_state.lfs_image_preview =
+                    Loadable::Ready(v.map(Arc::new));
+                repo_state.bump_diff_state_rev();
+            }
+            Err(e) => {
+                super::util::push_diagnostic(repo_state, DiagnosticKind::Error, e.to_string());
+                repo_state.diff_state.lfs_image_preview = Loadable::Error(e.to_string());
                 repo_state.bump_diff_state_rev();
             }
         }

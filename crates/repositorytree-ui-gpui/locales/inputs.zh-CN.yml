@@ -29,6 +29,7 @@ input:
     title: "克隆仓库"
     url_label: "仓库 URL / 路径"
     destination_label: "目标父文件夹"
+    ssh_key_label: "SSH key（可选）"
     select_folder: "选择克隆文件夹"
     clone: "克隆"
   stash:

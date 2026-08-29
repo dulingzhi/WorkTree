@@ -791,6 +791,7 @@ fn clone_repo_sets_running_state_and_emits_effect() {
         Msg::CloneRepo {
             url: "file:///tmp/example.git".to_string(),
             dest: PathBuf::from("/tmp/example"),
+            ssh_key: None,
         },
     );
 
@@ -816,6 +817,7 @@ fn clone_repo_progress_trims_tail_and_skips_blank_lines() {
         Msg::CloneRepo {
             url: "file:///tmp/example.git".to_string(),
             dest: dest.clone(),
+            ssh_key: None,
         },
     );
 
@@ -863,6 +865,7 @@ fn clone_repo_progress_tracks_loading_and_remote_object_phases() {
         Msg::CloneRepo {
             url: "file:///tmp/example.git".to_string(),
             dest: dest.clone(),
+            ssh_key: None,
         },
     );
 
@@ -910,6 +913,7 @@ fn clone_repo_progress_ignores_mismatched_or_non_running_operation() {
         Msg::CloneRepo {
             url: "file:///tmp/example.git".to_string(),
             dest: dest.clone(),
+            ssh_key: None,
         },
     );
 
@@ -973,6 +977,7 @@ fn abort_clone_repo_marks_operation_cancelling_and_emits_effect() {
         Msg::CloneRepo {
             url: "file:///tmp/example.git".to_string(),
             dest: dest.clone(),
+            ssh_key: None,
         },
     );
 
@@ -1005,6 +1010,7 @@ fn clone_repo_finished_updates_existing_operation_for_success_and_error() {
         Msg::CloneRepo {
             url: "file:///tmp/example.git".to_string(),
             dest: dest.clone(),
+            ssh_key: None,
         },
     );
 
@@ -1062,6 +1068,7 @@ fn clone_repo_finished_maps_cancelling_error_to_cancelled() {
         Msg::CloneRepo {
             url: "file:///tmp/example.git".to_string(),
             dest: dest.clone(),
+            ssh_key: None,
         },
     );
     reduce(
@@ -1101,6 +1108,7 @@ fn clone_repo_finished_preserves_cleanup_failure_when_cancelling() {
         Msg::CloneRepo {
             url: "file:///tmp/example.git".to_string(),
             dest: dest.clone(),
+            ssh_key: None,
         },
     );
     reduce(
@@ -1148,6 +1156,7 @@ fn clone_repo_finished_replaces_state_when_destination_differs() {
         Msg::CloneRepo {
             url: "file:///tmp/original.git".to_string(),
             dest: PathBuf::from("/tmp/original"),
+            ssh_key: None,
         },
     );
 

@@ -609,6 +609,7 @@ pub(super) fn schedule_clone_repo(
     msg_tx: StoreWorkerSender,
     url: String,
     dest: PathBuf,
+    ssh_key: Option<String>,
     auth: Option<StagedGitAuth>,
 ) {
     let active_clone = Arc::new(ActiveCloneHandle::new());
@@ -631,10 +632,16 @@ pub(super) fn schedule_clone_repo(
         }
 
         let mut cmd = git_command();
-        cmd.arg("-c")
-            .arg("color.ui=false")
-            .arg("clone")
-            .arg("--progress")
+        cmd.arg("-c").arg("color.ui=false");
+        // A per-clone key rides as the clone's own core.sshCommand (the same
+        // injection the remote-scoped flows use); quoting mirrors the gix
+        // layer's `quoted_ssh_key_path` because git hands the value to a
+        // shell.
+        if let Some(key) = ssh_key.as_deref().filter(|key| !key.trim().is_empty()) {
+            cmd.arg("-c")
+                .arg(format!("core.sshCommand=ssh -i {}", quote_clone_ssh_key(key)));
+        }
+        cmd.arg("clone").arg("--progress")
             .arg(&url)
             .arg(&dest)
             .stdout(Stdio::piped())
@@ -800,6 +807,20 @@ pub(super) fn schedule_clone_repo(
 
         if result.is_ok() {
             remember_successful_prompt_auth(prompt_auth.as_ref(), &askpass_script);
+            // Persist the per-clone key onto the new remote (the 02-4
+            // `remote.<name>.sshkey` convention) so later fetch/pull/push
+            // keep using it. Best-effort: a failure here never fails the
+            // clone itself.
+            if let Some(key) = ssh_key.as_deref().filter(|key| !key.trim().is_empty()) {
+                let mut persist = git_command();
+                persist
+                    .arg("-C")
+                    .arg(&dest)
+                    .arg("config")
+                    .arg("remote.origin.sshkey")
+                    .arg(key);
+                let _ = persist.output();
+            }
         }
 
         let ok = result.is_ok();
@@ -1066,4 +1087,11 @@ mod tests {
             Some("ssh-passphrase-b")
         );
     }
+}
+
+/// Single-quote a key path for the shell git spawns for `core.sshCommand`,
+/// escaping embedded quotes — the same shape as the gix layer's
+/// `quoted_ssh_key_path`, kept local because that helper is backend-private.
+fn quote_clone_ssh_key(path: &str) -> String {
+    format!("'{}'", path.replace('\'', "'\\''"))
 }

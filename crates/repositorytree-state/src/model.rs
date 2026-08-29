@@ -649,6 +649,7 @@ pub enum AuthRetryOperation {
     Clone {
         url: String,
         dest: PathBuf,
+        ssh_key: Option<String>,
     },
 }
 
@@ -715,6 +716,9 @@ pub enum AppNotificationKind {
 pub struct CloneOpState {
     pub url: Arc<str>,
     pub dest: Arc<PathBuf>,
+    /// The per-clone SSH key the operation started with, so an auth retry
+    /// re-runs the clone with the same key rather than dropping it.
+    pub ssh_key: Option<String>,
     pub status: CloneOpStatus,
     pub progress: CloneProgressMeter,
     pub seq: u64,
@@ -998,6 +1002,12 @@ pub struct DiffState {
     /// path is LFS-filtered, so the pane renders the pointer panel instead
     /// of the pointer file's raw text.
     pub diff_file_lfs: Loadable<Option<Shared<LfsPointerChange>>>,
+    /// The smudged new-side content of the LFS pointer change on screen,
+    /// loaded on explicit request (smudging can download from the LFS
+    /// server — it must never start on its own). `FileDiffImage` carries
+    /// the path alongside the bytes so the landing guard and the renderer
+    /// key off one value.
+    pub lfs_image_preview: Loadable<Option<Shared<FileDiffImage>>>,
 }
 
 impl Default for DiffState {
@@ -1022,6 +1032,7 @@ impl Default for DiffState {
             inline_submodule_diff: None,
             diff_file_image: Loadable::NotLoaded,
             diff_file_lfs: Loadable::NotLoaded,
+            lfs_image_preview: Loadable::NotLoaded,
         }
     }
 }

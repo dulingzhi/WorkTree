@@ -17,6 +17,8 @@ diff:
   lfs:
     title: "LFS pointer change"
     hint: "Content is stored in Git LFS; the diff above tracks the pointer."
+    load_preview: "Load preview"
+    loading_preview: "Loading preview…"
     old: Old
     new: New
     oid_absent: "—"

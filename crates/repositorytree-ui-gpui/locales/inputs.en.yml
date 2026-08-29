@@ -36,6 +36,7 @@ input:
     title: "Clone repository"
     url_label: "Repository URL / Path"
     destination_label: "Destination parent folder"
+    ssh_key_label: "SSH key (optional)"
     select_folder: "Clone into folder"
     clone: "Clone"
   stash:

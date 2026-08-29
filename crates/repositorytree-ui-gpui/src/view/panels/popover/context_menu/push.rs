@@ -76,9 +76,7 @@ pub(super) fn model(this: &PopoverHost) -> ContextMenuModel {
             icon: Some("icons/link.svg".into()),
             shortcut: None,
             disabled: !create_request_ready,
-            action: Box::new(ContextMenuAction::CreateWebRequestPage {
-                repo_id: this.active_repo_id().unwrap_or(RepoId(0)),
-            }),
+            action: Box::new(ContextMenuAction::CreateWebRequestPage),
         },
         ContextMenuItem::Entry {
             label: force_push_label.into(),

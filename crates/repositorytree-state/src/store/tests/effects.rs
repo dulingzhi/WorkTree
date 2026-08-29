@@ -344,7 +344,7 @@ fn clone_repo_effect_clones_local_repo_and_emits_finished_and_open_repo() {
             url: src.display().to_string(),
             dest: dest.clone(),
             auth: None,
-        },
+        ssh_key: None,},
     );
 
     let start = Instant::now();
@@ -427,7 +427,7 @@ fn clone_repo_effect_abort_removes_partially_created_destination() {
             url: local_file_url(&src),
             dest: dest.clone(),
             auth: None,
-        },
+        ssh_key: None,},
     );
 
     let start = Instant::now();
@@ -5954,4 +5954,105 @@ fn status_for_paths_falls_back_to_a_full_scan_when_it_cannot_merge() {
         ),
         "nothing settled to merge onto — the full scan answers"
     );
+}
+
+#[test]
+fn lfs_image_preview_loads_on_request_and_lands_gated_by_target() {
+    use crate::msg::InternalMsg;
+    use repositorytree_core::domain::FileDiffImage;
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+
+    let repo_id = RepoId(1);
+    repos.insert(repo_id, Arc::new(DummyRepo::new("/tmp/repo")));
+    let mut repo = RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    );
+    let target = DiffTarget::WorkingTree {
+        path: PathBuf::from("art/logo.png"),
+        area: DiffArea::Unstaged,
+    };
+    repo.diff_state.diff_target = Some(target.clone());
+    state.repos.push(repo);
+
+    // The request only runs while its target is the one on screen.
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::LoadLfsImagePreview {
+            repo_id,
+            target: target.clone(),
+        },
+    );
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::LoadLfsImagePreview { repo_id: id, target: t }] if *id == repo_id && *t == target
+    ));
+    assert!(matches!(
+        state.repos[0].diff_state.lfs_image_preview,
+        Loadable::Loading
+    ));
+
+    // A second request while loading does not stack.
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::LoadLfsImagePreview {
+            repo_id,
+            target: target.clone(),
+        },
+    );
+    assert!(effects.is_empty());
+
+    // The reply lands as the smudged new side, keyed to the target's path.
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(InternalMsg::LfsImagePreviewLoaded {
+            repo_id,
+            target: target.clone(),
+            result: Ok(Some(FileDiffImage {
+                path: PathBuf::from("art/logo.png"),
+                old: None,
+                new: Some(b"fake-smudged-image-bytes".to_vec()),
+            })),
+        }),
+    );
+    assert!(effects.is_empty());
+    match &state.repos[0].diff_state.lfs_image_preview {
+        Loadable::Ready(Some(image)) => {
+            assert_eq!(image.path, PathBuf::from("art/logo.png"));
+            assert!(image.old.is_none());
+            assert_eq!(image.new.as_deref(), Some(b"fake-smudged-image-bytes".as_slice()));
+        }
+        other => panic!("expected a ready preview, got {other:?}"),
+    }
+
+    // A reply for a target that is no longer on screen is dropped.
+    let moved = DiffTarget::WorkingTree {
+        path: PathBuf::from("art/other.png"),
+        area: DiffArea::Unstaged,
+    };
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(InternalMsg::LfsImagePreviewLoaded {
+            repo_id,
+            target: moved,
+            result: Ok(None),
+        }),
+    );
+    assert!(effects.is_empty());
+    assert!(matches!(
+        state.repos[0].diff_state.lfs_image_preview,
+        Loadable::Ready(Some(_))
+    ));
 }

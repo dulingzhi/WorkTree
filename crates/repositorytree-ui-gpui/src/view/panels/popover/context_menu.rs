@@ -1637,7 +1637,7 @@ impl PopoverHost {
                     cx,
                 );
             }
-            ContextMenuAction::CreateWebRequestPage { repo_id: _ } => {
+            ContextMenuAction::CreateWebRequestPage => {
                 let _ = self.root_view.update(cx, |root, cx| {
                     root.open_create_request_page(cx);
                 });

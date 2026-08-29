@@ -3,7 +3,7 @@ use crate::model::{
 };
 use crate::msg::Msg;
 use repositorytree_core::conflict_session::{ConflictPayload, ConflictSession, ConflictStageParts};
-use repositorytree_core::domain::{
+use repositorytree_core::domain::{FileDiffImage, 
     DiffArea, DiffPreviewTextSide, DiffTarget, LogCursor, LogScope, RepoStatus, Worktree,
     WorktreeDirtySummary, count_file_statuses,
 };
@@ -301,6 +301,34 @@ pub(super) fn schedule_load_remote_branches(
             );
         },
     );
+}
+
+pub(super) fn schedule_load_lfs_image_preview(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    target: DiffTarget,
+) {
+    spawn_with_repo(executor, repos, repo_id, msg_tx, move |repo, msg_tx| {
+        let result = repo
+            .lfs_new_side_smudged(&target)
+            .map(|bytes| {
+                bytes.map(|new| FileDiffImage {
+                    path: diff_target_path(&target).map(Path::to_path_buf).unwrap_or_default(),
+                    old: None,
+                    new: Some(new),
+                })
+            });
+        send_or_log(
+            &msg_tx,
+            Msg::Internal(crate::msg::InternalMsg::LfsImagePreviewLoaded {
+                repo_id,
+                target,
+                result,
+            }),
+        );
+    });
 }
 
 pub(super) fn schedule_load_status_for_paths(
