@@ -22,7 +22,14 @@ fn isolated_git_config_env() -> &'static IsolatedGitConfigEnv {
 
         fs::create_dir_all(&home_dir).expect("create isolated HOME directory");
         fs::create_dir_all(&xdg_config_home).expect("create isolated XDG_CONFIG_HOME directory");
-        fs::write(&global_config, "").expect("create isolated global git config file");
+        // The config starts empty so no machine state leaks in, but it still
+        // carries a test identity: commits run under it have no real
+        // user.name/user.email to borrow.
+        fs::write(
+            &global_config,
+            "[user]\n\tname = WorkTree Tests\n\temail = worktree-tests@example.invalid\n",
+        )
+        .expect("create isolated global git config file");
 
         IsolatedGitConfigEnv {
             _root: root,
