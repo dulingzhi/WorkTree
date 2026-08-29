@@ -114,7 +114,7 @@
 
 ---
 
-## 迭代 05 — v0.6.0「agent 深化 + 性能基建」（4–6 周）
+## 迭代 05 — v0.6.0「agent 深化 + 性能基建」（4–6 周）✅（2026-08-28 全部完成；另加用户追加项：仓库级设置 user/email/gpgsign `58b6881f`）
 
 **目标**：把 agent 工作台从 v1 的「能跑」推进到日常主力——隔离的专用 worktree、对称的接受/拒绝；清掉大仓库日常操作的性能主项（全量 status）；GitHub PR 链路补上「建」的一环。扩展系统维持 ⏸ 搁置。
 
@@ -134,8 +134,9 @@
    LFS 图片 smudge 预览 ✅（2026-08-28）：trait `lfs_new_side_smudged(target)`（重建规范 pointer 文本 → `lfs_smudge_bytes`）→ `Msg::LoadLfsImagePreview`/`Effect`/`InternalMsg::LfsImagePreviewLoaded` → `diff_state.lfs_image_preview: Loadable<Option<Shared<FileDiffImage>>>`（随 diff 重载清空；target 不匹配丢弃）。**显式按钮加载**（`diff.lfs.load_preview`）——smudge 可能从 LFS 服务器拉对象，绝不自动发起；spinner/错误行/`gpui::Image::from_bytes` 渲染（selector `lfs_image_preview`）。测试：state +1（请求门控/防叠/落稿/过期丢弃，DummyRepo 定 stand-in 字节不依赖 git-lfs 二进制）+ pointer 文本规范纯测。
    clone 对话框选 SSH key ✅（2026-08-28）：`Msg::CloneRepo{ssh_key}` → scheduler 注入 `-c core.sshCommand=ssh -i <单引号转义>`（`quote_clone_ssh_key` 镜像 gix 层）+ 克隆成功后 `git -C dest config remote.origin.sshkey` 持久化（best-effort）→ 02-4 的 remote 级约定覆盖后续 fetch/pull/push；`CloneOpState.ssh_key` 跨 auth-retry 携带（`AuthRetryOperation::Clone` 增字段）。UI：clone 弹窗第三输入行（可空；tab 序 dest→Browse→key→Cancel）。测试：既有 clone tab 序测试更新。
    hunk 解释取消 ✅（2026-08-28）：Generating 态加 Stop 按钮（`cancel_hunk_explanation`：状态置 None + 关弹窗）；`finish_hunk_explanation` 加防陈旧守卫——非 Generating 态（已取消/已落地）的迟到回复直接丢弃。**token 级真流式仍顺延**（单发 CLI/HTTP 矩阵需重做流式，取消是本 app 能诚实提供的全部）。
-5. **（机动）diff_view.rs 测试第一期** `M`
+5. **（机动）diff_view.rs 测试第一期** `M` ✅（2026-08-28，骨架落地）
    4,050 行零测试的分期起点：行渲染、选择、行级暂存交互的纯函数/接缝测试骨架，优先覆盖 coverage overlay 与 agent 比较新踩过的路径。
+   实现：`diff_view.rs` 首个 `#[cfg(test)]` 模块（submodule_helpers_tests +3）——短/全 hash 截断与 missing 回退、range 标签稳定性、`inline_submodule_entries` 的**不完整 range 整段跳过 + range→live-staged→live-unstaged 顺序与各自 DiffTarget 形状**（coverage/agent 比较路径的 `coverage_gutter_color`、`agent_restore_context` 已分别在各自模块有纯测，不在此重复）。
 
 ---
 

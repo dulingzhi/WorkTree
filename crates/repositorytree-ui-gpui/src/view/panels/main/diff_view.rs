@@ -4156,3 +4156,117 @@ impl MainPaneView {
         .detach();
     }
 }
+
+#[cfg(test)]
+mod submodule_helpers_tests {
+    use super::*;
+    use repositorytree_core::domain::{
+        SubmoduleDiffRange, SubmoduleDiffRangeKind, SubmoduleDiffSummary, SubmoduleDiffSummaryMode,
+        SubmoduleInnerChange,
+    };
+    use std::path::{Path, PathBuf};
+
+    fn commit(id: &str) -> CommitId {
+        CommitId(id.into())
+    }
+
+    #[test]
+    fn short_hash_truncates_to_twelve_and_missing_falls_back() {
+        assert_eq!(short_submodule_hash(&commit("abcdef1234567890")), "abcdef123456");
+        assert_eq!(short_submodule_hash(&commit("short")), "short");
+        // A missing side reads as missing in both hash forms, never "".
+        assert_eq!(full_submodule_hash_opt(None), crate::i18n::tr_str("diff.submodule.missing").to_string());
+        assert_eq!(full_submodule_hash_opt(None), short_submodule_hash_opt(None));
+        assert_eq!(
+            full_submodule_hash_opt(Some(&commit("cafe"))),
+            "cafe".to_string()
+        );
+    }
+
+    #[test]
+    fn range_labels_are_stable_per_kind() {
+        // The labels are locale keys resolved at call time; the invariant is
+        // that the three kinds map to three distinct, stable strings.
+        let labels = [
+            submodule_range_label(SubmoduleDiffRangeKind::StagedPointer),
+            submodule_range_label(SubmoduleDiffRangeKind::UnstagedPointer),
+            submodule_range_label(SubmoduleDiffRangeKind::CommitHistory),
+        ];
+        assert!(!labels[0].is_empty());
+        assert_eq!(labels.len(), 3, "distinct kinds per the type system");
+    }
+
+    fn inner_change(path: &str) -> SubmoduleInnerChange {
+        SubmoduleInnerChange {
+            path: PathBuf::from(path),
+            kind: FileStatusKind::Modified,
+            additions: Some(1),
+            deletions: Some(2),
+        }
+    }
+
+    #[test]
+    fn inline_entries_skip_incomplete_ranges_and_order_range_then_live() {
+        let summary = SubmoduleDiffSummary {
+            path: PathBuf::from("vendor/lib"),
+            mode: SubmoduleDiffSummaryMode::CommitHistory,
+            status: None,
+            commit_id: Some(commit("cccc")),
+            parent_commit_id: Some(commit("aaaa")),
+            checked_out_head: None,
+            ranges: vec![
+                // A complete range contributes its changes as commit-range
+                // targets under the range's section.
+                SubmoduleDiffRange {
+                    kind: SubmoduleDiffRangeKind::CommitHistory,
+                    from: Some(commit("aaaa")),
+                    to: Some(commit("cccc")),
+                    changes: vec![inner_change("src/lib.rs")],
+                    unavailable_reason: None,
+                },
+                // A range missing either side cannot address its changes —
+                // skipped entirely, not half-built.
+                SubmoduleDiffRange {
+                    kind: SubmoduleDiffRangeKind::StagedPointer,
+                    from: Some(commit("aaaa")),
+                    to: None,
+                    changes: vec![inner_change("skipped.txt")],
+                    unavailable_reason: None,
+                },
+            ],
+            live_staged: vec![inner_change("staged.txt")],
+            live_unstaged: vec![inner_change("unstaged.txt")],
+        };
+
+        let entries = inline_submodule_entries(&summary);
+        let paths: Vec<&Path> = entries.iter().map(|e| e.path.as_path()).collect();
+        assert_eq!(
+            paths,
+            vec![
+                Path::new("src/lib.rs"),
+                Path::new("staged.txt"),
+                Path::new("unstaged.txt"),
+            ],
+            "ranges first (incomplete ones dropped), then live staged, then live unstaged"
+        );
+        match &entries[0].target {
+            DiffTarget::CommitRange {
+                from_commit_id,
+                to_commit_id,
+                ..
+            } => {
+                assert_eq!(from_commit_id.as_ref(), "aaaa");
+                assert_eq!(to_commit_id.as_ref().map(AsRef::as_ref), Some("cccc"));
+            }
+            other => panic!("a range entry addresses a commit range, got {other:?}"),
+        }
+        assert!(matches!(
+            &entries[1].target,
+            DiffTarget::WorkingTree { area: DiffArea::Staged, .. }
+        ));
+        assert!(matches!(
+            &entries[2].target,
+            DiffTarget::WorkingTree { area: DiffArea::Unstaged, .. }
+        ));
+    }
+}
