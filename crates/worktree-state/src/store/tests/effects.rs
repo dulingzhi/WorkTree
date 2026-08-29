@@ -5755,7 +5755,8 @@ fn schedule_effect_dispatches_many_variants_with_repo_present() {
             Effect::LaunchMergetool {
                 repo_id,
                 path: PathBuf::from("conflicted.txt"),
-                preference: worktree_core::external_merge_tool::ExternalMergeToolSelection::FromGitConfig,
+                preference:
+                    worktree_core::external_merge_tool::ExternalMergeToolSelection::FromGitConfig,
             },
             1,
         ),
