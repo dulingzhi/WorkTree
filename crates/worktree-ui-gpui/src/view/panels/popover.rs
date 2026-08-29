@@ -345,6 +345,11 @@ pub(in super::super) struct PopoverHost {
     /// The local/global snapshot consumed by the next panel render; taken by
     /// the panel so it is re-read on every open, never between renders.
     repo_settings_current: Option<crate::view::panels::popover::repo_settings::RepoSettingsCurrent>,
+    /// Test seam: how many times the repo-settings config snapshot was read
+    /// from disk. An open and an apply each read once; renders must read
+    /// never — a render-time read is five git spawns per keystroke.
+    #[cfg(test)]
+    repo_settings_test_loads: usize,
     rebase_onto_input: Entity<components::TextInput>,
     create_tag_input: Entity<components::TextInput>,
     create_tag_message_input: Entity<components::TextInput>,
@@ -427,6 +432,7 @@ pub(in super::super) struct PopoverHost {
     squash_submit_focus_handle: FocusHandle,
     rebase_onto_submit_focus_handle: FocusHandle,
     clone_repo_focus: DialogFocus,
+    repo_settings_focus: DialogFocus,
     create_tag_focus: DialogFocus,
     remote_add_focus: DialogFocus,
     remote_edit_focus: DialogFocus,
@@ -1891,6 +1897,7 @@ impl PopoverHost {
         let squash_submit_focus_handle = cx.focus_handle().tab_index(0).tab_stop(true);
         let rebase_onto_submit_focus_handle = cx.focus_handle().tab_index(0).tab_stop(true);
         let clone_repo_focus = DialogFocus::new(cx);
+        let repo_settings_focus = DialogFocus::new(cx);
         let create_tag_focus = DialogFocus::new(cx);
         let create_tag_annotated_focus_handle = cx.focus_handle().tab_index(0).tab_stop(true);
         let remote_add_focus = DialogFocus::new(cx);
@@ -2018,6 +2025,8 @@ impl PopoverHost {
             repo_settings_sign_commits: None,
             repo_settings_error: None,
             repo_settings_current: None,
+            #[cfg(test)]
+            repo_settings_test_loads: 0,
             rebase_onto_input,
             create_tag_input,
             create_tag_message_input,
@@ -2075,6 +2084,7 @@ impl PopoverHost {
             squash_submit_focus_handle,
             rebase_onto_submit_focus_handle,
             clone_repo_focus,
+            repo_settings_focus,
             create_tag_focus,
             remote_add_focus,
             remote_edit_focus,
@@ -2383,6 +2393,7 @@ impl PopoverHost {
                 | Some(PopoverKind::CreateTagPrompt { .. })
                 | Some(PopoverKind::SquashPrompt { .. })
                 | Some(PopoverKind::PushSetUpstreamPrompt { .. })
+                | Some(PopoverKind::RepoSettingsPrompt { .. })
                 | Some(PopoverKind::Repo {
                     kind: RepoPopoverKind::Remote(RemotePopoverKind::AddPrompt),
                     ..
@@ -2492,6 +2503,7 @@ impl PopoverHost {
             | Some(PopoverKind::SquashPrompt { .. })
             | Some(PopoverKind::CheckoutRemoteBranchPrompt { .. })
             | Some(PopoverKind::PushSetUpstreamPrompt { .. })
+            | Some(PopoverKind::RepoSettingsPrompt { .. })
             | Some(PopoverKind::Repo {
                 kind: RepoPopoverKind::Remote(RemotePopoverKind::AddPrompt),
                 ..
@@ -4100,8 +4112,7 @@ impl PopoverHost {
                         let _ = &theme;
                         return;
                     };
-                    let current =
-                        crate::view::panels::popover::repo_settings::RepoSettingsCurrent::load(&workdir);
+                    let current = self.load_repo_settings_current(&workdir);
                     self.repo_settings_user_input.update(cx, |input, cx| {
                         input.clear_transient_key_presses();
                         input.set_theme(theme, cx);
@@ -4123,6 +4134,11 @@ impl PopoverHost {
                     self.repo_settings_sign_commits = current.sign_commits;
                     self.repo_settings_error = None;
                     self.repo_settings_current = Some(current);
+                    // Land in the first field, like every other prompt dialog.
+                    let focus = self
+                        .repo_settings_user_input
+                        .read_with(cx, |i, _| i.focus_handle());
+                    window.focus(&focus, cx);
                 }
                 PopoverKind::PushSetUpstreamPrompt { repo_id, .. } => {
                     let theme = self.theme;

@@ -94,6 +94,28 @@ pub(super) fn apply_repo_settings(
 }
 
 impl PopoverHost {
+    /// Read the live locals and globals for the repo-settings prompt. One
+    /// central seam so tests can count reads: an open reads once and an
+    /// apply re-reads once, but a render must never read at all.
+    pub(super) fn load_repo_settings_current(
+        &mut self,
+        workdir: &std::path::Path,
+    ) -> RepoSettingsCurrent {
+        #[cfg(test)]
+        {
+            self.repo_settings_test_loads += 1;
+        }
+        RepoSettingsCurrent::load(workdir)
+    }
+
+    /// How many times the config snapshot was read this session, so a
+    /// regression that re-reads per render fails a test instead of shipping
+    /// as input lag.
+    #[cfg(test)]
+    pub(in super::super) fn repo_settings_test_loads_for_tests(&self) -> usize {
+        self.repo_settings_test_loads
+    }
+
     /// Enter on either input applies, resolving the repo from the open kind.
     pub(super) fn submit_repo_settings_open(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
         let Some(PopoverKind::RepoSettingsPrompt { repo_id }) = self.popover else {
@@ -136,7 +158,7 @@ impl PopoverHost {
         let current = self
             .repo_settings_current
             .take()
-            .unwrap_or_else(|| RepoSettingsCurrent::load(&workdir));
+            .unwrap_or_else(|| self.load_repo_settings_current(&workdir));
         let plan = repo_settings_apply_plan(&draft, &current);
         if plan.is_empty() {
             self.dismiss_prompt_popover_window(cx);
@@ -190,29 +212,30 @@ pub(super) fn panel(
         );
     };
 
-    // The snapshot is read on open; the inputs own their drafts afterwards.
-    let current = this
-        .repo_settings_current
-        .take()
-        .unwrap_or_else(|| RepoSettingsCurrent::load(&workdir));
-    let placeholder = |global: &Option<String>, inherit: &str| -> SharedString {
-        match global {
-            Some(value) => format!("{inherit}: {value}").into(),
-            None => inherit.to_string().into(),
-        }
-    };
-    this.repo_settings_user_input.update(cx, |input, cx| {
-        input.set_placeholder(
-            placeholder(&current.global_user_name, &crate::i18n::tr_str("input.repo_settings.inherit")),
-            cx,
-        );
-    });
-    this.repo_settings_email_input.update(cx, |input, cx| {
-        input.set_placeholder(
-            placeholder(&current.global_user_email, &crate::i18n::tr_str("input.repo_settings.inherit")),
-            cx,
-        );
-    });
+    // The snapshot is read on open and consumed by this first render only:
+    // the placeholders quote the globals once, the inputs own their drafts
+    // afterwards, and a read is five git process spawns — every keystroke
+    // re-renders this host, so a re-render must never re-read.
+    if let Some(current) = this.repo_settings_current.take() {
+        let placeholder = |global: &Option<String>, inherit: &str| -> SharedString {
+            match global {
+                Some(value) => format!("{inherit}: {value}").into(),
+                None => inherit.to_string().into(),
+            }
+        };
+        this.repo_settings_user_input.update(cx, |input, cx| {
+            input.set_placeholder(
+                placeholder(&current.global_user_name, crate::i18n::tr_str("input.repo_settings.inherit")),
+                cx,
+            );
+        });
+        this.repo_settings_email_input.update(cx, |input, cx| {
+            input.set_placeholder(
+                placeholder(&current.global_user_email, crate::i18n::tr_str("input.repo_settings.inherit")),
+                cx,
+            );
+        });
+    }
 
     let sign_row = |state: Option<bool>| -> &'static str {
         match state {
@@ -310,10 +333,19 @@ pub(super) fn panel(
                     .items_center()
                     .justify_between()
                     .child(
-                        cancel_button("repo_settings_cancel", "repo_settings_cancel_hint", theme)
-                            .on_click(theme, cx, |this, _e, window, cx| {
-                                this.dismiss_prompt_popover(window, cx);
-                            }),
+                        div()
+                            .debug_selector(|| "repo_settings_cancel".to_string())
+                            .child(
+                                cancel_button(
+                                    "repo_settings_cancel",
+                                    "repo_settings_cancel_hint",
+                                    theme,
+                                )
+                                .focus_handle(this.repo_settings_focus.cancel.clone())
+                                .on_click(theme, cx, |this, _e, window, cx| {
+                                    this.dismiss_prompt_popover(window, cx);
+                                }),
+                            ),
                     )
                     .child(
                         div()
@@ -323,6 +355,7 @@ pub(super) fn panel(
                                     "repo_settings_apply_btn",
                                     crate::i18n::tr("input.repo_settings.apply"),
                                 )
+                                .focus_handle(this.repo_settings_focus.submit.clone())
                                 .style(components::ButtonStyle::Filled)
                                 .on_click(theme, cx, move |this, _e, _w, cx| {
                                     this.submit_repo_settings(repo_id, workdir.clone(), cx);
