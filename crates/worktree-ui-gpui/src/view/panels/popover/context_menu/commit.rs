@@ -1,7 +1,7 @@
 use super::*;
-use worktree_core::services::{BisectVerdict, InteractiveRebaseAction, InteractiveRebaseEntry};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::VecDeque;
+use worktree_core::services::{BisectVerdict, InteractiveRebaseAction, InteractiveRebaseEntry};
 
 type InteractiveRebaseSourceColor = (String, u8);
 type MultiCherryPickPlan = (
@@ -269,9 +269,21 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
     items.push(ContextMenuItem::Separator);
     if let Some(_session) = bisect_session {
         for (label, verdict, icon) in [
-            ("Bisect: mark this commit good", BisectVerdict::Good, "icons/check.svg"),
-            ("Bisect: mark this commit bad", BisectVerdict::Bad, "icons/generic_close.svg"),
-            ("Bisect: mark this commit skip", BisectVerdict::Skip, "icons/minus.svg"),
+            (
+                "Bisect: mark this commit good",
+                BisectVerdict::Good,
+                "icons/check.svg",
+            ),
+            (
+                "Bisect: mark this commit bad",
+                BisectVerdict::Bad,
+                "icons/generic_close.svg",
+            ),
+            (
+                "Bisect: mark this commit skip",
+                BisectVerdict::Skip,
+                "icons/minus.svg",
+            ),
         ] {
             items.push(ContextMenuItem::Entry {
                 label: label.into(),
@@ -620,11 +632,11 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use worktree_core::domain::{CommitParentIds, LogPage, RepoSpec};
-    use worktree_state::model::{Loadable, RepoId, RepoState};
     use std::path::PathBuf;
     use std::sync::Arc;
     use std::time::SystemTime;
+    use worktree_core::domain::{CommitParentIds, LogPage, RepoSpec};
+    use worktree_state::model::{Loadable, RepoId, RepoState};
 
     fn repo_state() -> RepoState {
         RepoState::new_opening(

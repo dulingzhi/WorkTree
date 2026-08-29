@@ -262,9 +262,9 @@ fn has_cmake_lists(workdir: &std::path::Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
     use worktree_core::domain::RepoSpec;
     use worktree_state::model::RepoState;
-    use std::path::PathBuf;
 
     fn state_with_repo_tabs(active_repo: RepoId, repo_count: u64) -> AppState {
         let mut state = AppState {

@@ -8,6 +8,9 @@ use crate::model::{
     RepoState, SidebarDataRequest, SidebarMode,
 };
 use crate::msg::{CommitSelectMode, ConflictAutosolveMode, Effect};
+use rustc_hash::{FxHashMap, FxHashSet};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use worktree_core::conflict_session::{
     ConflictPayload, ConflictRegionResolution, ConflictRegionSourceRanges,
     ConflictResolverStrategy, ConflictSession, reconstruct_conflict_marker_sides,
@@ -21,9 +24,6 @@ use worktree_core::domain::{
 use worktree_core::error::Error;
 use worktree_core::merge::{MergeSource, OrderedSelection};
 use worktree_core::services::{InteractiveRebaseAction, InteractiveRebaseEntry};
-use rustc_hash::{FxHashMap, FxHashSet};
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 pub(super) fn file_history_loaded(
     state: &mut AppState,
@@ -1681,11 +1681,7 @@ pub(super) fn recent_commit_messages_loaded(
 /// Cross-history search. A new search replaces any in-flight one — the
 /// request-rev guard drops the stale reply — and an empty query just clears
 /// the previous results (the picker's local rows are all it needs then).
-pub(super) fn search_commits(
-    state: &mut AppState,
-    repo_id: RepoId,
-    query: String,
-) -> Vec<Effect> {
+pub(super) fn search_commits(state: &mut AppState, repo_id: RepoId, query: String) -> Vec<Effect> {
     let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
         return Vec::new();
     };
@@ -3033,13 +3029,13 @@ pub(super) fn commit_details_loaded(
 mod tests {
     use super::*;
     use crate::model::{ConflictFile, RepoState, SidebarDataRequest, SidebarMode};
+    use std::path::{Path, PathBuf};
+    use std::sync::Arc;
     use worktree_core::domain::{
         DiffArea, DiffTarget, FileConflictKind, FileEntry, FileEntryKind, FileSource, FileStatus,
         LogScope, RepoSpec,
     };
     use worktree_core::error::{Error, ErrorKind};
-    use std::path::{Path, PathBuf};
-    use std::sync::Arc;
 
     fn backend_error(message: &str) -> Error {
         Error::new(ErrorKind::Backend(message.to_string()))

@@ -1,6 +1,6 @@
 use super::*;
-use worktree_core::domain::RecentCommitMessage;
 use std::sync::Arc;
+use worktree_core::domain::RecentCommitMessage;
 
 fn first_message_line(message: &str, fallback: &str) -> SharedString {
     message
@@ -57,8 +57,8 @@ fn model_for_recent_commit_messages(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use worktree_core::domain::{CommitId, RecentCommitMessage};
     use std::sync::Arc;
+    use worktree_core::domain::{CommitId, RecentCommitMessage};
 
     #[test]
     fn model_uses_first_non_empty_line_and_full_message_action() {

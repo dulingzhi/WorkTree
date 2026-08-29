@@ -1,14 +1,14 @@
 #[cfg(feature = "benchmarks")]
 mod harness {
+    use serde_json::{Map, Value, json};
+    use std::env;
+    use std::time::Duration;
     use worktree_ui_gpui::benchmarks::{
         IdleResourceConfig, IdleResourceFixture, IdleResourceMetrics, IdleResourceScenario,
     };
     use worktree_ui_gpui::perf_alloc::{TRACKING_MIMALLOC, measure_allocations};
     use worktree_ui_gpui::perf_ram_guard::install_benchmark_process_ram_guard;
     use worktree_ui_gpui::perf_sidecar::{PerfSidecarReport, write_criterion_sidecar};
-    use serde_json::{Map, Value, json};
-    use std::env;
-    use std::time::Duration;
 
     const DEFAULT_BENCH: &str = "idle/cpu_usage_single_repo_60s";
     const CPU_WINDOW_MS_ENV: &str = "WORKTREE_PERF_IDLE_CPU_WINDOW_MS";

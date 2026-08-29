@@ -1,7 +1,7 @@
 use super::GixRepo;
 use crate::util::{run_git_raw_output, run_git_simple};
-use worktree_core::services::Result;
 use std::path::{Path, PathBuf};
+use worktree_core::services::Result;
 
 impl GixRepo {
     /// Paths marked assume-unchanged in the index. `git ls-files -v` prefixes

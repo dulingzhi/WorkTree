@@ -14,11 +14,11 @@ use crate::model::{
     AppState, DiagnosticKind, InteractiveRebaseSetup, Loadable, RepoLoadsInFlight, SidebarMode,
 };
 use crate::msg::{Effect, RepoActionKind, RepoExternalChange};
+use rustc_hash::{FxHashMap, FxHashSet};
+use std::sync::Arc;
 use worktree_core::domain::{DiffArea, DiffTarget, LogCursor, LogPage, LogScope};
 use worktree_core::error::Error;
 use worktree_core::services::{BisectState, InteractiveRebaseEntry, SequencerState};
-use rustc_hash::{FxHashMap, FxHashSet};
-use std::sync::Arc;
 
 const LARGE_HISTORY_APPEND_LEN_THRESHOLD: usize = 4_096;
 const SMALL_APPEND_GROWTH_RATIO: usize = 8;

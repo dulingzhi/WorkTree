@@ -2,9 +2,9 @@ use super::GixRepo;
 use crate::util::{
     git_command_timeout, run_git_raw_output, run_git_with_output, run_git_with_stdin_capture,
 };
+use std::path::Path;
 use worktree_core::domain::{DiffTarget, LfsPointer, LfsPointerChange};
 use worktree_core::services::{CommandOutput, Result};
-use std::path::Path;
 
 impl GixRepo {
     /// Whether the repository has LFS wiring installed. `git lfs install`
@@ -27,7 +27,11 @@ impl GixRepo {
     /// when the value is exactly `lfs` (not `unspecified`/`set`/`unset`).
     pub(super) fn lfs_is_filtered_impl(&self, path: &Path) -> Result<bool> {
         let mut cmd = self.git_workdir_cmd();
-        cmd.arg("check-attr").arg("-z").arg("filter").arg("--").arg(path);
+        cmd.arg("check-attr")
+            .arg("-z")
+            .arg("filter")
+            .arg("--")
+            .arg(path);
         let output = run_git_raw_output(cmd, "git check-attr")?;
         Ok(check_attr_output_has_lfs_filter(&output.stdout))
     }
@@ -179,9 +183,7 @@ mod tests {
 
     #[test]
     fn check_attr_output_detects_lfs_filter_value() {
-        let triplet = |path: &str, attr: &str, value: &str| {
-            format!("{path}\0{attr}\0{value}\0")
-        };
+        let triplet = |path: &str, attr: &str, value: &str| format!("{path}\0{attr}\0{value}\0");
 
         assert!(check_attr_output_has_lfs_filter(
             triplet("art.bin", "filter", "lfs").as_bytes()

@@ -3,16 +3,16 @@ use crate::util::{
     bytes_to_text_preserving_utf8, git_command_failed_error, run_git_capture, run_git_raw_output,
     run_git_with_output, validate_hex_commit_id, validate_ref_like_arg,
 };
+use std::fmt::Write as _;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use worktree_core::domain::CommitId;
 use worktree_core::error::{Error, ErrorKind};
 use worktree_core::services::{
     BisectState, BisectVerdict, CommandOutput, InteractiveRebaseAction, InteractiveRebaseEntry,
     ResetMode, Result, SequencerState,
 };
-use std::fmt::Write as _;
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::Command;
 
 /// Returns the HEAD commit id, or `None` when HEAD is unborn / empty.
 pub(super) fn gix_head_id_or_none(repo: &gix::Repository) -> Result<Option<gix::ObjectId>> {
@@ -1623,8 +1623,8 @@ exit 0
 #[cfg(test)]
 mod tests {
     use super::{build_todo_content, parse_interactive_rebase_log, shell_quote_path};
-    use worktree_core::services::{InteractiveRebaseAction, InteractiveRebaseEntry};
     use std::path::Path;
+    use worktree_core::services::{InteractiveRebaseAction, InteractiveRebaseEntry};
 
     const SHA_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     const SHA_B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";

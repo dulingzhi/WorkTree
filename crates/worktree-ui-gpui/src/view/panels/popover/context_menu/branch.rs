@@ -188,10 +188,7 @@ pub(super) fn model(
         action: Box::new(ContextMenuAction::ArchiveZip {
             repo_id,
             revision: name.clone(),
-            suggested_name: format!(
-                "archive-{}.zip",
-                name.rsplit('/').next().unwrap_or(name)
-            ),
+            suggested_name: format!("archive-{}.zip", name.rsplit('/').next().unwrap_or(name)),
         }),
     });
     let pinned = this.is_branch_pinned(repo_id, section, name);

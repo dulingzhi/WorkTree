@@ -16,9 +16,6 @@ use crate::model::{
 use crate::msg::Effect;
 use crate::session;
 use crate::store::repo_load_trace;
-use worktree_core::domain::RepoSpec;
-use worktree_core::error::{Error, ErrorKind};
-use worktree_core::services::{CommandOutput, GitRepository};
 use rustc_hash::{FxHashMap, FxHashSet};
 use smallvec::SmallVec;
 use std::collections::VecDeque;
@@ -26,6 +23,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime};
+use worktree_core::domain::RepoSpec;
+use worktree_core::error::{Error, ErrorKind};
+use worktree_core::services::{CommandOutput, GitRepository};
 
 const HOT_REPO_SWITCH_SECONDARY_REFRESH_WINDOW: Duration = Duration::from_secs(5);
 const REACTIVATED_FILE_HISTORY_LIMIT: usize = 200;

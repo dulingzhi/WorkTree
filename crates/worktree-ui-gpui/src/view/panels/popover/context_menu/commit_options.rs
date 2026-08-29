@@ -73,10 +73,10 @@ fn model_for_state(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use worktree_core::domain::{Branch, CommitId, LogPage, RepoSpec};
-    use worktree_state::model::{Loadable, RepoId, RepoState};
     use std::path::PathBuf;
     use std::sync::Arc;
+    use worktree_core::domain::{Branch, CommitId, LogPage, RepoSpec};
+    use worktree_state::model::{Loadable, RepoId, RepoState};
 
     fn repo_state() -> RepoState {
         RepoState::new_opening(

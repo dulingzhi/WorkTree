@@ -1,7 +1,7 @@
 use crate::msg::Msg;
-use worktree_core::services::GitRepository;
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
+use worktree_core::services::GitRepository;
 
 use super::super::{
     RepoId, executor::TaskExecutor, repo_load_trace, worker_channel::StoreWorkerSender,

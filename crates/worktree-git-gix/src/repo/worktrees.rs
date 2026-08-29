@@ -1,9 +1,9 @@
 use super::GixRepo;
 use crate::util::{path_buf_from_git_bytes, run_git_capture_bytes, run_git_with_output};
+use std::path::Path;
 use worktree_core::domain::{CommitId, Worktree};
 use worktree_core::path_utils::canonicalize_or_original;
 use worktree_core::services::{CommandOutput, Result};
-use std::path::Path;
 
 impl GixRepo {
     pub(super) fn list_worktrees_impl(&self) -> Result<Vec<Worktree>> {
@@ -111,8 +111,8 @@ fn canonicalize_worktree_path(worktree: &mut Worktree) {
 #[cfg(test)]
 mod tests {
     use super::parse_git_worktree_list_porcelain_z;
-    use worktree_core::path_utils::canonicalize_or_original;
     use std::path::PathBuf;
+    use worktree_core::path_utils::canonicalize_or_original;
 
     #[test]
     fn parse_git_worktree_list_porcelain_z_parses_regular_and_detached_entries() {

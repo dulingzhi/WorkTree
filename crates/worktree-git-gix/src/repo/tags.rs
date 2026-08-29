@@ -3,12 +3,12 @@ use crate::util::{
     git_workdir_cmd_for, run_git_capture, run_git_capture_cancellable, run_git_with_output,
     validate_ref_like_arg,
 };
-use worktree_core::domain::{CommitId, RemoteTag, Tag};
-use worktree_core::error::{Error, ErrorKind};
-use worktree_core::services::{CancellationToken, CommandOutput, Result};
 use rustc_hash::FxHashSet;
 use std::str;
 use std::thread;
+use worktree_core::domain::{CommitId, RemoteTag, Tag};
+use worktree_core::error::{Error, ErrorKind};
+use worktree_core::services::{CancellationToken, CommandOutput, Result};
 
 fn parse_ls_remote_tag_names(output: &str) -> FxHashSet<String> {
     output
@@ -340,11 +340,11 @@ mod tests {
         GixRepo, local_tags_to_prune, parse_for_each_ref_tags, parse_ls_remote_tag_names,
         parse_ls_remote_tags,
     };
-    use worktree_core::error::ErrorKind;
-    use worktree_core::services::CancellationToken;
     use rustc_hash::FxHashSet;
     use std::path::Path;
     use std::process::Command;
+    use worktree_core::error::ErrorKind;
+    use worktree_core::services::CancellationToken;
 
     fn run_git(workdir: &Path, args: &[&str]) {
         let output = Command::new("git")

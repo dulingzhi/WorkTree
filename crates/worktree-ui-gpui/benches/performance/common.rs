@@ -1,4 +1,11 @@
 pub(crate) use criterion::{BatchSize, BenchmarkFilter, BenchmarkId, Criterion};
+use regex::Regex;
+pub(crate) use serde_json::{Map, Value, json};
+use std::cell::RefCell;
+use std::collections::VecDeque;
+pub(crate) use std::env;
+use std::sync::OnceLock;
+pub(crate) use std::time::{Duration, Instant};
 pub(crate) use worktree_core::file_diff::BenchmarkReplacementDistanceBackend;
 pub(crate) use worktree_ui_gpui::benchmarks::{
     BranchSidebarCacheFixture, BranchSidebarCacheMetrics, BranchSidebarFixture,
@@ -59,13 +66,6 @@ use worktree_ui_gpui::perf_alloc::{
 };
 use worktree_ui_gpui::perf_ram_guard::install_benchmark_process_ram_guard;
 use worktree_ui_gpui::perf_sidecar::{PerfSidecarReport, write_criterion_sidecar};
-use regex::Regex;
-pub(crate) use serde_json::{Map, Value, json};
-use std::cell::RefCell;
-use std::collections::VecDeque;
-pub(crate) use std::env;
-use std::sync::OnceLock;
-pub(crate) use std::time::{Duration, Instant};
 
 thread_local! {
     static PENDING_SIDECAR_ALLOCATIONS: RefCell<VecDeque<PerfAllocChannels>> = const {

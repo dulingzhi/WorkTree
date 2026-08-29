@@ -1,10 +1,10 @@
 use crate::cli::{DifftoolConfig, DifftoolInputKind, classify_difftool_input, exit_code};
 use crate::git_root::is_git_root_marker;
-use worktree_core::process::git_command;
 use rustc_hash::FxHashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::{Builder, TempDir};
+use worktree_core::process::git_command;
 
 /// Format a `"Failed to {op} {path}: {err}"` message concisely.
 macro_rules! io_err {

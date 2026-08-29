@@ -1,14 +1,14 @@
 use super::{BranchTrackingConfigCacheEntry, GixRepo, oid_to_arc_str, repo_file_stamp};
 use crate::util::{bytes_to_text_preserving_utf8, run_git_capture, run_git_raw_output};
-use worktree_core::domain::{Branch, CommitId, RefMetadata, Upstream, UpstreamDivergence};
-use worktree_core::error::{Error, ErrorKind};
-use worktree_core::services::Result;
 use gix::bstr::ByteSlice as _;
 use rustc_hash::FxHashMap;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 use std::process::Output;
+use worktree_core::domain::{Branch, CommitId, RefMetadata, Upstream, UpstreamDivergence};
+use worktree_core::error::{Error, ErrorKind};
+use worktree_core::services::Result;
 
 const LOCAL_BRANCH_PREFIX: &[u8] = b"refs/heads/";
 
@@ -624,9 +624,9 @@ mod tests {
         parse_local_branches_for_each_ref, parse_ref_metadata_for_each_ref, parse_upstream_short,
         parse_upstream_track_divergence,
     };
-    use worktree_core::domain::UpstreamDivergence;
     use rustc_hash::FxHashMap;
     use std::sync::Arc;
+    use worktree_core::domain::UpstreamDivergence;
 
     #[test]
     fn parse_upstream_short_requires_remote_and_branch() {

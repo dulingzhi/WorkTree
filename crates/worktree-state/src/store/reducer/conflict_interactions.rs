@@ -3,6 +3,8 @@ use crate::msg::{
     ConflictAutosolveMode, ConflictAutosolveStats, ConflictBulkChoice, ConflictBulkScope,
     ConflictRegionChoice, ConflictRegionResolutionUpdate, Effect, RepoPath,
 };
+use std::collections::BTreeMap;
+use std::path::Path;
 use worktree_core::conflict_session::{
     AutosolveConfidence, AutosolveRule, ConflictRegion, ConflictRegionEditOutcome,
     ConflictRegionResolution, ConflictRegionSplitBoundaries, ConflictResolverStrategy,
@@ -12,8 +14,6 @@ use worktree_core::conflict_session::{
 use worktree_core::merge::{
     ManualAlignment, MergeBlockId, MergeOptions, MergeSource, OrderedSelection,
 };
-use std::collections::BTreeMap;
-use std::path::Path;
 
 pub(super) fn set_hide_resolved(
     state: &mut AppState,

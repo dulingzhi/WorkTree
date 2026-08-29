@@ -1,11 +1,11 @@
 use crate::msg::{Msg, RepoActionKind, RepoPathList};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use worktree_core::auth::{
     StagedGitAuth, clear_staged_git_auth, stage_git_auth_for_current_thread,
 };
 use worktree_core::error::Error;
 use worktree_core::services::GitRepository;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use super::super::{RepoId, executor::TaskExecutor, worker_channel::StoreWorkerSender};
 use super::util::{RepoMap, send_or_log, spawn_with_repo};

@@ -8,6 +8,12 @@ use crate::util::{
     git_command_failed_error, run_git_parsed_stdout, run_git_parsed_stdout_cancellable,
     run_git_raw_output,
 };
+use rustc_hash::FxHasher;
+use std::hash::{Hash, Hasher};
+use std::io::{BufReader, Read, Seek, Write};
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::sync::Arc;
 use worktree_core::conflict_session::{
     ConflictPayload, ConflictResolverStrategy, ConflictSession, canonicalize_stage_parts,
 };
@@ -18,12 +24,6 @@ use worktree_core::domain::{
 use worktree_core::error::{Error, ErrorKind};
 use worktree_core::path_utils::strip_windows_verbatim_prefix;
 use worktree_core::services::{CancellationToken, ConflictFileStages, Result};
-use rustc_hash::FxHasher;
-use std::hash::{Hash, Hasher};
-use std::io::{BufReader, Read, Seek, Write};
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::Arc;
 
 #[cfg(not(test))]
 const MAX_IMAGE_DIFF_SIDE_BYTES: u64 = 64 * 1024 * 1024;
@@ -578,10 +578,7 @@ impl GixRepo {
         }
     }
 
-    pub(super) fn lfs_new_side_smudged_impl(
-        &self,
-        target: &DiffTarget,
-    ) -> Result<Option<Vec<u8>>> {
+    pub(super) fn lfs_new_side_smudged_impl(&self, target: &DiffTarget) -> Result<Option<Vec<u8>>> {
         let Some(change) = self.lfs_pointer_change_impl(target)? else {
             return Ok(None);
         };
@@ -767,7 +764,11 @@ impl GixRepo {
         // not text — retagging them keeps the strategy (and every payload
         // consumer) honest about there being nothing to merge.
         let (base, ours, theirs) = if is_submodule {
-            (submodule_pointer(base), submodule_pointer(ours), submodule_pointer(theirs))
+            (
+                submodule_pointer(base),
+                submodule_pointer(ours),
+                submodule_pointer(theirs),
+            )
         } else {
             (base, ours, theirs)
         };
@@ -1567,9 +1568,9 @@ fn unified_body_line_count(text: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::Command;
     use worktree_core::domain::{DiffArea, DiffTarget};
     use worktree_core::error::ErrorKind;
-    use std::process::Command;
 
     fn run_git(workdir: &Path, args: &[&str]) {
         let output = Command::new("git")
@@ -1741,9 +1742,7 @@ fn submodule_pointer(payload: ConflictPayload) -> ConflictPayload {
 /// bytes `git lfs smudge` expects on stdin, reconstructed because the diff
 /// view holds the parsed change, not the raw pointer file.
 fn lfs_pointer_text(oid: &str, size: u64) -> String {
-    format!(
-        "version https://git-lfs.github.com/spec/v1\noid sha256:{oid}\nsize {size}\n"
-    )
+    format!("version https://git-lfs.github.com/spec/v1\noid sha256:{oid}\nsize {size}\n")
 }
 
 #[cfg(test)]

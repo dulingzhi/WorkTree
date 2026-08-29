@@ -5,12 +5,6 @@ use crate::util::{
     path_buf_from_git_bytes, run_git_capture, run_git_parsed_stdout, unix_seconds_to_system_time,
     unix_seconds_to_system_time_or_epoch,
 };
-use worktree_core::domain::{
-    Commit, CommitDetails, CommitFileChange, CommitId, CommitParentIds, ContributorCommit,
-    EMPTY_TREE_ID, HistoryMode, LogCursor, LogPage, RecentCommitMessage, ReflogEntry, StashEntry,
-};
-use worktree_core::error::{Error, ErrorKind, GitFailure, GitFailureId};
-use worktree_core::services::{CancellationToken, LogChunk, Result};
 use gix::bstr::ByteSlice as _;
 use gix::objs::FindExt as _;
 use gix::traverse::commit::simple::CommitTimeOrder;
@@ -18,6 +12,12 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
+use worktree_core::domain::{
+    Commit, CommitDetails, CommitFileChange, CommitId, CommitParentIds, ContributorCommit,
+    EMPTY_TREE_ID, HistoryMode, LogCursor, LogPage, RecentCommitMessage, ReflogEntry, StashEntry,
+};
+use worktree_core::error::{Error, ErrorKind, GitFailure, GitFailureId};
+use worktree_core::services::{CancellationToken, LogChunk, Result};
 
 const RECENT_COMMIT_MESSAGES_MAX_LIMIT: usize = 100;
 /// How much history [`GixRepo::author_email_map_impl`] walks — enough that
@@ -420,8 +420,8 @@ fn commit_file_change_from_diff(
     change: gix::object::tree::diff::ChangeDetached,
     compute_stats: bool,
 ) -> Result<Option<CommitFileChange>> {
-    use worktree_core::domain::FileStatusKind;
     use gix::object::tree::diff::ChangeDetached;
+    use worktree_core::domain::FileStatusKind;
 
     let (location, is_tree, is_submodule, kind, old_id, new_id) = match change {
         ChangeDetached::Addition {
@@ -1553,17 +1553,11 @@ impl GixRepo {
         for name in refs {
             let commit = repo
                 .rev_parse_single(name.as_str())
-                .map_err(|e| {
-                    Error::new(ErrorKind::Backend(format!("gix rev-parse {name}: {e}")))
-                })?
+                .map_err(|e| Error::new(ErrorKind::Backend(format!("gix rev-parse {name}: {e}"))))?
                 .object()
-                .map_err(|e| {
-                    Error::new(ErrorKind::Backend(format!("gix object {name}: {e}")))
-                })?
+                .map_err(|e| Error::new(ErrorKind::Backend(format!("gix object {name}: {e}"))))?
                 .peel_to_commit()
-                .map_err(|e| {
-                    Error::new(ErrorKind::Backend(format!("gix peel {name}: {e}")))
-                })?;
+                .map_err(|e| Error::new(ErrorKind::Backend(format!("gix peel {name}: {e}"))))?;
             tips.push(commit.id().detach());
         }
 
@@ -2575,7 +2569,9 @@ mod tests {
         assert!(hits[0].parent_ids.is_empty());
 
         // A non-root commit parses its %P parents.
-        let hits = repo.search_commits_impl("feature", 10).expect("second search");
+        let hits = repo
+            .search_commits_impl("feature", 10)
+            .expect("second search");
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].summary.as_ref(), "add feature");
         assert_eq!(hits[0].parent_ids.len(), 1);
@@ -2591,7 +2587,9 @@ mod tests {
 
         // A needle every commit matches through either pass — including the
         // first two through author *and* message — yields each commit once.
-        let hits = repo.search_commits_impl("e", 10).expect("search both passes");
+        let hits = repo
+            .search_commits_impl("e", 10)
+            .expect("search both passes");
         assert_eq!(hits.len(), 3);
 
         // The limit caps the merged list, message pass first.
@@ -2599,10 +2597,11 @@ mod tests {
         assert_eq!(hits.len(), 2);
 
         // Blank queries search nothing.
-        assert!(repo
-            .search_commits_impl("   ", 10)
-            .expect("blank query")
-            .is_empty());
+        assert!(
+            repo.search_commits_impl("   ", 10)
+                .expect("blank query")
+                .is_empty()
+        );
     }
 
     #[test]

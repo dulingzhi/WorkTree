@@ -2,10 +2,14 @@ use crate::model::{
     AI_COMMIT_RECENT_SUBJECTS_LIMIT, AiCommitContext, AppState, ConflictFileLoadMode,
 };
 use crate::msg::Msg;
+use rustc_hash::FxHashMap;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
+use std::time::Instant;
 use worktree_core::conflict_session::{ConflictPayload, ConflictSession, ConflictStageParts};
-use worktree_core::domain::{FileDiffImage, 
-    DiffArea, DiffPreviewTextSide, DiffTarget, LogCursor, LogScope, RepoStatus, Worktree,
-    WorktreeDirtySummary, count_file_statuses,
+use worktree_core::domain::{
+    DiffArea, DiffPreviewTextSide, DiffTarget, FileDiffImage, LogCursor, LogScope, RepoStatus,
+    Worktree, WorktreeDirtySummary, count_file_statuses,
 };
 use worktree_core::error::{Error, ErrorKind};
 use worktree_core::mergetool_trace::{
@@ -13,10 +17,6 @@ use worktree_core::mergetool_trace::{
 };
 use worktree_core::path_utils::canonicalize_or_original;
 use worktree_core::services::{CancellationToken, ConflictFileStages, GitBackend, GitRepository};
-use rustc_hash::FxHashMap;
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock, RwLock};
-use std::time::Instant;
 
 use super::super::{RepoId, executor::TaskExecutor, worker_channel::StoreWorkerSender};
 use super::util::{
@@ -311,15 +311,15 @@ pub(super) fn schedule_load_lfs_image_preview(
     target: DiffTarget,
 ) {
     spawn_with_repo(executor, repos, repo_id, msg_tx, move |repo, msg_tx| {
-        let result = repo
-            .lfs_new_side_smudged(&target)
-            .map(|bytes| {
-                bytes.map(|new| FileDiffImage {
-                    path: diff_target_path(&target).map(Path::to_path_buf).unwrap_or_default(),
-                    old: None,
-                    new: Some(new),
-                })
-            });
+        let result = repo.lfs_new_side_smudged(&target).map(|bytes| {
+            bytes.map(|new| FileDiffImage {
+                path: diff_target_path(&target)
+                    .map(Path::to_path_buf)
+                    .unwrap_or_default(),
+                old: None,
+                new: Some(new),
+            })
+        });
         send_or_log(
             &msg_tx,
             Msg::Internal(crate::msg::InternalMsg::LfsImagePreviewLoaded {
@@ -779,7 +779,8 @@ pub(super) fn schedule_load_repo_statistics(
     msg_tx: StoreWorkerSender,
     repo_id: RepoId,
 ) {
-    let since = std::time::SystemTime::now() - std::time::Duration::from_secs(STATISTICS_WINDOW_DAYS * 24 * 3600);
+    let since = std::time::SystemTime::now()
+        - std::time::Duration::from_secs(STATISTICS_WINDOW_DAYS * 24 * 3600);
     spawn_detached_with_repo_or_else(
         executor,
         "load-repo-statistics",
@@ -790,10 +791,7 @@ pub(super) fn schedule_load_repo_statistics(
             let result = repo.contributor_commits_since(since);
             send_or_log(
                 &msg_tx,
-                Msg::Internal(crate::msg::InternalMsg::RepoStatisticsLoaded {
-                    repo_id,
-                    result,
-                }),
+                Msg::Internal(crate::msg::InternalMsg::RepoStatisticsLoaded { repo_id, result }),
             );
         },
         move |msg_tx| {

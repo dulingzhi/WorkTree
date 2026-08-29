@@ -5,13 +5,13 @@ use crate::util::{
     run_git_raw_output, run_git_simple, run_git_simple_with_paths, validate_hex_commit_id,
     validate_ref_like_arg,
 };
-use worktree_core::domain::{CommitId, FileStatusKind, StashEntry};
-use worktree_core::error::{Error, ErrorKind, GitFailure, GitFailureId};
-use worktree_core::services::{CommitOperationOutcome, Result};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::fs;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
+use worktree_core::domain::{CommitId, FileStatusKind, StashEntry};
+use worktree_core::error::{Error, ErrorKind, GitFailure, GitFailureId};
+use worktree_core::services::{CommitOperationOutcome, Result};
 
 fn stash_spec(index: usize) -> String {
     format!("stash@{{{index}}}")
@@ -1196,8 +1196,8 @@ mod tests {
         paths_may_conflict_on_restore, stash_apply_failure_id,
         untracked_restore_conflict_paths_from_output,
     };
-    use worktree_core::error::GitFailureId;
     use std::{fs, path::Path};
+    use worktree_core::error::GitFailureId;
 
     #[test]
     fn parses_untracked_restore_conflict_paths_with_optional_error_prefixes() {

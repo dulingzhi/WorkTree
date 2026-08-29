@@ -4,6 +4,10 @@ use crate::util::{
     bytes_to_text_preserving_utf8, git_command_failed_error, run_git_capture, run_git_raw_output,
     run_git_simple, run_git_with_output, validate_hex_commit_id, validate_ref_like_arg,
 };
+use gix::bstr::ByteSlice as _;
+use rustc_hash::FxHashSet;
+use std::process::Command;
+use std::str;
 use worktree_core::domain::{CommitId, Remote, RemoteBranch, Upstream};
 use worktree_core::error::{Error, ErrorKind};
 use worktree_core::services::{
@@ -11,10 +15,6 @@ use worktree_core::services::{
     RemoteUrlKind, Result, SafePushAfterCommitContext, SafePushAfterCommitDecision,
     SafePushAfterCommitTarget,
 };
-use gix::bstr::ByteSlice as _;
-use rustc_hash::FxHashSet;
-use std::process::Command;
-use std::str;
 
 fn parse_refname_set(output: &str) -> FxHashSet<String> {
     output
@@ -1064,7 +1064,10 @@ impl GixRepo {
         };
         output
             .lines()
-            .filter_map(|line| line.split_once(' ').map(|(_, value)| value.trim().to_string()))
+            .filter_map(|line| {
+                line.split_once(' ')
+                    .map(|(_, value)| value.trim().to_string())
+            })
             .filter(|value| !value.is_empty())
             .collect()
     }
@@ -1073,8 +1076,10 @@ impl GixRepo {
     /// key, when one exists. Must run before the git subcommand is appended.
     fn apply_remote_ssh_command(&self, cmd: &mut Command, remote: &str) {
         if let Some(key) = self.remote_ssh_key(remote) {
-            cmd.arg("-c")
-                .arg(format!("core.sshCommand=ssh -i {}", quoted_ssh_key_path(&key)));
+            cmd.arg("-c").arg(format!(
+                "core.sshCommand=ssh -i {}",
+                quoted_ssh_key_path(&key)
+            ));
         }
     }
 
@@ -1088,8 +1093,10 @@ impl GixRepo {
         if keys.len() == 1
             && let Some(key) = keys.first()
         {
-            cmd.arg("-c")
-                .arg(format!("core.sshCommand=ssh -i {}", quoted_ssh_key_path(key)));
+            cmd.arg("-c").arg(format!(
+                "core.sshCommand=ssh -i {}",
+                quoted_ssh_key_path(key)
+            ));
         }
     }
 
@@ -1408,9 +1415,9 @@ mod tests {
         branches_to_prune, normalize_remote_url, parse_refname_set, parse_short_remote_branch_name,
         run_git_command,
     };
-    use worktree_core::services::CommandOutput;
     use rustc_hash::FxHashSet;
     use std::{cell::Cell, process::Command};
+    use worktree_core::services::CommandOutput;
 
     #[test]
     fn parse_refname_set_trims_and_deduplicates_lines() {
@@ -1560,7 +1567,10 @@ mod ssh_tests {
 
     #[test]
     fn plain_path_is_single_quoted() {
-        assert_eq!(quoted_ssh_key_path("/home/me/.ssh/id_ed25519"), "'/home/me/.ssh/id_ed25519'");
+        assert_eq!(
+            quoted_ssh_key_path("/home/me/.ssh/id_ed25519"),
+            "'/home/me/.ssh/id_ed25519'"
+        );
     }
 
     #[test]
@@ -1573,6 +1583,9 @@ mod ssh_tests {
 
     #[test]
     fn embedded_single_quotes_are_escaped() {
-        assert_eq!(quoted_ssh_key_path("/path/to/bob's key"), "'/path/to/bob'\\''s key'");
+        assert_eq!(
+            quoted_ssh_key_path("/path/to/bob's key"),
+            "'/path/to/bob'\\''s key'"
+        );
     }
 }

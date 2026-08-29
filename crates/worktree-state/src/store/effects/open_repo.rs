@@ -1,8 +1,8 @@
 use crate::msg::Msg;
-use worktree_core::domain::RepoSpec;
-use worktree_core::services::{CancellationToken, GitBackend};
 use std::path::PathBuf;
 use std::sync::Arc;
+use worktree_core::domain::RepoSpec;
+use worktree_core::services::{CancellationToken, GitBackend};
 
 use super::super::{
     RepoId, executor::TaskExecutor, repo_load_trace, worker_channel::StoreWorkerSender,

@@ -4,10 +4,10 @@
 //! `git difftool` and `git mergetool` invoke worktree automatically.
 //! Uninstall removes those entries while preserving unrelated tool settings.
 
-use worktree_core::path_utils::strip_windows_verbatim_prefix;
-use worktree_core::process::git_command as process_git_command;
 use rustc_hash::FxHashMap;
 use std::path::{Path, PathBuf};
+use worktree_core::path_utils::strip_windows_verbatim_prefix;
+use worktree_core::process::git_command as process_git_command;
 
 /// A single `git config` key-value pair to set.
 struct ConfigEntry {

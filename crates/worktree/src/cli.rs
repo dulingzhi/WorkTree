@@ -9,9 +9,9 @@
 //! - `extract-merge-fixtures`: generate Phase 3C real-world merge fixtures
 
 use clap::{Parser, Subcommand};
-use worktree_core::merge::{ConflictStyle, DEFAULT_MARKER_SIZE, DiffAlgorithm};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+use worktree_core::merge::{ConflictStyle, DEFAULT_MARKER_SIZE, DiffAlgorithm};
 
 mod compat;
 mod git_config;

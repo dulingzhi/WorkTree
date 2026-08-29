@@ -1,12 +1,6 @@
 use super::*;
 use crate::i18n::{t, tr, tr_str};
 use crate::ui_scale;
-use worktree_core::domain::HistoryMode;
-use worktree_core::process::{
-    GitExecutablePreference, GitRuntimeState, install_git_executable_path, refresh_git_runtime,
-};
-use worktree_state::model::{DefaultTagType, GitLogTagFetchMode};
-use worktree_state::session::ExternalCodeEditorSetting;
 use gpui::{
     Stateful, TitlebarOptions, WindowBackgroundAppearance, WindowBounds, WindowDecorations,
     WindowOptions,
@@ -506,13 +500,11 @@ impl GpgConfig {
     #[cfg(not(test))]
     fn read_from_git() -> Self {
         GpgConfig {
-            commit_signing_enabled:
-                worktree_core::process::git_config_global_get("commit.gpgsign")
-                    .as_deref()
-                    == Some("true"),
-            user_signing_key:
-                worktree_core::process::git_config_global_get("user.signingkey")
-                    .unwrap_or_default(),
+            commit_signing_enabled: worktree_core::process::git_config_global_get("commit.gpgsign")
+                .as_deref()
+                == Some("true"),
+            user_signing_key: worktree_core::process::git_config_global_get("user.signingkey")
+                .unwrap_or_default(),
             gpg_program: worktree_core::process::git_config_global_get("gpg.program")
                 .unwrap_or_default(),
         }
@@ -1647,7 +1639,7 @@ impl SettingsWindowView {
     /// render. The result lands in `ai_commit_availability` for the status
     /// row; `None` while in flight.
     fn refresh_ai_commit_availability(&mut self, cx: &mut gpui::Context<Self>) {
-        use crate::ai_commit_sources::{check_availability, EnvAccess};
+        use crate::ai_commit_sources::{EnvAccess, check_availability};
 
         let source = self.ai_commit_source;
         let manual = crate::ai_commit::current();
@@ -1656,12 +1648,7 @@ impl SettingsWindowView {
         cx.spawn(async move |this, cx| {
             let availability = cx
                 .background_spawn(async move {
-                    check_availability(
-                        source,
-                        &manual,
-                        &custom_command,
-                        &EnvAccess::real(),
-                    )
+                    check_availability(source, &manual, &custom_command, &EnvAccess::real())
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
@@ -3887,9 +3874,7 @@ impl SettingsWindowView {
     ) -> Vec<AnyElement> {
         let theme = this.theme;
         range
-            .filter_map(|ix| {
-                crate::ai_commit_sources::AiSource::ALL.get(ix).copied()
-            })
+            .filter_map(|ix| crate::ai_commit_sources::AiSource::ALL.get(ix).copied())
             .map(|source| {
                 this.option_row(
                     format!("settings_window_ai_commit_source_{}", source.key()),
@@ -5411,15 +5396,10 @@ impl Render for SettingsWindowView {
                                         Some((key, Some(detail))) => {
                                             crate::i18n::t!(*key, detail = detail).into_owned()
                                         }
-                                        Some((key, None)) => {
-                                            crate::i18n::t!(*key).into_owned()
-                                        }
+                                        Some((key, None)) => crate::i18n::t!(*key).into_owned(),
                                         None => String::new(),
                                     };
-                                    (
-                                        SharedString::from(text),
-                                        theme.colors.foreground.secondary,
-                                    )
+                                    (SharedString::from(text), theme.colors.foreground.secondary)
                                 }
                             };
                             general_card = general_card.child(
@@ -7385,16 +7365,16 @@ fn is_supported_git_version(version: GitVersion) -> bool {
 mod tests {
     use super::*;
     use crate::test_support::lock_visual_test;
-    use worktree_core::error::{Error, ErrorKind};
-    use worktree_core::process::{
-        GitExecutableAvailability, GitExecutablePreference, GitRuntimeState,
-    };
-    use worktree_core::services::{GitBackend, GitRepository, Result};
     use gpui::{Modifiers, ScrollDelta, ScrollWheelEvent};
     use std::ops::Deref;
     use std::path::{Path, PathBuf};
     use std::process::Command;
     use std::time::{SystemTime, UNIX_EPOCH};
+    use worktree_core::error::{Error, ErrorKind};
+    use worktree_core::process::{
+        GitExecutableAvailability, GitExecutablePreference, GitRuntimeState,
+    };
+    use worktree_core::services::{GitBackend, GitRepository, Result};
 
     const SESSION_FILE_ENV: &str = "WORKTREE_SESSION_FILE";
     const DIFF_DEFAULTS_SESSION_SUBTEST_ENV: &str = "WORKTREE_DIFF_DEFAULTS_SESSION_SUBTEST";
@@ -8370,7 +8350,9 @@ mod tests {
         });
 
         assert!(
-            settings_cx.debug_bounds("settings_window_gpg_signing").is_some(),
+            settings_cx
+                .debug_bounds("settings_window_gpg_signing")
+                .is_some(),
             "GPG signing card should render for its category"
         );
 
@@ -8387,7 +8369,10 @@ mod tests {
                 vec![
                     ("commit.gpgsign".to_string(), Some("true".to_string())),
                     ("user.signingkey".to_string(), None),
-                    ("gpg.program".to_string(), Some("/opt/gnupg/bin/gpg".to_string())),
+                    (
+                        "gpg.program".to_string(),
+                        Some("/opt/gnupg/bin/gpg".to_string())
+                    ),
                 ],
                 "each control should write its own global git-config key"
             );
@@ -10606,9 +10591,11 @@ mod tests {
         });
         cx.update(|_window, app| {
             let _ = settings_window.update(app, |settings, _window, cx| {
-                settings.ai_commit_custom_command_input.update(cx, |input, cx| {
-                    input.set_text("my-tool --flag {PROMPT}", cx);
-                });
+                settings
+                    .ai_commit_custom_command_input
+                    .update(cx, |input, cx| {
+                        input.set_text("my-tool --flag {PROMPT}", cx);
+                    });
             });
         });
         cx.run_until_parked();

@@ -1,10 +1,10 @@
-use worktree_core::domain::{CommitId, FileEntry, FileEntryKind};
-use worktree_core::error::{Error, ErrorKind};
-use worktree_core::services::Result;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use worktree_core::domain::{CommitId, FileEntry, FileEntryKind};
+use worktree_core::error::{Error, ErrorKind};
+use worktree_core::services::Result;
 
 use super::GixRepo;
 
@@ -242,10 +242,10 @@ fn collect_tree_entries(
 #[cfg(test)]
 mod tests {
     use super::GixRepo;
-    use worktree_core::domain::{CommitId, FileEntry, FileEntryKind};
     use std::fs;
     use std::path::Path;
     use std::process::Command;
+    use worktree_core::domain::{CommitId, FileEntry, FileEntryKind};
 
     fn paths_of(entries: &[FileEntry]) -> Vec<String> {
         entries

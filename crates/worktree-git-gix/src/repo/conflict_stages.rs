@@ -1,7 +1,7 @@
+use std::path::Path;
 use worktree_core::domain::FileConflictKind;
 use worktree_core::error::{Error, ErrorKind};
 use worktree_core::services::Result;
-use std::path::Path;
 
 #[derive(Default)]
 pub(super) struct ConflictStageData {

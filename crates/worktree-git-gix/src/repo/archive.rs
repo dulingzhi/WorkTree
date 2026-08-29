@@ -1,7 +1,7 @@
 use super::GixRepo;
 use crate::util::{run_git_with_output, validate_ref_like_arg};
-use worktree_core::services::{CommandOutput, Result};
 use std::path::Path;
+use worktree_core::services::{CommandOutput, Result};
 
 impl GixRepo {
     pub(super) fn archive_zip_with_output_impl(

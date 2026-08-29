@@ -1,16 +1,4 @@
 use crate::msg::Msg;
-use worktree_core::auth::{
-    CachedPassphraseEntry, WORKTREE_AUTH_CACHE_PROMPT_ENV_PREFIX,
-    WORKTREE_AUTH_CACHE_SECRET_ENV_PREFIX, WORKTREE_AUTH_CACHE_SIZE_ENV, WORKTREE_AUTH_KIND_ENV,
-    WORKTREE_AUTH_KIND_HOST_VERIFICATION, WORKTREE_AUTH_KIND_PASSPHRASE,
-    WORKTREE_AUTH_KIND_PASSPHRASE_CACHED, WORKTREE_AUTH_KIND_USERNAME_PASSWORD,
-    WORKTREE_AUTH_SECRET_ENV, WORKTREE_AUTH_USERNAME_ENV, GitAuthKind, StagedGitAuth,
-    load_session_passphrases, remember_passphrase_prompt_from_staged_git_auth,
-    take_staged_git_auth,
-};
-use worktree_core::error::{Error, ErrorKind};
-use worktree_core::process::git_command;
-use worktree_core::services::CommandOutput;
 use rustc_hash::FxHashMap;
 use std::fs;
 use std::io::Read as _;
@@ -19,6 +7,17 @@ use std::process::{Child, ChildStderr, ChildStdout, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
+use worktree_core::auth::{
+    CachedPassphraseEntry, GitAuthKind, StagedGitAuth, WORKTREE_AUTH_CACHE_PROMPT_ENV_PREFIX,
+    WORKTREE_AUTH_CACHE_SECRET_ENV_PREFIX, WORKTREE_AUTH_CACHE_SIZE_ENV, WORKTREE_AUTH_KIND_ENV,
+    WORKTREE_AUTH_KIND_HOST_VERIFICATION, WORKTREE_AUTH_KIND_PASSPHRASE,
+    WORKTREE_AUTH_KIND_PASSPHRASE_CACHED, WORKTREE_AUTH_KIND_USERNAME_PASSWORD,
+    WORKTREE_AUTH_SECRET_ENV, WORKTREE_AUTH_USERNAME_ENV, load_session_passphrases,
+    remember_passphrase_prompt_from_staged_git_auth, take_staged_git_auth,
+};
+use worktree_core::error::{Error, ErrorKind};
+use worktree_core::process::git_command;
+use worktree_core::services::CommandOutput;
 
 use super::super::{executor::TaskExecutor, worker_channel::StoreWorkerSender};
 use super::util::send_or_log;
@@ -638,10 +637,13 @@ pub(super) fn schedule_clone_repo(
         // layer's `quoted_ssh_key_path` because git hands the value to a
         // shell.
         if let Some(key) = ssh_key.as_deref().filter(|key| !key.trim().is_empty()) {
-            cmd.arg("-c")
-                .arg(format!("core.sshCommand=ssh -i {}", quote_clone_ssh_key(key)));
+            cmd.arg("-c").arg(format!(
+                "core.sshCommand=ssh -i {}",
+                quote_clone_ssh_key(key)
+            ));
         }
-        cmd.arg("clone").arg("--progress")
+        cmd.arg("clone")
+            .arg("--progress")
             .arg(&url)
             .arg(&dest)
             .stdout(Stdio::piped())

@@ -9,17 +9,12 @@ pub(super) fn model(this: &PopoverHost) -> ContextMenuModel {
         .iter()
         .find(|repo| Some(repo.id) == this.state.active_repo)
         .is_some_and(|repo| {
-            repo.remotes
-                .ready()
-                .is_some_and(|remotes| {
-                    super::super::super::super::forge_request::forge_request_base_from_remotes(
-                        remotes,
-                    )
+            repo.remotes.ready().is_some_and(|remotes| {
+                super::super::super::super::forge_request::forge_request_base_from_remotes(remotes)
                     .is_some()
-                })
-                && repo.head_branch.ready().is_some_and(|head| {
-                    super::super::super::super::forge_request::branch_is_url_safe(head.as_str())
-                })
+            }) && repo.head_branch.ready().is_some_and(|head| {
+                super::super::super::super::forge_request::branch_is_url_safe(head.as_str())
+            })
         });
 
     let repo_id = this.active_repo_id();

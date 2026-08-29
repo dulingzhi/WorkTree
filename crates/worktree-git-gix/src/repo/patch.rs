@@ -1,11 +1,11 @@
 use super::GixRepo;
 use crate::util::{run_git_capture, run_git_with_output};
-use worktree_core::domain::CommitId;
-use worktree_core::error::{Error, ErrorKind};
-use worktree_core::services::{CommandOutput, Result};
 use std::io::Write;
 use std::path::Path;
 use tempfile::NamedTempFile;
+use worktree_core::domain::CommitId;
+use worktree_core::error::{Error, ErrorKind};
+use worktree_core::services::{CommandOutput, Result};
 
 impl GixRepo {
     pub(super) fn export_patch_with_output_impl(

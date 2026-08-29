@@ -1,6 +1,3 @@
-pub(crate) use worktree_ui_gpui::perf_sidecar::{
-    PerfSidecarReport, criterion_sidecar_path, read_sidecar,
-};
 pub(crate) use serde::Deserialize;
 pub(crate) use std::env;
 pub(crate) use std::fmt::Write as _;
@@ -8,6 +5,9 @@ pub(crate) use std::fs::{self, OpenOptions};
 pub(crate) use std::io::Write;
 pub(crate) use std::path::{Path, PathBuf};
 pub(crate) use std::time::SystemTime;
+pub(crate) use worktree_ui_gpui::perf_sidecar::{
+    PerfSidecarReport, criterion_sidecar_path, read_sidecar,
+};
 
 mod artifacts;
 mod budgets;

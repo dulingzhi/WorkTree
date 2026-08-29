@@ -10,7 +10,11 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, number: u64) -> Context
 /// Pure half of [`model`]: everything it needs (title, checkout remote, web
 /// URL) is re-resolved from the live repo state, so the row never carries a
 /// stale copy of any of them.
-fn model_for_pull_request(repo: Option<&RepoState>, repo_id: RepoId, number: u64) -> ContextMenuModel {
+fn model_for_pull_request(
+    repo: Option<&RepoState>,
+    repo_id: RepoId,
+    number: u64,
+) -> ContextMenuModel {
     let (title, remote, url) = match repo {
         Some(repo) => {
             let title = match &repo.pull_requests {
@@ -96,11 +100,9 @@ fn origin_remote_name(remotes: &[Remote]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use worktree_core::domain::{
-        CommitId, PullRequest, PullRequestChecksState, RepoSpec,
-    };
     use std::path::PathBuf;
     use std::sync::Arc;
+    use worktree_core::domain::{CommitId, PullRequest, PullRequestChecksState, RepoSpec};
 
     fn github_repo_state() -> RepoState {
         let mut repo = RepoState::new_opening(
@@ -200,9 +202,11 @@ mod tests {
         // The PR is gone from the listing but the remote/URL actions still
         // resolve — the number is all the link needs.
         assert_eq!(entry_actions(&model).len(), 3);
-        assert!(model
-            .items
-            .iter()
-            .all(|item| !matches!(item, ContextMenuItem::Label(_))));
+        assert!(
+            model
+                .items
+                .iter()
+                .all(|item| !matches!(item, ContextMenuItem::Label(_)))
+        );
     }
 }

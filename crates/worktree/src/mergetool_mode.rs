@@ -1,4 +1,5 @@
 use crate::cli::{MergetoolConfig, exit_code};
+use std::{fs, path::Path};
 use worktree_core::{
     conflict_labels::{BaseLabelScenario, format_base_label},
     conflict_session::try_autosolve_merge_plan,
@@ -7,7 +8,6 @@ use worktree_core::{
         render_merge_plan,
     },
 };
-use std::{fs, path::Path};
 
 /// Result of running the dedicated mergetool mode.
 #[derive(Clone, Debug, Eq, PartialEq)]

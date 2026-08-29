@@ -7,15 +7,15 @@ use crate::util::{
     bytes_to_text_preserving_utf8, git_command_timeout, path_buf_from_git_bytes,
     run_git_capture_bytes, run_git_with_output, run_git_with_stdin_capture,
 };
-use worktree_core::domain::{DiffArea, is_uncommitted_commit_id};
-use worktree_core::error::{Error, ErrorKind};
-use worktree_core::services::{BlameLine, CommandOutput, ConflictSide, Result};
 use gix::bstr::ByteSlice as _;
 use rustc_hash::FxHashMap;
 use std::collections::hash_map::Entry;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use worktree_core::domain::{DiffArea, is_uncommitted_commit_id};
+use worktree_core::error::{Error, ErrorKind};
+use worktree_core::services::{BlameLine, CommandOutput, ConflictSide, Result};
 
 struct BlameCommitMetadata {
     commit_id_text: Arc<str>,

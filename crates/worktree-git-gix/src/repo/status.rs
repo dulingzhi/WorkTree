@@ -4,16 +4,16 @@ use super::{
     repo_file_stamp,
 };
 use crate::util::{git_workdir_cmd_for, path_buf_from_git_bytes, run_git_raw_output};
-use worktree_core::error::{GitFailure, GitFailureId};
-use worktree_core::domain::{
-    FileConflictKind, FileStatus, FileStatusKind, RepoStatus, UpstreamDivergence,
-};
-use worktree_core::error::{Error, ErrorKind};
-use worktree_core::services::{CancellationToken, Result};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::convert::Infallible;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
+use worktree_core::domain::{
+    FileConflictKind, FileStatus, FileStatusKind, RepoStatus, UpstreamDivergence,
+};
+use worktree_core::error::{Error, ErrorKind};
+use worktree_core::error::{GitFailure, GitFailureId};
+use worktree_core::services::{CancellationToken, Result};
 
 impl GixRepo {
     fn may_have_gitlink_status_supplement(
@@ -207,7 +207,10 @@ impl GixRepo {
             .arg("--untracked-files=all")
             .arg("--ignore-submodules=none")
             .arg("--");
-        let mut args: Vec<String> = paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+        let mut args: Vec<String> = paths
+            .iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect();
         args.sort();
         args.dedup();
         for arg in &args {
@@ -1281,9 +1284,7 @@ fn porcelain_v2_unmerged_kind(xy: &str) -> Option<FileConflictKind> {
 /// two lanes. Rename/copy records (`2`) answer `NeedsFullScan`: pairing
 /// their halves against the previous list is not something the merge
 /// replicates, and the full scan is the honest answer.
-fn parse_porcelain_v2_for_paths(
-    output: &[u8],
-) -> worktree_core::services::StatusForPaths {
+fn parse_porcelain_v2_for_paths(output: &[u8]) -> worktree_core::services::StatusForPaths {
     use worktree_core::services::StatusForPaths;
     let mut unstaged = Vec::new();
     let mut staged = Vec::new();
@@ -1314,12 +1315,18 @@ fn parse_porcelain_v2_for_paths(
                 let mut chars = xy.chars();
                 let x = chars.next();
                 let y = chars.next();
-                if let (Some(path), Some(x)) = (path_buf_from_git_bytes(path.as_bytes(), "porcelain v2 path").ok(), x) {
+                if let (Some(path), Some(x)) = (
+                    path_buf_from_git_bytes(path.as_bytes(), "porcelain v2 path").ok(),
+                    x,
+                ) {
                     if let Some(kind) = map_porcelain_v2_status_char(x) {
                         push_status_entry(&mut staged, path.clone(), kind);
                     }
                 }
-                if let (Some(y), Some(path)) = (y, path_buf_from_git_bytes(path.as_bytes(), "porcelain v2 path").ok()) {
+                if let (Some(y), Some(path)) = (
+                    y,
+                    path_buf_from_git_bytes(path.as_bytes(), "porcelain v2 path").ok(),
+                ) {
                     if let Some(kind) = map_porcelain_v2_status_char(y) {
                         push_status_entry(&mut unstaged, path, kind);
                     }
@@ -1348,7 +1355,9 @@ fn parse_porcelain_v2_for_paths(
                 let path = fields.next();
                 if let (Some(xy), Some(path)) = (xy, path) {
                     if let Some(kind) = porcelain_v2_unmerged_kind(xy) {
-                        if let Ok(path) = path_buf_from_git_bytes(path.as_bytes(), "porcelain v2 path") {
+                        if let Ok(path) =
+                            path_buf_from_git_bytes(path.as_bytes(), "porcelain v2 path")
+                        {
                             push_status_entry(&mut unstaged, path, FileStatusKind::Conflicted);
                             unstaged.last_mut().map(|entry| entry.conflict = Some(kind));
                         }
@@ -1481,11 +1490,11 @@ mod tests {
         map_porcelain_v2_status_char, remove_conflicted_paths_from_staged,
         should_supplement_unmerged_conflicts, sort_and_dedup_status_entries, tree_id_for_commit,
     };
-    use worktree_core::domain::{FileConflictKind, FileStatus, FileStatusKind};
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::process::{Command, Output};
     use std::sync::OnceLock;
+    use worktree_core::domain::{FileConflictKind, FileStatus, FileStatusKind};
 
     #[cfg(unix)]
     use std::{fs::Permissions, os::unix::fs::PermissionsExt as _};

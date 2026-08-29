@@ -1,10 +1,10 @@
 use super::GixRepo;
 use crate::util::run_git_simple_with_paths;
+use rustc_hash::FxHashSet;
+use std::path::Path;
 use worktree_core::domain::FileStatusKind;
 use worktree_core::error::{Error, ErrorKind};
 use worktree_core::services::Result;
-use rustc_hash::FxHashSet;
-use std::path::Path;
 
 impl GixRepo {
     pub(super) fn discard_worktree_changes_impl(&self, paths: &[&Path]) -> Result<()> {

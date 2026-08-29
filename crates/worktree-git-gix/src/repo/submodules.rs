@@ -4,6 +4,13 @@ use crate::util::{
     bytes_to_text_preserving_utf8, git_workdir_cmd_for, path_buf_from_git_bytes,
     run_git_raw_output, run_git_simple, run_git_with_output,
 };
+use gix::bstr::ByteSlice as _;
+use std::collections::BTreeMap;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::thread;
+use std::time::Duration;
 use worktree_core::domain::{
     CommitFileChange, CommitId, DiffTarget, FileStatus, RepoStatus, Submodule, SubmoduleDiffRange,
     SubmoduleDiffRangeKind, SubmoduleDiffSummary, SubmoduleDiffSummaryMode, SubmoduleInnerChange,
@@ -14,13 +21,6 @@ use worktree_core::path_utils::canonicalize_or_original;
 use worktree_core::services::{
     CancellationToken, CommandOutput, Result, SubmoduleTrustDecision, SubmoduleTrustTarget,
 };
-use gix::bstr::ByteSlice as _;
-use std::collections::BTreeMap;
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::thread;
-use std::time::Duration;
 
 type NumstatLineCounts = (Option<u32>, Option<u32>);
 type NumstatCounts = BTreeMap<PathBuf, NumstatLineCounts>;
@@ -1862,13 +1862,13 @@ mod tests {
         GixRepo, allow_file_submodule_transport, is_git_config_contention_error,
         retry_git_config_contention, submodule_file_transport_consent_key,
     };
-    use worktree_core::domain::{CommitId, DiffArea, DiffTarget, SubmoduleDiffRangeKind};
-    use worktree_core::error::{Error, ErrorKind, GitFailure, GitFailureId};
-    use worktree_core::services::CancellationToken;
     use std::cell::Cell;
     use std::ffi::OsStr;
     use std::path::Path;
     use std::process::Command;
+    use worktree_core::domain::{CommitId, DiffArea, DiffTarget, SubmoduleDiffRangeKind};
+    use worktree_core::error::{Error, ErrorKind, GitFailure, GitFailureId};
+    use worktree_core::services::CancellationToken;
 
     fn run_git(workdir: &Path, args: &[&str]) {
         let output = Command::new("git")
