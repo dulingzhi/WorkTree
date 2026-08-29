@@ -58,12 +58,16 @@ fn open_statistics(
     (view, cx)
 }
 
-/// A commit `hours_ago` hours back, so it lands inside the current week,
-/// month, and year regardless of when the test runs.
-fn recent_commit(author: &str, hours_ago: u64) -> ContributorCommit {
+/// A commit `seconds_ago` seconds back. The offsets stay in seconds, not
+/// hours: a few hours back crosses midnight — and with it the week, month,
+/// or year boundary — when the suite runs in the small hours of a Sunday or
+/// the first of a month, silently dropping the commit from the period the
+/// popover opens on. Seconds still straddle the exact midnight instant, a
+/// window orders of magnitude smaller than the hour-scale one.
+fn recent_commit(author: &str, seconds_ago: u64) -> ContributorCommit {
     ContributorCommit {
         author: Arc::from(author),
-        time: SystemTime::now() - std::time::Duration::from_secs(hours_ago * 3600),
+        time: SystemTime::now() - std::time::Duration::from_secs(seconds_ago),
     }
 }
 
