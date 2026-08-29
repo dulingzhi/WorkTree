@@ -204,6 +204,12 @@ mod tests {
             "path-shaped names are refused, only bare names are searched"
         );
 
+        // The plain-file rejection is the unix executable-bit check; on
+        // Windows every file counts as runnable, so the decoy `codex` file
+        // must go before the roster check can expect ClaudeCode alone.
+        #[cfg(not(unix))]
+        std::fs::remove_file(dir.join("codex")).unwrap();
+
         let available = available_agents(&paths);
         assert_eq!(available, vec![AgentKind::ClaudeCode]);
 

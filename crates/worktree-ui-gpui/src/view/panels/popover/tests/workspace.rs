@@ -74,13 +74,19 @@ fn open_workspace_picker(
     (view, cx)
 }
 
+/// Expected suggestion strings join with the platform separator, the way
+/// the picker itself does; the fixtures carry unix-style parent paths.
+fn expected_worktree_path(name: &str) -> String {
+    Path::new("/tmp/ws").join(name).display().to_string()
+}
+
 #[test]
 fn suggested_worktree_path_places_new_worktrees_beside_the_current_one() {
     let repo = repo_with_worktrees(RepoId(1));
 
     assert_eq!(
         workspace_picker::suggested_worktree_path(&repo, "feature"),
-        "/tmp/ws/feature"
+        expected_worktree_path("feature")
     );
 }
 
@@ -91,7 +97,7 @@ fn suggested_worktree_path_flattens_branch_shaped_queries() {
 
     assert_eq!(
         workspace_picker::suggested_worktree_path(&repo, "feat/x"),
-        "/tmp/ws/feat-x"
+        expected_worktree_path("feat-x")
     );
 }
 
@@ -341,7 +347,11 @@ fn workspace_picker_create_row_opens_the_add_dialog_prefilled(cx: &mut gpui::Tes
             host.worktree_ref_source_target_for_tests().to_string(),
         )
     });
-    assert_eq!(path, "/tmp/ws/shiny", "path should be prefilled from query");
+    assert_eq!(
+        path,
+        expected_worktree_path("shiny"),
+        "path should be prefilled from query"
+    );
     // `git worktree add <path> main` fails when main is checked out elsewhere;
     // with no reference git creates a new branch off HEAD, which is intended.
     assert_eq!(

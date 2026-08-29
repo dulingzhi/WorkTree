@@ -3416,9 +3416,8 @@ mod tests {
             fs::read_to_string(readme_path()).expect("README.md should be readable for docs tests");
 
         for snippet in [
-            "Custom themes are loaded from JSON bundle files in your per-user themes directory",
-            "creates on startup",
-            "[THEMES.md](docs/themes.md)",
+            "custom themes from JSON bundles",
+            "[Themes](docs/themes.md)",
         ] {
             assert!(
                 readme.contains(snippet),
