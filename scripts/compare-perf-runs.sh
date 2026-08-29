@@ -399,7 +399,7 @@ compare_metrics_table() {
                 .
               end
               | sub("^target/criterion/"; "")
-              | sub("^crates/repositorytree-ui-gpui/target/criterion/"; "")
+              | sub("^crates/worktree-ui-gpui/target/criterion/"; "")
             )
           | .[0]?
         );

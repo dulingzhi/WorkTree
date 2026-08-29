@@ -1,0 +1,137 @@
+# 简体中文目录，对应 misc.en.yml；键结构必须一致，%{…} 占位符须一一对应。
+#
+# 文件末尾另有 gettext 风格的顶层条目（键为英文原文，无 en 对应物）：
+# keep/delete 冲突面板的规格表在 Rust 侧保留英文（其单元测试直接断言
+# 表中字段），渲染时经 `tr_en` 查询这些英文原文键完成本地化。
+misc:
+  keep_delete:
+    keep_and_close: "%{label}并关闭"
+    keep_unavailable: "冲突暂存数据中没有可保留的一侧，只能应用删除。"
+    empty_file: "（空文件）"
+    not_present: "（不存在于冲突暂存数据中）"
+    deleted_side: "已删除的一侧（%{side}）："
+    surviving_side_one: "保留的一侧（%{side}）（%{count} 行）："
+    surviving_side_many: "保留的一侧（%{side}）（%{count} 行）："
+    file_deleted: "（文件已删除）"
+  diff_canvas:
+    view_prior: 查看此更改之前的文件
+    view_at_commit: 查看此提交时的文件
+  conflict_fold:
+    reveal_top: 从此折叠区顶部再显示 20 行
+    reveal_bottom: 从此折叠区底部再显示 20 行
+    expand_all: 展开所有隐藏的行
+  markdown:
+    image_unavailable: 图片不可用
+    failed_to_load: 加载失败
+    image_reason_with_target: "%{reason}：%{target}"
+    preview_source_limit: "Markdown 预览不可用：文件超出 1 MiB 预览限制。"
+    preview_row_limit: "Markdown 预览不可用：超出渲染行数限制。"
+    preview_diff_limit: "Markdown 预览不可用：差异超出 2 MiB 预览限制。"
+  history_panel:
+    title: 历史
+    no_repository: "未打开仓库。"
+    no_commits: "没有提交。"
+    author_tooltip: "按作者筛选历史 —— 建议来自已加载的历史记录"
+    author_filter_tooltip: "作者筛选：%{name} —— 建议来自已加载的历史记录"
+    ref_filter_tooltip: "按分支和标签筛选历史"
+    ref_filter_tooltip_active: "引用筛选：已选 %{count} 项 —— 仅显示从所选分支/标签可达的提交"
+    mode_tooltip: "历史模式（全部可达 / 仅第一父提交 / 排除合并 / 仅合并提交 / 所有分支）"
+    scanning: "正在扫描历史… %{count} 个提交"
+    column_message: 信息
+    column_date: 日期
+    column_sha: SHA
+  details:
+    commit_message_placeholder: 输入提交信息
+  ai_commit:
+    not_configured: "尚未配置 AI 提交信息——请在 设置 → 通用 中选择提供商并填写 API Key。"
+    no_staged_changes: "还没有已暂存的更改——请先暂存更改再生成提交信息。"
+    empty_diff: "暂存差异为空，没有可供模型描述的内容。"
+    failed: "AI 生成提交信息失败：%{error}"
+  file_editor:
+    workdir_unavailable: "仓库工作目录不可用。"
+  branch_sidebar:
+    no_remotes: 无远程仓库
+  repo_open:
+    prompt_init: 初始化 Git 仓库
+    init_failed_status: "Git init 失败（%{status}）。"
+    init_failed_detail: "Git init 失败：%{detail}"
+    could_not_start_git: "无法启动 Git：%{err}"
+    picker_failed: "无法打开文件夹选择器：%{err}"
+    initialized_at: "已在 %{path} 初始化仓库"
+  terminal:
+    system_default_best_effort: "系统默认（尽力而为）"
+    custom_launcher_not_set: "自定义启动器（未设置）"
+    no_shell_for_embedded: "未找到可用于内嵌终端的 shell 程序。"
+    no_launcher_on_path: "在 PATH 上未找到受支持的终端启动器。请在设置 > 终端中配置自定义启动器。"
+    unsupported_platform: "此平台不支持启动终端。"
+    set_custom_launcher: "请在设置 > 终端中设置自定义终端启动器程序。"
+    pwsh_fallback_cmd: "未找到可用于内嵌终端的 PowerShell；回退到 cmd.exe"
+  external_editor:
+    not_configured: 未配置外部代码编辑器
+    empty_custom_executable: 自定义编辑器可执行文件为空
+    invalid_custom_arguments: "无效的自定义编辑器参数：%{err}"
+    no_terminal_launcher: 未找到受支持的终端启动器
+    none_detail: 不显示外部编辑器操作
+    missing_detail: "缺失：%{path}"
+    saved_detail: "已保存：%{path}"
+    custom_label: 自定义…
+    custom_detail: 使用自定义命令或可执行文件路径
+    fallback_label: 外部编辑器
+  survey:
+    name: WorkTree 用户问卷
+    message: "填写一份简短的用户问卷，帮助改进 WorkTree。"
+    open: 打开问卷
+    postpone: 稍后
+  linux_gui:
+    wsl_wayland_missing_xdg: "此 WSL 环境设置了 WAYLAND_DISPLAY，但缺少 XDG_RUNTIME_DIR。请从启用 WSLg 的终端启动 WorkTree，或确保导出了 WSLg 会话变量。"
+    wsl_no_gui: "在此 WSL 环境中未检测到 GUI 会话。WorkTree 需要启用 WSLg 并设置 WAYLAND_DISPLAY 或 DISPLAY 才能打开窗口。"
+    wayland_missing_xdg: "已设置 WAYLAND_DISPLAY，但缺少 XDG_RUNTIME_DIR。请从活动的桌面会话启动 WorkTree。"
+    no_gui: "未检测到 GUI 会话。WorkTree 需要 X11 或 Wayland 会话才能打开窗口。请从活动的桌面会话启动它。"
+  desktop_install:
+    failed_detail: "桌面安装失败：%{err}"
+    failed_not_unicode: '桌面安装失败：可执行文件路径不是有效的 Unicode："%{path}"'
+    failed_no_exe: "桌面安装失败：无法解析可执行文件路径"
+    failed_no_home: "桌面安装失败：未设置 HOME/XDG_DATA_HOME"
+    installed_toast: "已将桌面入口和图标安装到：\n%{desktop}\n%{icon}\n\n如果 GNOME 仍显示通用图标，请注销后重新登录（或重启 GNOME Shell）。"
+  platform_open:
+    locations_unsupported: 此平台不支持打开文件所在位置
+    external_unsupported: 此平台不支持打开外部资源
+    files_unsupported: 此平台不支持打开文件
+    url_empty: URL 为空
+    url_missing_scheme: URL 缺少协议方案
+    url_scheme_denied: 不允许该 URL 协议方案
+    subject_open_external: 打开外部资源
+    subject_open_files: 打开文件或文件夹
+    missing_opener: "无法%{subject}：未找到受支持的桌面打开工具。请安装 `xdg-utils` 或使 `gio open` 可用。"
+    missing_opener_wsl_suffix: " 在 WSL 下，还可以安装 `wslu` 以提供 `wslview`。"
+  focused_diff:
+    title: "WorkTree — 对比"
+
+# Gettext 风格条目：keep/delete 冲突规格表（keep_delete_conflict.rs）的
+# 英文原文 → 中文。表在 Rust 侧保持英文（测试直接断言字段），渲染时经
+# `tr_en` 查询。
+"Modify / Delete conflict": "修改/删除冲突"
+"Add / Delete conflict": "添加/删除冲突"
+"This file was modified on the remote branch but deleted on your local branch.": "此文件在远程分支上被修改，但在您的本地分支上被删除。"
+"This file was modified on your local branch but deleted on the remote branch.": "此文件在您的本地分支上被修改，但在远程分支上被删除。"
+"This file was added on your local branch and deleted on the remote branch.": "此文件在您的本地分支上被添加，并在远程分支上被删除。"
+"This file was added on the remote branch and deleted on your local branch.": "此文件在远程分支上被添加，并在您的本地分支上被删除。"
+"Conflict": "冲突"
+"Unexpected conflict type.": "意外的冲突类型。"
+"Keep File (theirs)": "保留文件（对方）"
+"Keep File (ours)": "保留文件（我方）"
+"Accept Deletion (ours)": "接受删除（我方）"
+"Accept Deletion (theirs)": "接受删除（对方）"
+"Use Ours": "使用我方"
+"Accept Deletion": "接受删除"
+"Ours": "我方"
+"Theirs": "对方"
+
+# History-mode settings rows (spec table keeps English; rendered via `tr_en`
+# in settings_window.rs, keyed by the English sentence).
+"Show every commit reachable from the current branch tip.": "显示从当前分支尖端可达的所有提交。"
+"Follow only the mainline path through merges.": "只沿合并的主线路径追溯。"
+"Hide merge commits and show only ordinary commits.": "隐藏合并提交，只显示普通提交。"
+"Show only merge commits for high-level integration history.": "只显示合并提交，便于总览集成历史。"
+"Show commits reachable from all refs, not just the current branch.": "显示从所有引用可达的提交，而不仅是当前分支。"
+"Markdown preview unavailable: document is too large to render; showing source.": "Markdown 预览不可用：文档过大无法渲染；显示源文件。"

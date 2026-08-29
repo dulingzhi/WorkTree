@@ -1,23 +1,23 @@
 [workspace]
 resolver = "3"
 members = [
-  "crates/repositorytree",
-  "crates/repositorytree-core",
-  "crates/repositorytree-git",
-  "crates/repositorytree-git-gix",
-  "crates/repositorytree-state",
-  "crates/repositorytree-tree-sitter-alloc",
-  "crates/repositorytree-ui-gpui",
+  "crates/worktree",
+  "crates/worktree-core",
+  "crates/worktree-git",
+  "crates/worktree-git-gix",
+  "crates/worktree-state",
+  "crates/worktree-tree-sitter-alloc",
+  "crates/worktree-ui-gpui",
 ]
 exclude = ["crates/win32-window-utils", "vendor/tree-sitter-vue"]
 
 default-members = [
-  "crates/repositorytree",
-  "crates/repositorytree-core",
-  "crates/repositorytree-git",
-  "crates/repositorytree-git-gix",
-  "crates/repositorytree-state",
-  "crates/repositorytree-ui-gpui",
+  "crates/worktree",
+  "crates/worktree-core",
+  "crates/worktree-git",
+  "crates/worktree-git-gix",
+  "crates/worktree-state",
+  "crates/worktree-ui-gpui",
 ]
 
 [workspace.package]
@@ -25,16 +25,16 @@ version = "0.3.0"
 edition = "2024"
 license = "AGPL-3.0-only"
 authors = ["AutoExplore Oy <info@autoexplore.ai>"]
-repository = "https://github.com/RepositoryTree/RepositoryTree"
+repository = "https://github.com/dulingzhi/WorkTree"
 rust-version = "1.98.0"
 
 [workspace.dependencies]
 # Internal crates
-repositorytree-core = { path = "crates/repositorytree-core" }
-repositorytree-git = { path = "crates/repositorytree-git" }
-repositorytree-git-gix = { path = "crates/repositorytree-git-gix" }
-repositorytree-state = { path = "crates/repositorytree-state" }
-repositorytree-ui-gpui = { path = "crates/repositorytree-ui-gpui", default-features = false }
+worktree-core = { path = "crates/worktree-core" }
+worktree-git = { path = "crates/worktree-git" }
+worktree-git-gix = { path = "crates/worktree-git-gix" }
+worktree-state = { path = "crates/worktree-state" }
+worktree-ui-gpui = { path = "crates/worktree-ui-gpui", default-features = false }
 
 # External crates
 alacritty_terminal = "0.26"

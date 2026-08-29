@@ -6,9 +6,9 @@ usage() {
 Usage: scripts/install-linux.sh [--release|--debug] [--prefix PATH] [--no-build]
 
 Installs:
-  - binary to <prefix>/bin/repositorytree
-  - desktop entry to ~/.local/share/applications/repositorytree.desktop
-  - icons to ~/.local/share/icons/hicolor/<size>x<size>/apps/repositorytree.png
+  - binary to <prefix>/bin/worktree
+  - desktop entry to ~/.local/share/applications/worktree.desktop
+  - icons to ~/.local/share/icons/hicolor/<size>x<size>/apps/worktree.png
     sizes: 32, 48, 128, 256, 512
 
 Defaults:
@@ -32,14 +32,14 @@ while [[ $# -gt 0 ]]; do
 done
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-bin_src="${repo_root}/target/${mode}/repositorytree"
+bin_src="${repo_root}/target/${mode}/worktree"
 
 if [[ $build -eq 1 && ! -x "$bin_src" ]]; then
   cargo_mode_flag=()
   if [[ "$mode" == "release" ]]; then
     cargo_mode_flag=(--release)
   fi
-  (cd "$repo_root" && cargo build -p repositorytree "${cargo_mode_flag[@]}")
+  (cd "$repo_root" && cargo build -p worktree "${cargo_mode_flag[@]}")
 fi
 
 if [[ ! -x "$bin_src" ]]; then
@@ -53,27 +53,27 @@ appdir="${XDG_DATA_HOME:-${HOME}/.local/share}/applications"
 iconsroot="${XDG_DATA_HOME:-${HOME}/.local/share}/icons/hicolor"
 icon_sizes=(32 48 128 256 512)
 
-install -Dm755 "$bin_src" "${bindir}/repositorytree"
+install -Dm755 "$bin_src" "${bindir}/worktree"
 
 # Install desktop file with absolute Exec path so it works even if ~/.local/bin isn't on PATH.
 tmp_desktop="$(mktemp)"
 trap 'rm -f "$tmp_desktop"' EXIT
-sed "s|^Exec=.*$|Exec=${bindir}/repositorytree|g" \
-  "${repo_root}/assets/linux/repositorytree.desktop" >"$tmp_desktop"
-install -Dm644 "$tmp_desktop" "${appdir}/repositorytree.desktop"
+sed "s|^Exec=.*$|Exec=${bindir}/worktree|g" \
+  "${repo_root}/assets/linux/worktree.desktop" >"$tmp_desktop"
+install -Dm644 "$tmp_desktop" "${appdir}/worktree.desktop"
 
 for size in "${icon_sizes[@]}"; do
-  install -Dm644 "${repo_root}/assets/linux/hicolor/${size}x${size}/apps/repositorytree.png" \
-    "${iconsroot}/${size}x${size}/apps/repositorytree.png"
+  install -Dm644 "${repo_root}/assets/linux/hicolor/${size}x${size}/apps/worktree.png" \
+    "${iconsroot}/${size}x${size}/apps/worktree.png"
 done
 
 command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$appdir" >/dev/null 2>&1 || true
 command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache "${iconsroot}" >/dev/null 2>&1 || true
 
-echo "Installed RepositoryTree:"
-echo "  ${bindir}/repositorytree"
-echo "  ${appdir}/repositorytree.desktop"
+echo "Installed WorkTree:"
+echo "  ${bindir}/worktree"
+echo "  ${appdir}/worktree.desktop"
 for size in "${icon_sizes[@]}"; do
-  echo "  ${iconsroot}/${size}x${size}/apps/repositorytree.png"
+  echo "  ${iconsroot}/${size}x${size}/apps/worktree.png"
 done
 echo "If GNOME still shows a generic icon, log out/in (or restart GNOME Shell)."

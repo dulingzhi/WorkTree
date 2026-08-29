@@ -189,7 +189,7 @@ jobs:
           grep -Fq '"Arm64"' .github/workflows/deploy-microsoft-store.yml
           grep -Fq 'storage_container: "$web"' .github/workflows/release-manual-main.yml
           grep -Fq 'storage_prefix: "windows"' .github/workflows/release-manual-main.yml
-          grep -Fq 'package_base_url: "https://apt.repositorytree.dev/windows"' .github/workflows/release-manual-main.yml
+          grep -Fq 'package_base_url: "https://apt.worktree.dev/windows"' .github/workflows/release-manual-main.yml
           grep -Fq 'product_id: $''{{ vars.MICROSOFT_STORE_PRODUCT_ID }}' .github/workflows/release-manual-main.yml
           grep -Fq 'package_languages: $''{{ vars.MICROSOFT_STORE_PACKAGE_LANGUAGES }}' .github/workflows/release-manual-main.yml
           grep -Fq 'store_listing_languages: $''{{ vars.MICROSOFT_STORE_LISTING_LANGUAGES }}' .github/workflows/release-manual-main.yml
@@ -200,8 +200,8 @@ jobs:
           grep -Fq 'vars.WINDOWS_SIGNING_ENDPOINT' .github/workflows/build-release-artifacts.yml
           grep -Fq 'vars.WINDOWS_SIGNING_ACCOUNT_NAME' .github/workflows/build-release-artifacts.yml
           grep -Fq 'AZURE_CREDENTIALS' .github/workflows/build-release-artifacts.yml
-          grep -Fq 'repositorytree-windows-test' .github/workflows/build-release-artifacts.yml
-          grep -Fq 'repositorytree-windows-release' .github/workflows/build-release-artifacts.yml
+          grep -Fq 'worktree-windows-test' .github/workflows/build-release-artifacts.yml
+          grep -Fq 'worktree-windows-release' .github/workflows/build-release-artifacts.yml
           grep -Fq 'azure/login@' .github/workflows/build-release-artifacts.yml
           grep -Fq 'artifact-signing-action@' .github/workflows/build-release-artifacts.yml
           grep -Fq 'file-digest:' .github/workflows/build-release-artifacts.yml
@@ -211,7 +211,7 @@ jobs:
           grep -Fq 'verify-signed-artifact.ps1' .github/workflows/build-release-artifacts.yml
           grep -Fq 'AUR_PRIVATE_SSH_KEY' .github/workflows/deploy-aur.yml
           grep -Fq 'AUR_PRIVATE_SSH_KEY_PASSPHRASE' .github/workflows/deploy-aur.yml
-          grep -Fq 'ssh://aur@aur.archlinux.org/repositorytree.git' .github/workflows/deploy-aur.yml
+          grep -Fq 'ssh://aur@aur.archlinux.org/worktree.git' .github/workflows/deploy-aur.yml
           grep -Fq 'HOMEBREW_TAP_TOKEN' .github/workflows/deploy-homebrew-tap.yml
 
       - name: Test Microsoft Store deployment workflow
@@ -225,14 +225,14 @@ jobs:
           set -euo pipefail
           mkdir -p dist/deployment-ci/microsoft-store
           store_dir="dist/deployment-ci/microsoft-store"
-          release_url="https://github.com/RepositoryTree/RepositoryTree/releases/tag/v0.0.0-ci"
+          release_url="https://github.com/dulingzhi/WorkTree/releases/tag/v0.0.0-ci"
 
           cat > "$store_dir/listings.json" <<'JSON'
           {
             "Listings": [
               {
                 "Language": "en-us",
-                "Description": "RepositoryTree is a fast Git client.",
+                "Description": "WorkTree is a fast Git client.",
                 "WhatsNew": "stale notes from the previous release",
                 "ShortDescription": "Fast Git client",
                 "SearchTerms": ["git", "vcs"],
@@ -241,7 +241,7 @@ jobs:
               },
               {
                 "Language": "en-gb",
-                "Description": "RepositoryTree is a fast Git client.",
+                "Description": "WorkTree is a fast Git client.",
                 "AdditionalLicenseTerms": "MIT"
               }
             ]
@@ -253,11 +253,11 @@ jobs:
             echo '<img width="1987" src="https://example.invalid/screenshot.png" />'
             echo
             echo "## What's Changed"
-            echo '* Fix/repo ends with dot git by @quakj in https://github.com/RepositoryTree/RepositoryTree/pull/276'
+            echo '* Fix/repo ends with dot git by @quakj in https://github.com/dulingzhi/WorkTree/pull/276'
             for pr in $(seq 300 400); do
-              echo "* Change number ${pr} with a deliberately long title by @someone in https://github.com/RepositoryTree/RepositoryTree/pull/${pr}"
+              echo "* Change number ${pr} with a deliberately long title by @someone in https://github.com/dulingzhi/WorkTree/pull/${pr}"
             done
-            echo '**Full Changelog**: https://github.com/RepositoryTree/RepositoryTree/compare/v0.1.0...v0.2.0'
+            echo '**Full Changelog**: https://github.com/dulingzhi/WorkTree/compare/v0.1.0...v0.2.0'
           } > "$store_dir/release-notes.txt"
 
           scripts/microsoft-store-listing-metadata.sh \
@@ -277,7 +277,7 @@ jobs:
             # survive the round trip; only WhatsNew may change.
             test "$(jq -r 'keys | join(",")' "$payload")" = "Listings"
             test "$(jq -r '.Listings.Language' "$payload")" = "${expected_languages[$index]}"
-            test "$(jq -r '.Listings.Description' "$payload")" = "RepositoryTree is a fast Git client."
+            test "$(jq -r '.Listings.Description' "$payload")" = "WorkTree is a fast Git client."
             test "$(jq -r '.Listings.AdditionalLicenseTerms' "$payload")" = "MIT"
 
             whats_new="$(jq -r '.Listings.WhatsNew' "$payload")"
@@ -294,7 +294,7 @@ jobs:
 
           # The v0.2.0 release failed because the packages payload was fetched instead of
           # the listings module; that must be a loud failure, not an empty submission.
-          echo '{"Packages":[{"PackageUrl":"https://example.invalid/repositorytree.msi"}]}' \
+          echo '{"Packages":[{"PackageUrl":"https://example.invalid/worktree.msi"}]}' \
             > "$store_dir/packages.json"
           if scripts/microsoft-store-listing-metadata.sh \
             --listings-json "$store_dir/packages.json" \
@@ -310,31 +310,31 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist/deployment-ci
-          printf 'linux-arm-appimage-test' > dist/deployment-ci/repositorytree-v0.0.0-ci-linux-arm64.AppImage
-          printf 'linux-appimage-test' > dist/deployment-ci/repositorytree-v0.0.0-ci-linux-x86_64.AppImage
-          printf 'arm64-dmg-test' > dist/deployment-ci/repositorytree-v0.0.0-ci-macos-arm64.dmg
-          printf 'intel-dmg-test' > dist/deployment-ci/repositorytree-v0.0.0-ci-macos-x86_64.dmg
+          printf 'linux-arm-appimage-test' > dist/deployment-ci/worktree-v0.0.0-ci-linux-arm64.AppImage
+          printf 'linux-appimage-test' > dist/deployment-ci/worktree-v0.0.0-ci-linux-x86_64.AppImage
+          printf 'arm64-dmg-test' > dist/deployment-ci/worktree-v0.0.0-ci-macos-arm64.dmg
+          printf 'intel-dmg-test' > dist/deployment-ci/worktree-v0.0.0-ci-macos-x86_64.dmg
 
           scripts/generate-homebrew-cask.sh \
             --version "0.0.0-ci" \
-            --github-repo "RepositoryTree/RepositoryTree" \
-            --arm-dmg "dist/deployment-ci/repositorytree-v0.0.0-ci-macos-arm64.dmg" \
-            --intel-dmg "dist/deployment-ci/repositorytree-v0.0.0-ci-macos-x86_64.dmg" \
-            --linux-arm-appimage "dist/deployment-ci/repositorytree-v0.0.0-ci-linux-arm64.AppImage" \
-            --linux-intel-appimage "dist/deployment-ci/repositorytree-v0.0.0-ci-linux-x86_64.AppImage" \
-            --output "dist/deployment-ci/repositorytree.rb"
+            --github-repo "dulingzhi/WorkTree" \
+            --arm-dmg "dist/deployment-ci/worktree-v0.0.0-ci-macos-arm64.dmg" \
+            --intel-dmg "dist/deployment-ci/worktree-v0.0.0-ci-macos-x86_64.dmg" \
+            --linux-arm-appimage "dist/deployment-ci/worktree-v0.0.0-ci-linux-arm64.AppImage" \
+            --linux-intel-appimage "dist/deployment-ci/worktree-v0.0.0-ci-linux-x86_64.AppImage" \
+            --output "dist/deployment-ci/worktree.rb"
 
-          ruby -c dist/deployment-ci/repositorytree.rb
-          grep -q 'cask "repositorytree" do' dist/deployment-ci/repositorytree.rb
-          grep -q 'os macos: "macos", linux: "linux"' dist/deployment-ci/repositorytree.rb
-          grep -q 'on_linux do' dist/deployment-ci/repositorytree.rb
-          grep -q 'on_macos do' dist/deployment-ci/repositorytree.rb
-          grep -q 'app "RepositoryTree.app"' dist/deployment-ci/repositorytree.rb
-          grep -q 'binary "#{appdir}/RepositoryTree.app/Contents/MacOS/repositorytree", target: "repositorytree"' dist/deployment-ci/repositorytree.rb
-          grep -q 'container type: :naked' dist/deployment-ci/repositorytree.rb
-          grep -q 'binary "repositorytree-v#{version}-linux-#{arch}.AppImage", target: "repositorytree"' dist/deployment-ci/repositorytree.rb
-          grep -q 'repositorytree-v#{version}-linux-#{arch}.AppImage' dist/deployment-ci/repositorytree.rb
-          grep -q 'depends_on macos:' dist/deployment-ci/repositorytree.rb
+          ruby -c dist/deployment-ci/worktree.rb
+          grep -q 'cask "worktree" do' dist/deployment-ci/worktree.rb
+          grep -q 'os macos: "macos", linux: "linux"' dist/deployment-ci/worktree.rb
+          grep -q 'on_linux do' dist/deployment-ci/worktree.rb
+          grep -q 'on_macos do' dist/deployment-ci/worktree.rb
+          grep -q 'app "WorkTree.app"' dist/deployment-ci/worktree.rb
+          grep -q 'binary "#{appdir}/WorkTree.app/Contents/MacOS/worktree", target: "worktree"' dist/deployment-ci/worktree.rb
+          grep -q 'container type: :naked' dist/deployment-ci/worktree.rb
+          grep -q 'binary "worktree-v#{version}-linux-#{arch}.AppImage", target: "worktree"' dist/deployment-ci/worktree.rb
+          grep -q 'worktree-v#{version}-linux-#{arch}.AppImage' dist/deployment-ci/worktree.rb
+          grep -q 'depends_on macos:' dist/deployment-ci/worktree.rb
 
       - name: Validate Homebrew tap publish detection
         run: |
@@ -343,44 +343,44 @@ jobs:
           git init --initial-branch=main dist/deployment-ci/tap-repo
 
           pushd dist/deployment-ci/tap-repo >/dev/null
-          git config user.name "RepositoryTree CI"
+          git config user.name "WorkTree CI"
           git config user.email "ci@autoexplore.ai"
           echo "# Homebrew Tap" > README.md
           mkdir -p Formula
-          cat > Formula/repositorytree.rb <<'RUBY'
-          class Repositorytree < Formula
-            desc "Legacy RepositoryTree formula"
+          cat > Formula/worktree.rb <<'RUBY'
+          class Worktree < Formula
+            desc "Legacy WorkTree formula"
             homepage "https://example.com"
-            url "https://example.com/repositorytree.tar.gz"
+            url "https://example.com/worktree.tar.gz"
             sha256 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             version "0.0.0"
           end
           RUBY
-          cat > Formula/repositorytree-cli.rb <<'RUBY'
-          class RepositorytreeCli < Formula
-            desc "Legacy RepositoryTree CLI formula"
+          cat > Formula/worktree-cli.rb <<'RUBY'
+          class WorktreeCli < Formula
+            desc "Legacy WorkTree CLI formula"
             homepage "https://example.com"
-            url "https://example.com/repositorytree-cli.tar.gz"
+            url "https://example.com/worktree-cli.tar.gz"
             sha256 "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
             version "0.0.0"
           end
           RUBY
 
-          git add README.md Formula/repositorytree.rb Formula/repositorytree-cli.rb
+          git add README.md Formula/worktree.rb Formula/worktree-cli.rb
           git commit -m "Initial tap repo"
 
           mkdir -p Casks
-          cp ../repositorytree.rb Casks/repositorytree.rb
+          cp ../worktree.rb Casks/worktree.rb
 
-          git add Casks/repositorytree.rb
-          if git ls-files --error-unmatch Formula/repositorytree-cli.rb >/dev/null 2>&1; then
-            git rm -f Formula/repositorytree-cli.rb
+          git add Casks/worktree.rb
+          if git ls-files --error-unmatch Formula/worktree-cli.rb >/dev/null 2>&1; then
+            git rm -f Formula/worktree-cli.rb
           fi
-          if git ls-files --error-unmatch Formula/repositorytree.rb >/dev/null 2>&1; then
-            git rm -f Formula/repositorytree.rb
+          if git ls-files --error-unmatch Formula/worktree.rb >/dev/null 2>&1; then
+            git rm -f Formula/worktree.rb
           fi
 
-          if git diff --cached --quiet -- Casks/repositorytree.rb Formula/repositorytree-cli.rb Formula/repositorytree.rb; then
+          if git diff --cached --quiet -- Casks/worktree.rb Formula/worktree-cli.rb Formula/worktree.rb; then
             echo "Expected Homebrew cask publish and legacy formula removal to be detected as a change."
             exit 1
           fi
@@ -411,12 +411,12 @@ jobs:
           set -euo pipefail
           mkdir -p dist/aur-ci/repo
           cat > dist/aur-ci/repo/PKGBUILD <<'EOF'
-          pkgname=repositorytree
+          pkgname=worktree
           pkgver=0.0.0
           pkgrel=1
           pkgdesc="Fast, resource-efficient Git GUI written in Rust"
           arch=('x86_64')
-          url="https://repositorytree.dev/"
+          url="https://worktree.dev/"
           license=('AGPL-3.0-only')
           depends=(
             'fontconfig'
@@ -428,19 +428,19 @@ jobs:
             'wayland'
           )
           source=(
-            "repositorytree-v$pkgver-linux-x86_64.tar.gz::https://example.invalid/repositorytree-v$pkgver-linux-x86_64.tar.gz"
-            "repositorytree-source-v$pkgver.tar.gz::https://example.invalid/repositorytree-source-v$pkgver.tar.gz"
+            "worktree-v$pkgver-linux-x86_64.tar.gz::https://example.invalid/worktree-v$pkgver-linux-x86_64.tar.gz"
+            "worktree-source-v$pkgver.tar.gz::https://example.invalid/worktree-source-v$pkgver.tar.gz"
           )
           sha256sums=('oldbinary'
                       'oldsource')
 
           package() {
-            install -D -m755 "repositorytree-v$pkgver-linux-x86_64/repositorytree" "$pkgdir/usr/bin/repositorytree"
+            install -D -m755 "worktree-v$pkgver-linux-x86_64/worktree" "$pkgdir/usr/bin/worktree"
           }
           EOF
 
-          printf 'synthetic-binary' > dist/aur-ci/repositorytree-v0.0.0-linux-x86_64.tar.gz
-          printf 'synthetic-source' > dist/aur-ci/repositorytree-source-v0.0.0.tar.gz
+          printf 'synthetic-binary' > dist/aur-ci/worktree-v0.0.0-linux-x86_64.tar.gz
+          printf 'synthetic-source' > dist/aur-ci/worktree-source-v0.0.0.tar.gz
           chown -R builder:builder dist
 
       - name: Run update-aur.sh
@@ -449,8 +449,8 @@ jobs:
           su builder -c "cd '$GITHUB_WORKSPACE' && scripts/update-aur.sh \
             --aur-dir '$GITHUB_WORKSPACE/dist/aur-ci/repo' \
             --version 0.0.0 \
-            --binary-tar '$GITHUB_WORKSPACE/dist/aur-ci/repositorytree-v0.0.0-linux-x86_64.tar.gz' \
-            --source-tar '$GITHUB_WORKSPACE/dist/aur-ci/repositorytree-source-v0.0.0.tar.gz' \
+            --binary-tar '$GITHUB_WORKSPACE/dist/aur-ci/worktree-v0.0.0-linux-x86_64.tar.gz' \
+            --source-tar '$GITHUB_WORKSPACE/dist/aur-ci/worktree-source-v0.0.0.tar.gz' \
             --verify-source"
 
       - name: Validate generated PKGBUILD and .SRCINFO
@@ -458,8 +458,8 @@ jobs:
           set -euo pipefail
           test -f dist/aur-ci/repo/.SRCINFO
           grep -q '^pkgver=0.0.0$' dist/aur-ci/repo/PKGBUILD
-          grep -q 'source = repositorytree-v0.0.0-linux-x86_64.tar.gz::https://example.invalid/repositorytree-v0.0.0-linux-x86_64.tar.gz$' dist/aur-ci/repo/.SRCINFO
-          grep -q 'source = repositorytree-source-v0.0.0.tar.gz::https://example.invalid/repositorytree-source-v0.0.0.tar.gz$' dist/aur-ci/repo/.SRCINFO
+          grep -q 'source = worktree-v0.0.0-linux-x86_64.tar.gz::https://example.invalid/worktree-v0.0.0-linux-x86_64.tar.gz$' dist/aur-ci/repo/.SRCINFO
+          grep -q 'source = worktree-source-v0.0.0.tar.gz::https://example.invalid/worktree-source-v0.0.0.tar.gz$' dist/aur-ci/repo/.SRCINFO
 
   apt-repo-generation-smoke:
     name: Validate APT repo generation script
@@ -480,18 +480,18 @@ jobs:
             pkg_root="dist/apt-ci/pkg-${architecture}"
             mkdir -p "${pkg_root}/DEBIAN" "${pkg_root}/usr/bin"
 
-            printf '%s\n' '#!/usr/bin/env bash' "echo \"RepositoryTree CI ${architecture}\"" > "${pkg_root}/usr/bin/repositorytree"
-            chmod +x "${pkg_root}/usr/bin/repositorytree"
+            printf '%s\n' '#!/usr/bin/env bash' "echo \"WorkTree CI ${architecture}\"" > "${pkg_root}/usr/bin/worktree"
+            chmod +x "${pkg_root}/usr/bin/worktree"
 
             {
-              echo "Package: repositorytree"
+              echo "Package: worktree"
               echo "Version: 0.0.0~ci1"
               echo "Architecture: ${architecture}"
-              echo "Maintainer: RepositoryTree CI <ci@autoexplore.ai>"
-              echo "Description: Synthetic RepositoryTree package for deployment CI."
+              echo "Maintainer: WorkTree CI <ci@autoexplore.ai>"
+              echo "Description: Synthetic WorkTree package for deployment CI."
             } > "${pkg_root}/DEBIAN/control"
 
-            dpkg-deb --build "${pkg_root}" "dist/apt-ci/repositorytree_0.0.0~ci1_${architecture}.deb"
+            dpkg-deb --build "${pkg_root}" "dist/apt-ci/worktree_0.0.0~ci1_${architecture}.deb"
           done
 
       - name: Generate temporary signing key
@@ -505,7 +505,7 @@ jobs:
           {
             echo "Key-Type: RSA"
             echo "Key-Length: 3072"
-            echo "Name-Real: RepositoryTree CI"
+            echo "Name-Real: WorkTree CI"
             echo "Name-Email: ci@autoexplore.ai"
             echo "Expire-Date: 0"
             echo "%no-protection"
@@ -524,16 +524,16 @@ jobs:
           set -euo pipefail
           scripts/build-apt-repo.sh \
             --repo-dir dist/apt-ci/repo \
-            --deb dist/apt-ci/repositorytree_0.0.0~ci1_amd64.deb \
-            --deb dist/apt-ci/repositorytree_0.0.0~ci1_arm64.deb \
+            --deb dist/apt-ci/worktree_0.0.0~ci1_amd64.deb \
+            --deb dist/apt-ci/worktree_0.0.0~ci1_arm64.deb \
             --distribution stable \
             --component main \
             --architecture amd64 \
             --architecture arm64 \
-            --origin RepositoryTree \
-            --label RepositoryTree \
-            --description "RepositoryTree deployment CI repository" \
-            --repo-url https://example.invalid/repositorytree/apt \
+            --origin WorkTree \
+            --label WorkTree \
+            --description "WorkTree deployment CI repository" \
+            --repo-url https://example.invalid/worktree/apt \
             --gpg-passphrase "${APT_GPG_PASSPHRASE}" \
             --signing-key "${APT_TEST_GPG_KEY_ID}"
 
@@ -548,40 +548,40 @@ jobs:
           test -f dist/apt-ci/repo/dists/stable/main/binary-arm64/Packages.gz
           test -f dist/apt-ci/repo/dists/stable/InRelease
           test -f dist/apt-ci/repo/dists/stable/Release.gpg
-          test -f dist/apt-ci/repo/repositorytree-archive-keyring.gpg
-          test -f dist/apt-ci/repo/repositorytree.sources
+          test -f dist/apt-ci/repo/worktree-archive-keyring.gpg
+          test -f dist/apt-ci/repo/worktree.sources
 
-          grep -q "^Package: repositorytree$" dist/apt-ci/repo/dists/stable/main/binary-amd64/Packages
-          grep -q "^Filename: pool/main/g/repositorytree/repositorytree_0.0.0~ci1_amd64.deb$" dist/apt-ci/repo/dists/stable/main/binary-amd64/Packages
-          grep -q "^Package: repositorytree$" dist/apt-ci/repo/dists/stable/main/binary-arm64/Packages
-          grep -q "^Filename: pool/main/g/repositorytree/repositorytree_0.0.0~ci1_arm64.deb$" dist/apt-ci/repo/dists/stable/main/binary-arm64/Packages
+          grep -q "^Package: worktree$" dist/apt-ci/repo/dists/stable/main/binary-amd64/Packages
+          grep -q "^Filename: pool/main/g/worktree/worktree_0.0.0~ci1_amd64.deb$" dist/apt-ci/repo/dists/stable/main/binary-amd64/Packages
+          grep -q "^Package: worktree$" dist/apt-ci/repo/dists/stable/main/binary-arm64/Packages
+          grep -q "^Filename: pool/main/g/worktree/worktree_0.0.0~ci1_arm64.deb$" dist/apt-ci/repo/dists/stable/main/binary-arm64/Packages
           grep -q "^Architectures: amd64 arm64$" dist/apt-ci/repo/dists/stable/Release
-          grep -q "^URIs: https://example.invalid/repositorytree/apt$" dist/apt-ci/repo/repositorytree.sources
-          grep -q "^Architectures: amd64 arm64$" dist/apt-ci/repo/repositorytree.sources
-          grep -q '^deb \[arch=amd64,arm64 signed-by=/usr/share/keyrings/repositorytree-archive-keyring.gpg\] https://example.invalid/repositorytree/apt stable main$' dist/apt-ci/repo/repositorytree.list
+          grep -q "^URIs: https://example.invalid/worktree/apt$" dist/apt-ci/repo/worktree.sources
+          grep -q "^Architectures: amd64 arm64$" dist/apt-ci/repo/worktree.sources
+          grep -q '^deb \[arch=amd64,arm64 signed-by=/usr/share/keyrings/worktree-archive-keyring.gpg\] https://example.invalid/worktree/apt stable main$' dist/apt-ci/repo/worktree.list
 
           mkdir -p "$GNUPGHOME"
           chmod 700 "$GNUPGHOME"
-          gpg --batch --no-default-keyring --keyring dist/apt-ci/repo/repositorytree-archive-keyring.gpg --verify dist/apt-ci/repo/dists/stable/InRelease >/dev/null
+          gpg --batch --no-default-keyring --keyring dist/apt-ci/repo/worktree-archive-keyring.gpg --verify dist/apt-ci/repo/dists/stable/InRelease >/dev/null
 
       - name: Verify generated repo with apt-secure
         run: |
           set -euo pipefail
 
           repo_root="$(pwd)/dist/apt-ci/repo"
-          source_dir="${RUNNER_TEMP}/repositorytree-apt-sources.d"
-          lists_dir="${RUNNER_TEMP}/repositorytree-apt-lists"
+          source_dir="${RUNNER_TEMP}/worktree-apt-sources.d"
+          lists_dir="${RUNNER_TEMP}/worktree-apt-lists"
 
           mkdir -p "$source_dir"
           sudo mkdir -p "${lists_dir}/partial"
 
-          cat > "${source_dir}/repositorytree-ci.sources" <<EOF
+          cat > "${source_dir}/worktree-ci.sources" <<EOF
           Types: deb
           URIs: file://${repo_root}
           Suites: stable
           Components: main
           Architectures: amd64
-          Signed-By: ${repo_root}/repositorytree-archive-keyring.gpg
+          Signed-By: ${repo_root}/worktree-archive-keyring.gpg
           EOF
 
           sudo apt-get update \
@@ -590,7 +590,7 @@ jobs:
             -o Dir::State::lists="${lists_dir}" \
             -o APT::Get::List-Cleanup=0
 
-          apt-cache policy repositorytree \
+          apt-cache policy worktree \
             -o Dir::Etc::sourcelist=/dev/null \
             -o Dir::Etc::sourceparts="${source_dir}" \
             -o Dir::State::lists="${lists_dir}" \
@@ -629,7 +629,7 @@ jobs:
               set -- "$@" "$arg"
             done <<<"$cargo_config_output"
           fi
-          set -- "$@" -p repositorytree --release --locked --features ui-gpui,gix --bins
+          set -- "$@" -p worktree --release --locked --features ui-gpui,gix --bins
           cargo build "$@"
 
       - name: Package macOS artifacts
@@ -645,14 +645,14 @@ jobs:
       - name: Verify tarball contents
         run: |
           set -euo pipefail
-          tarball="dist/repositorytree-v0.0.0-ci-macos-${{ matrix.arch }}.tar.gz"
+          tarball="dist/worktree-v0.0.0-ci-macos-${{ matrix.arch }}.tar.gz"
           test -f "$tarball"
-          tar -tzf "$tarball" | grep -q "RepositoryTree.app/Contents/MacOS/repositorytree$"
+          tar -tzf "$tarball" | grep -q "WorkTree.app/Contents/MacOS/worktree$"
 
       - name: Verify DMG launches binary
         run: |
           set -euo pipefail
-          dmg="dist/repositorytree-v0.0.0-ci-macos-${{ matrix.arch }}.dmg"
+          dmg="dist/worktree-v0.0.0-ci-macos-${{ matrix.arch }}.dmg"
           test -f "$dmg"
 
           mount_point="$(hdiutil attach "$dmg" | awk '/\/Volumes\// {print $3; exit}')"
@@ -661,5 +661,5 @@ jobs:
             exit 1
           fi
 
-          "${mount_point}/RepositoryTree.app/Contents/MacOS/repositorytree" --help >/dev/null
+          "${mount_point}/WorkTree.app/Contents/MacOS/worktree" --help >/dev/null
           hdiutil detach "$mount_point"

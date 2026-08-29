@@ -22,9 +22,9 @@ NOTICE      text eol=lf
 
 # Merge test fixtures encode exact line endings (some are CRLF on purpose);
 # git must never normalize them.
-crates/repositorytree-core/tests/fixtures/merge/*.txt -text
+crates/worktree-core/tests/fixtures/merge/*.txt -text
 # Third-party font files ship with their own line endings.
-crates/repositorytree-ui-gpui/assets/fonts/** -text
+crates/worktree-ui-gpui/assets/fonts/** -text
 # Vendored tree-sitter grammars are upstream sources, not our code.
 vendor/** linguist-vendored
 

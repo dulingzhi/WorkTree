@@ -50,7 +50,7 @@ Then notarize and staple the generated artifacts:
 scripts/notarize-macos.sh \
   --version 0.2.0 \
   --arch arm64 \
-  --keychain-profile repositorytree-notary
+  --keychain-profile worktree-notary
 ```
 
 If you prefer direct API-key authentication instead of a stored profile:
@@ -67,7 +67,7 @@ scripts/notarize-macos.sh \
 To create a local keychain profile up front:
 
 ```bash
-xcrun notarytool store-credentials repositorytree-notary \
+xcrun notarytool store-credentials worktree-notary \
   --key /path/to/AuthKey_ABC1234567.p8 \
   --key-id ABC1234567 \
   --issuer 00000000-0000-0000-0000-000000000000
@@ -85,11 +85,11 @@ The packaging and notarization scripts already run the important checks for you:
 After a successful local run, you can manually spot-check the finished artifacts:
 
 ```bash
-codesign --verify --deep --strict --verbose=2 dist/stage/repositorytree-v0.2.0-macos-arm64/RepositoryTree.app
-spctl --assess --type open --context context:primary-signature --verbose=4 dist/stage/repositorytree-v0.2.0-macos-arm64/RepositoryTree.app
-spctl --assess --type open --context context:primary-signature --verbose=4 dist/repositorytree-v0.2.0-macos-arm64.dmg
-xcrun stapler validate dist/stage/repositorytree-v0.2.0-macos-arm64/RepositoryTree.app
-xcrun stapler validate dist/repositorytree-v0.2.0-macos-arm64.dmg
+codesign --verify --deep --strict --verbose=2 dist/stage/worktree-v0.2.0-macos-arm64/WorkTree.app
+spctl --assess --type open --context context:primary-signature --verbose=4 dist/stage/worktree-v0.2.0-macos-arm64/WorkTree.app
+spctl --assess --type open --context context:primary-signature --verbose=4 dist/worktree-v0.2.0-macos-arm64.dmg
+xcrun stapler validate dist/stage/worktree-v0.2.0-macos-arm64/WorkTree.app
+xcrun stapler validate dist/worktree-v0.2.0-macos-arm64.dmg
 ```
 
 If all of those commands return success, the signed macOS app bundle and DMG are in good shape.
@@ -103,7 +103,7 @@ Use repository-level or organization-level GitHub Actions secrets for the macOS 
 3. Base64-encode the `.p12` as a single line:
 
 ```bash
-base64 -i repositorytree-signing.p12 | tr -d '\n'
+base64 -i worktree-signing.p12 | tr -d '\n'
 ```
 
 4. In GitHub, add these Actions secrets:
@@ -152,7 +152,7 @@ The workflow imports the `.p12` certificate into a temporary keychain, signs the
 Treat the DMG as the canonical trusted macOS download.
 
 - The DMG is the notarized and stapled end-user artifact.
-- The tarball is rebuilt after stapling so the bundled `RepositoryTree.app` is current.
-- The standalone `repositorytree` binary at the tarball root is only code-signed. Apple's notary service does not accept `.tar.gz` uploads directly, and that file is not inside the submitted DMG.
+- The tarball is rebuilt after stapling so the bundled `WorkTree.app` is current.
+- The standalone `worktree` binary at the tarball root is only code-signed. Apple's notary service does not accept `.tar.gz` uploads directly, and that file is not inside the submitted DMG.
 
 If you want a separately trusted CLI-only macOS artifact, publish it in a notary-supported container such as a ZIP, DMG, or signed flat PKG and update downstream packaging accordingly.

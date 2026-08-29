@@ -47,9 +47,9 @@ Options:
   -h, --help               Show this help.
 
 Environment:
-  REPOSITORYTREE_PERF_REAL_REPO_ROOT
+  WORKTREE_PERF_REAL_REPO_ROOT
     Optional real-repo snapshot root used by real_repo benchmarks.
-  REPOSITORYTREE_PERF_RUNNER_CLASS
+  WORKTREE_PERF_RUNNER_CLASS
     Optional stable label recorded into new perf sidecars under
     .runner.runner_class. Set it before measured runs if artifacts may later
     be compared across sessions or machines.
@@ -57,13 +57,13 @@ Environment:
     Defaults to 0 in this script unless already set.
   MIMALLOC_PURGE_DECOMMITS
     Defaults to 1 in this script unless already set.
-  REPOSITORYTREE_BENCH_HISTORY_HEAVY_COMMITS
+  WORKTREE_BENCH_HISTORY_HEAVY_COMMITS
     Defaults to 10000 in this script unless already set.
-  REPOSITORYTREE_PERF_PRINT_BENCH_SUMMARY
+  WORKTREE_PERF_PRINT_BENCH_SUMMARY
     When truthy, print parsed artifact summaries after each benchmark case.
-  REPOSITORYTREE_PERF_SUMMARY_LOG
+  WORKTREE_PERF_SUMMARY_LOG
     Optional file path that receives the same per-benchmark summary text.
-  REPOSITORYTREE_PERF_SUMMARY_JSONL
+  WORKTREE_PERF_SUMMARY_JSONL
     Optional file path that receives one JSON record per completed benchmark
     case with parsed Criterion estimates and sidecar metrics when available.
 
@@ -163,7 +163,7 @@ crate_local_criterion_root() {
     return 1
   fi
 
-  printf 'crates/repositorytree-ui-gpui/%s\n' "${criterion_root}"
+  printf 'crates/worktree-ui-gpui/%s\n' "${criterion_root}"
 }
 
 resolve_sidecar_path() {
@@ -391,8 +391,8 @@ build_report_args() {
 }
 
 discover_main_benchmarks() {
-  env REPOSITORYTREE_PERF_SUPPRESS_MISSING_REAL_REPO_NOTICE=1 \
-    cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- --list --format terse |
+  env WORKTREE_PERF_SUPPRESS_MISSING_REAL_REPO_NOTICE=1 \
+    cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- --list --format terse |
     while IFS= read -r line; do
       [[ "${line}" == *": benchmark" ]] || continue
       local bench_name="${line%: benchmark}"
@@ -419,7 +419,7 @@ run_launch_case() {
   if [[ ${dry_run} -eq 1 ]]; then
     run_section \
       "App launch: ${bench}" \
-      cargo run -p repositorytree --bin perf-app-launch -- \
+      cargo run -p worktree --bin perf-app-launch -- \
       --bench "${bench}" \
       --timeout-ms "${launch_timeout_ms}"
     return 0
@@ -431,7 +431,7 @@ run_launch_case() {
   local launch_output=""
   local launch_status=0
   if launch_output="$(
-    cargo run -p repositorytree --bin perf-app-launch -- \
+    cargo run -p worktree --bin perf-app-launch -- \
       --bench "${bench}" \
       --timeout-ms "${launch_timeout_ms}" \
       2>&1
@@ -527,10 +527,10 @@ run_main_suite() {
   if [[ ${dry_run} -eq 1 ]]; then
     echo
     echo "==> Criterion benchmark suite (sharded)"
-    run_cmd env REPOSITORYTREE_PERF_SUPPRESS_MISSING_REAL_REPO_NOTICE=1 \
-      cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- --list --format terse
-    run_cmd env REPOSITORYTREE_PERF_SUPPRESS_MISSING_REAL_REPO_NOTICE=1 \
-      cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- --noplot \
+    run_cmd env WORKTREE_PERF_SUPPRESS_MISSING_REAL_REPO_NOTICE=1 \
+      cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- --list --format terse
+    run_cmd env WORKTREE_PERF_SUPPRESS_MISSING_REAL_REPO_NOTICE=1 \
+      cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- --noplot \
       "${main_criterion_args[@]}" --exact "<benchmark-name>"
     if [[ -n "${main_filter}" ]]; then
       echo "Main suite filter: ${main_filter}"
@@ -564,8 +564,8 @@ run_main_suite() {
   for bench in "${main_benches[@]}"; do
     run_section \
       "Criterion: ${bench}" \
-      env REPOSITORYTREE_PERF_SUPPRESS_MISSING_REAL_REPO_NOTICE=1 \
-      cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- --noplot \
+      env WORKTREE_PERF_SUPPRESS_MISSING_REAL_REPO_NOTICE=1 \
+      cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- --noplot \
       "${main_criterion_args[@]}" --exact "${bench}"
     emit_bench_summary "${bench}" "criterion"
   done
@@ -589,11 +589,11 @@ skip_idle_memory_growth_set=0
 auto_fresh_reference=0
 launch_suite_environment_blocked=0
 print_bench_summary=0
-summary_log_path="${REPOSITORYTREE_PERF_SUMMARY_LOG:-}"
-summary_jsonl_path="${REPOSITORYTREE_PERF_SUMMARY_JSONL:-}"
+summary_log_path="${WORKTREE_PERF_SUMMARY_LOG:-}"
+summary_jsonl_path="${WORKTREE_PERF_SUMMARY_JSONL:-}"
 bench_summary_warned_missing_jq=0
 
-if is_truthy "${REPOSITORYTREE_PERF_PRINT_BENCH_SUMMARY:-}"; then
+if is_truthy "${WORKTREE_PERF_PRINT_BENCH_SUMMARY:-}"; then
   print_bench_summary=1
 fi
 if [[ -n "${summary_log_path}" || -n "${summary_jsonl_path}" ]]; then
@@ -694,7 +694,7 @@ fi
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${repo_root}"
-export REPOSITORYTREE_PERF_CRITERION_ROOT="${criterion_root}"
+export WORKTREE_PERF_CRITERION_ROOT="${criterion_root}"
 
 if [[ -n "${summary_log_path}" ]]; then
   mkdir -p "$(dirname "${summary_log_path}")"
@@ -711,8 +711,8 @@ fi
 if [[ -z "${MIMALLOC_PURGE_DECOMMITS+x}" ]]; then
   export MIMALLOC_PURGE_DECOMMITS=1
 fi
-if [[ -z "${REPOSITORYTREE_BENCH_HISTORY_HEAVY_COMMITS+x}" ]]; then
-  export REPOSITORYTREE_BENCH_HISTORY_HEAVY_COMMITS=10000
+if [[ -z "${WORKTREE_BENCH_HISTORY_HEAVY_COMMITS+x}" ]]; then
+  export WORKTREE_BENCH_HISTORY_HEAVY_COMMITS=10000
 fi
 
 prepare_fresh_reference
@@ -753,18 +753,18 @@ fi
 
 echo "Running full performance suite from: ${repo_root}"
 echo "Perf profile: ${profile}"
-echo "Using primary Criterion sidecar root: ${REPOSITORYTREE_PERF_CRITERION_ROOT}"
+echo "Using primary Criterion sidecar root: ${WORKTREE_PERF_CRITERION_ROOT}"
 if [[ ${run_report} -eq 1 ]]; then
   echo "Budget report search roots: ${report_criterion_roots[*]}"
 fi
-if [[ -n "${REPOSITORYTREE_PERF_RUNNER_CLASS:-}" ]]; then
-  echo "Using perf runner class label: ${REPOSITORYTREE_PERF_RUNNER_CLASS}"
+if [[ -n "${WORKTREE_PERF_RUNNER_CLASS:-}" ]]; then
+  echo "Using perf runner class label: ${WORKTREE_PERF_RUNNER_CLASS}"
 fi
-if [[ -n "${REPOSITORYTREE_PERF_REAL_REPO_ROOT:-}" ]]; then
-  echo "Using real repo snapshots from: ${REPOSITORYTREE_PERF_REAL_REPO_ROOT}"
+if [[ -n "${WORKTREE_PERF_REAL_REPO_ROOT:-}" ]]; then
+  echo "Using real repo snapshots from: ${WORKTREE_PERF_REAL_REPO_ROOT}"
 fi
 echo "Using mimalloc purge settings: MIMALLOC_PURGE_DELAY=${MIMALLOC_PURGE_DELAY} MIMALLOC_PURGE_DECOMMITS=${MIMALLOC_PURGE_DECOMMITS}"
-echo "Using synthetic history-heavy commits: REPOSITORYTREE_BENCH_HISTORY_HEAVY_COMMITS=${REPOSITORYTREE_BENCH_HISTORY_HEAVY_COMMITS}"
+echo "Using synthetic history-heavy commits: WORKTREE_BENCH_HISTORY_HEAVY_COMMITS=${WORKTREE_BENCH_HISTORY_HEAVY_COMMITS}"
 if [[ -n "${fresh_reference}" ]]; then
   if [[ ${auto_fresh_reference} -eq 1 ]]; then
     echo "Using auto-generated report freshness reference: ${fresh_reference}"
@@ -805,7 +805,7 @@ if [[ ${run_idle} -eq 1 ]]; then
     fi
     run_section \
       "Idle resource: ${bench}" \
-      cargo run -p repositorytree-ui-gpui --features benchmarks --bin perf_idle_resource -- \
+      cargo run -p worktree-ui-gpui --features benchmarks --bin perf_idle_resource -- \
       --bench "${bench}"
     emit_bench_summary "${bench}" "idle"
   done
@@ -822,7 +822,7 @@ fi
 if [[ ${run_report} -eq 1 ]]; then
   run_section \
     "Performance budget report" \
-    cargo run -p repositorytree-ui-gpui --bin perf_budget_report -- \
+    cargo run -p worktree-ui-gpui --bin perf_budget_report -- \
     "${report_args[@]}"
 fi
 

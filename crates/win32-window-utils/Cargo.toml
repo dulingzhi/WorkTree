@@ -1,10 +1,10 @@
 [package]
-name = "repositorytree-win32-window-utils"
+name = "worktree-win32-window-utils"
 version = "0.1.7"
 edition = "2024"
 authors = ["AutoExplore Oy <info@autoexplore.ai>"]
 license = "AGPL-3.0-only"
-repository = "https://github.com/RepositoryTree/RepositoryTree"
+repository = "https://github.com/dulingzhi/WorkTree"
 rust-version = "1.98.0"
 publish = false
 

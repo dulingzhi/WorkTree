@@ -1,6 +1,6 @@
-# RepositoryTree（Rust）功能迭代路线
+# WorkTree（Rust）功能迭代路线
 
-> 参照系：C# 版 RepositoryTree（Sourcegit fork，2020 年起 1,073 commits，活跃至 2026-08）——同一作者 5 年日常使用沉淀的功能广度。
+> 参照系：C# 版 WorkTree（Sourcegit fork，2020 年起 1,073 commits，活跃至 2026-08）——同一作者 5 年日常使用沉淀的功能广度。
 > 约束：**不合并 `feature/jj-vcs` 及任何历史滞留分支**，jj 保持现状；本路线只排功能迭代；**subtree 与 git-flow 经决策不做**，不在计划内。
 > 依据：两版全量功能盘点 + Rust 侧逐项 grep 核实（GPG / LFS / 统计 / per-repo SSH key / archive / assume-unchanged / WIP 节点均确认缺失；标签会话恢复初判缺失系误报，实为已实现，见迭代 02-5）。工作量 S/M/L 按单人周粗估。
 

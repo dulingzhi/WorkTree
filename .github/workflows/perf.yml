@@ -34,7 +34,7 @@ jobs:
     continue-on-error: true
     timeout-minutes: 60
     env:
-      REPOSITORYTREE_PERF_CRITERION_ROOT: target/criterion
+      WORKTREE_PERF_CRITERION_ROOT: target/criterion
     steps:
     - uses: actions/checkout@v7
       with:
@@ -68,65 +68,65 @@ jobs:
     - name: Benchmark manual PR subset
       run: |
         # Conflict and markdown hot paths (existing)
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- conflict_three_way_scroll/style_window
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- conflict_two_way_split_scroll/window_200
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- conflict_search_query_update/window/200
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- conflict_split_resize_step/window/200
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- markdown_preview_parse_build/single_document/medium
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- markdown_preview_parse_build/two_sided_diff/medium
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- markdown_preview_render_single/window_rows/200
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- markdown_preview_render_diff/window_rows/200
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- conflict_three_way_scroll/style_window
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- conflict_two_way_split_scroll/window_200
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- conflict_search_query_update/window/200
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- conflict_split_resize_step/window/200
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- markdown_preview_parse_build/single_document/medium
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- markdown_preview_parse_build/two_sided_diff/medium
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- markdown_preview_render_single/window_rows/200
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- markdown_preview_render_diff/window_rows/200
         # Broad workflow alerting subset (perf.md on-demand PR list)
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- open_repo/balanced
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- history_cache_build/balanced
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- 'branch_sidebar/cache_hit_balanced'
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- 'branch_sidebar/20k_branches_100_remotes'
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- 'branch_sidebar/cache_invalidation_worktrees_ready'
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- commit_details/many_files
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- commit_details/large_message_body
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- repo_switch/refocus_same_repo
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- repo_switch/two_hot_repos
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- repo_switch/selected_commit_and_details
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- repo_switch/twenty_tabs
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- repo_switch/selected_diff_file
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- repo_switch/selected_conflict_target
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- repo_switch/merge_active_with_draft_restore
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- status_list/unstaged_large
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- diff_open_patch_first_window/200
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- diff_open_file_split_first_window/200
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- diff_open_file_inline_first_window/200
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- diff_open_image_preview_first_paint
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- diff_open_patch_deep_window_90pct/200
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- 'diff_refresh_rev_only_same_content'
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- open_repo/balanced
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- history_cache_build/balanced
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- 'branch_sidebar/cache_hit_balanced'
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- 'branch_sidebar/20k_branches_100_remotes'
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- 'branch_sidebar/cache_invalidation_worktrees_ready'
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- commit_details/many_files
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- commit_details/large_message_body
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- repo_switch/refocus_same_repo
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- repo_switch/two_hot_repos
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- repo_switch/selected_commit_and_details
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- repo_switch/twenty_tabs
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- repo_switch/selected_diff_file
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- repo_switch/selected_conflict_target
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- repo_switch/merge_active_with_draft_restore
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- status_list/unstaged_large
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- diff_open_patch_first_window/200
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- diff_open_file_split_first_window/200
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- diff_open_file_inline_first_window/200
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- diff_open_image_preview_first_paint
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- diff_open_patch_deep_window_90pct/200
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- 'diff_refresh_rev_only_same_content'
         # Text input highlight streaming — dense streamed cursor is the main hot path
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- 'text_input_runs_streamed_highlight_dense/streamed_cursor'
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- merge_open_bootstrap/large_streamed
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- 'text_input_runs_streamed_highlight_dense/streamed_cursor'
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- merge_open_bootstrap/large_streamed
         # Conflict edit path — incremental resolved-output recompute should stay local, not fall back to full rebuilds
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- 'resolved_output_recompute_incremental/incremental_recompute'
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- 'resolved_output_recompute_incremental/incremental_recompute'
         # Git data layer (Phase 4)
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- 'git_ops/log_walk_100k_commits_shallow'
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- 'git_ops/log_walk_100k_commits_shallow'
         # Search (Phase 4)
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- 'search/commit_filter_by_author_50k_commits'
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- 'search/in_diff_text_search_100k_lines'
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- 'search/commit_filter_by_author_50k_commits'
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- 'search/in_diff_text_search_100k_lines'
         # Keyboard (Phase 4)
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- 'keyboard/arrow_scroll_diff_sustained_repeat'
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- 'keyboard/stage_unstage_toggle_rapid'
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- 'keyboard/arrow_scroll_diff_sustained_repeat'
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- 'keyboard/stage_unstage_toggle_rapid'
         # Staging (Phase 4) — batch stage is the most common staging path at scale
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- 'staging/stage_all_10k_files'
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- 'staging/stage_all_10k_files'
         # Undo/redo (Phase 4) — deep conflict undo stack is the heaviest undo/redo path
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- 'undo_redo/conflict_resolution_deep_stack'
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- 'undo_redo/conflict_resolution_deep_stack'
         # Frame timing (Phase 4) — rapid commit selection is the most user-visible jank risk
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- 'frame_timing/rapid_commit_selection_changes'
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- 'frame_timing/rapid_commit_selection_changes'
         # Filesystem event (Phase 4) — single-file save is the most common fs event path
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- 'fs_event/single_file_save_to_status_update'
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- 'fs_event/single_file_save_to_status_update'
         # Network (Phase 4) — interleaved progress+scroll is the most user-visible network jank path
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- 'network/ui_responsiveness_during_fetch'
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- 'network/ui_responsiveness_during_fetch'
         # Clipboard (Phase 4) — copy from diff is the most common clipboard path
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- 'clipboard/copy_10k_lines_from_diff'
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- 'clipboard/copy_10k_lines_from_diff'
         # Display (Phase 4) — scale factor sweep is the most representative display cost benchmark
-        cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance -- 'display/render_cost_1x_vs_2x_vs_3x_scale'
+        cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- 'display/render_cost_1x_vs_2x_vs_3x_scale'
     - name: Emit budget report (alerting mode, skip missing)
-      run: cargo run -p repositorytree-ui-gpui --bin perf_budget_report -- --criterion-root target/criterion --skip-missing
+      run: cargo run -p worktree-ui-gpui --bin perf_budget_report -- --criterion-root target/criterion --skip-missing
 
   performance-budgets-full:
     name: Performance budgets (strict, full suite)
@@ -137,7 +137,7 @@ jobs:
     runs-on: ${{ vars.PERF_RUNNER || 'ubuntu-22.04' }}
     timeout-minutes: 120
     env:
-      REPOSITORYTREE_PERF_CRITERION_ROOT: target/criterion
+      WORKTREE_PERF_CRITERION_ROOT: target/criterion
     steps:
     - uses: actions/checkout@v7
       with:
@@ -167,32 +167,32 @@ jobs:
         fi
     - name: Run full benchmark suite
       env:
-        REPOSITORYTREE_PERF_REAL_REPO_ROOT: ${{ vars.PERF_REAL_REPO_ROOT }}
-      run: cargo bench -p repositorytree-ui-gpui --features benchmarks --bench performance
+        WORKTREE_PERF_REAL_REPO_ROOT: ${{ vars.PERF_REAL_REPO_ROOT }}
+      run: cargo bench -p worktree-ui-gpui --features benchmarks --bench performance
     - name: Run idle resource harness (dedicated runner only)
       if: vars.PERF_RUNNER != ''
       run: |
-        cargo run -p repositorytree-ui-gpui --features benchmarks --bin perf_idle_resource -- --bench 'idle/cpu_usage_single_repo_60s'
-        cargo run -p repositorytree-ui-gpui --features benchmarks --bin perf_idle_resource -- --bench 'idle/cpu_usage_ten_repos_60s'
-        cargo run -p repositorytree-ui-gpui --features benchmarks --bin perf_idle_resource -- --bench 'idle/memory_growth_single_repo_10min'
-        cargo run -p repositorytree-ui-gpui --features benchmarks --bin perf_idle_resource -- --bench 'idle/memory_growth_ten_repos_10min'
-        cargo run -p repositorytree-ui-gpui --features benchmarks --bin perf_idle_resource -- --bench 'idle/background_refresh_cost_per_cycle'
-        cargo run -p repositorytree-ui-gpui --features benchmarks --bin perf_idle_resource -- --bench 'idle/wake_from_sleep_resume'
+        cargo run -p worktree-ui-gpui --features benchmarks --bin perf_idle_resource -- --bench 'idle/cpu_usage_single_repo_60s'
+        cargo run -p worktree-ui-gpui --features benchmarks --bin perf_idle_resource -- --bench 'idle/cpu_usage_ten_repos_60s'
+        cargo run -p worktree-ui-gpui --features benchmarks --bin perf_idle_resource -- --bench 'idle/memory_growth_single_repo_10min'
+        cargo run -p worktree-ui-gpui --features benchmarks --bin perf_idle_resource -- --bench 'idle/memory_growth_ten_repos_10min'
+        cargo run -p worktree-ui-gpui --features benchmarks --bin perf_idle_resource -- --bench 'idle/background_refresh_cost_per_cycle'
+        cargo run -p worktree-ui-gpui --features benchmarks --bin perf_idle_resource -- --bench 'idle/wake_from_sleep_resume'
     - name: Run app launch harness (dedicated runner only)
       if: vars.PERF_RUNNER != ''
       run: |
-        cargo run -p repositorytree --bin perf-app-launch -- --bench 'app_launch/cold_empty_workspace'
-        cargo run -p repositorytree --bin perf-app-launch -- --bench 'app_launch/cold_single_repo'
-        cargo run -p repositorytree --bin perf-app-launch -- --bench 'app_launch/cold_five_repos'
-        cargo run -p repositorytree --bin perf-app-launch -- --bench 'app_launch/cold_twenty_repos'
-        cargo run -p repositorytree --bin perf-app-launch -- --bench 'app_launch/warm_single_repo'
-        cargo run -p repositorytree --bin perf-app-launch -- --bench 'app_launch/warm_twenty_repos'
+        cargo run -p worktree --bin perf-app-launch -- --bench 'app_launch/cold_empty_workspace'
+        cargo run -p worktree --bin perf-app-launch -- --bench 'app_launch/cold_single_repo'
+        cargo run -p worktree --bin perf-app-launch -- --bench 'app_launch/cold_five_repos'
+        cargo run -p worktree --bin perf-app-launch -- --bench 'app_launch/cold_twenty_repos'
+        cargo run -p worktree --bin perf-app-launch -- --bench 'app_launch/warm_single_repo'
+        cargo run -p worktree --bin perf-app-launch -- --bench 'app_launch/warm_twenty_repos'
     - name: Emit budget report (strict on dedicated runner, alerting on shared)
       run: |
         if [ -n "${{ vars.PERF_RUNNER }}" ]; then
           echo "::notice::Running in strict mode on dedicated runner (${{ vars.PERF_RUNNER }}) with real-repo snapshots from ${{ vars.PERF_REAL_REPO_ROOT }}"
-          cargo run -p repositorytree-ui-gpui --bin perf_budget_report -- --criterion-root target/criterion --strict
+          cargo run -p worktree-ui-gpui --bin perf_budget_report -- --criterion-root target/criterion --strict
         else
           echo "::notice::Running in alerting mode on shared runner (ubuntu-22.04) — numbers are noisy"
-          cargo run -p repositorytree-ui-gpui --bin perf_budget_report -- --criterion-root target/criterion --skip-missing
+          cargo run -p worktree-ui-gpui --bin perf_budget_report -- --criterion-root target/criterion --skip-missing
         fi

@@ -67,7 +67,7 @@ case "$FAKE_MSSTORE_SCENARIO" in
     exit 0
     ;;
   wrapped-json)
-    printf '{"isSuccess":true,"errors":[],"Listings":[{"Language":"en","Description":"RepositoryTree stays \nresponsive after a hard wrap and preserves intentional\\nparagraph breaks."}]}\n'
+    printf '{"isSuccess":true,"errors":[],"Listings":[{"Language":"en","Description":"WorkTree stays \nresponsive after a hard wrap and preserves intentional\\nparagraph breaks."}]}\n'
     exit 0
     ;;
   *)
@@ -142,7 +142,7 @@ fi
 
 run_fetch wrapped-json en
 test "$(wc -l < "$temp_dir/wrapped-json/paths.txt")" -eq 1
-test "$(jq -r '.Listings[0].Description' "$(head -n 1 "$temp_dir/wrapped-json/paths.txt")")" = $'RepositoryTree stays responsive after a hard wrap and preserves intentional\nparagraph breaks.'
+test "$(jq -r '.Listings[0].Description' "$(head -n 1 "$temp_dir/wrapped-json/paths.txt")")" = $'WorkTree stays responsive after a hard wrap and preserves intentional\nparagraph breaks.'
 
 printf '%s\n' 'Synthetic release notes' > "$temp_dir/release-notes.txt"
 prepare_dir="$temp_dir/prepare-fallback"

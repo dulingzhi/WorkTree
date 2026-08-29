@@ -12,7 +12,7 @@ Usage: scripts/generate-homebrew-cask.sh \
   --linux-intel-appimage PATH \
   --output PATH
 
-Generates a Homebrew cask for RepositoryTree from macOS DMG and Linux AppImage artifacts.
+Generates a Homebrew cask for WorkTree from macOS DMG and Linux AppImage artifacts.
 USAGE
 }
 
@@ -119,7 +119,7 @@ linux_intel_sha="$(sha256_file "$linux_intel_appimage")"
 mkdir -p "$(dirname "$out_path")"
 
 cat > "$out_path" <<EOF2
-cask "repositorytree" do
+cask "worktree" do
   version "${version}"
   arch arm: "arm64", intel: "x86_64"
   os macos: "macos", linux: "linux"
@@ -133,11 +133,11 @@ cask "repositorytree" do
       sha256 "${intel_sha}"
     end
 
-    url "https://github.com/${github_repo}/releases/download/v#{version}/repositorytree-v#{version}-macos-#{arch}.dmg"
+    url "https://github.com/${github_repo}/releases/download/v#{version}/worktree-v#{version}-macos-#{arch}.dmg"
     depends_on macos: :ventura
 
-    app "RepositoryTree.app"
-    binary "#{appdir}/RepositoryTree.app/Contents/MacOS/repositorytree", target: "repositorytree"
+    app "WorkTree.app"
+    binary "#{appdir}/WorkTree.app/Contents/MacOS/worktree", target: "worktree"
   end
 
   on_linux do
@@ -149,13 +149,13 @@ cask "repositorytree" do
       sha256 "${linux_intel_sha}"
     end
 
-    url "https://github.com/${github_repo}/releases/download/v#{version}/repositorytree-v#{version}-linux-#{arch}.AppImage"
+    url "https://github.com/${github_repo}/releases/download/v#{version}/worktree-v#{version}-linux-#{arch}.AppImage"
     container type: :naked
 
-    binary "repositorytree-v#{version}-linux-#{arch}.AppImage", target: "repositorytree"
+    binary "worktree-v#{version}-linux-#{arch}.AppImage", target: "worktree"
   end
 
-  name "RepositoryTree"
+  name "WorkTree"
   desc "Fast, resource-efficient Git GUI written in Rust"
   homepage "https://github.com/${github_repo}"
 end

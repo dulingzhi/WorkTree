@@ -10,8 +10,8 @@ resulting ticket to the staged .app bundle and DMG, and refreshes the macOS
 tarball so the archived app bundle also carries the stapled ticket.
 
 Expected inputs:
-  - <out-dir>/repositorytree-v<VERSION>-macos-<ARCH>.dmg
-  - <out-dir>/stage/repositorytree-v<VERSION>-macos-<ARCH>/RepositoryTree.app
+  - <out-dir>/worktree-v<VERSION>-macos-<ARCH>.dmg
+  - <out-dir>/stage/worktree-v<VERSION>-macos-<ARCH>/WorkTree.app
 
 Authentication:
   --keychain-profile PROFILE
@@ -23,7 +23,7 @@ Authentication:
 
 Notes:
   - The macOS tarball is rebuilt after stapling so the bundled .app is up to date.
-  - The standalone repositorytree binary at the tarball root is only code-signed.
+  - The standalone worktree binary at the tarball root is only code-signed.
     Apple's notary service does not accept .tar.gz uploads directly.
 
 Defaults:
@@ -142,14 +142,14 @@ else
   out_abs="$(cd "${repo_root}/${out_dir}" && pwd)"
 fi
 
-release_root="repositorytree-v${version}-macos-${arch}"
+release_root="worktree-v${version}-macos-${arch}"
 stage_root="${out_abs}/stage"
 release_dir="${stage_root}/${release_root}"
-app_path="${release_dir}/RepositoryTree.app"
-app_binary="${app_path}/Contents/MacOS/repositorytree"
+app_path="${release_dir}/WorkTree.app"
+app_binary="${app_path}/Contents/MacOS/worktree"
 tarball_path="${out_abs}/${release_root}.tar.gz"
 dmg_path="${out_abs}/${release_root}.dmg"
-standalone_binary="${release_dir}/repositorytree"
+standalone_binary="${release_dir}/worktree"
 
 for tool in xcrun codesign spctl tar; do
   if ! command -v "$tool" >/dev/null 2>&1; then
@@ -194,7 +194,7 @@ else
 fi
 
 echo "Submitting $dmg_path for notarization"
-submit_log="$(mktemp -t repositorytree-notary-submit.XXXXXX)"
+submit_log="$(mktemp -t worktree-notary-submit.XXXXXX)"
 set +e
 xcrun notarytool submit "$dmg_path" "${notary_args[@]}" --wait --timeout "$wait_timeout" 2>&1 | tee "$submit_log"
 submit_status=${PIPESTATUS[0]}

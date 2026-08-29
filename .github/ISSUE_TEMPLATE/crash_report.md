@@ -1,13 +1,13 @@
 ---
 name: Crash report
-about: Report a RepositoryTree crash
+about: Report a WorkTree crash
 title: "Crash: "
 labels: bug
 ---
 
 ## Crash Summary
 
-Describe what you were doing right before RepositoryTree crashed.
+Describe what you were doing right before WorkTree crashed.
 
 ## Reproduction Steps
 

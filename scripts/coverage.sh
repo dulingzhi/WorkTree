@@ -34,7 +34,7 @@ mkdir -p "$coverage_dir"
 
 cargo llvm-cov \
   --workspace \
-  --exclude repositorytree-ui-gpui \
+  --exclude worktree-ui-gpui \
   --no-default-features \
   --features gix \
   --lcov \
@@ -43,7 +43,7 @@ cargo llvm-cov \
 
 cargo llvm-cov \
   --workspace \
-  --exclude repositorytree-ui-gpui \
+  --exclude worktree-ui-gpui \
   --no-default-features \
   --features gix \
   --html \

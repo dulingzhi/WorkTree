@@ -172,12 +172,12 @@ jobs:
           gh release view "${{ steps.norm.outputs.tag }}" --repo "$GITHUB_REPOSITORY" >/dev/null
           gh release download "${{ steps.norm.outputs.tag }}" \
             --repo "$GITHUB_REPOSITORY" \
-            --pattern "repositorytree-v${{ steps.norm.outputs.version }}-windows-*.msi" \
+            --pattern "worktree-v${{ steps.norm.outputs.version }}-windows-*.msi" \
             --dir dist/windows-release \
             --clobber
 
-          x64_installer="dist/windows-release/repositorytree-v${{ steps.norm.outputs.version }}-windows-x86_64.msi"
-          arm64_installer="dist/windows-release/repositorytree-v${{ steps.norm.outputs.version }}-windows-arm64.msi"
+          x64_installer="dist/windows-release/worktree-v${{ steps.norm.outputs.version }}-windows-x86_64.msi"
+          arm64_installer="dist/windows-release/worktree-v${{ steps.norm.outputs.version }}-windows-arm64.msi"
 
           missing=()
           for installer_path in "$x64_installer" "$arm64_installer"; do

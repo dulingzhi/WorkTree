@@ -2,17 +2,17 @@
 setlocal EnableExtensions
 
 rem ── Detect target architecture ────────────────────────────────────────────
-rem   Defaults to the host architecture.  Override with REPOSITORYTREE_TARGET_ARCH
+rem   Defaults to the host architecture.  Override with WORKTREE_TARGET_ARCH
 rem   (set to "x64" or "arm64") for cross-compilation scenarios.
-if defined REPOSITORYTREE_TARGET_ARCH goto :arch_set
+if defined WORKTREE_TARGET_ARCH goto :arch_set
 if /i "%PROCESSOR_ARCHITECTURE%"=="ARM64" (
-  set "REPOSITORYTREE_TARGET_ARCH=arm64"
+  set "WORKTREE_TARGET_ARCH=arm64"
 ) else (
-  set "REPOSITORYTREE_TARGET_ARCH=x64"
+  set "WORKTREE_TARGET_ARCH=x64"
 )
 :arch_set
 
-if /i "%REPOSITORYTREE_TARGET_ARCH%"=="arm64" (
+if /i "%WORKTREE_TARGET_ARCH%"=="arm64" (
   set "VS_COMPONENT=Microsoft.VisualStudio.Component.VC.Tools.ARM64"
   set "LINK_HOST_PRIMARY=Hostarm64\arm64"
   set "LINK_HOST_FALLBACK=Hostx64\arm64"
@@ -27,8 +27,8 @@ if /i "%REPOSITORYTREE_TARGET_ARCH%"=="arm64" (
 rem ── Locate Visual Studio ──────────────────────────────────────────────────
 set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
 if not exist "%VSWHERE%" (
-  echo repositorytree: could not find vswhere.exe at "%VSWHERE%".
-  echo repositorytree: install Visual Studio 2022 Build Tools or Community with C++ workload.
+  echo worktree: could not find vswhere.exe at "%VSWHERE%".
+  echo worktree: install Visual Studio 2022 Build Tools or Community with C++ workload.
   exit /b 1
 )
 
@@ -37,15 +37,15 @@ for /f "usebackq delims=" %%I in (`"%VSWHERE%" -latest -products * -requires %VS
   set "VSINSTALL=%%I"
 )
 if not defined VSINSTALL (
-  echo repositorytree: could not locate a Visual Studio installation with MSVC %REPOSITORYTREE_TARGET_ARCH% tools.
-  echo repositorytree: install the "Desktop development with C++" workload ^(component: %VS_COMPONENT%^).
+  echo worktree: could not locate a Visual Studio installation with MSVC %WORKTREE_TARGET_ARCH% tools.
+  echo worktree: install the "Desktop development with C++" workload ^(component: %VS_COMPONENT%^).
   exit /b 1
 )
 
 rem ── Locate MSVC toolset ───────────────────────────────────────────────────
 set "MSVC_TOOLS=%VSINSTALL%\VC\Tools\MSVC"
 if not exist "%MSVC_TOOLS%" (
-  echo repositorytree: MSVC tools directory not found: "%MSVC_TOOLS%".
+  echo worktree: MSVC tools directory not found: "%MSVC_TOOLS%".
   exit /b 1
 )
 
@@ -56,7 +56,7 @@ for /f "delims=" %%I in ('dir /b /ad "%MSVC_TOOLS%" ^| "%SystemRoot%\System32\so
 )
 :msvc_version_found
 if not defined MSVC_VER (
-  echo repositorytree: no MSVC toolset found under "%MSVC_TOOLS%".
+  echo worktree: no MSVC toolset found under "%MSVC_TOOLS%".
   exit /b 1
 )
 
@@ -73,7 +73,7 @@ if not defined LINK_EXE if defined LINK_HOST_FALLBACK (
   )
 )
 if not defined LINK_EXE (
-  echo repositorytree: link.exe not found for %REPOSITORYTREE_TARGET_ARCH% target under "%MSVC_ROOT%\bin".
+  echo worktree: link.exe not found for %WORKTREE_TARGET_ARCH% target under "%MSVC_ROOT%\bin".
   exit /b 1
 )
 
@@ -83,8 +83,8 @@ set "KITS_LIB=%KITS_ROOT%\Lib"
 set "KITS_INC=%KITS_ROOT%\Include"
 
 if not exist "%KITS_LIB%" (
-  echo repositorytree: Windows SDK not found at "%KITS_LIB%".
-  echo repositorytree: install the Windows 10 or Windows 11 SDK component in Visual Studio Installer.
+  echo worktree: Windows SDK not found at "%KITS_LIB%".
+  echo worktree: install the Windows 10 or Windows 11 SDK component in Visual Studio Installer.
   exit /b 1
 )
 
@@ -97,8 +97,8 @@ for /f "delims=" %%I in ('dir /b /ad "%KITS_LIB%" ^| "%SystemRoot%\System32\sort
 )
 :sdk_found
 if not defined SDK_VER (
-  echo repositorytree: Windows SDK %SDK_ARCH% libraries missing ^(kernel32.lib not found^).
-  echo repositorytree: install the Windows 10 or Windows 11 SDK component with %SDK_ARCH% libs.
+  echo worktree: Windows SDK %SDK_ARCH% libraries missing ^(kernel32.lib not found^).
+  echo worktree: install the Windows 10 or Windows 11 SDK component with %SDK_ARCH% libs.
   exit /b 1
 )
 
@@ -118,11 +118,11 @@ set "LIBPATH=%MSVC_LIB%;%SDK_UM_LIB%;%SDK_UCRT_LIB%;%LIBPATH%"
 set "INCLUDE=%MSVC_INCLUDE%;%SDK_SHARED_INC%;%SDK_UM_INC%;%SDK_UCRT_INC%;%SDK_WINRT_INC%;%SDK_CPPWINRT_INC%;%INCLUDE%"
 
 rem ── Invoke link.exe ───────────────────────────────────────────────────────
-rem RepositoryTree's GPUI diff/render paths are substantially deeper in debug builds.
+rem WorkTree's GPUI diff/render paths are substantially deeper in debug builds.
 rem The Windows default 1 MiB main-thread stack is not enough there, which can
 rem abort the process with a stack overflow before Rust's panic hook runs.
-if "%REPOSITORYTREE_LINK_STACK_RESERVE%"=="" set "REPOSITORYTREE_LINK_STACK_RESERVE=8388608"
+if "%WORKTREE_LINK_STACK_RESERVE%"=="" set "WORKTREE_LINK_STACK_RESERVE=8388608"
 
-"%LINK_EXE%" /STACK:%REPOSITORYTREE_LINK_STACK_RESERVE% %*
+"%LINK_EXE%" /STACK:%WORKTREE_LINK_STACK_RESERVE% %*
 set "EXITCODE=%ERRORLEVEL%"
 exit /b %EXITCODE%

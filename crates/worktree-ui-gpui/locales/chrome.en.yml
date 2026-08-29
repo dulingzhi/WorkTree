@@ -1,0 +1,151 @@
+# Locale files are keyed by filename (`chrome.en.yml` -> locale "en"), so the
+# content below is the key tree directly — no `en:` root. English is also the
+# fallback locale, so every value must stay byte-identical to the string it
+# replaces in the sources (tests assert these exact texts).
+#
+# This catalog is the tail of the i18n sweep: the window chrome the earlier
+# per-surface catalogs did not cover — splash/interstitial screens (splash.rs),
+# terminal panel header and exit strings (terminal_panel.rs), the crash-report
+# banner, SSH/auth prompt and error banner (view/mod.rs), the bottom status
+# bar chips and toggles (bottom_status_bar.rs), the manual open-repository bar
+# (bars.rs), and the sidebar pane/row chrome (panes/sidebar.rs,
+# rows/sidebar.rs). The sidebar file-filter tooltips deliberately reuse
+# `diff.search.*`, whose three strings are byte-identical.
+chrome:
+  crash:
+    recovered: WorkTree recovered from program crash
+    contribute_prompt: Would you like to contribute by reporting issue to WorkTree GitHub repository?
+    summary_label: "Summary: %{summary}"
+    report_issue: Report Issue
+    ignore_crash: Ignore Crash
+    opened_in_browser: Opened crash report page in your browser.
+    open_browser_failed: "Failed to open browser: %{err}"
+    clear_failed: "Could not clear crash report: %{err}"
+  auth:
+    title:
+      username_password: Repository authentication required
+      passphrase: Passphrase required
+      host_verification: Host authenticity confirmation required
+    subtitle:
+      username_password: "Enter username and password, then confirm to retry."
+      passphrase: "Enter your key passphrase, then confirm to retry."
+      host_verification: "Enter `yes` to trust this host key, or paste the shown fingerprint."
+    untrusted_host_hint: "Use Cancel if you do not trust this host."
+    username_placeholder: Username
+    secret_placeholder: "Password / passphrase / confirmation"
+    username_required: "Username is required."
+    password_required: "Password is required."
+    passphrase_required: "Passphrase is required."
+    confirmation_required: "Confirmation is required (`yes` or fingerprint)."
+    confirm: Confirm
+    cancel: Cancel
+  error_banner:
+    scroll_hint: Scroll for full output
+  editor:
+    no_active_repo: "No active repository to open in code editor."
+    path_not_found: "Path not found: %{path}"
+    open_failed: "Failed to open in code editor: %{err}"
+  patch:
+    select_file: Select patch file
+  splash:
+    git_unavailable_fallback: "WorkTree could not find a usable Git executable."
+    git_unavailable_title: Git executable unavailable
+    git_unavailable_body: "WorkTree cannot open, refresh, or run repository actions until a Git executable is configured."
+    open_settings: Open Settings
+    open_settings_tooltip: Open settings
+    loading_title: Loading repository session
+    loading_body: WorkTree is opening your workspace.
+    please_wait: "Please wait…"
+    open_repo: Open Repository
+    open_repo_tooltip: Open repository
+    clone_repo: Clone Repository
+    clone_repo_tooltip: Clone repository
+    native_picker_unavailable: "Native folder picker unavailable. Enter a repository path manually."
+    hero_line_1: Fastest Open
+    hero_line_2: Source Git GUI
+    hero_body: "WorkTree is built for teams that want fast Git operations with local-first privacy, familiar workflows, and open source freedom."
+    platforms: "Available for Linux, Windows and macOS."
+  terminal:
+    spawn_failed: "Failed to start embedded terminal: %{err}"
+    shell_exited: "Shell exited."
+    exit_status: "Terminal — %{status}"
+    new_tab: New terminal
+    keyboard_captured: Keyboard captured
+    keyboard_captured_tooltip: "Terminal has keyboard focus — app shortcuts are sent to the terminal. Click outside the terminal to release."
+    open_external: Open in external terminal
+    clear: Clear terminal (Ctrl+L)
+    close: Close terminal
+    tab_default: Terminal
+  open_repo_panel:
+    path_label: Path
+    open: Open
+  status_bar:
+    adjust_zoom: Adjust zoom
+    show_sidebar: Show sidebar
+    hide_sidebar: Hide sidebar
+    show_details: Show details panel
+    hide_details: Hide details panel
+    discord: Join the WorkTree Discord
+    editions: See WorkTree editions
+    free_badge: FREE
+    website: Open worktree.dev
+    releases: View WorkTree releases
+  sidebar:
+    search_files_placeholder: "Search files..."
+    filter_branches_placeholder: "Filter branches..."
+    filter_branches: Filter branches
+    hide_filter: Hide filter
+    more_actions: More actions
+    clear_filter: Clear filter
+    branches: Branches
+    files: Files
+    empty:
+      no_repository: "No repository selected."
+      loading_files: "Loading files..."
+      repository: "Empty repository."
+      no_files_visible: "No files visible."
+      load_error: "Error loading files."
+      no_matching_branches: "No matching branches."
+      nothing_yet: "Nothing here yet."
+    locate_open_file: "Show the open file in the explorer (%{shortcut})"
+    no_file_open: No file is open
+    unsaved_edits: "Unsaved edits (%{count})"
+    unsaved_discard_tooltip: Throw away the unsaved changes and reload this file from disk
+    pr:
+      empty: "No open pull requests."
+      draft: Draft
+      checks:
+        success: Checks passed
+        failure: Checks failed
+        pending: Checks running
+  branch:
+    upstream: Upstream
+  submodule:
+    badge_not_loaded: Not loaded
+    head_mismatch: Head mismatch
+    conflict: Conflict
+    missing_mapping: Missing mapping
+    unknown: Unknown
+    not_loaded: not loaded
+    tooltip: "%{path}\nRecorded: %{recorded}\nChecked out: %{checked}"
+  worktree:
+    detached: "(detached)"
+    fallback_name: worktree
+
+  agent:
+    not_installed: "%{name} is not installed or not on PATH"
+    no_baseline: "Could not resolve a baseline commit for the agent session"
+    no_session: "No agent session is running for this repository"
+    worktree_failed: "Could not create the agent worktree %{path}: {err}"
+    restore_file: "Restore file from baseline"
+    restore_failed: "Could not restore %{path} from the baseline: {err}"
+    roster_title: "Agent Sessions"
+    roster_empty: "No agent session is running. Starting one creates a dedicated worktree beside this repository — your working tree stays untouched."
+    view_changes: "View changes"
+    stop_session: "Stop session"
+    start: "Start %{agent}"
+    baseline_label: "Agent session start (%{agent})"
+
+  forge_request:
+    no_remote: "No GitHub or GitLab remote found for this repository"
+    no_branch: "Checkout a branch first — the request needs a source branch"

@@ -1,1 +1,1 @@
-cargo wix crates\repositorytree\Cargo.toml -p repositorytree --profile release --nocapture --output dist\repositorytree-local-test.msi
+cargo wix crates\worktree\Cargo.toml -p worktree --profile release --nocapture --output dist\worktree-local-test.msi

@@ -113,7 +113,7 @@ summary_jsonl="${archive_dir}/benchmark-metrics.jsonl"
 archive_criterion_root="${archive_dir}/criterion"
 criterion_source_roots=(
   "target/criterion"
-  "crates/repositorytree-ui-gpui/target/criterion"
+  "crates/worktree-ui-gpui/target/criterion"
 )
 
 if [[ -e "${archive_dir}" ]]; then
@@ -126,16 +126,16 @@ mkdir -p "${archive_dir}"
 
 suite_cmd=(
   env
-  REPOSITORYTREE_PERF_PRINT_BENCH_SUMMARY=1
-  REPOSITORYTREE_PERF_SUMMARY_LOG="${summary_log}"
-  REPOSITORYTREE_PERF_SUMMARY_JSONL="${summary_jsonl}"
+  WORKTREE_PERF_PRINT_BENCH_SUMMARY=1
+  WORKTREE_PERF_SUMMARY_LOG="${summary_log}"
+  WORKTREE_PERF_SUMMARY_JSONL="${summary_jsonl}"
   bash scripts/run-full-perf-suite.sh
   --fresh-reference "${fresh_reference}"
 )
 suite_cmd+=("${suite_args[@]}")
 
 report_cmd=(
-  cargo run -p repositorytree-ui-gpui --bin perf_budget_report --
+  cargo run -p worktree-ui-gpui --bin perf_budget_report --
   --criterion-root "${archive_criterion_root}"
   --fresh-reference "${fresh_reference}"
 )
@@ -160,8 +160,8 @@ git_status="$(git status --short 2>/dev/null || true)"
   printf 'benchmark_summary_jsonl: %s\n' "${repo_root}/${summary_jsonl}"
   printf 'git_head: %s\n' "${git_head}"
   printf 'git_branch: %s\n' "${git_branch}"
-  printf 'runner_class: %s\n' "${REPOSITORYTREE_PERF_RUNNER_CLASS:-}"
-  printf 'real_repo_root: %s\n' "${REPOSITORYTREE_PERF_REAL_REPO_ROOT:-}"
+  printf 'runner_class: %s\n' "${WORKTREE_PERF_RUNNER_CLASS:-}"
+  printf 'real_repo_root: %s\n' "${WORKTREE_PERF_REAL_REPO_ROOT:-}"
   printf 'suite_command: %s\n' "$(quote_args "${suite_cmd[@]}")"
   printf 'archived_report_command: %s\n' "$(quote_args "${report_cmd[@]}")"
   if [[ -n "${git_status}" ]]; then

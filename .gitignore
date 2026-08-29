@@ -7,7 +7,7 @@ target/
 zed
 callgrind.out*
 *.orig
-repositorytree-agent*
+worktree-agent*
 local_*.sh
 tmp/*
 feat/*

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=WorkTree
+Comment=Git UI built with GPUI
+Exec=worktree
+Icon=worktree
+StartupWMClass=worktree
+Terminal=false
+Categories=Development;RevisionControl;

@@ -1,0 +1,112 @@
+# Command palette catalog.
+#
+# `COMMANDS` in `src/view/command_palette.rs` is a const table and therefore
+# cannot call translation functions at compile time: it stores these keys in its
+# `label`/`category` fields, and every display or match site resolves them with
+# `tr_str`. English is the fallback locale, so values here are byte-identical to
+# the historical English strings (tests assert them exactly).
+#
+# Keyed by filename (`palette.en.yml` -> locale "en"); the content below is the
+# key tree directly — no `en:` root.
+palette:
+  # Search input placeholder.
+  placeholder: Search commands…
+  # Shared header above search results.
+  results: Results
+  # Empty-state text when a query matches nothing.
+  no_matches: No matching commands
+
+  # Command labels, keyed by the `COMMANDS` entry id.
+  cmd:
+    commit: Commit Changes
+    stage-all: Stage All Changes
+    unstage-all: Unstage All Changes
+    discard-all: Discard All Changes
+    create-branch: Create Branch
+    checkout-branch: Checkout Branch
+    delete-branch: Delete Branch
+    rename-branch: Rename Branch
+    rebase: Rebase Onto
+    merge: Merge Branch
+    checkout-remote-branch: Checkout Remote Branch
+    delete-remote-branch: Delete Remote Branch
+    pull: Pull
+    push: Push
+    force-push: Force Push
+    stash: Stash Changes
+    stash-pop: Pop Stash
+    stash-apply: Apply Stash
+    stash-drop: Drop Stash
+    stash-branch: Branch Stash
+    open-repository: Open Repository
+    switch-repository: Switch Repository
+    clone-repository: Clone Repository
+    close-repo-tab: Close Repository Tab
+    reload-repository: Reload Repository
+    fetch-all: Fetch All
+    cleanup-repository: Cleanup Repository (GC)
+    manage-assume-unchanged: Assume-Unchanged Files…
+    show-statistics: Statistics…
+    import-coverage: "Import coverage file…"
+    agent-claude: "Agent: Start Claude Code session"
+    agent-codex: "Agent: Start Codex session"
+    agent-changes: "Agent: Show what the agent changed"
+    agent-sessions: "Agent: Sessions…"
+    create-pr: "Create pull request on the web…"
+    repo-settings: "Repository settings…"
+    clear-coverage: "Clear coverage overlay"
+    import-coverage-prompt: "Choose an lcov / llvm-cov export"
+    coverage-imported: "Coverage imported: %{files} files, %{lines} lines%{percent} — annotated in the diff gutter"
+    coverage-cleared: "Coverage overlay cleared"
+    undo-last-action: Undo Last Action…
+    toggle-sidebar: Toggle Sidebar
+    toggle-details: Toggle Details Pane
+    toggle-diff-view: Toggle Diff View (Split/Inline)
+    toggle-diff-word-wrap: Toggle Diff Word Wrap
+    toggle-line-numbers: Toggle Diff Line Numbers
+    toggle-whitespace-chars: Toggle Whitespace Characters
+    previous-repo-tab: Previous Repository Tab
+    next-repo-tab: Next Repository Tab
+    locate-file-in-explorer: Open in file explorer
+    open-active-view-search: Search in Current View
+    create-tag: Create Tag
+    delete-tag: Delete Tag
+    new-window: New Window
+    open-settings: Open Settings
+    quit: Quit WorkTree
+    minimize-window: Minimize Window
+    zoom-window: Zoom Window
+    toggle-fullscreen: Toggle Full Screen
+    increase-ui-scale: Increase UI Scale
+    decrease-ui-scale: Decrease UI Scale
+    reset-ui-scale: Reset UI Scale
+    close-window: Close Window
+    add-remote: Add Remote
+    remove-remote: Remove Remote
+    edit-remote-url: Edit Remote URL
+    add-submodule: Add Submodule
+    remove-submodule: Remove Submodule
+    update-submodules: Update Submodules
+    add-worktree: Add Worktree
+    remove-worktree: Remove Worktree
+    blame: Blame / Annotate
+    search-commits: Search Commits
+    back: Navigate Back
+    forward: Navigate Forward
+
+  # Category headers, one per distinct `category` value in `COMMANDS`.
+  cat:
+    commit: Commit
+    working-copy: Working Copy
+    branch: Branch
+    sync: Sync
+    stash: Stash
+    repository: Repository
+    view: View
+    navigation: Navigation
+    tags: Tags
+    window: Window
+    remotes: Remotes
+    submodules: Submodules
+    worktrees: Worktrees
+    history: History

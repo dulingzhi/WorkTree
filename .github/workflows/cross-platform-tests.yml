@@ -59,7 +59,7 @@ jobs:
       - name: Run headless test suite
         run: |
           cargo test --workspace \
-            --exclude repositorytree-ui-gpui \
+            --exclude worktree-ui-gpui \
             $APP_FEATURES \
             --locked \
             --verbose
@@ -96,7 +96,7 @@ jobs:
         shell: bash
         run: |
           cargo test --workspace \
-            --exclude repositorytree-ui-gpui \
+            --exclude worktree-ui-gpui \
             $APP_FEATURES \
             --locked \
             --verbose
@@ -167,10 +167,10 @@ jobs:
           echo "XDG_CURRENT_DESKTOP=${XDG_CURRENT_DESKTOP:-<unset>}"
       - name: Run display-selection integration tests
         run: |
-          cargo test -p repositorytree $APP_FEATURES --test mergetool_git_integration gui_default --verbose
-          cargo test -p repositorytree $APP_FEATURES --test difftool_git_integration gui_default --verbose
+          cargo test -p worktree $APP_FEATURES --test mergetool_git_integration gui_default --verbose
+          cargo test -p worktree $APP_FEATURES --test difftool_git_integration gui_default --verbose
       - name: Run UI smoke test under selected profile
-        run: cargo test -p repositorytree-ui-gpui smoke_tests::smoke_view_renders_without_panicking -- --exact
+        run: cargo test -p worktree-ui-gpui smoke_tests::smoke_view_renders_without_panicking -- --exact
 
   macos-tests:
     name: macOS Tests (${{ matrix.name }})
@@ -209,7 +209,7 @@ jobs:
       - name: Run headless test suite
         run: |
           cargo test --workspace \
-            --exclude repositorytree-ui-gpui \
+            --exclude worktree-ui-gpui \
             $APP_FEATURES \
             --locked \
             --verbose
@@ -223,10 +223,10 @@ jobs:
               set -- "$@" "$arg"
             done <<<"$cargo_config_output"
           fi
-          set -- "$@" -p repositorytree $APP_FEATURES --release --locked
+          set -- "$@" -p worktree $APP_FEATURES --release --locked
           cargo build "$@"
-          codesign --verify --verbose target/release/repositorytree || true
-          spctl --assess --type execute --verbose target/release/repositorytree || true
+          codesign --verify --verbose target/release/worktree || true
+          spctl --assess --type execute --verbose target/release/worktree || true
 
   windows-tests:
     name: Windows Tests (${{ matrix.target_platform }})
@@ -259,14 +259,14 @@ jobs:
         shell: pwsh
         run: |
           cargo test --workspace `
-            --exclude repositorytree-ui-gpui `
+            --exclude worktree-ui-gpui `
             --no-default-features `
             --features gix `
             --locked `
             --verbose
       - name: Run standalone smoke test in CMD
         shell: cmd
-        run: cargo test -p repositorytree --no-default-features --features gix --test standalone_tool_mode_integration help_flag_exits_zero -- --exact
+        run: cargo test -p worktree --no-default-features --features gix --test standalone_tool_mode_integration help_flag_exits_zero -- --exact
       - name: Show path behavior (CMD + Git Bash)
         shell: cmd
         run: |

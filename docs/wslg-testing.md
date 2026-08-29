@@ -1,30 +1,30 @@
-# RepositoryTree WSLg Testing
+# WorkTree WSLg Testing
 
 ### WSLg
 
-RepositoryTree's Linux build can run inside WSL with WSLg.
+WorkTree's Linux build can run inside WSL with WSLg.
 
 - Launch the Linux binary from a WSL distro with `WAYLAND_DISPLAY` or `DISPLAY` available.
 - Prefer repositories stored inside the distro filesystem such as `~/src/repo` instead of `/mnt/c/...`.
 - If Linux desktop openers are unavailable, install `wslu` to provide `wslview` for URL and file-opening fallbacks.
 - For prebuilt Linux binaries on Debian/Ubuntu/WSLg, install the GUI runtime libraries: `libxcb1`, `libxkbcommon0`, and `libxkbcommon-x11-0`.
-- RepositoryTree now prefers Wayland under WSLg so GPUI can keep RepositoryTree's own client-side titlebar and window frame.
-- If Wayland preflight fails but `DISPLAY` is available, RepositoryTree falls back to X11 automatically.
+- WorkTree now prefers Wayland under WSLg so GPUI can keep WorkTree's own client-side titlebar and window frame.
+- If Wayland preflight fails but `DISPLAY` is available, WorkTree falls back to X11 automatically.
 - If you need to force the X11 backend manually, unset `WAYLAND_DISPLAY` and `WAYLAND_SOCKET`, then export `XDG_SESSION_TYPE=x11` before launch.
 - For source builds inside WSL, install the Linux UI dependencies used elsewhere in this repo: `pkg-config`, `libxcb1-dev`, `libxkbcommon-dev`, and `libxkbcommon-x11-dev`.
-- GUI `git difftool` and `git mergetool` work under WSLg because `repositorytree setup` already selects the GUI tool when display environment variables are present.
+- GUI `git difftool` and `git mergetool` work under WSLg because `worktree setup` already selects the GUI tool when display environment variables are present.
 - Manual validation steps for developers live in `docs/wslg-testing.md`.
 
 
-This file documents how to validate RepositoryTree's Linux GPUI application inside Windows WSL with WSLg.
+This file documents how to validate WorkTree's Linux GPUI application inside Windows WSL with WSLg.
 
 Source of truth:
-- `crates/repositorytree-ui-gpui/src/linux_gui_env.rs`
-- `crates/repositorytree-ui-gpui/src/view/platform_open.rs`
-- `crates/repositorytree-ui-gpui/src/app.rs`
+- `crates/worktree-ui-gpui/src/linux_gui_env.rs`
+- `crates/worktree-ui-gpui/src/view/platform_open.rs`
+- `crates/worktree-ui-gpui/src/app.rs`
 
 Notes:
-- This covers the Linux `repositorytree` binary launched from a WSL 2 distro.
+- This covers the Linux `worktree` binary launched from a WSL 2 distro.
 - This does not cover the native Windows build.
 - Prefer repositories inside the distro filesystem such as `~/src/repo`.
 - Repositories under `/mnt/c/...` are best-effort only.
@@ -33,11 +33,11 @@ Notes:
 
 | Scenario | Expected result |
 | --- | --- |
-| Launch RepositoryTree from a WSLg shell | Main GPUI window opens |
+| Launch WorkTree from a WSLg shell | Main GPUI window opens |
 | Launch without GUI environment variables | Launch fails with a clear X11 / Wayland / WSLg message |
 | Open a repo from the distro filesystem | Repo opens normally |
 | Open a repo from `/mnt/c/...` | Best-effort behavior; note any slowdown or path issues |
-| Trigger "Open Repository" | Native picker opens, or RepositoryTree falls back to manual path entry |
+| Trigger "Open Repository" | Native picker opens, or WorkTree falls back to manual path entry |
 | Open external URLs or file locations | Linux openers work via `xdg-open`, `gio open`, or `wslview` under WSL |
 | Run `git difftool --gui` | Focused diff window opens |
 | Run `git mergetool --gui` | Focused merge window opens |
@@ -66,7 +66,7 @@ sudo apt update
 sudo apt install -y git libxcb1 libxkbcommon0 libxkbcommon-x11-0 wslu
 ```
 
-If you are building RepositoryTree from source inside WSL, also install the development headers:
+If you are building WorkTree from source inside WSL, also install the development headers:
 
 ```bash
 sudo apt install -y pkg-config libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev
@@ -76,7 +76,7 @@ If you are building from source, install the Rust toolchain normally for this re
 
 ## GUI Session Sanity Check
 
-Still inside WSL, verify the session variables that RepositoryTree uses to decide whether GPUI can launch:
+Still inside WSL, verify the session variables that WorkTree uses to decide whether GPUI can launch:
 
 ```bash
 echo "DISPLAY=$DISPLAY"
@@ -89,13 +89,13 @@ Expected:
 - `WAYLAND_DISPLAY` and `XDG_RUNTIME_DIR` should be set for Wayland-only WSLg sessions.
 - If all three are empty, the positive launch tests should fail and the negative launch test below should match that behavior.
 
-## Build RepositoryTree
+## Build WorkTree
 
 Use the Linux filesystem for the checkout when possible:
 
 ```bash
-cd ~/src/RepositoryTree3
-cargo build -p repositorytree --features ui-gpui,gix
+cd ~/src/WorkTree3
+cargo build -p worktree --features ui-gpui,gix
 ```
 
 If your current checkout lives on the Windows filesystem, move or reclone it into the distro filesystem before running the WSLg tests.
@@ -103,12 +103,12 @@ If your current checkout lives on the Windows filesystem, move or reclone it int
 The binary will be available at:
 
 ```bash
-~/src/RepositoryTree3/target/debug/repositorytree
+~/src/WorkTree3/target/debug/worktree
 ```
 
 ## Main App Smoke Test
 
-Create a disposable repository inside WSL and launch RepositoryTree against it:
+Create a disposable repository inside WSL and launch WorkTree against it:
 
 ```bash
 mkdir -p ~/src/wslg-smoke
@@ -119,7 +119,7 @@ git config user.email "wslg-test@example.invalid"
 printf "hello\n" > README.md
 git add README.md
 git commit -m "init"
-~/src/RepositoryTree3/target/debug/repositorytree ~/src/wslg-smoke
+~/src/WorkTree3/target/debug/worktree ~/src/wslg-smoke
 ```
 
 Verify:
@@ -134,7 +134,7 @@ From the running app:
 
 1. Press `Ctrl-O`.
 2. If the native folder picker opens, select `~/src/wslg-smoke` and confirm the repo loads.
-3. If the native picker is unavailable in that WSLg session, confirm RepositoryTree falls back to the manual repository path entry panel instead of failing silently.
+3. If the native picker is unavailable in that WSLg session, confirm WorkTree falls back to the manual repository path entry panel instead of failing silently.
 4. Repeat with a repo stored under `/mnt/c/...` and note any behavioral differences.
 
 The manual-entry fallback is part of the intended WSLg support because native pickers may not be available in every WSL desktop integration setup.
@@ -160,30 +160,30 @@ Expected:
 
 This validates the new launch guard and error message path.
 
-Run RepositoryTree with the GUI variables removed:
+Run WorkTree with the GUI variables removed:
 
 ```bash
 env -u DISPLAY -u WAYLAND_DISPLAY -u XDG_RUNTIME_DIR \
-  ~/src/RepositoryTree3/target/debug/repositorytree
+  ~/src/WorkTree3/target/debug/worktree
 ```
 
 Expected:
-- RepositoryTree exits immediately.
+- WorkTree exits immediately.
 - The error mentions the missing GUI session and, under WSL detection, references WSLg / `WAYLAND_DISPLAY` or `DISPLAY`.
 
 ## Difftool Smoke Test
 
-Configure the local repo to use the built RepositoryTree binary, then open a GUI diff:
+Configure the local repo to use the built WorkTree binary, then open a GUI diff:
 
 ```bash
 cd ~/src/wslg-smoke
-~/src/RepositoryTree3/target/debug/repositorytree setup --local
+~/src/WorkTree3/target/debug/worktree setup --local
 printf "second line\n" >> README.md
 git difftool --gui -y HEAD -- README.md
 ```
 
 Expected:
-- Git starts the RepositoryTree GUI difftool path.
+- Git starts the WorkTree GUI difftool path.
 - A focused diff window opens under WSLg.
 
 ## Mergetool Smoke Test
@@ -205,14 +205,14 @@ git commit -am "feature change"
 git checkout main
 printf "main\n" > conflict.txt
 git commit -am "main change"
-~/src/RepositoryTree3/target/debug/repositorytree setup --local
+~/src/WorkTree3/target/debug/worktree setup --local
 git merge feature || true
 git mergetool --gui
 ```
 
 Expected:
 - Git detects the conflict.
-- RepositoryTree opens the focused GPUI merge window under WSLg.
+- WorkTree opens the focused GPUI merge window under WSLg.
 
 ## Troubleshooting
 

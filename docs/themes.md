@@ -1,24 +1,24 @@
-# RepositoryTree Themes
+# WorkTree Themes
 
-RepositoryTree supports built-in themes and user-provided custom themes.
+WorkTree supports built-in themes and user-provided custom themes.
 
-Built-in themes are embedded in the RepositoryTree binary.
+Built-in themes are embedded in the WorkTree binary.
 
-RepositoryTree loads custom themes from JSON bundle files in your per-user themes directory.
+WorkTree loads custom themes from JSON bundle files in your per-user themes directory.
 
 ## Theme File Location
 
-RepositoryTree creates the user themes directory on startup and only loads custom `.json` files from that location:
+WorkTree creates the user themes directory on startup and only loads custom `.json` files from that location:
 
 | Platform | Themes directory |
 | --- | --- |
-| Linux | `$XDG_DATA_HOME/repositorytree/themes` or `~/.local/share/repositorytree/themes` |
-| macOS | `~/Library/Application Support/repositorytree/themes` |
-| Windows | `%LOCALAPPDATA%\\repositorytree\\themes` or `%APPDATA%\\repositorytree\\themes` |
+| Linux | `$XDG_DATA_HOME/worktree/themes` or `~/.local/share/worktree/themes` |
+| macOS | `~/Library/Application Support/worktree/themes` |
+| Windows | `%LOCALAPPDATA%\\worktree\\themes` or `%APPDATA%\\worktree\\themes` |
 
 ## JSON Schema
 
-Disclaimer: The theme JSON format may change as RepositoryTree's UI is still actively being developed.
+Disclaimer: The theme JSON format may change as WorkTree's UI is still actively being developed.
 
 Each theme file is a bundle with a bundle name and one or more themes. The example below includes every currently supported field:
 
@@ -198,7 +198,7 @@ The bundle root supports:
 
 Theme schema v2 uses semantic groups. Define every group and field below: a token
 your file leaves out falls back to the bundled theme matching your `appearance`
-(`repositorytree_dark` or `repositorytree_light`), which keeps older theme files loading when
+(`worktree_dark` or `worktree_light`), which keeps older theme files loading when
 new tokens are added but means the omitted token is not yours to control. A token
 you misspell is still an error — the file is rejected rather than half-applied.
 
@@ -232,7 +232,7 @@ Most color fields accept either:
 - a hex RGBA string such as `#0d1016ff`
 - an object with `hex` plus `alpha`, for example `{ "hex": "#5ac1feff", "alpha": 0.60 }`
 
-Use `graph_lane_palette` for an explicit list of colors, or `graph_lane_hues` for a list of hue values that RepositoryTree turns into graph lane colors automatically.
+Use `graph_lane_palette` for an explicit list of colors, or `graph_lane_hues` for a list of hue values that WorkTree turns into graph lane colors automatically.
 
 Syntax colors, graph lanes, and the documented radius extensions have fallbacks of
 their own — omitting `graph_lane_palette` and `graph_lane_hues` generates lane
@@ -268,10 +268,10 @@ These values are numeric and control the corner radius used by major UI elements
 
 ## Overrides And Validation Behavior
 
-- Built-in system themes stay embedded in the RepositoryTree binary and are not loaded from the custom themes directory.
-- RepositoryTree loads custom `.json` files from the themes directory, but ignores files whose basename matches a bundled system theme file such as `repositorytree.json`.
+- Built-in system themes stay embedded in the WorkTree binary and are not loaded from the custom themes directory.
+- WorkTree loads custom `.json` files from the themes directory, but ignores files whose basename matches a bundled system theme file such as `worktree.json`.
 - Custom themes can add new theme keys, but they cannot override built-in system theme keys. Any runtime theme entry that reuses a built-in key is ignored.
 - A file that cannot be read or parsed is ignored and reported with its path and reason.
-- RepositoryTree validates the structure and types of custom themes, but does not
+- WorkTree validates the structure and types of custom themes, but does not
   measure, warn about, reject, or alter their colors based on contrast.
-- RepositoryTree does not expose a separate machine-readable JSON Schema file today; the implementation in [`crates/repositorytree-ui-gpui/src/theme.rs`](crates/repositorytree-ui-gpui/src/theme.rs) is the source of truth.
+- WorkTree does not expose a separate machine-readable JSON Schema file today; the implementation in [`crates/worktree-ui-gpui/src/theme.rs`](crates/worktree-ui-gpui/src/theme.rs) is the source of truth.

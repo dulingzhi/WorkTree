@@ -155,7 +155,7 @@ jobs:
       AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
       WINDOWS_SIGNING_ENDPOINT: ${{ vars.WINDOWS_SIGNING_ENDPOINT }}
       WINDOWS_SIGNING_ACCOUNT_NAME: ${{ vars.WINDOWS_SIGNING_ACCOUNT_NAME }}
-      WINDOWS_SIGNING_PROFILE_NAME: ${{ needs.prepare.outputs.release_id != '' && 'repositorytree-windows-release' || 'repositorytree-windows-test' }}
+      WINDOWS_SIGNING_PROFILE_NAME: ${{ needs.prepare.outputs.release_id != '' && 'worktree-windows-release' || 'worktree-windows-test' }}
       WINDOWS_SIGNING_TIMESTAMP_RFC3161: http://timestamp.acs.microsoft.com/
     steps:
       - uses: actions/checkout@v7
@@ -227,7 +227,7 @@ jobs:
       - name: Build release binary
         shell: pwsh
         run: |
-          cargo build -p repositorytree --release --locked --features ui-gpui,gix --bin repositorytree
+          cargo build -p worktree --release --locked --features ui-gpui,gix --bin worktree
 
       - name: Sign Windows release binary
         uses: Azure/artifact-signing-action@v2
@@ -236,7 +236,7 @@ jobs:
           signing-account-name: ${{ env.WINDOWS_SIGNING_ACCOUNT_NAME }}
           certificate-profile-name: ${{ env.WINDOWS_SIGNING_PROFILE_NAME }}
           files-folder: ${{ github.workspace }}\target\release
-          files-folder-filter: repositorytree.exe
+          files-folder-filter: worktree.exe
           file-digest: SHA256
           timestamp-rfc3161: ${{ env.WINDOWS_SIGNING_TIMESTAMP_RFC3161 }}
           timestamp-digest: SHA256
@@ -248,7 +248,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
 
-          $artifactPath = Join-Path $env:GITHUB_WORKSPACE "target\release\repositorytree.exe"
+          $artifactPath = Join-Path $env:GITHUB_WORKSPACE "target\release\worktree.exe"
           & "$env:GITHUB_WORKSPACE\scripts\windows\verify-signed-artifact.ps1" `
             -Path $artifactPath `
             -SignToolPath $env:SIGNTOOL_PATH
@@ -258,12 +258,12 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           New-Item -ItemType Directory -Path dist\portable -Force | Out-Null
-          Copy-Item target\release\repositorytree.exe dist\portable\repositorytree.exe -Force
+          Copy-Item target\release\worktree.exe dist\portable\worktree.exe -Force
           Copy-Item README.md dist\portable\README.md -Force
           Copy-Item LICENSE-AGPL-3.0 dist\portable\LICENSE-AGPL-3.0 -Force
           Copy-Item NOTICE dist\portable\NOTICE -Force
 
-          $zipName = "repositorytree-v${env:VERSION}-windows-${env:ARTIFACT_ARCH}-portable.zip"
+          $zipName = "worktree-v${env:VERSION}-windows-${env:ARTIFACT_ARCH}-portable.zip"
           if (Test-Path "dist\$zipName") { Remove-Item "dist\$zipName" -Force }
           Compress-Archive -Path dist\portable\* -DestinationPath "dist\$zipName"
 
@@ -301,11 +301,11 @@ jobs:
           $env:WIX = Split-Path $wixBin -Parent
           $env:PATH = "$wixBin;$env:PATH"
 
-          if (!(Test-Path "crates\repositorytree\wix\main.wxs")) {
-            cargo wix init --package repositorytree
+          if (!(Test-Path "crates\worktree\wix\main.wxs")) {
+            cargo wix init --package worktree
           }
-          $msiName = "repositorytree-v${env:VERSION}-windows-${env:ARTIFACT_ARCH}.msi"
-          cargo wix --package repositorytree --profile release --nocapture --no-build --bin-path "$wixBin" --output "dist\$msiName"
+          $msiName = "worktree-v${env:VERSION}-windows-${env:ARTIFACT_ARCH}.msi"
+          cargo wix --package worktree --profile release --nocapture --no-build --bin-path "$wixBin" --output "dist\$msiName"
 
       - name: Sign Windows MSI installer
         uses: Azure/artifact-signing-action@v2
@@ -314,7 +314,7 @@ jobs:
           signing-account-name: ${{ env.WINDOWS_SIGNING_ACCOUNT_NAME }}
           certificate-profile-name: ${{ env.WINDOWS_SIGNING_PROFILE_NAME }}
           files-folder: ${{ github.workspace }}\dist
-          files-folder-filter: repositorytree-v${{ env.VERSION }}-windows-${{ env.ARTIFACT_ARCH }}.msi
+          files-folder-filter: worktree-v${{ env.VERSION }}-windows-${{ env.ARTIFACT_ARCH }}.msi
           file-digest: SHA256
           timestamp-rfc3161: ${{ env.WINDOWS_SIGNING_TIMESTAMP_RFC3161 }}
           timestamp-digest: SHA256
@@ -326,7 +326,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
 
-          $artifactPath = Join-Path $env:GITHUB_WORKSPACE "dist\repositorytree-v$($env:VERSION)-windows-$($env:ARTIFACT_ARCH).msi"
+          $artifactPath = Join-Path $env:GITHUB_WORKSPACE "dist\worktree-v$($env:VERSION)-windows-$($env:ARTIFACT_ARCH).msi"
           & "$env:GITHUB_WORKSPACE\scripts\windows\verify-signed-artifact.ps1" `
             -Path $artifactPath `
             -SignToolPath $env:SIGNTOOL_PATH
@@ -401,22 +401,22 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build release binary
-        run: cargo build -p repositorytree --release --locked --features ui-gpui,gix --bin repositorytree
+        run: cargo build -p worktree --release --locked --features ui-gpui,gix --bin worktree
 
       - name: Normalize desktop entry metadata
         run: |
           set -euo pipefail
           mkdir -p dist
           # Backward compatibility for older tags that used non-standard categories.
-          sed 's/VersionControl;/RevisionControl;/g' assets/linux/repositorytree.desktop > dist/repositorytree.desktop
-          desktop-file-validate dist/repositorytree.desktop
+          sed 's/VersionControl;/RevisionControl;/g' assets/linux/worktree.desktop > dist/worktree.desktop
+          desktop-file-validate dist/worktree.desktop
 
       - name: Package tar.gz
         run: |
           set -euo pipefail
-          root="repositorytree-v${VERSION}-linux-${ARTIFACT_ARCH}"
+          root="worktree-v${VERSION}-linux-${ARTIFACT_ARCH}"
           mkdir -p "dist/stage/${root}"
-          install -m755 target/release/repositorytree "dist/stage/${root}/repositorytree"
+          install -m755 target/release/worktree "dist/stage/${root}/worktree"
           install -m644 README.md "dist/stage/${root}/README.md"
           install -m644 LICENSE-AGPL-3.0 "dist/stage/${root}/LICENSE-AGPL-3.0"
           install -m644 NOTICE "dist/stage/${root}/NOTICE"
@@ -434,24 +434,24 @@ jobs:
           fi
 
           trap 'rm -rf debian' EXIT
-          pkg_root="debian/repositorytree"
+          pkg_root="debian/worktree"
           mkdir -p "${pkg_root}/DEBIAN"
           mkdir -p "${pkg_root}/usr/bin"
           mkdir -p "${pkg_root}/usr/share/applications"
           mkdir -p "${pkg_root}/usr/share/icons/hicolor/512x512/apps"
 
-          install -m755 target/release/repositorytree "${pkg_root}/usr/bin/repositorytree"
-          install -m644 dist/repositorytree.desktop "${pkg_root}/usr/share/applications/repositorytree.desktop"
-          install -m644 assets/repositorytree-512.png "${pkg_root}/usr/share/icons/hicolor/512x512/apps/repositorytree.png"
+          install -m755 target/release/worktree "${pkg_root}/usr/bin/worktree"
+          install -m644 dist/worktree.desktop "${pkg_root}/usr/share/applications/worktree.desktop"
+          install -m644 assets/worktree-512.png "${pkg_root}/usr/share/icons/hicolor/512x512/apps/worktree.png"
 
           {
-            echo "Source: repositorytree"
+            echo "Source: worktree"
             echo "Maintainer: AutoExplore Oy <info@autoexplore.ai>"
             echo "Section: utils"
             echo "Priority: optional"
             echo "Standards-Version: 4.7.0"
             echo
-            echo "Package: repositorytree"
+            echo "Package: worktree"
             echo "Architecture: ${DEB_ARCH}"
             echo "Depends: git, \${shlibs:Depends}"
             echo "Section: utils"
@@ -460,17 +460,17 @@ jobs:
           } > debian/control
 
           {
-            echo "repositorytree (${deb_version}) unstable; urgency=medium"
+            echo "worktree (${deb_version}) unstable; urgency=medium"
             echo
             echo "  * Release ${VERSION}."
             echo
             echo " -- AutoExplore Oy <info@autoexplore.ai>  $(date -Ru)"
           } > debian/changelog
 
-          dpkg-shlibdeps -Tdebian/substvars "${pkg_root}/usr/bin/repositorytree"
-          dpkg-gencontrol -prepositorytree -P"${pkg_root}" -Tdebian/substvars
+          dpkg-shlibdeps -Tdebian/substvars "${pkg_root}/usr/bin/worktree"
+          dpkg-gencontrol -pworktree -P"${pkg_root}" -Tdebian/substvars
 
-          pkg_file="dist/repositorytree_${deb_version}_${DEB_ARCH}.deb"
+          pkg_file="dist/worktree_${deb_version}_${DEB_ARCH}.deb"
           dpkg-deb --build "${pkg_root}" "${pkg_file}"
 
           package_name="$(dpkg-deb -f "${pkg_file}" Package)"
@@ -478,7 +478,7 @@ jobs:
           package_architecture="$(dpkg-deb -f "${pkg_file}" Architecture)"
           package_depends="$(dpkg-deb -f "${pkg_file}" Depends)"
 
-          if [[ "${package_name}" != "repositorytree" ]]; then
+          if [[ "${package_name}" != "worktree" ]]; then
             echo "::error title=Unexpected package name::Got ${package_name}."
             exit 1
           fi
@@ -505,15 +505,15 @@ jobs:
           set -euo pipefail
           appdir="dist/AppDir"
           mkdir -p "${appdir}/usr/bin"
-          install -m755 target/release/repositorytree "${appdir}/usr/bin/repositorytree"
-          install -m644 dist/repositorytree.desktop "${appdir}/repositorytree.desktop"
-          install -m644 assets/repositorytree-512.png "${appdir}/repositorytree.png"
+          install -m755 target/release/worktree "${appdir}/usr/bin/worktree"
+          install -m644 dist/worktree.desktop "${appdir}/worktree.desktop"
+          install -m644 assets/worktree-512.png "${appdir}/worktree.png"
 
           {
             echo '#!/usr/bin/env bash'
             echo 'set -euo pipefail'
             echo 'HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"'
-            echo 'exec "${HERE}/usr/bin/repositorytree" "$@"'
+            echo 'exec "${HERE}/usr/bin/worktree" "$@"'
           } > "${appdir}/AppRun"
           chmod +x "${appdir}/AppRun"
 
@@ -523,7 +523,7 @@ jobs:
           echo "${APPIMAGETOOL_SHA256}  /tmp/appimagetool.AppImage" | sha256sum -c -
           chmod +x /tmp/appimagetool.AppImage
           ARCH="${APPIMAGE_ARCH}" /tmp/appimagetool.AppImage --appimage-extract-and-run \
-            "${appdir}" "dist/repositorytree-v${VERSION}-linux-${ARTIFACT_ARCH}.AppImage"
+            "${appdir}" "dist/worktree-v${VERSION}-linux-${ARTIFACT_ARCH}.AppImage"
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v7
@@ -619,9 +619,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          keychain_path="${RUNNER_TEMP}/repositorytree-signing.keychain-db"
+          keychain_path="${RUNNER_TEMP}/worktree-signing.keychain-db"
           keychain_password="$(openssl rand -hex 24)"
-          cert_path="${RUNNER_TEMP}/repositorytree-signing-cert.p12"
+          cert_path="${RUNNER_TEMP}/worktree-signing-cert.p12"
           api_key_path="${RUNNER_TEMP}/AuthKey_${MACOS_NOTARY_KEY_ID}.p8"
           default_keychain="$(security default-keychain -d user | tr -d '"' | xargs)"
 
@@ -665,7 +665,7 @@ jobs:
 
       - name: Package macOS release assets
         env:
-          REPOSITORYTREE_MACOS_PACKAGE_CLEAN_TARGET: "1"
+          WORKTREE_MACOS_PACKAGE_CLEAN_TARGET: "1"
         run: |
           set -euo pipefail
           package_args=(
@@ -777,10 +777,10 @@ jobs:
       - name: Generate Homebrew cask
         run: |
           set -euo pipefail
-          linux_arm_appimage="repositorytree-v${VERSION}-linux-arm64.AppImage"
-          linux_intel_appimage="repositorytree-v${VERSION}-linux-x86_64.AppImage"
-          arm_dmg="repositorytree-v${VERSION}-macos-arm64.dmg"
-          intel_dmg="repositorytree-v${VERSION}-macos-x86_64.dmg"
+          linux_arm_appimage="worktree-v${VERSION}-linux-arm64.AppImage"
+          linux_intel_appimage="worktree-v${VERSION}-linux-x86_64.AppImage"
+          arm_dmg="worktree-v${VERSION}-macos-arm64.dmg"
+          intel_dmg="worktree-v${VERSION}-macos-x86_64.dmg"
           linux_arm_appimage_path="dist/release/${linux_arm_appimage}"
           linux_intel_appimage_path="dist/release/${linux_intel_appimage}"
           arm_dmg_path="dist/release/${arm_dmg}"
@@ -798,14 +798,14 @@ jobs:
             --intel-dmg "${intel_dmg_path}" \
             --linux-arm-appimage "${linux_arm_appimage_path}" \
             --linux-intel-appimage "${linux_intel_appimage_path}" \
-            --output "dist/release/repositorytree.rb"
+            --output "dist/release/worktree.rb"
 
       - name: Generate checksums
         run: |
           set -euo pipefail
           pushd dist/release >/dev/null
-          md5_file="repositorytree-v${VERSION}-checksums.md5"
-          sha_file="repositorytree-v${VERSION}-checksums.sha256"
+          md5_file="worktree-v${VERSION}-checksums.md5"
+          sha_file="worktree-v${VERSION}-checksums.sha256"
 
           find . -maxdepth 1 -type f \
             ! -name "*checksums*" \
@@ -824,9 +824,9 @@ jobs:
         if: ${{ env.ENABLE_KEYLESS_SIGNING == 'true' }}
         run: |
           set -euo pipefail
-          sha_file="dist/release/repositorytree-v${VERSION}-checksums.sha256"
-          sig_file="dist/release/repositorytree-v${VERSION}-checksums.sha256.sig"
-          cert_file="dist/release/repositorytree-v${VERSION}-checksums.sha256.pem"
+          sha_file="dist/release/worktree-v${VERSION}-checksums.sha256"
+          sig_file="dist/release/worktree-v${VERSION}-checksums.sha256.sig"
+          cert_file="dist/release/worktree-v${VERSION}-checksums.sha256.pem"
           cosign sign-blob --yes \
             --output-signature "$sig_file" \
             --output-certificate "$cert_file" \

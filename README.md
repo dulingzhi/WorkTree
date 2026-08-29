@@ -1,29 +1,29 @@
-## <img alt="RepositoryTree logo" src="assets/repositorytree_logo.svg" width="26" /> RepositoryTree
+## <img alt="WorkTree logo" src="assets/worktree_logo.svg" width="26" /> WorkTree
 
-[![Build Status](https://github.com/RepositoryTree/RepositoryTree/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/RepositoryTree/RepositoryTree/actions/workflows/rust.yml)
+[![Build Status](https://github.com/dulingzhi/WorkTree/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/dulingzhi/WorkTree/actions/workflows/rust.yml)
 [![Discord](https://img.shields.io/badge/Discord-Join%20chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/2ufDGP8RnA)
-[![Website](https://img.shields.io/badge/Website-repositorytree.dev-0A66C2?logo=googlechrome&logoColor=white)](https://repositorytree.dev)
+[![Website](https://img.shields.io/badge/Website-worktree.dev-0A66C2?logo=googlechrome&logoColor=white)](https://worktree.dev)
 [![AutoExplore](https://img.shields.io/badge/AutoExplore-autoexplore.ai-0B7A75?logo=safari&logoColor=white)](https://autoexplore.ai)
-[![license](https://img.shields.io/github/license/RepositoryTree/RepositoryTree.svg)](LICENSE)
-[![latest](https://img.shields.io/github/v/release/RepositoryTree/RepositoryTree.svg)](https://github.com/RepositoryTree/RepositoryTree/releases/latest)
-[![downloads](https://img.shields.io/github/downloads/RepositoryTree/RepositoryTree/total)](https://github.com/RepositoryTree/RepositoryTree/releases)
+[![license](https://img.shields.io/github/license/dulingzhi/WorkTree.svg)](LICENSE)
+[![latest](https://img.shields.io/github/v/release/dulingzhi/WorkTree.svg)](https://github.com/dulingzhi/WorkTree/releases/latest)
+[![downloads](https://img.shields.io/github/downloads/dulingzhi/WorkTree/total)](https://github.com/dulingzhi/WorkTree/releases)
 
 **Fastest Open Source Git GUI**
 
-RepositoryTree is built for teams that want fast Git operations with local-first privacy, familiar workflows, and open source freedom.
+WorkTree is built for teams that want fast Git operations with local-first privacy, familiar workflows, and open source freedom.
 
 Available for Linux, Windows, and macOS.
 
-<img alt="RepositoryTree demo" src="assets/repositorytree-0.2.0.gif"/>
+<img alt="WorkTree demo" src="assets/worktree-0.2.0.gif"/>
 
 ### Download
 
-Download the latest prebuilt binaries/installers from [GitHub Releases](https://github.com/RepositoryTree/RepositoryTree/releases).
+Download the latest prebuilt binaries/installers from [GitHub Releases](https://github.com/dulingzhi/WorkTree/releases).
 
 <details>
 <summary>Windows</summary>
 
-Download the latest Windows installer or portable binary from [GitHub Releases](https://github.com/RepositoryTree/RepositoryTree/releases).
+Download the latest Windows installer or portable binary from [GitHub Releases](https://github.com/dulingzhi/WorkTree/releases).
 
 Install from the Microsoft Store:
 
@@ -36,10 +36,10 @@ Install from the Microsoft Store:
 <details>
 <summary>Homebrew (macOS / Linux)</summary>
 
-App and `repositorytree` command from tap:
+App and `worktree` command from tap:
 
 ```bash
-brew install --cask repositorytree
+brew install --cask worktree
 ```
 
 On Linux, the cask installs the AppImage build. If your system cannot launch AppImages, use the APT repo, AUR package, release tarball, or `.deb` instead.
@@ -50,8 +50,8 @@ On Linux, the cask installs the AppImage build. If your system cannot launch App
 <summary>AUR (Arch Linux)</summary>
 
 ```bash
-git clone https://aur.archlinux.org/repositorytree.git
-cd repositorytree && makepkg -si
+git clone https://aur.archlinux.org/worktree.git
+cd worktree && makepkg -si
 ```
 
 </details>
@@ -60,7 +60,7 @@ cd repositorytree && makepkg -si
 <summary>GURU (Gentoo Linux)</summary>
 
 ```bash
-emerge --ask dev-vcs/repositorytree
+emerge --ask dev-vcs/worktree
 ```
 
 </details>
@@ -69,10 +69,10 @@ emerge --ask dev-vcs/repositorytree
 <summary>apt (Debian/Ubuntu)</summary>
 
 ```bash
-curl -fsSL https://apt.repositorytree.dev/repositorytree-archive-keyring.gpg | sudo tee /usr/share/keyrings/repositorytree-archive-keyring.gpg >/dev/null
-curl -fsSL https://apt.repositorytree.dev/repositorytree.sources | sudo tee /etc/apt/sources.list.d/repositorytree.sources >/dev/null
+curl -fsSL https://apt.worktree.dev/worktree-archive-keyring.gpg | sudo tee /usr/share/keyrings/worktree-archive-keyring.gpg >/dev/null
+curl -fsSL https://apt.worktree.dev/worktree.sources | sudo tee /etc/apt/sources.list.d/worktree.sources >/dev/null
 sudo apt update
-sudo apt install repositorytree
+sudo apt install worktree
 ```
 
 If you install a Linux tarball or Homebrew binary on Debian, Ubuntu, or WSLg instead of the official `apt` package, install the GUI runtime libraries separately:
@@ -85,17 +85,17 @@ sudo apt install libxcb1 libxkbcommon0 libxkbcommon-x11-0
 
 ### Requirements
 
-RepositoryTree requires a local Git installation of `2.50` or newer.
+WorkTree requires a local Git installation of `2.50` or newer.
 
-### RepositoryTree User Survey
+### WorkTree User Survey
 
 We’re running this short survey to better understand how people use our Git GUI client in their daily work. Your feedback will help us improve the product and prioritize the features that matter most.
 
 https://docs.google.com/forms/d/e/1FAIpQLSd8DKIl222UomSXrpv1q9rWodRlBSQo9pJDD62GbZEANTgD1A/viewform?usp=dialog
 
-### Why RepositoryTree
+### Why WorkTree
 
-RepositoryTree started from frustration with existing tools on huge codebases like Chromium. We could not find a product that stays responsive and functional when browsing large repositories and file diffs.
+WorkTree started from frustration with existing tools on huge codebases like Chromium. We could not find a product that stays responsive and functional when browsing large repositories and file diffs.
 
 ### Editions (planned)
 
@@ -119,13 +119,13 @@ RepositoryTree started from frustration with existing tools on huge codebases li
   - Code test coverage workflows
   - GitHub and Azure DevOps integrations
   - Priority improvements during early access
-- Join waitlist: [repositorytree.dev/#editions](https://repositorytree.dev/#editions)
+- Join waitlist: [worktree.dev/#editions](https://worktree.dev/#editions)
 
 ### Build from source
 
 ```bash
-cargo build -p repositorytree --features ui-gpui,gix
-cargo run -p repositorytree --features ui-gpui,gix -- /path/to/repo
+cargo build -p worktree --features ui-gpui,gix
+cargo run -p worktree --features ui-gpui,gix -- /path/to/repo
 ```
 
 ### Contributing
@@ -134,16 +134,16 @@ Developer setup, workspace layout, testing, and coverage docs live in `CONTRIBUT
 
 ### Using as a Git difftool / mergetool
 
-RepositoryTree can be used as a standalone diff and merge tool invoked by `git difftool` and `git mergetool`. It supports both headless (algorithm-only) and GUI (interactive GPUI window) modes.
+WorkTree can be used as a standalone diff and merge tool invoked by `git difftool` and `git mergetool`. It supports both headless (algorithm-only) and GUI (interactive GPUI window) modes.
 
 #### Setup / uninstall (recommended)
 
 ```bash
-# Configure Git globally to use RepositoryTree for both difftool + mergetool
-repositorytree setup
+# Configure Git globally to use WorkTree for both difftool + mergetool
+worktree setup
 
-# Remove RepositoryTree integration safely
-repositorytree uninstall
+# Remove WorkTree integration safely
+worktree uninstall
 ```
 
 - Use `--local` to target only the current repository instead of global config.
@@ -158,41 +158,41 @@ This setup registers both headless and GUI variants with `guiDefault=auto`, so G
 Built-in `setup` writes these Git config entries:
 
 ```bash
-REPOSITORYTREE_BIN="/absolute/path/to/repositorytree"
+WORKTREE_BIN="/absolute/path/to/worktree"
 
 # Headless tool: algorithm-only merge/diff for CI, scripts, and no-display environments
-git config --global merge.tool repositorytree
-git config --global mergetool.repositorytree.cmd \
-  "'$REPOSITORYTREE_BIN' mergetool --base \"\$BASE\" --local \"\$LOCAL\" --remote \"\$REMOTE\" --merged \"\$MERGED\""
+git config --global merge.tool worktree
+git config --global mergetool.worktree.cmd \
+  "'$WORKTREE_BIN' mergetool --base \"\$BASE\" --local \"\$LOCAL\" --remote \"\$REMOTE\" --merged \"\$MERGED\""
 git config --global mergetool.trustExitCode true
-git config --global mergetool.repositorytree.trustExitCode true
+git config --global mergetool.worktree.trustExitCode true
 git config --global mergetool.prompt false
 
-git config --global diff.tool repositorytree
-git config --global difftool.repositorytree.cmd \
-  "'$REPOSITORYTREE_BIN' difftool --local \"\$LOCAL\" --remote \"\$REMOTE\" --path \"\$MERGED\""
+git config --global diff.tool worktree
+git config --global difftool.worktree.cmd \
+  "'$WORKTREE_BIN' difftool --local \"\$LOCAL\" --remote \"\$REMOTE\" --path \"\$MERGED\""
 git config --global difftool.trustExitCode true
-git config --global difftool.repositorytree.trustExitCode true
+git config --global difftool.worktree.trustExitCode true
 git config --global difftool.prompt false
 
 # GUI tool: opens focused GPUI windows for interactive diff/merge
-git config --global merge.guitool repositorytree-gui
-git config --global mergetool.repositorytree-gui.cmd \
-  "'$REPOSITORYTREE_BIN' mergetool --gui --base \"\$BASE\" --local \"\$LOCAL\" --remote \"\$REMOTE\" --merged \"\$MERGED\""
-git config --global mergetool.repositorytree-gui.trustExitCode true
+git config --global merge.guitool worktree-gui
+git config --global mergetool.worktree-gui.cmd \
+  "'$WORKTREE_BIN' mergetool --gui --base \"\$BASE\" --local \"\$LOCAL\" --remote \"\$REMOTE\" --merged \"\$MERGED\""
+git config --global mergetool.worktree-gui.trustExitCode true
 
-git config --global diff.guitool repositorytree-gui
-git config --global difftool.repositorytree-gui.cmd \
-  "'$REPOSITORYTREE_BIN' difftool --gui --local \"\$LOCAL\" --remote \"\$REMOTE\" --path \"\$MERGED\""
-git config --global difftool.repositorytree-gui.trustExitCode true
+git config --global diff.guitool worktree-gui
+git config --global difftool.worktree-gui.cmd \
+  "'$WORKTREE_BIN' difftool --gui --local \"\$LOCAL\" --remote \"\$REMOTE\" --path \"\$MERGED\""
+git config --global difftool.worktree-gui.trustExitCode true
 
 # Auto-select GUI tool when DISPLAY is available, headless otherwise
 git config --global mergetool.guiDefault auto
 git config --global difftool.guiDefault auto
 ```
 
-Built-in `setup` stores previous user values for shared generic keys under `repositorytree.backup.*` (when needed).  
-Built-in `uninstall` restores those backups only when the key still has the setup-managed value. If the user changed a setting after setup, uninstall preserves that user-edited value and then removes RepositoryTree-specific keys.
+Built-in `setup` stores previous user values for shared generic keys under `worktree.backup.*` (when needed).  
+Built-in `uninstall` restores those backups only when the key still has the setup-managed value. If the user changed a setting after setup, uninstall preserves that user-edited value and then removes WorkTree-specific keys.
 
 </details>
 
@@ -201,7 +201,7 @@ Built-in `uninstall` restores those backups only when the key still has the setu
 **Difftool:**
 
 ```bash
-repositorytree difftool --local <path> --remote <path> [--path <display_name>] [--label-left <label>] [--label-right <label>]
+worktree difftool --local <path> --remote <path> [--path <display_name>] [--label-left <label>] [--label-right <label>]
 ```
 
 Also reads `LOCAL`/`REMOTE` from environment as a fallback when invoked by Git.
@@ -209,46 +209,46 @@ Also reads `LOCAL`/`REMOTE` from environment as a fallback when invoked by Git.
 **Mergetool:**
 
 ```bash
-repositorytree mergetool --local <path> --remote <path> --merged <path> [--base <path>] [--label-local <label>] [--label-remote <label>] [--label-base <label>]
+worktree mergetool --local <path> --remote <path> --merged <path> [--base <path>] [--label-local <label>] [--label-remote <label>] [--label-base <label>]
 ```
 
 Also reads `LOCAL`/`REMOTE`/`MERGED`/`BASE` from environment. Base is optional for add/add conflicts.
 
 #### Compatibility
 
-KDiff3 and Meld invocation forms are supported (`--L1/--L2/--L3`, `-o/--output/--out`, `--base`, positional arguments), so RepositoryTree can be a drop-in replacement.
+KDiff3 and Meld invocation forms are supported (`--L1/--L2/--L3`, `-o/--output/--out`, `--base`, positional arguments), so WorkTree can be a drop-in replacement.
 
 ### Themes
 
-RepositoryTree supports built-in themes and user-provided custom themes.
+WorkTree supports built-in themes and user-provided custom themes.
 
-Built-in themes are embedded in the RepositoryTree binary. Custom themes are loaded from JSON bundle files in your per-user themes directory, which RepositoryTree creates on startup.
+Built-in themes are embedded in the WorkTree binary. Custom themes are loaded from JSON bundle files in your per-user themes directory, which WorkTree creates on startup.
 
 The full theme guide, including file locations, schema details, example bundles, and override behavior, now lives in [THEMES.md](docs/themes.md).
 
 ### Crash logs
 
-RepositoryTree writes panic logs and abnormal-exit recovery state to:
+WorkTree writes panic logs and abnormal-exit recovery state to:
 
-- Linux: `$XDG_STATE_HOME/repositorytree/crashes/` (fallback: `~/.local/state/repositorytree/crashes/`)
-- macOS: `~/Library/Logs/repositorytree/crashes/`
-- Windows: `%LOCALAPPDATA%\repositorytree\crashes\` (fallback: `%APPDATA%\repositorytree\crashes\`)
+- Linux: `$XDG_STATE_HOME/worktree/crashes/` (fallback: `~/.local/state/worktree/crashes/`)
+- macOS: `~/Library/Logs/worktree/crashes/`
+- Windows: `%LOCALAPPDATA%\worktree\crashes\` (fallback: `%APPDATA%\worktree\crashes\`)
 
-On Linux, the directory normally is `~/.local/state/repositorytree/crashes/`.
-RepositoryTree creates a process-specific `session-in-progress-<pid>.log` before it
+On Linux, the directory normally is `~/.local/state/worktree/crashes/`.
+WorkTree creates a process-specific `session-in-progress-<pid>.log` before it
 starts the GPUI runtime. A native abort, terminated UI, or GPUI event loop exit
 without an explicitly requested user shutdown leaves that marker behind; Rust
 panics also write `panic-*.log`. Error-level runtime diagnostics are mirrored to
 `last-runtime-error-<pid>.log`, including their source location and a backtrace,
 so fatal errors logged and consumed by the UI runtime remain reportable.
-Recovery ignores markers owned by still-running RepositoryTree processes, so one open
+Recovery ignores markers owned by still-running WorkTree processes, so one open
 instance cannot consume another's crash state.
-On the next launch, RepositoryTree snapshots recovered data as
+On the next launch, WorkTree snapshots recovered data as
 `pending-startup-report.log` and retains it until the user reports or dismisses
 the notification, so a failed subsequent launch cannot discard the report before
 its notification is visible.
 
-RepositoryTree presents the report in the next UI launch and also prints its
+WorkTree presents the report in the next UI launch and also prints its
 prefilled GitHub issue URL and log path to the launching terminal. The report
 includes app version, platform, structured failure details, and a trimmed
 backtrace.
@@ -261,7 +261,7 @@ This project has been created with the help of AI tools, including OpenAI Codex 
 
 ### License
 
-RepositoryTree is licensed under the GNU Affero General Public License Version 3
+WorkTree is licensed under the GNU Affero General Public License Version 3
 (AGPL-3.0-only). See `LICENSE-AGPL-3.0`.
 
 Copyright (C) 2026 AutoExplore Oy  
