@@ -131,16 +131,9 @@ jobs:
       - name: Validate deployment workflow config keys
         run: |
           set -euo pipefail
-          grep -Fq 'vars.AUR_GIT_REPOSITORY' .github/workflows/release-manual-main.yml
-          grep -Fq 'vars.AUR_GIT_BRANCH' .github/workflows/release-manual-main.yml
-          grep -Fq 'vars.APT_STORAGE_ACCOUNT' .github/workflows/release-manual-main.yml
-          grep -Fq 'vars.APT_STORAGE_CONTAINER' .github/workflows/release-manual-main.yml
-          grep -Fq 'vars.APT_REPO_DISTRIBUTION' .github/workflows/release-manual-main.yml
-          grep -Fq 'vars.APT_REPO_COMPONENT' .github/workflows/release-manual-main.yml
-          grep -Fq 'vars.APT_REPO_ORIGIN' .github/workflows/release-manual-main.yml
-          grep -Fq 'vars.APT_REPO_LABEL' .github/workflows/release-manual-main.yml
-          grep -Fq 'vars.APT_REPO_DESCRIPTION' .github/workflows/release-manual-main.yml
-          grep -Fq 'vars.APT_STORAGE_PUBLIC_ACCESS' .github/workflows/release-manual-main.yml
+          # The release flow currently publishes to GitHub Releases only; the
+          # deploy-* reusable workflows are validated below but are not wired
+          # into release-manual-main.yml.
           grep -Fq 'vars.APT_STORAGE_ACCOUNT' .github/workflows/deploy-apt-repo.yml
           grep -Fq 'vars.APT_STORAGE_CONTAINER' .github/workflows/deploy-apt-repo.yml
           grep -Fq 'vars.APT_REPO_DISTRIBUTION' .github/workflows/deploy-apt-repo.yml
@@ -187,14 +180,6 @@ jobs:
           ! grep -Fq 'ReleaseNotes' .github/workflows/deploy-microsoft-store.yml
           grep -Fq '"X64"' .github/workflows/deploy-microsoft-store.yml
           grep -Fq '"Arm64"' .github/workflows/deploy-microsoft-store.yml
-          grep -Fq 'storage_container: "$web"' .github/workflows/release-manual-main.yml
-          grep -Fq 'storage_prefix: "windows"' .github/workflows/release-manual-main.yml
-          grep -Fq 'package_base_url: "https://apt.worktree.dev/windows"' .github/workflows/release-manual-main.yml
-          grep -Fq 'product_id: $''{{ vars.MICROSOFT_STORE_PRODUCT_ID }}' .github/workflows/release-manual-main.yml
-          grep -Fq 'package_languages: $''{{ vars.MICROSOFT_STORE_PACKAGE_LANGUAGES }}' .github/workflows/release-manual-main.yml
-          grep -Fq 'store_listing_languages: $''{{ vars.MICROSOFT_STORE_LISTING_LANGUAGES }}' .github/workflows/release-manual-main.yml
-          grep -Fq 'store_preflight: true' .github/workflows/release-manual-main.yml
-          grep -Fq 'store_preflight: false' .github/workflows/release-manual-main.yml
           grep -Fq 'vars.AUR_GIT_REPOSITORY' .github/workflows/deploy-aur.yml
           grep -Fq 'vars.AUR_GIT_BRANCH' .github/workflows/deploy-aur.yml
           grep -Fq 'vars.WINDOWS_SIGNING_ENDPOINT' .github/workflows/build-release-artifacts.yml

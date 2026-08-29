@@ -89,6 +89,11 @@ The release workflow `.github/workflows/build-release-artifacts.yml` builds and 
 
 ### Homebrew deployment
 
+> The release flow currently publishes to GitHub Releases only. The channel
+> workflows described in this and the following sections are retained under
+> `.github/workflows/` but are not wired into
+> `.github/workflows/release-manual-main.yml`.
+
 To push `Casks/worktree.rb` into a Homebrew tap repo automatically on release:
 
 1. Create a tap repository (default expected name: `OWNER/homebrew-worktree`).
@@ -96,9 +101,9 @@ To push `Casks/worktree.rb` into a Homebrew tap repo automatically on release:
    - secret `HOMEBREW_TAP_TOKEN`: GitHub token with `contents:write` access to the tap repository.
    - variable `HOMEBREW_TAP_REPO`: tap repository in `OWNER/REPO` form.
    - optional variable `HOMEBREW_TAP_BRANCH`: target branch (default `main`).
-3. Run `.github/workflows/release-manual-main.yml` with `draft=false`.
+3. Re-add the `deploy_homebrew_tap` job to `.github/workflows/release-manual-main.yml`, then run the release with `draft=false`.
 
-This release flow will:
+With the job wired in, the release flow will:
 
 - build and upload release artifacts
 - publish the GitHub release
@@ -116,9 +121,9 @@ To push `PKGBUILD` and `.SRCINFO` into the live AUR repository automatically on 
    - secret `AUR_PRIVATE_SSH_KEY_PASSPHRASE`: the passphrase for that SSH key.
    - optional variable `AUR_GIT_REPOSITORY`: AUR Git remote URL (default: `ssh://aur@aur.archlinux.org/worktree.git`).
    - optional variable `AUR_GIT_BRANCH`: AUR branch for that remote (default `master`).
-3. Run `.github/workflows/release-manual-main.yml` with `draft=false`.
+3. Re-add the `deploy_aur` job to `.github/workflows/release-manual-main.yml`, then run the release with `draft=false`.
 
-This release flow will:
+With the job wired in, the release flow will:
 
 - download the published Linux release tarball and source tarball
 - update `PKGBUILD` `pkgver` and `sha256sums`

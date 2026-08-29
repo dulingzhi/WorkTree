@@ -174,98 +174,10 @@ jobs:
           gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false
           gh release view "$tag" --repo "$GITHUB_REPOSITORY"
 
-  deploy_homebrew_tap:
-    name: Deploy Homebrew tap packages
-    needs: [validate, build_and_upload, publish_release]
-    if: ${{ fromJSON(needs.validate.outputs.draft) == false && needs.build_and_upload.result == 'success' }}
-    uses: ./.github/workflows/deploy-homebrew-tap.yml
-    with:
-      tag: ${{ needs.validate.outputs.tag }}
-      version: ${{ needs.validate.outputs.version }}
-      tap_repo: ${{ vars.HOMEBREW_TAP_REPO }}
-      tap_branch: ${{ vars.HOMEBREW_TAP_BRANCH }}
-      dry_run: false
-    secrets: inherit
-
-  deploy_aur:
-    name: Deploy AUR metadata
-    needs: [validate, build_and_upload, publish_release]
-    if: ${{ fromJSON(needs.validate.outputs.draft) == false && needs.build_and_upload.result == 'success' }}
-    uses: ./.github/workflows/deploy-aur.yml
-    with:
-      tag: ${{ needs.validate.outputs.tag }}
-      version: ${{ needs.validate.outputs.version }}
-      aur_repo: ${{ vars.AUR_GIT_REPOSITORY }}
-      aur_branch: ${{ vars.AUR_GIT_BRANCH }}
-      dry_run: false
-    secrets: inherit
-
-  deploy_apt_repo:
-    name: Deploy Azure APT repository
-    needs: [validate, build_and_upload, publish_release]
-    if: ${{ fromJSON(needs.validate.outputs.draft) == false && needs.build_and_upload.result == 'success' }}
-    uses: ./.github/workflows/deploy-apt-repo.yml
-    with:
-      tag: ${{ needs.validate.outputs.tag }}
-      version: ${{ needs.validate.outputs.version }}
-      storage_account: ${{ vars.APT_STORAGE_ACCOUNT }}
-      storage_container: ${{ vars.APT_STORAGE_CONTAINER }}
-      storage_prefix: ${{ vars.APT_STORAGE_PREFIX }}
-      distribution: ${{ vars.APT_REPO_DISTRIBUTION }}
-      component: ${{ vars.APT_REPO_COMPONENT }}
-      architecture: "amd64,arm64"
-      repo_origin: ${{ vars.APT_REPO_ORIGIN }}
-      repo_label: ${{ vars.APT_REPO_LABEL }}
-      repo_description: ${{ vars.APT_REPO_DESCRIPTION }}
-      container_public_access: ${{ vars.APT_STORAGE_PUBLIC_ACCESS }}
-      dry_run: false
-    secrets: inherit
-
-  deploy_windows_installer:
-    name: Deploy Windows MSI installer
-    needs: [validate, build_and_upload, publish_release, deploy_apt_repo]
-    if: ${{ fromJSON(needs.validate.outputs.draft) == false && needs.build_and_upload.result == 'success' && needs.deploy_apt_repo.result == 'success' }}
-    uses: ./.github/workflows/deploy-windows-installer.yml
-    with:
-      tag: ${{ needs.validate.outputs.tag }}
-      version: ${{ needs.validate.outputs.version }}
-      storage_account: ${{ vars.APT_STORAGE_ACCOUNT }}
-      storage_container: "$web"
-      storage_prefix: "windows"
-      dry_run: false
-    secrets: inherit
-
-  preflight_microsoft_store:
-    name: Preflight Microsoft Store update
-    needs: [validate, build_and_upload, publish_release, deploy_windows_installer]
-    if: ${{ fromJSON(needs.validate.outputs.draft) == false && needs.build_and_upload.result == 'success' && needs.deploy_windows_installer.result == 'success' }}
-    uses: ./.github/workflows/deploy-microsoft-store.yml
-    with:
-      tag: ${{ needs.validate.outputs.tag }}
-      version: ${{ needs.validate.outputs.version }}
-      package_base_url: "https://apt.worktree.dev/windows"
-      product_id: ${{ vars.MICROSOFT_STORE_PRODUCT_ID }}
-      package_languages: ${{ vars.MICROSOFT_STORE_PACKAGE_LANGUAGES }}
-      store_listing_languages: ${{ vars.MICROSOFT_STORE_LISTING_LANGUAGES }}
-      dry_run: false
-      store_preflight: true
-    secrets: inherit
-
-  deploy_microsoft_store:
-    name: Submit Microsoft Store update
-    needs: [validate, build_and_upload, publish_release, deploy_windows_installer, preflight_microsoft_store]
-    if: ${{ fromJSON(needs.validate.outputs.draft) == false && needs.build_and_upload.result == 'success' && needs.deploy_windows_installer.result == 'success' && needs.preflight_microsoft_store.result == 'success' }}
-    uses: ./.github/workflows/deploy-microsoft-store.yml
-    with:
-      tag: ${{ needs.validate.outputs.tag }}
-      version: ${{ needs.validate.outputs.version }}
-      package_base_url: "https://apt.worktree.dev/windows"
-      product_id: ${{ vars.MICROSOFT_STORE_PRODUCT_ID }}
-      package_languages: ${{ vars.MICROSOFT_STORE_PACKAGE_LANGUAGES }}
-      store_listing_languages: ${{ vars.MICROSOFT_STORE_LISTING_LANGUAGES }}
-      dry_run: false
-      store_preflight: false
-    secrets: inherit
+  # Only GitHub Releases are published for now. The reusable workflows for the
+  # Homebrew tap, AUR, APT repository, Windows installer hosting, and the
+  # Microsoft Store remain under .github/workflows/ but are no longer wired
+  # into this release flow; re-add the jobs below to bring a channel back.
 
   cleanup_failed_release:
     name: Cleanup failed draft/tag

@@ -97,15 +97,6 @@ end
 metadata_step = steps.fetch(metadata_index)
 raise "optional listing metadata must not block package publishing" unless metadata_step["continue-on-error"] == true
 raise "publish must remain a strict release gate" if steps.fetch(publish_index)["continue-on-error"]
-
-manual_workflow = YAML.load_file(".github/workflows/release-manual-main.yml")
-manual_jobs = manual_workflow.fetch("jobs")
-preflight_job = manual_jobs.fetch("preflight_microsoft_store")
-live_job = manual_jobs.fetch("deploy_microsoft_store")
-raise "release must run a read-only Store preflight" unless preflight_job.fetch("with").fetch("store_preflight") == true
-raise "live Store submission must disable preflight mode" unless live_job.fetch("with").fetch("store_preflight") == false
-raise "live Store submission must require the preflight" unless live_job.fetch("needs").include?("preflight_microsoft_store")
-raise "live Store submission condition must require successful preflight" unless live_job.fetch("if").include?("needs.preflight_microsoft_store.result == 'success'")
 RUBY
 
 printf '%s\n' 'Microsoft Store workflow tests passed.'
