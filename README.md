@@ -1,31 +1,100 @@
-## <img alt="WorkTree logo" src="assets/worktree_logo.svg" width="26" /> WorkTree
+# <img alt="WorkTree logo" src="assets/worktree_logo.svg" width="28" /> WorkTree
+
+**English** | [简体中文](README.zh-CN.md)
 
 [![Build Status](https://github.com/dulingzhi/WorkTree/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/dulingzhi/WorkTree/actions/workflows/rust.yml)
 [![Discord](https://img.shields.io/badge/Discord-Join%20chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/2ufDGP8RnA)
 [![Website](https://img.shields.io/badge/Website-worktree.dev-0A66C2?logo=googlechrome&logoColor=white)](https://worktree.dev)
 [![AutoExplore](https://img.shields.io/badge/AutoExplore-autoexplore.ai-0B7A75?logo=safari&logoColor=white)](https://autoexplore.ai)
-[![license](https://img.shields.io/github/license/dulingzhi/WorkTree.svg)](LICENSE)
+[![license](https://img.shields.io/github/license/dulingzhi/WorkTree.svg)](LICENSE-AGPL-3.0)
 [![latest](https://img.shields.io/github/v/release/dulingzhi/WorkTree.svg)](https://github.com/dulingzhi/WorkTree/releases/latest)
 [![downloads](https://img.shields.io/github/downloads/dulingzhi/WorkTree/total)](https://github.com/dulingzhi/WorkTree/releases)
 
-**Fastest Open Source Git GUI**
+**The fastest open-source Git GUI — local-first, cross-platform, built in Rust.**
 
-WorkTree is built for teams that want fast Git operations with local-first privacy, familiar workflows, and open source freedom.
+WorkTree is a free, open-source Git client for Linux, Windows, and macOS. It is written in Rust on the [GPUI](https://github.com/zed-industries/gpui) UI framework with [gix](https://github.com/GitoxideLabs/gitoxide) (gitoxide) underneath. It exists because its author could not find a tool that stayed fast and usable on codebases the size of Chromium — responsiveness on huge repositories is the bar every feature has to clear.
 
-Available for Linux, Windows, and macOS.
+WorkTree is local-first: your repositories, credentials, and AI configuration stay on your machine. Nothing leaves it unless you run a remote operation or explicitly invoke an integration.
 
 <img alt="WorkTree demo" src="assets/worktree-0.2.0.gif"/>
 
-### Download
+## Features
 
-Download the latest prebuilt binaries/installers from [GitHub Releases](https://github.com/dulingzhi/WorkTree/releases).
+### Complete Git workflows
+
+- Stage, unstage, and discard changes at file, hunk, or single-line level
+- Commits, branches, tags, remotes, and submodules
+- Fetch, pull, and push — including GitLab merge-request push options
+- Stashes: by path, with keep-index / include-untracked options, and branch-from-stash
+- Interactive rebase editor and cherry-pick
+- Operation-level undo built on the reflog — undo resets, merges, rebases, and pulls with a safety preview
+- Full bisect flow, with good / bad / skip verdicts shown right in the history graph
+- First-class `git worktree` management
+- Blame with incremental working-tree updates
+- History graph with first-parent mode and ref / tag filters, plus cross-history commit search
+- GPG signing configuration and per-commit signature badges
+- Git LFS: pointer diffs, object viewing, image smudge previews, and prune
+- Per-remote SSH keys, ZIP archive export of any commit, and an assume-unchanged manager
+- A virtual WIP node that puts your uncommitted work inside the history graph
+
+### Diff and merge
+
+- Inline and side-by-side diffs with word-level highlighting
+- Syntax highlighting for dozens of languages via tree-sitter
+- Image diffs, LFS object previews, and inline file editing
+- A real three-way merge editor with conflict-style alignment (including zdiff3) and auto-solve
+
+### Works as your difftool / mergetool
+
+- One command — `worktree setup` — registers WorkTree with `git difftool` / `git mergetool`
+- Interactive GPUI windows when a display is available; headless, algorithm-only mode when it is not
+- KDiff3- and Meld-compatible invocation forms, so it drops right in as a replacement
+
+### GitHub & GitLab
+
+- Pull-request list in the sidebar with CI status chips; checkout PR refs locally
+- Create pull requests and merge requests via prefilled compare URLs (GitHub) or push options (GitLab)
+
+### AI assistance — bring your own model
+
+- Generate commit messages in the style of your recent history
+- Ask for a plain-language explanation of any hunk
+- Draft merge-request / pull-request descriptions, edit them, and copy them into your forge
+- Providers: Claude Code, Codex, GitHub Copilot (`gh` token → GitHub Models), Gemini CLI, Ollama, generic HTTP endpoints, environment variables, or a custom command
+- Credentials are discovered locally and resolved on demand — never written to disk
+
+### Agent workbench
+
+- Run Claude Code or Codex sessions inside WorkTree's embedded terminal
+- Every session gets its own isolated git worktree, so agents never touch your working tree
+- "What did the agent change?" diffs the session against its baseline — accept changes path by path, or restore files from the baseline
+
+### A polished desktop app
+
+- Command palette covering every action
+- Embedded terminal powered by Alacritty's core
+- Coverage overlay: import an lcov tracefile (as emitted by `llvm-cov` / `cargo llvm-cov`) and see covered and missed lines in your diffs
+- Contribution statistics with week / month / year rankings and charts
+- Multiple repositories in tabs, with full session restore
+- Light and dark themes, plus custom themes from JSON bundles
+- English and 简体中文 interface
+- Keyboard-first: every shortcut is shown inline in its context menu
+- Crash logging with next-launch recovery and prefilled issue reports
+
+### Built for huge repositories
+
+- Incremental status updates driven by filesystem events — only changed paths are rescanned, with full-scan fallback
+- Native performance throughout: Rust, GPUI rendering, gix for Git operations, mimalloc allocation
+- Developed and benchmarked against very large real-world repositories
+
+## Download
+
+Get the latest prebuilt binaries and installers from [GitHub Releases](https://github.com/dulingzhi/WorkTree/releases).
 
 <details>
 <summary>Windows</summary>
 
-Download the latest Windows installer or portable binary from [GitHub Releases](https://github.com/dulingzhi/WorkTree/releases).
-
-Install from the Microsoft Store:
+Download the latest installer or portable ZIP from [GitHub Releases](https://github.com/dulingzhi/WorkTree/releases), or install from the Microsoft Store:
 
 <a href="https://apps.microsoft.com/detail/XPFD182V1H793R?referrer=appbadge&mode=full" target="_blank"  rel="noopener noreferrer">
   <img src="https://get.microsoft.com/images/en-us%20dark.svg" width="200"/>
@@ -35,8 +104,6 @@ Install from the Microsoft Store:
 
 <details>
 <summary>Homebrew (macOS / Linux)</summary>
-
-App and `worktree` command from tap:
 
 ```bash
 brew install --cask worktree
@@ -66,7 +133,7 @@ emerge --ask dev-vcs/worktree
 </details>
 
 <details>
-<summary>apt (Debian/Ubuntu)</summary>
+<summary>apt (Debian / Ubuntu)</summary>
 
 ```bash
 curl -fsSL https://apt.worktree.dev/worktree-archive-keyring.gpg | sudo tee /usr/share/keyrings/worktree-archive-keyring.gpg >/dev/null
@@ -83,60 +150,31 @@ sudo apt install libxcb1 libxkbcommon0 libxkbcommon-x11-0
 
 </details>
 
-### Requirements
+## Requirements
 
-WorkTree requires a local Git installation of `2.50` or newer.
+WorkTree requires a local Git installation of **2.50 or newer**.
 
-### WorkTree User Survey
-
-We’re running this short survey to better understand how people use our Git GUI client in their daily work. Your feedback will help us improve the product and prioritize the features that matter most.
-
-https://docs.google.com/forms/d/e/1FAIpQLSd8DKIl222UomSXrpv1q9rWodRlBSQo9pJDD62GbZEANTgD1A/viewform?usp=dialog
-
-### Why WorkTree
-
-WorkTree started from frustration with existing tools on huge codebases like Chromium. We could not find a product that stays responsive and functional when browsing large repositories and file diffs.
-
-### Editions (planned)
-
-#### Open Source
-
-- **Price**: €0 forever
-- **Usage**: Free for personal and commercial use
-- **Includes**:
-  - Full local-first desktop workflow
-  - Git remotes, pull/push, staging, commits
-  - Worktrees, branching, and full history
-  - Multi-repository browsing
-  - Inline and side-by-side diffs
-  - 2-way and 3-way merge tools
-
-#### Professional
-
-- **Price**: €20 lifetime access (limited-time early adopter offer)
-- **Includes everything in Open Source, plus**:
-  - Claude Code, Codex, and GitHub CLI integrations
-  - Code test coverage workflows
-  - GitHub and Azure DevOps integrations
-  - Priority improvements during early access
-- Join waitlist: [worktree.dev/#editions](https://worktree.dev/#editions)
-
-### Build from source
+## Build from source
 
 ```bash
+git clone https://github.com/dulingzhi/WorkTree.git
+cd WorkTree
 cargo build -p worktree --features ui-gpui,gix
 cargo run -p worktree --features ui-gpui,gix -- /path/to/repo
 ```
 
-### Contributing
+Run the CI-equivalent test suite and lints:
 
-Developer setup, workspace layout, testing, and coverage docs live in `CONTRIBUTING.md`.
+```bash
+cargo test --workspace --no-default-features --features gix
+cargo clippy --workspace --no-default-features --features gix -- -D warnings
+```
 
-### Using as a Git difftool / mergetool
+Workspace layout, packaging, coverage tooling, and release processes are documented in [CONTRIBUTING.md](CONTRIBUTING.md).
 
-WorkTree can be used as a standalone diff and merge tool invoked by `git difftool` and `git mergetool`. It supports both headless (algorithm-only) and GUI (interactive GPUI window) modes.
+## Using WorkTree as a Git difftool / mergetool
 
-#### Setup / uninstall (recommended)
+WorkTree runs standalone as a diff and merge tool invoked by `git difftool` and `git mergetool`. It supports both headless (algorithm-only) and GUI (interactive GPUI window) modes.
 
 ```bash
 # Configure Git globally to use WorkTree for both difftool + mergetool
@@ -146,87 +184,18 @@ worktree setup
 worktree uninstall
 ```
 
-- Use `--local` to target only the current repository instead of global config.
-- Use `--dry-run` to print the commands before applying changes.
+- `--local` targets only the current repository; `--dry-run` prints the changes without applying them.
+- `setup` registers both headless and GUI variants with `guiDefault=auto`, so Git picks the GUI when a display is available and falls back to headless otherwise.
+- Both commands are idempotent. `uninstall` backs up and restores any user values it would otherwise overwrite.
+- KDiff3 and Meld invocation forms are supported, so WorkTree is a drop-in replacement.
 
-This setup registers both headless and GUI variants with `guiDefault=auto`, so Git chooses GUI when display is available and falls back to headless otherwise.
-`setup`/`uninstall` are designed to be idempotent.
+## Documentation
 
-<details>
-<summary>Show detailed setup/uninstall behavior and manual commands</summary>
+- [Keyboard shortcuts](docs/shortcuts.md) — full shortcut reference per surface
+- [Themes](docs/themes.md) — file locations, schema, and example bundles
+- [Contributing](CONTRIBUTING.md) — workspace layout, build, test, coverage, and release packaging
 
-Built-in `setup` writes these Git config entries:
-
-```bash
-WORKTREE_BIN="/absolute/path/to/worktree"
-
-# Headless tool: algorithm-only merge/diff for CI, scripts, and no-display environments
-git config --global merge.tool worktree
-git config --global mergetool.worktree.cmd \
-  "'$WORKTREE_BIN' mergetool --base \"\$BASE\" --local \"\$LOCAL\" --remote \"\$REMOTE\" --merged \"\$MERGED\""
-git config --global mergetool.trustExitCode true
-git config --global mergetool.worktree.trustExitCode true
-git config --global mergetool.prompt false
-
-git config --global diff.tool worktree
-git config --global difftool.worktree.cmd \
-  "'$WORKTREE_BIN' difftool --local \"\$LOCAL\" --remote \"\$REMOTE\" --path \"\$MERGED\""
-git config --global difftool.trustExitCode true
-git config --global difftool.worktree.trustExitCode true
-git config --global difftool.prompt false
-
-# GUI tool: opens focused GPUI windows for interactive diff/merge
-git config --global merge.guitool worktree-gui
-git config --global mergetool.worktree-gui.cmd \
-  "'$WORKTREE_BIN' mergetool --gui --base \"\$BASE\" --local \"\$LOCAL\" --remote \"\$REMOTE\" --merged \"\$MERGED\""
-git config --global mergetool.worktree-gui.trustExitCode true
-
-git config --global diff.guitool worktree-gui
-git config --global difftool.worktree-gui.cmd \
-  "'$WORKTREE_BIN' difftool --gui --local \"\$LOCAL\" --remote \"\$REMOTE\" --path \"\$MERGED\""
-git config --global difftool.worktree-gui.trustExitCode true
-
-# Auto-select GUI tool when DISPLAY is available, headless otherwise
-git config --global mergetool.guiDefault auto
-git config --global difftool.guiDefault auto
-```
-
-Built-in `setup` stores previous user values for shared generic keys under `worktree.backup.*` (when needed).  
-Built-in `uninstall` restores those backups only when the key still has the setup-managed value. If the user changed a setting after setup, uninstall preserves that user-edited value and then removes WorkTree-specific keys.
-
-</details>
-
-#### CLI modes
-
-**Difftool:**
-
-```bash
-worktree difftool --local <path> --remote <path> [--path <display_name>] [--label-left <label>] [--label-right <label>]
-```
-
-Also reads `LOCAL`/`REMOTE` from environment as a fallback when invoked by Git.
-
-**Mergetool:**
-
-```bash
-worktree mergetool --local <path> --remote <path> --merged <path> [--base <path>] [--label-local <label>] [--label-remote <label>] [--label-base <label>]
-```
-
-Also reads `LOCAL`/`REMOTE`/`MERGED`/`BASE` from environment. Base is optional for add/add conflicts.
-
-#### Compatibility
-
-KDiff3 and Meld invocation forms are supported (`--L1/--L2/--L3`, `-o/--output/--out`, `--base`, positional arguments), so WorkTree can be a drop-in replacement.
-
-### Themes
-
-WorkTree supports built-in themes and user-provided custom themes.
-
-Built-in themes are embedded in the WorkTree binary. Custom themes are loaded from JSON bundle files in your per-user themes directory, which WorkTree creates on startup.
-
-The full theme guide, including file locations, schema details, example bundles, and override behavior, now lives in [THEMES.md](docs/themes.md).
-
-### Crash logs
+## Crash logs
 
 WorkTree writes panic logs and abnormal-exit recovery state to:
 
@@ -234,35 +203,22 @@ WorkTree writes panic logs and abnormal-exit recovery state to:
 - macOS: `~/Library/Logs/worktree/crashes/`
 - Windows: `%LOCALAPPDATA%\worktree\crashes\` (fallback: `%APPDATA%\worktree\crashes\`)
 
-On Linux, the directory normally is `~/.local/state/worktree/crashes/`.
-WorkTree creates a process-specific `session-in-progress-<pid>.log` before it
-starts the GPUI runtime. A native abort, terminated UI, or GPUI event loop exit
-without an explicitly requested user shutdown leaves that marker behind; Rust
-panics also write `panic-*.log`. Error-level runtime diagnostics are mirrored to
-`last-runtime-error-<pid>.log`, including their source location and a backtrace,
-so fatal errors logged and consumed by the UI runtime remain reportable.
-Recovery ignores markers owned by still-running WorkTree processes, so one open
-instance cannot consume another's crash state.
-On the next launch, WorkTree snapshots recovered data as
-`pending-startup-report.log` and retains it until the user reports or dismisses
-the notification, so a failed subsequent launch cannot discard the report before
-its notification is visible.
+On the next launch, WorkTree shows the recovered report — app version, platform, structured failure details, and a trimmed backtrace — and prints a prefilled GitHub issue URL and log path to the launching terminal. You choose whether to report or dismiss.
 
-WorkTree presents the report in the next UI launch and also prints its
-prefilled GitHub issue URL and log path to the launching terminal. The report
-includes app version, platform, structured failure details, and a trimmed
-backtrace.
+## Community
 
-### Prior work and ideas inspired by:
+- [Discord](https://discord.gg/2ufDGP8RnA) — ask questions, share feedback, follow development
+- [worktree.dev](https://worktree.dev) — website
 
-SourceTree, GitKraken, Zed, GPUI, KDiff3, Meld, Github Desktop, Git, Gix, Rust, Smol, and many more.
+## Acknowledgments
+
+WorkTree's design and implementation draw on ideas from SourceTree, GitKraken, Zed, GPUI, KDiff3, Meld, GitHub Desktop, Git, Gix, Rust, Smol, and many more.
 
 This project has been created with the help of AI tools, including OpenAI Codex and Claude Code.
 
-### License
+## License
 
-WorkTree is licensed under the GNU Affero General Public License Version 3
-(AGPL-3.0-only). See `LICENSE-AGPL-3.0`.
+WorkTree is licensed under the GNU Affero General Public License Version 3 (AGPL-3.0-only). See [LICENSE-AGPL-3.0](LICENSE-AGPL-3.0).
 
-Copyright (C) 2026 AutoExplore Oy  
+Copyright (C) 2026 AutoExplore Oy
 Contact: info@autoexplore.ai
