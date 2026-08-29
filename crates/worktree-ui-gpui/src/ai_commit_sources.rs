@@ -38,7 +38,8 @@ pub(crate) enum AiSource {
     ClaudeCode,
     /// `~/.codex/auth.json` + `~/.codex/config.toml`, falling back to env.
     Codex,
-    /// GitHub CLI token (hosts.yml / `GH_TOKEN`) against GitHub Models.
+    /// GitHub CLI token (hosts.yml / `GH_TOKEN` / `gh auth token`) against
+    /// GitHub Models.
     Copilot,
     /// `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` (+ `*_BASE_URL`, `*_MODEL`).
     Env,
@@ -127,6 +128,12 @@ impl AiSource {
 pub(crate) struct EnvAccess {
     home: PathBuf,
     vars: HashMap<String, String>,
+    /// Last-resort token source: `gh auth token`, the CLI's documented
+    /// reader for tokens it keeps in the OS credential store (gh's default
+    /// storage on Windows and macOS, where hosts.yml holds no token at
+    /// all). Production installs the subprocess; tests stage a value so the
+    /// fallback order stays covered without a real CLI.
+    gh_cli_token: Option<Box<dyn Fn() -> Option<String> + Send + Sync>>,
 }
 
 impl EnvAccess {
@@ -138,13 +145,25 @@ impl EnvAccess {
         Self {
             home,
             vars: std::env::vars().collect(),
+            gh_cli_token: Some(Box::new(run_gh_auth_token)),
         }
     }
 
     /// A test seam: an explicit home directory and variable set.
     #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn synthetic(home: PathBuf, vars: HashMap<String, String>) -> Self {
-        Self { home, vars }
+        Self {
+            home,
+            vars,
+            gh_cli_token: None,
+        }
+    }
+
+    /// Test seam: pretend `gh auth token` printed this (or nothing).
+    #[cfg(test)]
+    fn stage_gh_cli_token(&mut self, token: Option<&str>) {
+        let token = token.map(str::to_string);
+        self.gh_cli_token = Some(Box::new(move || token.clone()));
     }
 
     fn var(&self, name: &str) -> Option<String> {
@@ -153,6 +172,28 @@ impl EnvAccess {
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty())
     }
+
+    /// Run the staged `gh auth token` source, if one is installed.
+    fn gh_cli_token(&self) -> Option<String> {
+        self.gh_cli_token.as_ref().and_then(|token| token())
+    }
+}
+
+/// Ask the GitHub CLI for the signed-in token. gh's default storage is the
+/// OS credential store (Windows Credential Manager, macOS keychain), which
+/// leaves hosts.yml without an `oauth_token:` line — a signed-in user would
+/// otherwise resolve as anonymous and every private-repo request 404. A
+/// missing CLI, failing run, or empty output simply means "no token".
+fn run_gh_auth_token() -> Option<String> {
+    let output = std::process::Command::new("gh")
+        .args(["auth", "token"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let token = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    (!token.is_empty()).then_some(token)
 }
 
 /// Resolve the HTTP settings a source yields right now, or `None` when the
@@ -307,7 +348,11 @@ pub(crate) fn read_gh_token(env: &EnvAccess) -> Option<String> {
             }
         }
     }
-    env.var("GH_TOKEN").or_else(|| env.var("GITHUB_TOKEN"))
+    env.var("GH_TOKEN")
+        .or_else(|| env.var("GITHUB_TOKEN"))
+        // gh's default storage is the OS credential store, leaving hosts.yml
+        // tokenless — the CLI itself is the only reader for that token.
+        .or_else(|| env.gh_cli_token())
 }
 
 /// gh keeps its config under XDG on every platform (`~/.config/gh`), plus the
@@ -755,6 +800,70 @@ base_url = "https://unused.example.com"
         let env = env_with_home(dir.path());
         assert!(
             resolve_http_settings(AiSource::Copilot, &AiCommitSettings::default(), &env).is_none()
+        );
+    }
+
+    #[test]
+    fn gh_cli_fallback_covers_keyring_stored_tokens() {
+        // gh's default token storage is the OS credential store, so hosts.yml
+        // carries the login but no `oauth_token:` line — exactly what a
+        // signed-in Windows user has. The CLI seam is the only reader left.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".config").join("gh")).unwrap();
+        std::fs::write(
+            dir.path().join(".config").join("gh").join("hosts.yml"),
+            "github.com:\n    git_protocol: https\n    user: alice\n",
+        )
+        .unwrap();
+
+        let mut env = env_with_home(dir.path());
+        env.stage_gh_cli_token(Some("gho_keyring"));
+        assert_eq!(read_gh_token(&env).as_deref(), Some("gho_keyring"));
+
+        // A CLI that answers nothing still resolves as signed out.
+        env.stage_gh_cli_token(None);
+        assert_eq!(read_gh_token(&env), None);
+    }
+
+    #[test]
+    fn gh_cli_fallback_runs_after_hosts_yml_and_env() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join(".config").join("gh")).unwrap();
+        std::fs::write(
+            dir.path().join(".config").join("gh").join("hosts.yml"),
+            "github.com:\n    oauth_token: gho_file\n",
+        )
+        .unwrap();
+
+        let mut env = env_with_home(dir.path());
+        env.stage_gh_cli_token(Some("gho_keyring"));
+        assert_eq!(read_gh_token(&env).as_deref(), Some("gho_file"));
+
+        std::fs::remove_file(dir.path().join(".config").join("gh").join("hosts.yml")).unwrap();
+        let mut env = env_with_vars(dir.path(), &[("GH_TOKEN", "ghp_env")]);
+        env.stage_gh_cli_token(Some("gho_keyring"));
+        assert_eq!(read_gh_token(&env).as_deref(), Some("ghp_env"));
+    }
+
+    /// Reads this machine's real gh login — run explicitly with
+    /// `cargo test -p worktree-ui-gpui real_env -- --ignored` to check the
+    /// keyring fallback against an actually signed-in CLI. On a machine
+    /// without gh signed in there is nothing to assert and it passes.
+    #[test]
+    #[ignore = "reads this machine's real gh login"]
+    fn real_env_resolves_the_signed_in_gh_token() {
+        let cli = std::process::Command::new("gh")
+            .args(["auth", "token"])
+            .output()
+            .expect("gh should be installed to run this test");
+        if !cli.status.success() {
+            return;
+        }
+        let expected = String::from_utf8_lossy(&cli.stdout).trim().to_string();
+        assert_eq!(
+            read_gh_token(&EnvAccess::real()),
+            Some(expected),
+            "the resolver must agree with what gh itself prints"
         );
     }
 

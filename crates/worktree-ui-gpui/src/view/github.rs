@@ -4,7 +4,8 @@
 //! base; this module points the same remote knowledge at GitHub's REST API to
 //! list open pull requests and read their combined CI status. Requests carry
 //! the token the AI commit sources already know how to find (the GitHub CLI's
-//! hosts file, then `GH_TOKEN`/`GITHUB_TOKEN`) when one is present, and go
+//! hosts file, then `GH_TOKEN`/`GITHUB_TOKEN`, then `gh auth token` for the
+//! CLI's credential-store logins) when one is present, and go
 //! out unauthenticated otherwise — public repositories list fine that way,
 //! within the 60-requests-per-hour unauthenticated rate limit. Authentication
 //! exists purely to widen that budget and unlock private repositories; no
