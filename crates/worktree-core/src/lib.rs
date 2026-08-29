@@ -1,7 +1,9 @@
+pub mod applog;
 pub mod auth;
 pub mod conflict_labels;
 pub mod conflict_output;
 pub mod conflict_session;
+pub mod coverage;
 pub mod diff;
 pub mod domain;
 pub mod encoding;
@@ -18,5 +20,4 @@ pub mod process;
 pub mod services;
 pub mod squash;
 pub mod text_utils;
-pub mod coverage;
 pub mod undo;

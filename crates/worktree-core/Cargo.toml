@@ -17,6 +17,8 @@ benchmarks = []
 [dependencies]
 chardetng = { workspace = true }
 encoding_rs = { workspace = true }
+# Local-time log filenames and timestamps (the `log` facade has no clock).
+jiff = { workspace = true }
 memchr = { workspace = true }
 regex = { workspace = true }
 rustc-hash = { workspace = true }

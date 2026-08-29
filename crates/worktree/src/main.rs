@@ -213,6 +213,10 @@ fn main() {
         AppMode::Browser { path } => {
             #[cfg(feature = "ui-gpui-runtime")]
             {
+                // The daily log file is named after the startup date, and the
+                // retention pass runs here, before anything might log.
+                worktree_core::applog::init();
+
                 #[cfg(all(target_os = "macos", feature = "ui-gpui-runtime"))]
                 if maybe_relaunch_browser_from_macos_app_bundle() {
                     std::process::exit(exit_code::SUCCESS);

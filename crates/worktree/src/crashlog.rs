@@ -80,6 +80,13 @@ impl log::Log for CrashLogger {
         // them durable enough to survive an event-loop or native process exit.
         let mut stderr = std::io::stderr().lock();
         let _ = writeln!(stderr, "{message}");
+        // The daily log takes the same record, so a bug report with a log
+        // file attached carries the runtime errors alongside the trace.
+        worktree_core::applog::log(
+            worktree_core::applog::Level::Error,
+            record.target(),
+            format_args!("{message}"),
+        );
         write_runtime_error_log(record);
     }
 

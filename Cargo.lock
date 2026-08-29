@@ -8867,6 +8867,7 @@ version = "0.3.0"
 dependencies = [
  "chardetng",
  "encoding_rs",
+ "jiff",
  "memchr",
  "regex",
  "rustc-hash 2.1.3",
