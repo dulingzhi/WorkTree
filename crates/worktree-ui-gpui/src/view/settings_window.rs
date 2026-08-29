@@ -754,6 +754,21 @@ fn uniform_list_should_stop_scroll_propagation(
     }
 }
 
+/// The `.on_scroll_wheel` handler every settings dropdown list uses, so a
+/// wheel over the list stops at the list and only chains to the page scroller
+/// once the list has hit its edge. Every new dropdown must use this — without
+/// it the page behind the open list scrolls in lockstep (the exact bug the
+/// four lists below were bitten by).
+fn stop_dropdown_wheel_chaining(
+    scroll: UniformListScrollHandle,
+) -> impl Fn(&gpui::ScrollWheelEvent, &mut Window, &mut App) {
+    move |event, window, cx| {
+        if uniform_list_should_stop_scroll_propagation(&scroll, event, window) {
+            cx.stop_propagation();
+        }
+    }
+}
+
 fn mix_color(a: gpui::Rgba, b: gpui::Rgba, t: f32) -> gpui::Rgba {
     let t = t.clamp(0.0, 1.0);
     gpui::Rgba::new(
@@ -4727,16 +4742,7 @@ impl Render for SettingsWindowView {
                         .h_full()
                         .min_h(px(0.0))
                         .track_scroll(&self.theme_scroll)
-                        .on_scroll_wheel({
-                            let scroll = self.theme_scroll.clone();
-                            move |event, window, cx| {
-                                if uniform_list_should_stop_scroll_propagation(
-                                    &scroll, event, window,
-                                ) {
-                                    cx.stop_propagation();
-                                }
-                            }
-                        });
+                        .on_scroll_wheel(stop_dropdown_wheel_chaining(self.theme_scroll.clone()));
                         let list = restrict_scroll_to_vertical_axis(list).into_any_element();
                         general_card = general_card.child(self.dropdown_list_container(
                             "settings_window_theme_list_container",
@@ -4795,16 +4801,9 @@ impl Render for SettingsWindowView {
                         .h_full()
                         .min_h(px(0.0))
                         .track_scroll(&self.language_scroll)
-                        .on_scroll_wheel({
-                            let scroll = self.language_scroll.clone();
-                            move |event, window, cx| {
-                                if uniform_list_should_stop_scroll_propagation(
-                                    &scroll, event, window,
-                                ) {
-                                    cx.stop_propagation();
-                                }
-                            }
-                        });
+                        .on_scroll_wheel(stop_dropdown_wheel_chaining(
+                            self.language_scroll.clone(),
+                        ));
                         let list = restrict_scroll_to_vertical_axis(list).into_any_element();
                         general_card = general_card.child(self.dropdown_list_container(
                             "settings_window_language_list_container",
@@ -4830,7 +4829,10 @@ impl Render for SettingsWindowView {
                         .min_w(px(0.0))
                         .h_full()
                         .min_h(px(0.0))
-                        .track_scroll(&self.avatar_source_scroll);
+                        .track_scroll(&self.avatar_source_scroll)
+                        .on_scroll_wheel(stop_dropdown_wheel_chaining(
+                            self.avatar_source_scroll.clone(),
+                        ));
                         let list = restrict_scroll_to_vertical_axis(list).into_any_element();
                         general_card = general_card.child(self.dropdown_list_container(
                             "settings_window_avatar_source_list_container",
@@ -4900,16 +4902,9 @@ impl Render for SettingsWindowView {
                                 .h_full()
                                 .min_h(px(0.0))
                                 .track_scroll(&self.ui_font_scroll)
-                                .on_scroll_wheel({
-                                    let scroll = self.ui_font_scroll.clone();
-                                    move |event, window, cx| {
-                                        if uniform_list_should_stop_scroll_propagation(
-                                            &scroll, event, window,
-                                        ) {
-                                            cx.stop_propagation();
-                                        }
-                                    }
-                                }),
+                                .on_scroll_wheel(
+                                    stop_dropdown_wheel_chaining(self.ui_font_scroll.clone()),
+                                ),
                             )
                             .into_any_element()
                         };
@@ -4950,16 +4945,9 @@ impl Render for SettingsWindowView {
                                 .h_full()
                                 .min_h(px(0.0))
                                 .track_scroll(&self.editor_font_scroll)
-                                .on_scroll_wheel({
-                                    let scroll = self.editor_font_scroll.clone();
-                                    move |event, window, cx| {
-                                        if uniform_list_should_stop_scroll_propagation(
-                                            &scroll, event, window,
-                                        ) {
-                                            cx.stop_propagation();
-                                        }
-                                    }
-                                }),
+                                .on_scroll_wheel(
+                                    stop_dropdown_wheel_chaining(self.editor_font_scroll.clone()),
+                                ),
                             )
                             .into_any_element()
                         };
@@ -5006,16 +4994,9 @@ impl Render for SettingsWindowView {
                         .h_full()
                         .min_h(px(0.0))
                         .track_scroll(&self.external_editor_scroll)
-                        .on_scroll_wheel({
-                            let scroll = self.external_editor_scroll.clone();
-                            move |event, window, cx| {
-                                if uniform_list_should_stop_scroll_propagation(
-                                    &scroll, event, window,
-                                ) {
-                                    cx.stop_propagation();
-                                }
-                            }
-                        })
+                        .on_scroll_wheel(stop_dropdown_wheel_chaining(
+                            self.external_editor_scroll.clone(),
+                        ))
                         .into_any_element();
                         general_card = general_card.child(self.dropdown_list_container(
                             "settings_window_external_code_editor_list_container",
@@ -5131,7 +5112,10 @@ impl Render for SettingsWindowView {
                         .min_w(px(0.0))
                         .h_full()
                         .min_h(px(0.0))
-                        .track_scroll(&self.ai_commit_source_scroll);
+                        .track_scroll(&self.ai_commit_source_scroll)
+                        .on_scroll_wheel(stop_dropdown_wheel_chaining(
+                            self.ai_commit_source_scroll.clone(),
+                        ));
                         let list = restrict_scroll_to_vertical_axis(list).into_any_element();
                         general_card = general_card.child(self.dropdown_list_container(
                             "settings_window_ai_commit_source_list_container",
@@ -5232,179 +5216,185 @@ impl Render for SettingsWindowView {
                         }
 
                         if self.ai_commit_source == AiSource::Manual {
-                        general_card = general_card.child(
-                            div()
-                                .px_2()
-                                .pt_1()
-                                .text_xs()
-                                .text_color(theme.colors.foreground.secondary)
-                                .child(tr_str("settings.ai_commit.provider_heading")),
-                        );
-                        let provider_count = crate::ai_commit::AiProvider::ALL.len();
-                        let list = uniform_list(
-                            "settings_window_ai_commit_provider_list",
-                            provider_count,
-                            cx.processor(Self::render_ai_commit_provider_option_rows),
-                        )
-                        .w_full()
-                        .min_w(px(0.0))
-                        .h_full()
-                        .min_h(px(0.0))
-                        .track_scroll(&self.ai_commit_provider_scroll);
-                        let list = restrict_scroll_to_vertical_axis(list).into_any_element();
-                        general_card = general_card.child(self.dropdown_list_container(
-                            "settings_window_ai_commit_provider_list_container",
-                            "settings_window_ai_commit_provider_scrollbar",
-                            self.ai_commit_provider_scroll.clone(),
-                            provider_count,
-                            SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
-                            SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
-                            list,
-                            theme,
-                        ));
-                        general_card = general_card.child(
-                            self.detail_container(
-                                "settings_window_ai_commit_fields_container",
-                                theme,
-                            )
-                            .child(
+                            general_card = general_card.child(
                                 div()
                                     .px_2()
                                     .pt_1()
                                     .text_xs()
                                     .text_color(theme.colors.foreground.secondary)
-                                    .child(tr_str("settings.ai_commit.model")),
+                                    .child(tr_str("settings.ai_commit.provider_heading")),
+                            );
+                            let provider_count = crate::ai_commit::AiProvider::ALL.len();
+                            let list = uniform_list(
+                                "settings_window_ai_commit_provider_list",
+                                provider_count,
+                                cx.processor(Self::render_ai_commit_provider_option_rows),
                             )
-                            .child(
-                                div()
-                                    .px_2()
-                                    .pb_1()
-                                    .w_full()
-                                    .min_w(px(0.0))
-                                    .flex()
-                                    .items_center()
-                                    .gap_2()
-                                    .child(
-                                        div()
-                                            .flex_1()
-                                            .min_w(px(0.0))
-                                            .child(self.ai_commit_model_input.clone()),
+                            .w_full()
+                            .min_w(px(0.0))
+                            .h_full()
+                            .min_h(px(0.0))
+                            .track_scroll(&self.ai_commit_provider_scroll)
+                            .on_scroll_wheel(
+                                stop_dropdown_wheel_chaining(
+                                    self.ai_commit_provider_scroll.clone(),
+                                ),
+                            );
+                            let list = restrict_scroll_to_vertical_axis(list).into_any_element();
+                            general_card = general_card.child(self.dropdown_list_container(
+                                "settings_window_ai_commit_provider_list_container",
+                                "settings_window_ai_commit_provider_scrollbar",
+                                self.ai_commit_provider_scroll.clone(),
+                                provider_count,
+                                SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
+                                SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
+                                list,
+                                theme,
+                            ));
+                            general_card =
+                                general_card.child(
+                                    self.detail_container(
+                                        "settings_window_ai_commit_fields_container",
+                                        theme,
                                     )
                                     .child(
-                                        components::Button::new(
-                                            "settings_window_ai_commit_models_fetch",
-                                            tr("settings.ai_commit.models_fetch"),
-                                        )
-                                        .style(components::ButtonStyle::Outlined)
-                                        .disabled(matches!(
-                                            self.ai_commit_models,
-                                            AiCommitModels::Loading
-                                        ))
-                                        .on_click(
-                                            theme,
-                                            cx,
-                                            |this, _e, _window, cx| {
-                                                this.fetch_ai_commit_models(cx);
-                                            },
-                                        ),
+                                        div()
+                                            .px_2()
+                                            .pt_1()
+                                            .text_xs()
+                                            .text_color(theme.colors.foreground.secondary)
+                                            .child(tr_str("settings.ai_commit.model")),
+                                    )
+                                    .child(
+                                        div()
+                                            .px_2()
+                                            .pb_1()
+                                            .w_full()
+                                            .min_w(px(0.0))
+                                            .flex()
+                                            .items_center()
+                                            .gap_2()
+                                            .child(
+                                                div()
+                                                    .flex_1()
+                                                    .min_w(px(0.0))
+                                                    .child(self.ai_commit_model_input.clone()),
+                                            )
+                                            .child(
+                                                components::Button::new(
+                                                    "settings_window_ai_commit_models_fetch",
+                                                    tr("settings.ai_commit.models_fetch"),
+                                                )
+                                                .style(components::ButtonStyle::Outlined)
+                                                .disabled(matches!(
+                                                    self.ai_commit_models,
+                                                    AiCommitModels::Loading
+                                                ))
+                                                .on_click(theme, cx, |this, _e, _window, cx| {
+                                                    this.fetch_ai_commit_models(cx);
+                                                }),
+                                            ),
                                     ),
-                            ),
-                        );
+                                );
 
-                        match &self.ai_commit_models {
-                            AiCommitModels::NotFetched => {}
-                            AiCommitModels::Loading => {
-                                general_card = general_card.child(
+                            match &self.ai_commit_models {
+                                AiCommitModels::NotFetched => {}
+                                AiCommitModels::Loading => {
+                                    general_card = general_card.child(
+                                        div()
+                                            .id("settings_window_ai_commit_models_loading")
+                                            .px_2()
+                                            .pb_1()
+                                            .text_xs()
+                                            .text_color(theme.colors.foreground.secondary)
+                                            .child(tr_str("settings.ai_commit.models_loading")),
+                                    );
+                                }
+                                AiCommitModels::Error(error) => {
+                                    general_card = general_card.child(
+                                        div()
+                                            .id("settings_window_ai_commit_models_error")
+                                            .px_2()
+                                            .pb_1()
+                                            .text_xs()
+                                            .text_color(theme.colors.foreground.secondary)
+                                            .child(t!(
+                                                "settings.ai_commit.models_failed",
+                                                error = error
+                                            )),
+                                    );
+                                }
+                                AiCommitModels::Ready(models) => {
+                                    let list = uniform_list(
+                                        "settings_window_ai_commit_model_list",
+                                        models.len(),
+                                        cx.processor(Self::render_ai_commit_model_option_rows),
+                                    )
+                                    .w_full()
+                                    .min_w(px(0.0))
+                                    .h_full()
+                                    .min_h(px(0.0))
+                                    .track_scroll(&self.ai_commit_models_scroll)
+                                    .on_scroll_wheel(stop_dropdown_wheel_chaining(
+                                        self.ai_commit_models_scroll.clone(),
+                                    ));
+                                    let list =
+                                        restrict_scroll_to_vertical_axis(list).into_any_element();
+                                    general_card =
+                                        general_card.child(self.dropdown_list_container(
+                                            "settings_window_ai_commit_model_list_container",
+                                            "settings_window_ai_commit_model_scrollbar",
+                                            self.ai_commit_models_scroll.clone(),
+                                            models.len(),
+                                            SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
+                                            SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
+                                            list,
+                                            theme,
+                                        ));
+                                }
+                            }
+
+                            general_card = general_card
+                                .child(
                                     div()
-                                        .id("settings_window_ai_commit_models_loading")
                                         .px_2()
-                                        .pb_1()
+                                        .pt_1()
                                         .text_xs()
                                         .text_color(theme.colors.foreground.secondary)
-                                        .child(tr_str("settings.ai_commit.models_loading")),
-                                );
-                            }
-                            AiCommitModels::Error(error) => {
-                                general_card = general_card.child(
-                                    div()
-                                        .id("settings_window_ai_commit_models_error")
-                                        .px_2()
-                                        .pb_1()
-                                        .text_xs()
-                                        .text_color(theme.colors.foreground.secondary)
-                                        .child(t!(
-                                            "settings.ai_commit.models_failed",
-                                            error = error
-                                        )),
-                                );
-                            }
-                            AiCommitModels::Ready(models) => {
-                                let list = uniform_list(
-                                    "settings_window_ai_commit_model_list",
-                                    models.len(),
-                                    cx.processor(Self::render_ai_commit_model_option_rows),
+                                        .child(tr_str("settings.ai_commit.api_key")),
                                 )
-                                .w_full()
-                                .min_w(px(0.0))
-                                .h_full()
-                                .min_h(px(0.0))
-                                .track_scroll(&self.ai_commit_models_scroll);
-                                let list =
-                                    restrict_scroll_to_vertical_axis(list).into_any_element();
-                                general_card = general_card.child(self.dropdown_list_container(
-                                    "settings_window_ai_commit_model_list_container",
-                                    "settings_window_ai_commit_model_scrollbar",
-                                    self.ai_commit_models_scroll.clone(),
-                                    models.len(),
-                                    SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
-                                    SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
-                                    list,
-                                    theme,
-                                ));
-                            }
-                        }
-
-                        general_card = general_card
-                            .child(
-                                div()
-                                    .px_2()
-                                    .pt_1()
-                                    .text_xs()
-                                    .text_color(theme.colors.foreground.secondary)
-                                    .child(tr_str("settings.ai_commit.api_key")),
-                            )
-                            .child(
-                                div()
-                                    .px_2()
-                                    .pb_1()
-                                    .w_full()
-                                    .min_w(px(0.0))
-                                    .child(self.ai_commit_api_key_input.clone()),
-                            )
-                            .child(
-                                div()
-                                    .px_2()
-                                    .pt_1()
-                                    .text_xs()
-                                    .text_color(theme.colors.foreground.secondary)
-                                    .child(tr_str("settings.ai_commit.endpoint")),
-                            )
-                            .child(
-                                div()
-                                    .px_2()
-                                    .pb_1()
-                                    .w_full()
-                                    .min_w(px(0.0))
-                                    .child(self.ai_commit_endpoint_input.clone()),
-                            )
-                            .child(
-                                div()
-                                    .px_2()
-                                    .pt_1()
-                                    .text_xs()
-                                    .text_color(theme.colors.foreground.secondary)
-                                    .child(tr_str("settings.ai_commit.privacy_hint")),
-                            );
+                                .child(
+                                    div()
+                                        .px_2()
+                                        .pb_1()
+                                        .w_full()
+                                        .min_w(px(0.0))
+                                        .child(self.ai_commit_api_key_input.clone()),
+                                )
+                                .child(
+                                    div()
+                                        .px_2()
+                                        .pt_1()
+                                        .text_xs()
+                                        .text_color(theme.colors.foreground.secondary)
+                                        .child(tr_str("settings.ai_commit.endpoint")),
+                                )
+                                .child(
+                                    div()
+                                        .px_2()
+                                        .pb_1()
+                                        .w_full()
+                                        .min_w(px(0.0))
+                                        .child(self.ai_commit_endpoint_input.clone()),
+                                )
+                                .child(
+                                    div()
+                                        .px_2()
+                                        .pt_1()
+                                        .text_xs()
+                                        .text_color(theme.colors.foreground.secondary)
+                                        .child(tr_str("settings.ai_commit.privacy_hint")),
+                                );
                         }
                     }
 
@@ -5426,16 +5416,9 @@ impl Render for SettingsWindowView {
                         .h_full()
                         .min_h(px(0.0))
                         .track_scroll(&self.date_format_scroll)
-                        .on_scroll_wheel({
-                            let scroll = self.date_format_scroll.clone();
-                            move |event, window, cx| {
-                                if uniform_list_should_stop_scroll_propagation(
-                                    &scroll, event, window,
-                                ) {
-                                    cx.stop_propagation();
-                                }
-                            }
-                        });
+                        .on_scroll_wheel(stop_dropdown_wheel_chaining(
+                            self.date_format_scroll.clone(),
+                        ));
                         let list = restrict_scroll_to_vertical_axis(list).into_any_element();
                         general_card = general_card.child(self.dropdown_list_container(
                             "settings_window_date_format_list_container",
@@ -5461,16 +5444,9 @@ impl Render for SettingsWindowView {
                         .h_full()
                         .min_h(px(0.0))
                         .track_scroll(&self.timezone_scroll)
-                        .on_scroll_wheel({
-                            let scroll = self.timezone_scroll.clone();
-                            move |event, window, cx| {
-                                if uniform_list_should_stop_scroll_propagation(
-                                    &scroll, event, window,
-                                ) {
-                                    cx.stop_propagation();
-                                }
-                            }
-                        });
+                        .on_scroll_wheel(stop_dropdown_wheel_chaining(
+                            self.timezone_scroll.clone(),
+                        ));
                         let list = restrict_scroll_to_vertical_axis(list).into_any_element();
                         general_card = general_card.child(self.dropdown_list_container(
                             "settings_window_timezone_list_container",
@@ -5746,16 +5722,9 @@ impl Render for SettingsWindowView {
                         .h_full()
                         .min_h(px(0.0))
                         .track_scroll(&self.change_tracking_scroll)
-                        .on_scroll_wheel({
-                            let scroll = self.change_tracking_scroll.clone();
-                            move |event, window, cx| {
-                                if uniform_list_should_stop_scroll_propagation(
-                                    &scroll, event, window,
-                                ) {
-                                    cx.stop_propagation();
-                                }
-                            }
-                        });
+                        .on_scroll_wheel(stop_dropdown_wheel_chaining(
+                            self.change_tracking_scroll.clone(),
+                        ));
                         let list = restrict_scroll_to_vertical_axis(list).into_any_element();
                         change_tracking_card =
                             change_tracking_card.child(self.dropdown_list_container(
@@ -5789,16 +5758,9 @@ impl Render for SettingsWindowView {
                         .h_full()
                         .min_h(px(0.0))
                         .track_scroll(&self.diff_content_mode_scroll)
-                        .on_scroll_wheel({
-                            let scroll = self.diff_content_mode_scroll.clone();
-                            move |event, window, cx| {
-                                if uniform_list_should_stop_scroll_propagation(
-                                    &scroll, event, window,
-                                ) {
-                                    cx.stop_propagation();
-                                }
-                            }
-                        });
+                        .on_scroll_wheel(stop_dropdown_wheel_chaining(
+                            self.diff_content_mode_scroll.clone(),
+                        ));
                         let list = restrict_scroll_to_vertical_axis(list).into_any_element();
                         diff_card = diff_card.child(self.dropdown_list_container(
                             "settings_window_diff_content_mode_list_container",
@@ -5837,16 +5799,9 @@ impl Render for SettingsWindowView {
                         .h_full()
                         .min_h(px(0.0))
                         .track_scroll(&self.diff_view_mode_scroll)
-                        .on_scroll_wheel({
-                            let scroll = self.diff_view_mode_scroll.clone();
-                            move |event, window, cx| {
-                                if uniform_list_should_stop_scroll_propagation(
-                                    &scroll, event, window,
-                                ) {
-                                    cx.stop_propagation();
-                                }
-                            }
-                        });
+                        .on_scroll_wheel(stop_dropdown_wheel_chaining(
+                            self.diff_view_mode_scroll.clone(),
+                        ));
                         let list = restrict_scroll_to_vertical_axis(list).into_any_element();
                         diff_card = diff_card.child(self.dropdown_list_container(
                             "settings_window_diff_view_mode_list_container",
@@ -5879,16 +5834,9 @@ impl Render for SettingsWindowView {
                         .h_full()
                         .min_h(px(0.0))
                         .track_scroll(&self.diff_scroll_sync_scroll)
-                        .on_scroll_wheel({
-                            let scroll = self.diff_scroll_sync_scroll.clone();
-                            move |event, window, cx| {
-                                if uniform_list_should_stop_scroll_propagation(
-                                    &scroll, event, window,
-                                ) {
-                                    cx.stop_propagation();
-                                }
-                            }
-                        });
+                        .on_scroll_wheel(stop_dropdown_wheel_chaining(
+                            self.diff_scroll_sync_scroll.clone(),
+                        ));
                         let list = restrict_scroll_to_vertical_axis(list).into_any_element();
                         diff_card = diff_card.child(self.dropdown_list_container(
                             "settings_window_diff_scroll_sync_list_container",
