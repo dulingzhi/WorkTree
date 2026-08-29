@@ -1644,10 +1644,13 @@ impl SidebarPaneView {
                 }));
                 // Combined CI status per PR head. Statuses are token-gated:
                 // unauthenticated requests share a 60/hour budget with the
-                // listing, so the chips wait for a resolved token. Only open
-                // PRs are polled — settled ones no longer run CI, and the
-                // per-PR requests are the listing's rate-limit bottleneck.
-                if super::super::github::github_token().is_some() {
+                // listing, so the chips wait for a resolved token. One
+                // resolution covers the pass — the read may spawn `gh auth
+                // token`, and it must not run per head. Only open PRs are
+                // polled — settled ones no longer run CI, and the per-PR
+                // requests are the listing's rate-limit bottleneck.
+                let token = super::super::github::resolve_github_token().await;
+                if token.is_some() {
                     for pull_request in pull_requests
                         .iter()
                         .filter(|pull_request| {
@@ -1659,8 +1662,12 @@ impl SidebarPaneView {
                         if sha.is_empty() {
                             continue;
                         }
-                        if let Ok(Some(checks)) =
-                            super::super::github::fetch_pull_request_checks(&slug, sha).await
+                        if let Ok(Some(checks)) = super::super::github::fetch_pull_request_checks(
+                            &slug,
+                            sha,
+                            token.as_deref(),
+                        )
+                        .await
                         {
                             store.dispatch(Msg::Internal(InternalMsg::PullRequestChecksLoaded {
                                 repo_id,
