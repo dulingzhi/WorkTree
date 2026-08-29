@@ -122,6 +122,28 @@ impl std::fmt::Display for PullRequestFetchReason {
     }
 }
 
+/// How long the automatic fetch path waits after a failed attempt before
+/// refiring on its own. A stored error keeps the listing stale, and the
+/// section-visible pass runs on every presentation update — without this
+/// cooldown one failed request refires as fast as frames render (a signed-out
+/// user's private repo logged twelve fetches a second). Explicit reasons are
+/// user intent and never wait.
+const PULL_REQUEST_ERROR_RETRY_COOLDOWN: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Whether the asking path must hold off: only the automatic reason meeting
+/// a stored error inside the armed cooldown window. Explicit reasons and
+/// non-error listings always pass.
+fn pull_request_fetch_cooldown_blocked(
+    reason: PullRequestFetchReason,
+    stored_error: bool,
+    auto_retry_not_before: Option<std::time::Instant>,
+    now: std::time::Instant,
+) -> bool {
+    !reason.is_explicit()
+        && stored_error
+        && auto_retry_not_before.is_some_and(|not_before| now < not_before)
+}
+
 impl CollapsedSidebarSection {
     /// Rail order, top to bottom.
     pub(in crate::view) const ALL: [Self; 7] = [
@@ -299,6 +321,11 @@ pub(in super::super) struct SidebarPaneView {
     /// when the next ensure pass runs (construction fires two in quick
     /// succession). Cleared once the store reports a settled state.
     pull_requests_fetch_in_flight: bool,
+    /// Earliest the automatic (section-visible) fetch may run again, armed
+    /// whenever a fetch starts. A failed fetch stores an error, which keeps
+    /// the listing stale — without this deadline the next presentation pass
+    /// would refire it every frame. Explicit reasons ignore it.
+    pull_requests_auto_retry_not_before: Option<std::time::Instant>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -496,6 +523,7 @@ impl SidebarPaneView {
             pending_file_browser_reveal: None,
             pending_file_browser_reveal_at: None,
             pull_requests_fetch_in_flight: false,
+            pull_requests_auto_retry_not_before: None,
         };
         this.dispatch_sidebar_data_request_if_needed(cx);
         // Reflect any already-active repo's stored search query on first mount.
@@ -1514,7 +1542,7 @@ impl SidebarPaneView {
         // Every read from the borrowed repo is hoisted into owned values
         // first: the double-spawn guard below assigns into `self`, which
         // would conflict with the outstanding `active_repo` borrow.
-        let (repo_id, settled, stale, slug) = {
+        let (repo_id, settled, stale, stored_error, slug) = {
             let Some(repo) = self.active_repo() else {
                 return;
             };
@@ -1526,6 +1554,7 @@ impl SidebarPaneView {
                 repo.id,
                 matches!(repo.pull_requests, Loadable::Ready(_) | Loadable::Error(_)),
                 matches!(repo.pull_requests, Loadable::NotLoaded | Loadable::Error(_)),
+                matches!(repo.pull_requests, Loadable::Error(_)),
                 slug,
             )
         };
@@ -1545,6 +1574,17 @@ impl SidebarPaneView {
             }
             return;
         }
+        // A stored error keeps the listing stale, so without this gate the
+        // section-visible pass refires the fetch on every presentation
+        // update — each one a doomed request while the error stands.
+        if pull_request_fetch_cooldown_blocked(
+            reason,
+            stored_error,
+            self.pull_requests_auto_retry_not_before,
+            std::time::Instant::now(),
+        ) {
+            return;
+        }
         if !stale {
             if reason.is_explicit() {
                 worktree_core::applog_info!(
@@ -1562,6 +1602,8 @@ impl SidebarPaneView {
             return;
         };
         self.pull_requests_fetch_in_flight = true;
+        self.pull_requests_auto_retry_not_before =
+            Some(std::time::Instant::now() + PULL_REQUEST_ERROR_RETRY_COOLDOWN);
         worktree_core::applog_info!(
             "pull-request fetch started ({reason}): repo {}/{}, repo_id={}",
             slug.owner,
@@ -3419,6 +3461,59 @@ mod tests {
                 workdir: PathBuf::from(path),
             },
         )
+    }
+
+    #[test]
+    fn pull_request_fetch_cooldown_only_binds_the_automatic_path() {
+        use std::time::{Duration, Instant};
+
+        let now = Instant::now();
+        let retry_not_before = Some(now + Duration::from_secs(30));
+
+        // A stored error keeps the listing stale and the section-visible
+        // pass runs on every presentation update, so the automatic path
+        // waits out the cooldown instead of refiring each frame.
+        assert!(pull_request_fetch_cooldown_blocked(
+            PullRequestFetchReason::SidebarSection,
+            true,
+            retry_not_before,
+            now
+        ));
+        assert!(!pull_request_fetch_cooldown_blocked(
+            PullRequestFetchReason::SidebarSection,
+            true,
+            retry_not_before,
+            now + Duration::from_secs(31)
+        ));
+
+        // Explicit reasons are user intent (retry row, popover) and fire now.
+        assert!(!pull_request_fetch_cooldown_blocked(
+            PullRequestFetchReason::RetryRow,
+            true,
+            retry_not_before,
+            now
+        ));
+        assert!(!pull_request_fetch_cooldown_blocked(
+            PullRequestFetchReason::PopoverOpened,
+            true,
+            retry_not_before,
+            now
+        ));
+
+        // A listing that is not an error, or a first attempt with nothing
+        // armed yet, is never gated.
+        assert!(!pull_request_fetch_cooldown_blocked(
+            PullRequestFetchReason::SidebarSection,
+            false,
+            retry_not_before,
+            now
+        ));
+        assert!(!pull_request_fetch_cooldown_blocked(
+            PullRequestFetchReason::SidebarSection,
+            true,
+            None,
+            now
+        ));
     }
 
     #[test]
