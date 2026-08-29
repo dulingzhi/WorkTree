@@ -3,9 +3,6 @@
 [English](README.md) | **简体中文**
 
 [![Build Status](https://github.com/dulingzhi/WorkTree/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/dulingzhi/WorkTree/actions/workflows/rust.yml)
-[![Discord](https://img.shields.io/badge/Discord-Join%20chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/2ufDGP8RnA)
-[![Website](https://img.shields.io/badge/Website-worktree.dev-0A66C2?logo=googlechrome&logoColor=white)](https://worktree.dev)
-[![AutoExplore](https://img.shields.io/badge/AutoExplore-autoexplore.ai-0B7A75?logo=safari&logoColor=white)](https://autoexplore.ai)
 [![license](https://img.shields.io/github/license/dulingzhi/WorkTree.svg)](LICENSE-AGPL-3.0)
 [![latest](https://img.shields.io/github/v/release/dulingzhi/WorkTree.svg)](https://github.com/dulingzhi/WorkTree/releases/latest)
 [![downloads](https://img.shields.io/github/downloads/dulingzhi/WorkTree/total)](https://github.com/dulingzhi/WorkTree/releases)
@@ -16,7 +13,7 @@ WorkTree 是一个面向 Linux、Windows 与 macOS 的免费开源 Git 图形客
 
 WorkTree 本地优先：仓库、凭证与 AI 配置都保存在你自己的机器上，只有当你执行远程操作或主动调用集成功能时，才会产生网络访问。
 
-<img alt="WorkTree demo" src="assets/worktree-0.2.0.gif"/>
+<img alt="WorkTree demo" src="assets/worktree_screenshot.png"/>
 
 ## 功能特性
 

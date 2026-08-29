@@ -3,9 +3,6 @@
 **English** | [简体中文](README.zh-CN.md)
 
 [![Build Status](https://github.com/dulingzhi/WorkTree/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/dulingzhi/WorkTree/actions/workflows/rust.yml)
-[![Discord](https://img.shields.io/badge/Discord-Join%20chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/2ufDGP8RnA)
-[![Website](https://img.shields.io/badge/Website-worktree.dev-0A66C2?logo=googlechrome&logoColor=white)](https://worktree.dev)
-[![AutoExplore](https://img.shields.io/badge/AutoExplore-autoexplore.ai-0B7A75?logo=safari&logoColor=white)](https://autoexplore.ai)
 [![license](https://img.shields.io/github/license/dulingzhi/WorkTree.svg)](LICENSE-AGPL-3.0)
 [![latest](https://img.shields.io/github/v/release/dulingzhi/WorkTree.svg)](https://github.com/dulingzhi/WorkTree/releases/latest)
 [![downloads](https://img.shields.io/github/downloads/dulingzhi/WorkTree/total)](https://github.com/dulingzhi/WorkTree/releases)
@@ -16,7 +13,7 @@ WorkTree is a free, open-source Git client for Linux, Windows, and macOS. It is 
 
 WorkTree is local-first: your repositories, credentials, and AI configuration stay on your machine. Nothing leaves it unless you run a remote operation or explicitly invoke an integration.
 
-<img alt="WorkTree demo" src="assets/worktree-0.2.0.gif"/>
+<img alt="WorkTree demo" src="assets/worktree_screenshot.png"/>
 
 ## Features
 
