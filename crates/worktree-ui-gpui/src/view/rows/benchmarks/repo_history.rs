@@ -561,6 +561,25 @@ pub(in crate::view) fn hash_branch_sidebar_rows(rows: &[BranchSidebarRow]) -> u6
             BranchSidebarRow::PinnedHeader { collapsed, .. } => {
                 collapsed.hash(&mut h);
             }
+            BranchSidebarRow::TagsHeader { collapsed, .. } => {
+                collapsed.hash(&mut h);
+            }
+            BranchSidebarRow::TagPlaceholder { message } => {
+                message.len().hash(&mut h);
+            }
+            BranchSidebarRow::TagItem { name, .. } => {
+                name.len().hash(&mut h);
+            }
+            BranchSidebarRow::PullRequestsHeader { collapsed, .. } => {
+                collapsed.hash(&mut h);
+            }
+            BranchSidebarRow::PullRequestPlaceholder { message, .. } => {
+                message.len().hash(&mut h);
+            }
+            BranchSidebarRow::PullRequestItem { number, title, .. } => {
+                number.hash(&mut h);
+                title.len().hash(&mut h);
+            }
             BranchSidebarRow::SectionSpacer
             | BranchSidebarRow::WorktreesHeader { .. }
             | BranchSidebarRow::WorktreePlaceholder { .. }

@@ -622,6 +622,7 @@ pub(crate) fn build_synthetic_commits_with_merge_stride(
             summary: format!("Commit {ix} - synthetic benchmark history entry").into(),
             author: format!("Author {}", ix % 10).into(),
             time: base + Duration::from_secs(ix as u64),
+            signed: false,
         });
     }
 
@@ -704,9 +705,16 @@ pub(crate) fn build_tags_targeting_commits(commits: &[Commit], count: usize) -> 
             .get(target_ix)
             .map(|c| c.id.clone())
             .unwrap_or_else(|| CommitId("0".repeat(40).into()));
+        // git's creatordate convention: a lightweight tag is dated by its
+        // target commit; the fallback target has no date to borrow.
+        let created_at = commits
+            .get(target_ix)
+            .and_then(|c| c.time.duration_since(SystemTime::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64);
         tags.push(Tag {
             name: format!("v{}.{}.{}", ix / 100, (ix / 10) % 10, ix % 10),
             target,
+            created_at,
         });
     }
     tags
@@ -757,6 +765,7 @@ pub(crate) fn build_stash_fixture_commits(
             summary: format!("index on main: {i}").into(),
             author: "Author 0".into(),
             time: base_time + Duration::from_secs(i as u64 * 2),
+            signed: false,
         });
 
         // Stash tip — 2 parents, stash-like summary
@@ -768,6 +777,7 @@ pub(crate) fn build_stash_fixture_commits(
             summary: format!("WIP on main: stash message {i}").into(),
             author: "Author 0".into(),
             time: base_time + Duration::from_secs(i as u64 * 2 + 1),
+            signed: false,
         });
 
         stash_entries.push(StashEntry {
@@ -786,8 +796,8 @@ pub(crate) fn build_synthetic_commit_details(files: usize, depth: usize) -> Comm
         files,
         depth,
         "Synthetic benchmark commit details message\n\nWith body.".to_string(),
-    ),
-signed: false,}
+    )
+}
 
 pub(crate) fn build_synthetic_commit_details_with_message(
     files: usize,
@@ -834,6 +844,7 @@ pub(crate) fn build_synthetic_commit_details_with_message(
         files: out,
 signed: false,
     }
+}
 
 /// Like `build_synthetic_commit_details` but with a different commit ID
 /// (the `id_char` is repeated 40 times to form the ID hex string).
@@ -845,8 +856,8 @@ pub(crate) fn build_synthetic_commit_details_with_id(
     let mut details = build_synthetic_commit_details(files, depth);
     details.id = CommitId(id_char.repeat(40).into());
     details.parent_ids = vec![CommitId("d".repeat(40).into())];
-    details,
-signed: false,}
+    details
+}
 
 /// Like `build_synthetic_commit_details` but every file path is globally unique
 /// (no `ix % 128` clamping on directory names). This produces files that all
@@ -893,6 +904,7 @@ pub(crate) fn build_synthetic_commit_details_unique_paths(
         files: out,
 signed: false,
     }
+}
 
 pub(crate) fn build_synthetic_commit_message(min_bytes: usize, line_bytes: usize) -> String {
     let min_bytes = min_bytes.max(1);

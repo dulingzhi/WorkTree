@@ -1338,6 +1338,7 @@ fn build_synthetic_commits_for_search(count: usize) -> Vec<Commit> {
             summary,
             author: author.into(),
             time: base + Duration::from_secs(ix as u64),
+            signed: false,
         });
     }
     commits

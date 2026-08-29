@@ -812,6 +812,12 @@ fn stage_loaded_stage_parts_from_payload(
 ) -> (Option<Arc<[u8]>>, Option<Arc<str>>) {
     match payload {
         ConflictPayload::Text(text) => (None, Some(Arc::<str>::from(text.as_ref()))),
+        // Mirrors ConflictPayload::into_stage_parts: a submodule pointer is
+        // carried as both bytes and text.
+        ConflictPayload::Submodule(pointer) => (
+            Some(pointer.as_bytes().to_vec().into()),
+            Some(Arc::<str>::from(pointer.as_ref())),
+        ),
         ConflictPayload::Binary(bytes) => (Some(bytes.clone()), None),
         ConflictPayload::Absent => (None, None),
     }
