@@ -139,6 +139,8 @@ ui:
     commit_subject: "提交主题"
     mr_push_target: "目标分支（留空 = 默认分支）"
     clone_ssh_key: "/path/to/ssh/key（可选）"
+    repo_settings_user: "继承全局 user.name"
+    repo_settings_email: "继承全局 user.email"
   prompt:
     export_patch_folder: "导出补丁到文件夹"
 

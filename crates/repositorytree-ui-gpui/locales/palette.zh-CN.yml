@@ -42,6 +42,7 @@ palette:
     agent-changes: "Agent：查看 agent 改了什么"
     agent-sessions: "Agent：会话…"
     create-pr: "在网页上创建拉取/合并请求…"
+    repo-settings: "仓库设置…"
     clear-coverage: "清除覆盖率 overlay"
     import-coverage-prompt: "选择一个 lcov / llvm-cov 导出文件"
     coverage-imported: "覆盖率已导入：%{files} 个文件、%{lines} 行%{percent}——已在 diff 行号栏标注"

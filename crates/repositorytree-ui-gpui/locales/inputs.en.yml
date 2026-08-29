@@ -39,6 +39,16 @@ input:
     ssh_key_label: "SSH key (optional)"
     select_folder: "Clone into folder"
     clone: "Clone"
+  repo_settings:
+    title: "Repository settings"
+    user_label: "User name"
+    email_label: "Email"
+    inherit: "Inherits global"
+    sign_label: "Sign commits"
+    sign_inherit: "Inherits global setting"
+    sign_on: "Always on in this repository"
+    sign_off: "Off in this repository"
+    apply: "Apply"
   stash:
     title: "Create stash"
     stash: "Stash"

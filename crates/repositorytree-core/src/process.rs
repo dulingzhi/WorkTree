@@ -111,6 +111,52 @@ fn git_config_get_with(mut cmd: std::process::Command, key: &str) -> Option<Stri
     (!text.is_empty()).then(|| text.to_string())
 }
 
+/// Read one value from a repository's *local* config (`git config --local`),
+/// the per-repository override layer the repo-settings popover edits.
+pub fn git_config_local_get(workdir: &std::path::Path, key: &str) -> Option<String> {
+    let mut cmd = git_command();
+    cmd.current_dir(workdir);
+    let output = cmd
+        .args(["config", "--local", "--get", key])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    let text = text.trim();
+    (!text.is_empty()).then(|| text.to_string())
+}
+
+/// Write (`Some`) or unset (`None`) one value in a repository's *local*
+/// config — `None` returns the key to inheriting its global value, the same
+/// "absent == cleared" contract as the global writer.
+pub fn git_config_local_set(
+    workdir: &std::path::Path,
+    key: &str,
+    value: Option<&str>,
+) -> std::io::Result<()> {
+    let mut cmd = git_command();
+    cmd.current_dir(workdir);
+    cmd.args(["config", "--local"]);
+    match value {
+        Some(value) => {
+            cmd.arg(key).arg(value);
+        }
+        None => {
+            cmd.arg("--unset").arg(key);
+        }
+    }
+    let output = cmd.output()?;
+    if output.status.success() || (value.is_none() && output.status.code() == Some(5)) {
+        return Ok(());
+    }
+    Err(std::io::Error::other(format!(
+        "git config --local {key} failed: {}",
+        String::from_utf8_lossy(&output.stderr).trim()
+    )))
+}
+
 /// Write (`Some`) or unset (`None`) one value in the user's *global* git
 /// config. Unsetting a key that was never set is a success, matching how the
 /// settings surface treats "absent" and "cleared" as the same state.

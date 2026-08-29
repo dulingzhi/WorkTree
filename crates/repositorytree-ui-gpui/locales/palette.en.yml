@@ -53,6 +53,7 @@ palette:
     agent-changes: "Agent: Show what the agent changed"
     agent-sessions: "Agent: Sessions…"
     create-pr: "Create pull request on the web…"
+    repo-settings: "Repository settings…"
     clear-coverage: "Clear coverage overlay"
     import-coverage-prompt: "Choose an lcov / llvm-cov export"
     coverage-imported: "Coverage imported: %{files} files, %{lines} lines%{percent} — annotated in the diff gutter"

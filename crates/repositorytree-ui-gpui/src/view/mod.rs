@@ -996,6 +996,17 @@ impl RepositoryTreeView {
             "agent-changes" => {
                 self.view_agent_changes(cx);
             }
+            "repo-settings" => {
+                if let Some(repo_id) = self.active_repo_id()
+                    && let Some(window) = window
+                {
+                    self.open_popover_centered(
+                        PopoverKind::RepoSettingsPrompt { repo_id },
+                        window,
+                        cx,
+                    );
+                }
+            }
             "create-pr" => {
                 self.open_create_request_page(cx);
             }

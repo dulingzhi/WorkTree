@@ -68,6 +68,7 @@ mod merge_request_push;
 mod mergetool_settings;
 mod picker;
 mod refs;
+mod repo_settings;
 mod repository_switcher;
 mod stash;
 mod statistics;

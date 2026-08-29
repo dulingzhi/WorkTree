@@ -45,6 +45,16 @@ fn model_for_state(
         action: Box::new(ContextMenuAction::ActivateRepo { repo_id }),
     }];
 
+    items.push(ContextMenuItem::Entry {
+        label: "Repository settings…".into(),
+        icon: Some("icons/settings.svg".into()),
+        shortcut: None,
+        disabled: false,
+        action: Box::new(ContextMenuAction::OpenPopover {
+            kind: PopoverKind::RepoSettingsPrompt { repo_id },
+        }),
+    });
+
     if let Some(ref workdir) = workdir {
         items.push(ContextMenuItem::Separator);
         items.push(ContextMenuItem::Entry {

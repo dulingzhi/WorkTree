@@ -3,6 +3,7 @@
 # changes are needed — `ContextMenuText::localized` looks these up at render
 # time. English is the fallback, hence no `*.en.yml` companion.
 "Activate": "激活"
+"Repository settings…": "仓库设置…"
 "Auto Squash": "自动压缩"
 "Add remote…": "添加远程仓库…"
 "Add submodule…": "添加子模块…"

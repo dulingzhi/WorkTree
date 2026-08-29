@@ -151,6 +151,8 @@ ui:
     commit_subject: "Commit subject"
     mr_push_target: "Target branch (blank = default branch)"
     clone_ssh_key: "/path/to/ssh/key (optional)"
+    repo_settings_user: "Inherits global user.name"
+    repo_settings_email: "Inherits global user.email"
   prompt:
     export_patch_folder: "Export patch to folder"
 

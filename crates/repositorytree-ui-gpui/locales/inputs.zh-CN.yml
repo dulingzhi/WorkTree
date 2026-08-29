@@ -32,6 +32,16 @@ input:
     ssh_key_label: "SSH key（可选）"
     select_folder: "选择克隆文件夹"
     clone: "克隆"
+  repo_settings:
+    title: "仓库设置"
+    user_label: "用户名"
+    email_label: "邮箱"
+    inherit: "继承全局"
+    sign_label: "签名提交"
+    sign_inherit: "继承全局设置"
+    sign_on: "在本仓库始终开启"
+    sign_off: "在本仓库关闭"
+    apply: "应用"
   stash:
     title: "创建贮藏"
     stash: "贮藏"

@@ -406,6 +406,17 @@ impl TextInput {
         cx.notify();
     }
 
+    /// Swap the placeholder text (used for per-repo "inherits: <value>"
+    /// hints that depend on the opened repository's global config).
+    pub fn set_placeholder(&mut self, placeholder: SharedString, cx: &mut Context<Self>) {
+        if self.placeholder == placeholder {
+            return;
+        }
+        self.placeholder = placeholder;
+        self.invalidate_layout_caches();
+        cx.notify();
+    }
+
     pub fn set_leading_icon(&mut self, leading_icon: Option<&'static str>, cx: &mut Context<Self>) {
         if self.leading_icon == leading_icon {
             return;

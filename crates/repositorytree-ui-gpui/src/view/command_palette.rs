@@ -273,6 +273,14 @@ pub(crate) const COMMANDS: &[CommandEntry] = &[
         requires_repo: true,
     },
     CommandEntry {
+        id: "repo-settings",
+        label: "palette.cmd.repo-settings",
+        shortcut: Shortcut::None,
+        category: "palette.cat.repository",
+        keywords: "repository settings user name email identity local config signing",
+        requires_repo: true,
+    },
+    CommandEntry {
         id: "create-pr",
         label: "palette.cmd.create-pr",
         shortcut: Shortcut::None,
@@ -1337,6 +1345,7 @@ mod tests {
             "manage-assume-unchanged",
             "show-statistics",
             "import-coverage",
+            "repo-settings",
             "create-pr",
             "agent-claude",
             "agent-sessions",

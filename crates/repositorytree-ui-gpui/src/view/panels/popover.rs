@@ -48,6 +48,7 @@ mod search_inputs;
 mod squash_prompt;
 mod stage_conflict_markers_confirm;
 mod agent_sessions;
+mod repo_settings;
 mod statistics;
 mod stash_drop_confirm;
 mod stash_branch_prompt;
@@ -335,6 +336,15 @@ pub(in super::super) struct PopoverHost {
     /// Optional per-clone SSH key path: rides the clone as
     /// `core.sshCommand` and persists onto the new `origin` remote.
     clone_ssh_key_input: Entity<components::TextInput>,
+    /// Repo-settings prompt state: two inputs plus the tri-state signing
+    /// override and the config snapshot read on open.
+    repo_settings_user_input: Entity<components::TextInput>,
+    repo_settings_email_input: Entity<components::TextInput>,
+    repo_settings_sign_commits: Option<bool>,
+    repo_settings_error: Option<SharedString>,
+    /// The local/global snapshot consumed by the next panel render; taken by
+    /// the panel so it is re-read on every open, never between renders.
+    repo_settings_current: Option<crate::view::panels::popover::repo_settings::RepoSettingsCurrent>,
     rebase_onto_input: Entity<components::TextInput>,
     create_tag_input: Entity<components::TextInput>,
     create_tag_message_input: Entity<components::TextInput>,
@@ -946,6 +956,7 @@ pub(in super::super) fn popover_width_spec(kind: &PopoverKind) -> Option<Popover
         | PopoverKind::SquashPrompt { .. } => Some(DIALOG_420_WIDTH),
         PopoverKind::MergeRequestPushPrompt { .. } => Some(DIALOG_440_WIDTH),
         PopoverKind::AgentSessions { .. } => Some(DIALOG_440_WIDTH),
+        PopoverKind::RepoSettingsPrompt { .. } => Some(DIALOG_440_WIDTH),
         PopoverKind::UndoLastActionPrompt { .. } => Some(DIALOG_440_WIDTH),
         PopoverKind::AssumeUnchangedManager { .. } => Some(DIALOG_540_WIDTH),
         PopoverKind::Statistics { .. } => Some(DIALOG_540_WIDTH),
@@ -1315,6 +1326,27 @@ impl PopoverHost {
             )
         });
 
+        let repo_settings_user_input = cx.new(|cx| {
+            components::TextInput::new(
+                components::TextInputOptions {
+                    placeholder: crate::i18n::tr("ui.placeholder.repo_settings_user"),
+                    ..Default::default()
+                },
+                window,
+                cx,
+            )
+        });
+        let repo_settings_email_input = cx.new(|cx| {
+            components::TextInput::new(
+                components::TextInputOptions {
+                    placeholder: crate::i18n::tr("ui.placeholder.repo_settings_email"),
+                    ..Default::default()
+                },
+                window,
+                cx,
+            )
+        });
+
         let rebase_onto_input = cx.new(|cx| {
             components::TextInput::new(
                 components::TextInputOptions {
@@ -1658,6 +1690,15 @@ impl PopoverHost {
                 }
             },
         ));
+        for input in [&repo_settings_user_input, &repo_settings_email_input] {
+            prompt_input_subscriptions.push(Self::prompt_enter_subscription(
+                input,
+                window,
+                cx,
+                |this| matches!(this.popover, Some(PopoverKind::RepoSettingsPrompt { .. })),
+                |this, window, cx| this.submit_repo_settings_open(window, cx),
+            ));
+        }
         for input in [&clone_repo_url_input, &clone_repo_parent_dir_input, &clone_ssh_key_input] {
             prompt_input_subscriptions.push(Self::prompt_enter_subscription(
                 input,
@@ -1972,6 +2013,11 @@ impl PopoverHost {
             clone_repo_url_input,
             clone_repo_parent_dir_input,
             clone_ssh_key_input,
+            repo_settings_user_input,
+            repo_settings_email_input,
+            repo_settings_sign_commits: None,
+            repo_settings_error: None,
+            repo_settings_current: None,
             rebase_onto_input,
             create_tag_input,
             create_tag_message_input,
@@ -4036,6 +4082,48 @@ impl PopoverHost {
                 PopoverKind::HistoryRefFilter { .. } => {
                     self.ensure_history_ref_filter_search_input(window, cx);
                 }
+                PopoverKind::RepoSettingsPrompt { repo_id } => {
+                    let theme = self.theme;
+                    // Read the snapshot now (the panel consumes it) and seed
+                    // the drafts from the local overrides. `self.popover` is
+                    // still the previous kind here, so resolve via the arm's.
+                    let Some(workdir) = self
+                        .state
+                        .repos
+                        .iter()
+                        .find(|repo| repo.id == *repo_id)
+                        .map(|repo| repo.spec.workdir.clone())
+                    else {
+                        // No repo to configure: skip the seeding but still
+                        // let the popover open (the panel shows its own
+                        // no-repository face).
+                        let _ = &theme;
+                        return;
+                    };
+                    let current =
+                        crate::view::panels::popover::repo_settings::RepoSettingsCurrent::load(&workdir);
+                    self.repo_settings_user_input.update(cx, |input, cx| {
+                        input.clear_transient_key_presses();
+                        input.set_theme(theme, cx);
+                        input.set_text(
+                            current.user_name.clone().unwrap_or_default(),
+                            cx,
+                        );
+                        cx.notify();
+                    });
+                    self.repo_settings_email_input.update(cx, |input, cx| {
+                        input.clear_transient_key_presses();
+                        input.set_theme(theme, cx);
+                        input.set_text(
+                            current.user_email.clone().unwrap_or_default(),
+                            cx,
+                        );
+                        cx.notify();
+                    });
+                    self.repo_settings_sign_commits = current.sign_commits;
+                    self.repo_settings_error = None;
+                    self.repo_settings_current = Some(current);
+                }
                 PopoverKind::PushSetUpstreamPrompt { repo_id, .. } => {
                     let theme = self.theme;
                     let current_text = self
@@ -4661,6 +4749,9 @@ impl PopoverHost {
             PopoverKind::Statistics { repo_id } => statistics::panel(self, repo_id, cx),
         PopoverKind::AgentSessions { repo_id } => {
             agent_sessions::panel(self, repo_id, cx)
+        }
+        PopoverKind::RepoSettingsPrompt { repo_id } => {
+            repo_settings::panel(self, repo_id, cx)
         }
             PopoverKind::UndoLastActionPrompt { repo_id } => {
                 undo_last_action::panel(self, repo_id, cx)

@@ -4819,6 +4819,11 @@ pub(super) enum PopoverKind {
     AgentSessions {
         repo_id: RepoId,
     },
+    /// Per-repository settings (local git config overrides): user name,
+    /// email, and commit signing. Empty fields inherit the global config.
+    RepoSettingsPrompt {
+        repo_id: RepoId,
+    },
     HistoryBranchFilter {
         repo_id: RepoId,
     },
