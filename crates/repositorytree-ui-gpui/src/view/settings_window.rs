@@ -2278,6 +2278,8 @@ impl SettingsWindowView {
             source: self.ai_commit_source,
             provider: self.ai_commit_provider,
             api_key: self.ai_commit_api_key_draft.clone(),
+            // A key typed on this page is a console API key, never a token.
+            bearer_auth: false,
             model: self.ai_commit_model_draft.clone(),
             endpoint: self.ai_commit_endpoint_draft.clone(),
             custom_command: self.ai_commit_custom_command_draft.clone(),
@@ -2331,6 +2333,7 @@ impl SettingsWindowView {
                 source: self.ai_commit_source,
                 provider: self.ai_commit_provider,
                 api_key: self.ai_commit_api_key_draft.clone(),
+                bearer_auth: false,
                 model: self.ai_commit_model_draft.clone(),
                 endpoint: self.ai_commit_endpoint_draft.clone(),
                 custom_command: self.ai_commit_custom_command_draft.clone(),

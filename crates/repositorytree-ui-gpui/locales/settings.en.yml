@@ -85,7 +85,7 @@ settings:
     privacy_hint_cli: "At generation time the prompt (recent commit examples + staged diff) is passed to the command as a single argument."
     missing:
       manual: "No API key configured for the manual provider."
-      claude_code: "No ANTHROPIC_API_KEY in %{detail} or the environment."
+      claude_code: "No ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY in %{detail} or the environment."
       codex: "No OPENAI_API_KEY in %{detail} or the environment."
       copilot: "No GitHub token found (gh hosts.yml, GH_TOKEN, or GITHUB_TOKEN). If requests answer 403, run: gh auth refresh -s models:read"
       env: "Neither ANTHROPIC_API_KEY nor OPENAI_API_KEY is set."

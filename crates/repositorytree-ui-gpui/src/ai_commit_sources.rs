@@ -180,9 +180,17 @@ fn resolve_claude_code(env: &EnvAccess) -> Option<AiCommitSettings> {
     let read = |name: &str| {
         read_claude_settings_env(&env.home, name).or_else(|| env.var(name))
     };
+    // Claude Code relays keep their credential in ANTHROPIC_AUTH_TOKEN, a
+    // bearer token; a plain console key may sit in ANTHROPIC_API_KEY. The
+    // auth token wins when both are set, and only it turns on Bearer auth.
+    let (api_key, bearer_auth) = match read("ANTHROPIC_AUTH_TOKEN") {
+        Some(token) => (token, true),
+        None => (read("ANTHROPIC_API_KEY")?, false),
+    };
     Some(AiCommitSettings {
         provider: AiProvider::Anthropic,
-        api_key: read("ANTHROPIC_API_KEY")?,
+        api_key,
+        bearer_auth,
         model: read("ANTHROPIC_MODEL").unwrap_or_default(),
         endpoint: read("ANTHROPIC_BASE_URL").unwrap_or_default(),
         ..AiCommitSettings::default()
@@ -577,7 +585,7 @@ mod tests {
         std::fs::create_dir_all(dir.path().join(".claude")).unwrap();
         std::fs::write(
             dir.path().join(".claude").join("settings.json"),
-            r#"{"env": {"ANTHROPIC_API_KEY": "sk-file", "ANTHROPIC_BASE_URL": "https://relay.example.com"}}"#,
+            r#"{"env": {"ANTHROPIC_AUTH_TOKEN": "tok-file", "ANTHROPIC_BASE_URL": "https://relay.example.com"}}"#,
         )
         .unwrap();
 
@@ -586,17 +594,37 @@ mod tests {
             resolve_http_settings(AiSource::ClaudeCode, &AiCommitSettings::default(), &env)
                 .expect("settings.json credentials resolve");
         assert_eq!(settings.provider, AiProvider::Anthropic);
-        assert_eq!(settings.api_key, "sk-file");
+        assert_eq!(settings.api_key, "tok-file");
+        assert!(settings.bearer_auth, "an auth token is a bearer credential");
         assert_eq!(settings.endpoint, "https://relay.example.com");
 
         // Without the file, the environment variable takes over.
         std::fs::remove_file(dir.path().join(".claude").join("settings.json")).unwrap();
-        let env = env_with_vars(dir.path(), &[("ANTHROPIC_API_KEY", "sk-env")]);
+        let env = env_with_vars(dir.path(), &[("ANTHROPIC_AUTH_TOKEN", "tok-env")]);
         let settings =
             resolve_http_settings(AiSource::ClaudeCode, &AiCommitSettings::default(), &env)
                 .expect("env credentials resolve");
-        assert_eq!(settings.api_key, "sk-env");
+        assert_eq!(settings.api_key, "tok-env");
         assert_eq!(settings.model, "");
+
+        // A plain API key still resolves, as an x-api-key credential.
+        let env = env_with_vars(dir.path(), &[("ANTHROPIC_API_KEY", "sk-env")]);
+        let settings =
+            resolve_http_settings(AiSource::ClaudeCode, &AiCommitSettings::default(), &env)
+                .unwrap();
+        assert_eq!(settings.api_key, "sk-env");
+        assert!(!settings.bearer_auth);
+
+        // Both set → the auth token wins.
+        let env = env_with_vars(
+            dir.path(),
+            &[("ANTHROPIC_AUTH_TOKEN", "tok-both"), ("ANTHROPIC_API_KEY", "sk-both")],
+        );
+        let settings =
+            resolve_http_settings(AiSource::ClaudeCode, &AiCommitSettings::default(), &env)
+                .unwrap();
+        assert_eq!(settings.api_key, "tok-both");
+        assert!(settings.bearer_auth);
 
         // Neither present → unavailable.
         let env = env_with_home(dir.path());
@@ -607,11 +635,11 @@ mod tests {
 
         // Malformed JSON falls back to the environment rather than failing.
         std::fs::write(dir.path().join(".claude").join("settings.json"), "{not json").unwrap();
-        let env = env_with_vars(dir.path(), &[("ANTHROPIC_API_KEY", "sk-env2")]);
+        let env = env_with_vars(dir.path(), &[("ANTHROPIC_AUTH_TOKEN", "tok-env2")]);
         let settings =
             resolve_http_settings(AiSource::ClaudeCode, &AiCommitSettings::default(), &env)
                 .expect("malformed settings.json falls back to env");
-        assert_eq!(settings.api_key, "sk-env2");
+        assert_eq!(settings.api_key, "tok-env2");
     }
 
     #[test]

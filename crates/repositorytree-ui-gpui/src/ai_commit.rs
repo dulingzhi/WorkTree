@@ -99,6 +99,11 @@ pub(crate) struct AiCommitSettings {
     pub(crate) source: crate::ai_commit_sources::AiSource,
     pub(crate) provider: AiProvider,
     pub(crate) api_key: String,
+    /// Whether `api_key` is an `ANTHROPIC_AUTH_TOKEN`-style credential, which
+    /// travels as `Authorization: Bearer` instead of Anthropic's `x-api-key`.
+    /// Set by the Claude Code source; a manually entered console key is an
+    /// API key.
+    pub(crate) bearer_auth: bool,
     pub(crate) model: String,
     pub(crate) endpoint: String,
     pub(crate) custom_command: String,
@@ -158,9 +163,17 @@ impl AiCommitSettings {
     }
 
     /// Provider-appropriate authentication headers, shared by the chat
-    /// request and the model listing.
+    /// request and the model listing. A bearer credential switches the
+    /// Anthropic path from `x-api-key` to `Authorization: Bearer`.
     pub(crate) fn auth_headers(&self) -> Vec<(&'static str, String)> {
         match self.provider {
+            AiProvider::Anthropic if self.bearer_auth => vec![
+                (
+                    "Authorization",
+                    format!("Bearer {}", self.api_key.trim()),
+                ),
+                ("anthropic-version", "2023-06-01".to_string()),
+            ],
             AiProvider::Anthropic => vec![
                 ("x-api-key", self.api_key.trim().to_string()),
                 ("anthropic-version", "2023-06-01".to_string()),
@@ -216,6 +229,8 @@ pub(crate) fn init_from_session(ui_session: &session::UiSession) {
         source,
         provider,
         api_key: ui_session.ai_commit_api_key.clone().unwrap_or_default(),
+        // A persisted key is a manually entered console key — never a token.
+        bearer_auth: false,
         model: ui_session.ai_commit_model.clone().unwrap_or_default(),
         endpoint: ui_session.ai_commit_endpoint.clone().unwrap_or_default(),
         custom_command: ui_session
@@ -1148,6 +1163,16 @@ mod tests {
             anthropic.auth_headers(),
             vec![
                 ("x-api-key", "sk-test".to_string()),
+                ("anthropic-version", "2023-06-01".to_string()),
+            ]
+        );
+        // An ANTHROPIC_AUTH_TOKEN credential is a bearer token, not an x-api-key.
+        let mut token = settings(AiProvider::Anthropic);
+        token.bearer_auth = true;
+        assert_eq!(
+            token.auth_headers(),
+            vec![
+                ("Authorization", "Bearer sk-test".to_string()),
                 ("anthropic-version", "2023-06-01".to_string()),
             ]
         );

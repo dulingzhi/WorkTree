@@ -83,7 +83,7 @@ settings:
     privacy_hint_cli: 生成时提示词（最近提交示例 + 暂存差异）作为单个参数传给命令。
     missing:
       manual: 手动来源尚未配置 API Key。
-      claude_code: "在 %{detail} 或环境变量中未找到 ANTHROPIC_API_KEY。"
+      claude_code: "在 %{detail} 或环境变量中未找到 ANTHROPIC_AUTH_TOKEN 或 ANTHROPIC_API_KEY。"
       codex: "在 %{detail} 或环境变量中未找到 OPENAI_API_KEY。"
       copilot: "未找到 GitHub token（gh hosts.yml、GH_TOKEN 或 GITHUB_TOKEN）。请求返回 403 时请执行：gh auth refresh -s models:read"
       env: 未设置 ANTHROPIC_API_KEY 或 OPENAI_API_KEY。
