@@ -2790,6 +2790,7 @@ fn additional_routing_messages_emit_effects_and_update_counters() {
         Msg::LaunchMergetool {
             repo_id,
             path: PathBuf::from("conflicted.txt"),
+            preference: worktree_core::external_merge_tool::ExternalMergeToolSelection::FromGitConfig,
         },
     );
     assert!(matches!(
@@ -2886,6 +2887,7 @@ fn repo_command_finished_error_summaries_cover_additional_labels() {
         (
             RepoCommandKind::LaunchMergetool {
                 path: PathBuf::from("conflicted.txt"),
+                preference: worktree_core::external_merge_tool::ExternalMergeToolSelection::FromGitConfig,
             },
             "Mergetool",
         ),

@@ -6,6 +6,7 @@ pub mod diff;
 pub mod domain;
 pub mod encoding;
 pub mod error;
+pub mod external_merge_tool;
 pub mod file_diff;
 pub mod git_ops_trace;
 pub mod gitignore;

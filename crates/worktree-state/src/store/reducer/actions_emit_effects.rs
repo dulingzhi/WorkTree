@@ -3,25 +3,26 @@ use super::util::{
     apply_selected_diff_load_plan_state_with_reload_mode, clear_banner_error_for_repo,
     diff_reload_effects, format_failure_summary, push_action_log, push_command_log,
     push_failure_needs_pull_retry, refresh_full_effects, refresh_primary_effects,
-    selected_conflict_target,
-    selected_diff_load_plan, start_conflict_target_reload, start_current_conflict_target_reload,
+    selected_conflict_target, selected_diff_load_plan, start_conflict_target_reload,
+    start_current_conflict_target_reload,
 };
 use crate::model::{
     AppState, InteractiveCherryPickSetup, InteractiveRebaseSetup, Loadable, RepoId,
     RepoLoadsInFlight, RepoState,
 };
 use crate::msg::{Effect, RepoCommandKind, RepoPathList};
+use rustc_hash::FxHashMap;
+use std::path::PathBuf;
+use std::sync::Arc;
 use worktree_core::auth::StagedGitAuth;
 use worktree_core::conflict_session::{ConflictRegionResolution, ConflictResolverStrategy};
 use worktree_core::domain::{DiffTarget, FileConflictKind};
 use worktree_core::error::Error;
+use worktree_core::external_merge_tool::ExternalMergeToolSelection;
 use worktree_core::services::{
     CommandOutput, GitRepository, InteractiveRebaseEntry, PullMode, RemoteUrlKind, ResetMode,
     SafePushAfterCommitTarget,
 };
-use rustc_hash::FxHashMap;
-use std::path::PathBuf;
-use std::sync::Arc;
 
 pub(super) fn checkout_branch(repo_id: RepoId, name: String) -> Vec<Effect> {
     vec![Effect::CheckoutBranch { repo_id, name }]
@@ -41,11 +42,7 @@ pub(super) fn checkout_remote_branch(
     }]
 }
 
-pub(super) fn checkout_pull_request(
-    repo_id: RepoId,
-    remote: String,
-    number: u64,
-) -> Vec<Effect> {
+pub(super) fn checkout_pull_request(repo_id: RepoId, remote: String, number: u64) -> Vec<Effect> {
     vec![Effect::CheckoutPullRequest {
         repo_id,
         remote,
@@ -957,8 +954,16 @@ pub(super) fn checkout_conflict_base(repo_id: RepoId, path: PathBuf) -> Vec<Effe
     vec![Effect::CheckoutConflictBase { repo_id, path }]
 }
 
-pub(super) fn launch_mergetool(repo_id: RepoId, path: PathBuf) -> Vec<Effect> {
-    vec![Effect::LaunchMergetool { repo_id, path }]
+pub(super) fn launch_mergetool(
+    repo_id: RepoId,
+    path: PathBuf,
+    preference: ExternalMergeToolSelection,
+) -> Vec<Effect> {
+    vec![Effect::LaunchMergetool {
+        repo_id,
+        path,
+        preference,
+    }]
 }
 
 pub(super) fn stash(
@@ -997,11 +1002,7 @@ pub(super) fn stash_branch(repo_id: RepoId, index: usize, branch: String) -> Vec
     }]
 }
 
-pub(super) fn set_assume_unchanged(
-    repo_id: RepoId,
-    path: PathBuf,
-    enable: bool,
-) -> Vec<Effect> {
+pub(super) fn set_assume_unchanged(repo_id: RepoId, path: PathBuf, enable: bool) -> Vec<Effect> {
     vec![Effect::SetAssumeUnchanged {
         repo_id,
         path,
@@ -1415,7 +1416,7 @@ pub(super) fn repo_command_finished(
                 repo_state.set_diff_target(None);
                 repo_state.diff_state.diff = Loadable::NotLoaded;
                 repo_state.diff_state.diff_file = Loadable::NotLoaded;
-            repo_state.diff_state.diff_file_lfs = Loadable::NotLoaded;
+                repo_state.diff_state.diff_file_lfs = Loadable::NotLoaded;
                 repo_state.diff_state.diff_preview_text_file = Loadable::NotLoaded;
                 repo_state.diff_state.submodule_summary = Loadable::NotLoaded;
                 repo_state.diff_state.inline_submodule_diff = None;
@@ -1594,7 +1595,7 @@ fn resolution_command_path(command: &RepoCommandKind) -> Option<&std::path::Path
         RepoCommandKind::CheckoutConflict { path, .. }
         | RepoCommandKind::CheckoutConflictBase { path }
         | RepoCommandKind::AcceptConflictDeletion { path }
-        | RepoCommandKind::LaunchMergetool { path } => Some(path),
+        | RepoCommandKind::LaunchMergetool { path, .. } => Some(path),
         _ => None,
     }
 }

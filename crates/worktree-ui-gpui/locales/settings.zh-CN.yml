@@ -13,6 +13,7 @@ settings:
     tags: 标签
     git_executable: Git 可执行文件
     gpg_signing: GPG 签名
+    merge_tool: 合并工具
     environment: 环境
     links: 链接
     no_match: 没有匹配的设置
@@ -172,6 +173,33 @@ settings:
     apply: 应用
     save_failed: 保存失败
     scope_note: 读写 git 全局配置（commit.gpgsign、user.signingkey、gpg.program）。此处创建的提交会自动遵循；已签名提交在历史列表中显示对勾标记。
+  merge_tool:
+    row_label: 外部合并工具
+    from_git_config: 跟随 git 配置（merge.tool）
+    custom: 自定义命令
+    hint: 供冲突文件右键的「Open external mergetool」使用。内置工具仍遵循其 git 配置覆盖（mergetool.<tool>.path/.cmd/.trustExitCode）。
+    custom_command: 自定义命令
+    custom_command_placeholder: "code --wait --merge $REMOTE $LOCAL $BASE $MERGED"
+    custom_hint: 以 shell 命令运行，$BASE、$LOCAL、$REMOTE、$MERGED 指向冲突文件。
+    trust_exit_code: 信任退出码
+    trust_exit_code_hint: 关闭时，只有合并文件实际发生变化才算解决成功。
+    checking: 正在检查 PATH…
+    available: "已在 PATH 中找到：%{program}"
+    missing: "未在 PATH 中找到：%{programs}"
+    unknown_preset: 未知工具 id —— 将按 git 配置行为解析该名字。
+    scope_note: 保存在 WorkTree 自身设置中，不写入 git 配置。「跟随 git 配置」保持既有 merge.tool / mergetool.<tool>.* 的行为。
+    tools:
+      kdiff3: KDiff3
+      meld: Meld
+      bc: Beyond Compare
+      p4merge: P4Merge
+      vscode: VS Code
+      smerge: Sublime Merge
+      araxis: Araxis Merge
+      winmerge: WinMerge
+      tortoisemerge: TortoiseGit Merge
+      opendiff: FileMerge (opendiff)
+      vimdiff: vimdiff
   git:
     detected_runtime: 检测到的运行时
     status_supported: "Git >= %{version}"

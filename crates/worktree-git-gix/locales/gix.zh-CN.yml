@@ -2,3 +2,5 @@
 git:
   ssh_host_verification_prompt: "SSH 主机验证提示：\n"
   mergetool_command: "合并工具（%{tool}）"
+  mergetool_custom_empty: "自定义合并命令为空。请在「设置 > 合并工具」中配置。"
+  mergetool_preset_id_empty: "配置的合并工具 id 为空。请在「设置 > 合并工具」中选择工具。"

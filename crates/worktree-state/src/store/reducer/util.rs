@@ -4,17 +4,17 @@ use crate::model::{
     RepoLoadsInFlight, RepoState,
 };
 use crate::msg::{ConflictAutosolveMode, ConflictAutosolveStats, Effect, RepoCommandKind};
+use rustc_hash::FxHashSet;
+use smallvec::{Array, SmallVec};
+use std::io;
+use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 #[cfg(test)]
 use worktree_core::auth::stage_git_auth;
 use worktree_core::auth::{GitAuthKind, StagedGitAuth, clear_staged_git_auth};
 use worktree_core::domain::{DiffArea, DiffTarget, FileStatusKind};
 use worktree_core::error::{Error, ErrorKind, GitFailure};
 use worktree_core::services::CommandOutput;
-use rustc_hash::FxHashSet;
-use smallvec::{Array, SmallVec};
-use std::io;
-use std::path::{Path, PathBuf};
-use std::time::SystemTime;
 
 /// Default page size for log fetches.
 pub(super) const DEFAULT_LOG_PAGE_SIZE: usize = 200;
@@ -1312,9 +1312,7 @@ fn summarize_command(
             RepoCommandKind::ArchiveZip { .. } => {
                 rust_i18n::t!("store.reducer.label_archive").to_string()
             }
-            RepoCommandKind::Cleanup => {
-                rust_i18n::t!("store.reducer.label_cleanup").to_string()
-            }
+            RepoCommandKind::Cleanup => rust_i18n::t!("store.reducer.label_cleanup").to_string(),
             RepoCommandKind::AddWorktree { .. }
             | RepoCommandKind::RemoveWorktree { .. }
             | RepoCommandKind::ForceRemoveWorktree { .. } => {
@@ -1572,7 +1570,7 @@ fn summarize_command(
         RepoCommandKind::CheckoutConflictBase { path } => {
             rust_i18n::t!("store.reducer.resolved_base", path = path.display()).to_string()
         }
-        RepoCommandKind::LaunchMergetool { path } => {
+        RepoCommandKind::LaunchMergetool { path, .. } => {
             rust_i18n::t!("store.reducer.mergetool_resolved", path = path.display()).to_string()
         }
         RepoCommandKind::SaveWorktreeFile { path, stage } => {
@@ -1647,8 +1645,7 @@ fn summarize_command(
             {
                 rust_i18n::t!("store.reducer.bisect_first_bad", sha = sha).to_string()
             } else {
-                rust_i18n::t!("store.reducer.bisect_marked", kind = verdict.as_str())
-                    .to_string()
+                rust_i18n::t!("store.reducer.bisect_marked", kind = verdict.as_str()).to_string()
             }
         }
         RepoCommandKind::BisectReset => {
@@ -1742,10 +1739,12 @@ fn summarize_command(
             rust_i18n::t!("store.reducer.remote_url_updated", name = name, kind = kind).to_string()
         }
         RepoCommandKind::SetRemoteSshKey { remote, key } => match key {
-            Some(key) => {
-                rust_i18n::t!("store.reducer.remote_ssh_key_set", name = remote, path = key)
-                    .to_string()
-            }
+            Some(key) => rust_i18n::t!(
+                "store.reducer.remote_ssh_key_set",
+                name = remote,
+                path = key
+            )
+            .to_string(),
             None => {
                 rust_i18n::t!("store.reducer.remote_ssh_key_cleared", name = remote).to_string()
             }
@@ -1756,9 +1755,7 @@ fn summarize_command(
         RepoCommandKind::ArchiveZip { dest, .. } => {
             rust_i18n::t!("store.reducer.archive_exported", path = dest.display()).to_string()
         }
-        RepoCommandKind::Cleanup => {
-            rust_i18n::t!("store.reducer.cleanup_finished").to_string()
-        }
+        RepoCommandKind::Cleanup => rust_i18n::t!("store.reducer.cleanup_finished").to_string(),
         RepoCommandKind::ApplyPatch { patch } => {
             rust_i18n::t!("store.reducer.patch_applied_to", path = patch.display()).to_string()
         }
@@ -2058,10 +2055,10 @@ mod tests {
     use super::*;
     use crate::model::{AppNotificationKind, DiagnosticKind};
     use crate::msg::RepoCommandKind;
+    use std::path::Path;
     use worktree_core::domain::{CommitId, DiffArea, DiffTarget, RepoSpec};
     use worktree_core::error::{GitFailure, GitFailureId};
     use worktree_core::services::{PullMode, RemoteUrlKind, ResetMode};
-    use std::path::Path;
 
     fn repo_state(id: u64) -> RepoState {
         RepoState::new_opening(

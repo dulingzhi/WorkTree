@@ -257,6 +257,8 @@ impl WorkTreeView {
                             default_tag_type: None,
                             git_executable_path: None,
                             external_code_editor: None,
+                            // Managed by the settings window, not this snapshot.
+                            external_merge_tool: None,
                         };
 
                         Some(settings)

@@ -2365,6 +2365,7 @@ fn repo_command_finished_launch_mergetool_clears_conflict_context() {
             repo_id,
             command: RepoCommandKind::LaunchMergetool {
                 path: PathBuf::from("file.txt"),
+                preference: worktree_core::external_merge_tool::ExternalMergeToolSelection::FromGitConfig,
             },
             result: Ok(CommandOutput::empty_success("mergetool (dummy)")),
         }),
@@ -3972,6 +3973,7 @@ fn clearing_conflict_context_drops_pending_restore_session() {
             repo_id,
             command: RepoCommandKind::LaunchMergetool {
                 path: PathBuf::from("file.txt"),
+                preference: worktree_core::external_merge_tool::ExternalMergeToolSelection::FromGitConfig,
             },
             result: Ok(CommandOutput::empty_success("git mergetool file.txt")),
         }),

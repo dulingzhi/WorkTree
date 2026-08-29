@@ -20,9 +20,11 @@ encoding_rs = { workspace = true }
 memchr = { workspace = true }
 regex = { workspace = true }
 rustc-hash = { workspace = true }
+serde = { workspace = true }
 smallvec = { workspace = true }
 strsim = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+serde_json = { workspace = true }
 tempfile = { workspace = true }

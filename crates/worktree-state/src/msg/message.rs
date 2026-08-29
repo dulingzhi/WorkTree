@@ -2,10 +2,14 @@ use crate::model::GitLogTagFetchMode;
 use crate::model::{
     AiCommitContext, ConflictFileLoadMode, DefaultTagType, RepoId, SidebarDataRequest, SidebarMode,
 };
+use rustc_hash::FxHashMap;
+use std::path::PathBuf;
+use std::sync::Arc;
 use worktree_core::auth::StagedGitAuth;
 use worktree_core::conflict_session::ConflictSession;
 use worktree_core::domain::*;
 use worktree_core::error::Error;
+use worktree_core::external_merge_tool::ExternalMergeToolSelection;
 use worktree_core::process::GitRuntimeState;
 use worktree_core::services::GitRepository;
 use worktree_core::services::{
@@ -14,9 +18,6 @@ use worktree_core::services::{
     ResetMode, SafePushAfterCommitContext, SafePushAfterCommitDecision, SafePushAfterCommitTarget,
     SequencerState, SubmoduleTrustDecision, SubmoduleTrustTarget,
 };
-use rustc_hash::FxHashMap;
-use std::path::PathBuf;
-use std::sync::Arc;
 
 use super::repo_command_kind::RepoCommandKind;
 use super::repo_external_change::RepoExternalChange;
@@ -956,6 +957,9 @@ pub enum Msg {
     LaunchMergetool {
         repo_id: RepoId,
         path: PathBuf,
+        /// App-level external merge tool selection, snapshotted by the UI at
+        /// dispatch time; `FromGitConfig` keeps the git-config behavior.
+        preference: ExternalMergeToolSelection,
     },
     RecordConflictAutosolveTelemetry {
         repo_id: RepoId,
@@ -1164,10 +1168,7 @@ pub enum InternalMsg {
     StatusForPathsLoaded {
         repo_id: RepoId,
         paths: std::sync::Arc<[std::path::PathBuf]>,
-        result: Result<
-            worktree_core::services::StatusForPaths,
-            Error,
-        >,
+        result: Result<worktree_core::services::StatusForPaths, Error>,
     },
     HeadBranchLoaded {
         repo_id: RepoId,
@@ -1461,8 +1462,8 @@ impl From<InternalMsg> for Msg {
 mod tests {
     use super::{InternalMsg, Msg, RepoActionKind};
     use crate::model::RepoId;
-    use worktree_core::error::{Error, ErrorKind};
     use std::path::PathBuf;
+    use worktree_core::error::{Error, ErrorKind};
 
     #[test]
     fn wraps_internal_messages() {

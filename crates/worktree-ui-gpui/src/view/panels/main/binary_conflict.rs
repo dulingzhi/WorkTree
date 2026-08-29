@@ -205,6 +205,9 @@ impl MainPaneView {
                             this.store.dispatch(Msg::LaunchMergetool {
                                 repo_id,
                                 path: mergetool_path.clone(),
+                                preference:
+                                    worktree_core::external_merge_tool::current_external_merge_tool(
+                                    ),
                             });
                         }),
                     )

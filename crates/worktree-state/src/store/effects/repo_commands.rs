@@ -1,15 +1,16 @@
 use crate::msg::{Msg, RepoCommandKind};
+use std::path::{Component, Path, PathBuf};
+use std::sync::Arc;
 use worktree_core::auth::{
     StagedGitAuth, clear_staged_git_auth, stage_git_auth_for_current_thread,
 };
 use worktree_core::error::{Error, ErrorKind};
+use worktree_core::external_merge_tool::ExternalMergeToolSelection;
 use worktree_core::services::{
     CommandOutput, ConflictSide, ForcePushLease, GitRepository, InteractiveRebaseEntry,
     MergeRequestPushOptions, PullMode, RemoteUrlKind, ResetMode, SafePushAfterCommitContext,
     SafePushAfterCommitTarget, SubmoduleTrustTarget,
 };
-use std::path::{Component, Path, PathBuf};
-use std::sync::Arc;
 
 use super::super::{RepoId, executor::TaskExecutor, worker_channel::StoreWorkerSender};
 use super::util::{RepoMap, send_or_log, spawn_with_repo};
@@ -1510,6 +1511,7 @@ pub(super) fn schedule_launch_mergetool(
     msg_tx: StoreWorkerSender,
     repo_id: RepoId,
     path: PathBuf,
+    preference: ExternalMergeToolSelection,
 ) {
     let command_path = path.clone();
     schedule_repo_command(
@@ -1517,9 +1519,12 @@ pub(super) fn schedule_launch_mergetool(
         repos,
         msg_tx,
         repo_id,
-        RepoCommandKind::LaunchMergetool { path: command_path },
+        RepoCommandKind::LaunchMergetool {
+            path: command_path,
+            preference: preference.clone(),
+        },
         move |repo| {
-            let result = repo.launch_mergetool(&path);
+            let result = repo.launch_mergetool(&path, &preference);
             match result {
                 Ok(mergetool_result) => {
                     if mergetool_result.success {

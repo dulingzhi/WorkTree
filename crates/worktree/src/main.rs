@@ -24,10 +24,10 @@ mod setup_mode;
 use cli::{AppMode, exit_code};
 #[cfg(feature = "ui-gpui-runtime")]
 use git_root::is_git_root_marker;
-use worktree_core::process::install_git_executable_path;
 #[cfg(all(target_os = "linux", feature = "ui-gpui-runtime"))]
 use linux_wayland_fallback::maybe_relaunch_with_linux_x11_fallback;
 use mimalloc::MiMalloc;
+use worktree_core::process::install_git_executable_path;
 
 pub(crate) fn hex_encode(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
@@ -164,6 +164,7 @@ fn main() {
     };
 
     install_configured_git_executable_preference(&mode);
+    install_configured_external_merge_tool(&mode);
 
     #[cfg(all(target_os = "linux", feature = "ui-gpui-runtime"))]
     if let Some(code) = maybe_relaunch_with_linux_x11_fallback(&mode) {
@@ -336,6 +337,20 @@ fn install_configured_git_executable_preference(mode: &AppMode) {
 
     let session = worktree_state::session::load();
     let _ = install_git_executable_path(session.git_executable_path);
+}
+
+/// Install the app-level external merge tool preference from the session file.
+/// The conflicted-file context menu snapshots this when dispatching, so the
+/// browser mode — the only mode with that menu — is the one that needs it.
+fn install_configured_external_merge_tool(mode: &AppMode) {
+    if !mode_uses_configured_git_executable_preference(mode) {
+        return;
+    }
+
+    let session = worktree_state::session::load();
+    worktree_core::external_merge_tool::install_external_merge_tool(
+        session.external_merge_tool.unwrap_or_default(),
+    );
 }
 
 #[cfg(all(target_os = "macos", feature = "ui-gpui-runtime"))]
@@ -649,10 +664,10 @@ fn resolve_mergetool_repo_path(merged_path: &std::path::Path) -> Option<std::pat
 #[cfg(test)]
 mod tests {
     use super::*;
-    use worktree_core::merge::{ConflictStyle, DEFAULT_MARKER_SIZE, DiffAlgorithm};
     #[cfg(feature = "ui-gpui-runtime")]
     use std::fs;
     use std::io::{self, Write};
+    use worktree_core::merge::{ConflictStyle, DEFAULT_MARKER_SIZE, DiffAlgorithm};
 
     #[derive(Default)]
     struct RecordingWriter {

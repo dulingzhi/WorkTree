@@ -3,26 +3,29 @@ use super::mergetool_builtin::{
 };
 use super::{GixRepo, conflict_stages::gix_index_stage_blob_bytes_optional};
 use crate::util::{bytes_to_text_preserving_utf8, run_git_simple};
-use worktree_core::error::{Error, ErrorKind};
-use worktree_core::path_utils::canonicalize_or_original;
-use worktree_core::process::background_command as no_window_command;
-use worktree_core::services::{
-    CommandOutput, MergetoolResult, Result, validate_conflict_resolution_text,
-};
 use rustc_hash::FxHashSet;
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 #[cfg(any(not(windows), test))]
 use std::process::Command;
 use std::sync::{Mutex, OnceLock};
+use worktree_core::error::{Error, ErrorKind};
+use worktree_core::external_merge_tool::ExternalMergeToolSelection;
+use worktree_core::path_utils::canonicalize_or_original;
+use worktree_core::process::background_command as no_window_command;
+use worktree_core::services::{
+    CommandOutput, MergetoolResult, Result, validate_conflict_resolution_text,
+};
 
 impl GixRepo {
     /// Launch an external mergetool for a conflicted file.
     ///
     /// The implementation:
-    /// 1. Reads `merge.tool` from git config to determine the tool name.
-    ///    Repository-local `mergetool.<tool>.cmd` is blocked by default unless
-    ///    explicitly trusted via a WorkTree global consent key.
+    /// 1. Resolves the tool: the app-level external-merge-tool preference
+    ///    (Settings > Merge tool) when one is installed, otherwise
+    ///    `merge.tool` from git config. Repository-local
+    ///    `mergetool.<tool>.cmd` is blocked by default unless explicitly
+    ///    trusted via a WorkTree global consent key.
     /// 2. Extracts conflict stages (`:1:`, `:2:`, `:3:`) into temp files.
     /// 3. Invokes the tool with the BASE, LOCAL, REMOTE and MERGED files, using
     ///    git's built-in argument convention for the tool (see
@@ -31,7 +34,11 @@ impl GixRepo {
     /// 4. Reads trust-exit config to decide success semantics:
     ///    `mergetool.<tool>.trustExitCode`, then `mergetool.trustExitCode`.
     /// 5. Reads back the merged file and stages it on success.
-    pub(super) fn launch_mergetool_impl(&self, path: &Path) -> Result<MergetoolResult> {
+    pub(super) fn launch_mergetool_impl(
+        &self,
+        path: &Path,
+        preference: &ExternalMergeToolSelection,
+    ) -> Result<MergetoolResult> {
         let workdir = &self.spec.workdir;
         let repo = self.reopen_repo()?;
         let MergetoolConfig {
@@ -41,7 +48,7 @@ impl GixRepo {
             trust_exit_code,
             write_to_temp,
             keep_temporaries,
-        } = resolve_mergetool_config(&repo, env_has_display())?;
+        } = resolve_mergetool_config(&repo, env_has_display(), preference)?;
         let stage_paths = materialize_mergetool_stage_files(
             &repo,
             workdir,
@@ -338,12 +345,61 @@ fn choose_mergetool_name(
     )))
 }
 
-fn resolve_mergetool_config(repo: &gix::Repository, has_display: bool) -> Result<MergetoolConfig> {
-    let merge_tool = git_config_get(repo, "merge.tool")?;
-    let merge_guitool = git_config_get(repo, "merge.guitool")?;
-    let gui_default = parse_gui_default(git_config_get(repo, "mergetool.guiDefault")?.as_deref())?;
+/// Tool name recorded for the app-configured custom merge command. Distinct
+/// from `worktree` / `worktree-gui`, which setup mode reserves for launching
+/// WorkTree itself as git's mergetool.
+const CUSTOM_PREFERENCE_TOOL_NAME: &str = "worktree-custom";
 
-    let tool_name = choose_mergetool_name(merge_tool, merge_guitool, gui_default, has_display)?;
+fn resolve_mergetool_config(
+    repo: &gix::Repository,
+    has_display: bool,
+    preference: &ExternalMergeToolSelection,
+) -> Result<MergetoolConfig> {
+    let tool_name = match preference {
+        ExternalMergeToolSelection::FromGitConfig => {
+            let merge_tool = git_config_get(repo, "merge.tool")?;
+            let merge_guitool = git_config_get(repo, "merge.guitool")?;
+            let gui_default =
+                parse_gui_default(git_config_get(repo, "mergetool.guiDefault")?.as_deref())?;
+            choose_mergetool_name(merge_tool, merge_guitool, gui_default, has_display)?
+        }
+        // The preference forces the tool id; the per-tool git config keys
+        // (`mergetool.<id>.path/.cmd/.trustExitCode`) still apply, so
+        // fine-tuning through git config keeps working.
+        ExternalMergeToolSelection::Builtin { id } => {
+            let id = id.trim();
+            if id.is_empty() {
+                return Err(Error::new(ErrorKind::Backend(
+                    rust_i18n::t!("git.mergetool_preset_id_empty").to_string(),
+                )));
+            }
+            id.to_string()
+        }
+        // The command is user-authored in the app's own settings — the same
+        // trust level as global git config — so it bypasses the repo-local
+        // `cmd` consent gate by design. Trust comes from the setting; the
+        // temp-file behavior stays with `mergetool.writeToTemp`/`keepTemporaries`.
+        ExternalMergeToolSelection::Custom {
+            command,
+            trust_exit_code,
+        } => {
+            let command = command.trim();
+            if command.is_empty() {
+                return Err(Error::new(ErrorKind::Backend(
+                    rust_i18n::t!("git.mergetool_custom_empty").to_string(),
+                )));
+            }
+            return Ok(MergetoolConfig {
+                tool_name: CUSTOM_PREFERENCE_TOOL_NAME.to_string(),
+                tool_cmd: Some(command.to_string()),
+                tool_path: None,
+                trust_exit_code: *trust_exit_code,
+                write_to_temp: git_config_get_bool(repo, "mergetool.writeToTemp")?.unwrap_or(false),
+                keep_temporaries: git_config_get_bool(repo, "mergetool.keepTemporaries")?
+                    .unwrap_or(false),
+            });
+        }
+    };
     let tool_cmd = resolve_mergetool_command_with_trust_mode(repo, &tool_name)?;
     let tool_path = git_config_get(repo, &format!("mergetool.{tool_name}.path"))?;
     let trust_exit_code =
@@ -1296,7 +1352,9 @@ mod tests {
             .unwrap();
 
         let repo = open_repo(workdir);
-        let cfg = resolve_mergetool_config(&repo, false).unwrap();
+        let cfg =
+            resolve_mergetool_config(&repo, false, &ExternalMergeToolSelection::FromGitConfig)
+                .unwrap();
         assert_eq!(cfg.tool_name, "gui");
         assert_eq!(cfg.tool_cmd, None);
         assert_eq!(cfg.tool_path.as_deref(), Some("/opt/fake-gui-tool"));
@@ -1336,7 +1394,9 @@ mod tests {
             .unwrap();
 
         let repo = open_repo(workdir);
-        let cfg = resolve_mergetool_config(&repo, false).unwrap();
+        let cfg =
+            resolve_mergetool_config(&repo, false, &ExternalMergeToolSelection::FromGitConfig)
+                .unwrap();
         assert_eq!(cfg.tool_name, "cli");
         assert_eq!(cfg.tool_cmd, None);
         assert!(!cfg.write_to_temp);
@@ -1368,7 +1428,9 @@ mod tests {
             .unwrap();
 
         let repo = open_repo(workdir);
-        let cfg = resolve_mergetool_config(&repo, false).unwrap();
+        let cfg =
+            resolve_mergetool_config(&repo, false, &ExternalMergeToolSelection::FromGitConfig)
+                .unwrap();
         assert!(cfg.trust_exit_code);
     }
 
@@ -1403,7 +1465,9 @@ mod tests {
             .unwrap();
 
         let repo = open_repo(workdir);
-        let cfg = resolve_mergetool_config(&repo, false).unwrap();
+        let cfg =
+            resolve_mergetool_config(&repo, false, &ExternalMergeToolSelection::FromGitConfig)
+                .unwrap();
         assert!(!cfg.trust_exit_code);
     }
 
@@ -1432,7 +1496,9 @@ mod tests {
             .unwrap();
 
         let repo = open_repo(workdir);
-        let cfg = resolve_mergetool_config(&repo, false).unwrap();
+        let cfg =
+            resolve_mergetool_config(&repo, false, &ExternalMergeToolSelection::FromGitConfig)
+                .unwrap();
         assert!(cfg.write_to_temp);
         assert!(!cfg.keep_temporaries);
     }
@@ -1462,7 +1528,9 @@ mod tests {
             .unwrap();
 
         let repo = open_repo(workdir);
-        let cfg = resolve_mergetool_config(&repo, false).unwrap();
+        let cfg =
+            resolve_mergetool_config(&repo, false, &ExternalMergeToolSelection::FromGitConfig)
+                .unwrap();
         assert!(!cfg.write_to_temp);
         assert!(cfg.keep_temporaries);
     }

@@ -309,11 +309,12 @@ pub(super) fn builtin_merge_command(tool: &str, files: &MergetoolFiles<'_>) -> B
     BuiltinMergeCommand::Args(args)
 }
 
-/// Executable name git would run for a built-in tool whose command differs from
-/// the tool name (git's `translate_merge_tool_path`). Returns `None` when the
-/// tool name is already the command to run, or is not a known built-in.
-pub(super) fn builtin_tool_program(tool: &str) -> Option<String> {
-    let candidates: &[&str] = match builtin_tool_key(tool)? {
+/// Executable names git would try for a built-in tool whose command differs
+/// from the tool name (git's `translate_merge_tool_path`), in order. Empty
+/// when the tool name is already the command to run; `None` when the tool is
+/// not a known built-in.
+pub(super) fn builtin_tool_program_candidates(tool: &str) -> Option<&'static [&'static str]> {
+    Some(match builtin_tool_key(tool)? {
         "bc" => &["bcomp", "bcompare"],
         "vscode" => &["code"],
         "araxis" => &["compare"],
@@ -326,8 +327,18 @@ pub(super) fn builtin_tool_program(tool: &str) -> Option<String> {
         "gvimdiff" => &["gvim"],
         "vimdiff" => &["vim"],
         "nvimdiff" => &["nvim"],
-        _ => return None,
-    };
+        _ => &[],
+    })
+}
+
+/// Executable name git would run for a built-in tool whose command differs from
+/// the tool name (git's `translate_merge_tool_path`). Returns `None` when the
+/// tool name is already the command to run, or is not a known built-in.
+pub(super) fn builtin_tool_program(tool: &str) -> Option<String> {
+    let candidates = builtin_tool_program_candidates(tool)?;
+    if candidates.is_empty() {
+        return None;
+    }
     Some(first_program_on_path(candidates))
 }
 
@@ -638,5 +649,35 @@ mod tests {
             dir.path().as_os_str(),
             "worktree-not-executable"
         ));
+    }
+
+    #[test]
+    fn merge_tool_presets_stay_in_sync_with_builtin_tables() {
+        use worktree_core::external_merge_tool::MERGE_TOOL_PRESETS;
+
+        for preset in MERGE_TOOL_PRESETS {
+            // Every offered preset must resolve to itself in the built-in
+            // table, so a Builtin preference gets git's argv convention.
+            assert_eq!(builtin_tool_key(preset.id), Some(preset.id));
+
+            // And the UI's PATH-detection candidates must match what the
+            // backend would translate the tool name to (empty = the tool
+            // name itself is the program).
+            let expected = builtin_tool_program_candidates(preset.id).unwrap();
+            if expected.is_empty() {
+                assert_eq!(
+                    preset.program_candidates,
+                    &[preset.id],
+                    "{}: no translate entry means the tool name is the program",
+                    preset.id
+                );
+            } else {
+                assert_eq!(
+                    preset.program_candidates, expected,
+                    "{}: program candidates drifted from the translate table",
+                    preset.id
+                );
+            }
+        }
     }
 }

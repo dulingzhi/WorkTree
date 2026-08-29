@@ -13,12 +13,12 @@ use crate::model::{
 };
 use crate::msg::{ConflictRegionChoice, Effect, Msg, RepoCommandKind, RepoPath, RepoPathList};
 use crate::store::repo_load_trace;
-use worktree_core::auth::StagedGitAuth;
-use worktree_core::services::{GitRepository, SafePushAfterCommitContext};
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
+use worktree_core::auth::StagedGitAuth;
+use worktree_core::services::{GitRepository, SafePushAfterCommitContext};
 
 #[cfg(feature = "benchmarks")]
 pub(crate) use diff_selection::SelectDiffEffects;
@@ -397,9 +397,7 @@ fn retry_msg_for_repo_command(repo_id: RepoId, command: RepoCommandKind) -> Opti
         },
         RepoCommandKind::ForcePush => Msg::ForcePush { repo_id },
         RepoCommandKind::ForcePushWithLease { lease } => Msg::ForcePushWithLease { repo_id, lease },
-        RepoCommandKind::PushMergeRequest { options } => {
-            Msg::PushMergeRequest { repo_id, options }
-        }
+        RepoCommandKind::PushMergeRequest { options } => Msg::PushMergeRequest { repo_id, options },
         RepoCommandKind::PushSetUpstream { remote, branch } => Msg::PushSetUpstream {
             repo_id,
             remote,
@@ -531,7 +529,11 @@ fn retry_msg_for_repo_command(repo_id: RepoId, command: RepoCommandKind) -> Opti
         RepoCommandKind::CheckoutConflictBase { path } => {
             Msg::CheckoutConflictBase { repo_id, path }
         }
-        RepoCommandKind::LaunchMergetool { path } => Msg::LaunchMergetool { repo_id, path },
+        RepoCommandKind::LaunchMergetool { path, preference } => Msg::LaunchMergetool {
+            repo_id,
+            path,
+            preference,
+        },
         RepoCommandKind::ExportPatch { commit_id, dest } => Msg::ExportPatch {
             repo_id,
             commit_id,
@@ -954,12 +956,7 @@ fn reduce_inner(
             repo_id,
             change,
             worktree_paths,
-        } => external_and_history::repo_externally_changed(
-            state,
-            repo_id,
-            change,
-            worktree_paths,
-        ),
+        } => external_and_history::repo_externally_changed(state, repo_id, change, worktree_paths),
         Msg::RepoWatchDegraded { repo_id: _, reason } => {
             let message = match reason {
                 crate::msg::RepoWatchDegradedReason::TooManyFolders { dir_count } => rust_i18n::t!(
@@ -1310,24 +1307,16 @@ fn reduce_inner(
             begin_local_action(state, repo_id);
             actions_emit_effects::delete_branches(repo_id, names, force)
         }
-        Msg::CloneRepo {
-            url,
-            dest,
-            ssh_key,
-        } => repo_management::clone_repo(state, url, dest, ssh_key),
+        Msg::CloneRepo { url, dest, ssh_key } => {
+            repo_management::clone_repo(state, url, dest, ssh_key)
+        }
         Msg::AbortCloneRepo { dest } => repo_management::abort_clone_repo(state, dest),
         Msg::Internal(crate::msg::InternalMsg::CloneRepoProgress { dest, line }) => {
             repo_management::clone_repo_progress(state, dest, line)
         }
         Msg::Internal(crate::msg::InternalMsg::CloneRepoFinished { url, dest, result }) => {
-            let auth_prompt = result
-                .as_ref()
-                .err()
-                .and_then(|error| {
-                let ssh_key = state
-                    .clone
-                    .as_ref()
-                    .and_then(|op| op.ssh_key.clone());
+            let auth_prompt = result.as_ref().err().and_then(|error| {
+                let ssh_key = state.clone.as_ref().and_then(|op| op.ssh_key.clone());
                 auth_prompt_for_clone(&url, &dest, ssh_key.as_deref(), error)
             });
             let effects = repo_management::clone_repo_finished(state, url, dest, result);
@@ -1635,9 +1624,10 @@ fn reduce_inner(
             begin_local_action(state, repo_id);
             actions_emit_effects::squash_ref(repo_id, reference)
         }
-        Msg::Push { repo_id, pull_retry } => {
-            actions_emit_effects::push(repos, state, repo_id, pull_retry)
-        }
+        Msg::Push {
+            repo_id,
+            pull_retry,
+        } => actions_emit_effects::push(repos, state, repo_id, pull_retry),
         Msg::PushAfterCommit {
             repo_id,
             target,
@@ -1845,9 +1835,13 @@ fn reduce_inner(
             begin_local_action(state, repo_id);
             actions_emit_effects::checkout_conflict_base(repo_id, path)
         }
-        Msg::LaunchMergetool { repo_id, path } => {
+        Msg::LaunchMergetool {
+            repo_id,
+            path,
+            preference,
+        } => {
             begin_local_action(state, repo_id);
-            actions_emit_effects::launch_mergetool(repo_id, path)
+            actions_emit_effects::launch_mergetool(repo_id, path, preference)
         }
         Msg::RecordConflictAutosolveTelemetry {
             repo_id,
@@ -2139,16 +2133,10 @@ fn reduce_inner(
         Msg::Internal(crate::msg::InternalMsg::StashesLoaded { repo_id, result }) => {
             effects::stashes_loaded(state, repo_id, result)
         }
-        Msg::Internal(crate::msg::InternalMsg::AssumeUnchangedListLoaded {
-            repo_id,
-            result,
-        }) => {
+        Msg::Internal(crate::msg::InternalMsg::AssumeUnchangedListLoaded { repo_id, result }) => {
             effects::assume_unchanged_list_loaded(state, repo_id, result)
         }
-        Msg::Internal(crate::msg::InternalMsg::RepoStatisticsLoaded {
-            repo_id,
-            result,
-        }) => {
+        Msg::Internal(crate::msg::InternalMsg::RepoStatisticsLoaded { repo_id, result }) => {
             effects::repo_statistics_loaded(state, repo_id, result)
         }
         Msg::Internal(crate::msg::InternalMsg::ReflogLoaded { repo_id, result }) => {
@@ -2587,8 +2575,12 @@ fn reduce_inner(
             // push's log entry can be rewritten as a retry-in-progress.
             let push_pull_retry_plan =
                 actions_emit_effects::push_pull_retry_plan(state, repo_id, &command, &result);
-            let mut effects =
-                actions_emit_effects::repo_command_finished(state, repo_id, command.clone(), result);
+            let mut effects = actions_emit_effects::repo_command_finished(
+                state,
+                repo_id,
+                command.clone(),
+                result,
+            );
             effects.extend(actions_emit_effects::apply_push_pull_retry(
                 repos,
                 state,
@@ -2623,11 +2615,11 @@ fn reduce_inner(
 mod nav_history_tests {
     use super::*;
     use crate::model::{AppState, RepoState};
+    use std::sync::atomic::AtomicU64;
     use worktree_core::domain::{CommitId, DiffArea, DiffTarget, RepoSpec};
     use worktree_core::process::{
         GitExecutableAvailability, GitExecutablePreference, GitRuntimeState,
     };
-    use std::sync::atomic::AtomicU64;
 
     fn available_state_with_repo(repo_id: RepoId) -> AppState {
         let mut state = AppState::default();
@@ -3208,13 +3200,13 @@ mod comparison_tests {
     use super::*;
     use crate::model::{AppState, Loadable, RepoState};
     use crate::msg::{CommitSelectMode, Effect};
+    use std::sync::atomic::AtomicU64;
     use worktree_core::domain::{
         Commit, CommitFileChange, CommitId, FileStatusKind, LogPage, RepoSpec,
     };
     use worktree_core::process::{
         GitExecutableAvailability, GitExecutablePreference, GitRuntimeState,
     };
-    use std::sync::atomic::AtomicU64;
 
     fn commit(id: &str, parent: &str) -> Commit {
         Commit {

@@ -1,12 +1,3 @@
-use worktree_core::conflict_session::{ConflictPayload, ConflictResolverStrategy};
-use worktree_core::domain::{
-    CommitId, DiffArea, DiffLineKind, DiffPreviewTextSide, DiffTarget, FileConflictKind,
-    FileDiffText, FileDiffTextSource, FileStatusKind,
-};
-use worktree_core::error::{Error, ErrorKind, GitFailureId};
-use worktree_core::services::GitBackend;
-use worktree_core::services::{ConflictSide, InteractiveRebaseAction, InteractiveRebaseEntry};
-use worktree_git_gix::GixBackend;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -21,6 +12,16 @@ use std::{
     fs::Permissions,
     os::unix::fs::{PermissionsExt, symlink},
 };
+use worktree_core::conflict_session::{ConflictPayload, ConflictResolverStrategy};
+use worktree_core::domain::{
+    CommitId, DiffArea, DiffLineKind, DiffPreviewTextSide, DiffTarget, FileConflictKind,
+    FileDiffText, FileDiffTextSource, FileStatusKind,
+};
+use worktree_core::error::{Error, ErrorKind, GitFailureId};
+use worktree_core::external_merge_tool::ExternalMergeToolSelection;
+use worktree_core::services::GitBackend;
+use worktree_core::services::{ConflictSide, InteractiveRebaseAction, InteractiveRebaseEntry};
+use worktree_git_gix::GixBackend;
 
 fn read_file_diff_text_source(source: Option<&FileDiffTextSource>) -> Option<String> {
     source.map(|source| {
@@ -3420,7 +3421,12 @@ fn launch_mergetool_trust_exit_false_detects_same_size_content_change() {
 
     let backend = GixBackend;
     let opened = backend.open(repo).unwrap();
-    let result = opened.launch_mergetool(Path::new("a.txt")).unwrap();
+    let result = opened
+        .launch_mergetool(
+            Path::new("a.txt"),
+            &ExternalMergeToolSelection::FromGitConfig,
+        )
+        .unwrap();
     assert!(result.success);
     assert_eq!(result.tool_name, "fake");
     assert_eq!(result.output.exit_code, Some(1));
@@ -3461,7 +3467,12 @@ fn launch_mergetool_reflects_config_written_after_backend_open() {
     );
     run_git(repo, &["config", "mergetool.fake.trustExitCode", "true"]);
 
-    let result = opened.launch_mergetool(Path::new("a.txt")).unwrap();
+    let result = opened
+        .launch_mergetool(
+            Path::new("a.txt"),
+            &ExternalMergeToolSelection::FromGitConfig,
+        )
+        .unwrap();
     assert!(result.success);
     assert_eq!(result.tool_name, "fake");
     assert_eq!(result.output.exit_code, Some(0));
@@ -3502,7 +3513,12 @@ fn launch_mergetool_trust_exit_false_requires_content_change() {
 
     let backend = GixBackend;
     let opened = backend.open(repo).unwrap();
-    let result = opened.launch_mergetool(Path::new("a.txt")).unwrap();
+    let result = opened
+        .launch_mergetool(
+            Path::new("a.txt"),
+            &ExternalMergeToolSelection::FromGitConfig,
+        )
+        .unwrap();
     assert!(!result.success);
     assert_eq!(result.tool_name, "fake");
     assert_eq!(result.output.exit_code, Some(0));
@@ -3543,7 +3559,12 @@ fn launch_mergetool_trust_exit_false_detects_deleted_output_change() {
 
     let backend = GixBackend;
     let opened = backend.open(repo).unwrap();
-    let result = opened.launch_mergetool(Path::new("a.txt")).unwrap();
+    let result = opened
+        .launch_mergetool(
+            Path::new("a.txt"),
+            &ExternalMergeToolSelection::FromGitConfig,
+        )
+        .unwrap();
     assert!(result.success);
     assert_eq!(result.tool_name, "fake");
     assert_eq!(result.output.exit_code, Some(1));
@@ -3571,6 +3592,222 @@ fn launch_mergetool_trust_exit_false_detects_deleted_output_change() {
 }
 
 #[test]
+fn launch_mergetool_from_git_config_preference_keeps_existing_behavior() {
+    if !require_git_shell_for_status_integration_tests() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path();
+    setup_both_modified_text_conflict(repo, "a.txt", "ours\n", "theirs\n");
+
+    run_git(repo, &["config", "merge.tool", "fake"]);
+    set_repo_local_mergetool_cmd_with_consent(
+        repo,
+        "fake",
+        cmd_copy_remote_to_merged_and_exit_success(),
+    );
+    run_git(repo, &["config", "mergetool.fake.trustExitCode", "true"]);
+
+    let backend = GixBackend;
+    let opened = backend.open(repo).unwrap();
+    let result = opened
+        .launch_mergetool(
+            Path::new("a.txt"),
+            &ExternalMergeToolSelection::FromGitConfig,
+        )
+        .unwrap();
+    assert!(result.success);
+    assert_eq!(result.tool_name, "fake");
+    assert_eq!(
+        result.merged_contents.as_deref(),
+        Some("theirs\n".as_bytes())
+    );
+}
+
+#[test]
+fn launch_mergetool_builtin_preference_overrides_merge_tool_config() {
+    if !require_git_shell_for_status_integration_tests() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path();
+    setup_both_modified_text_conflict(repo, "a.txt", "ours\n", "theirs\n");
+
+    // `merge.tool` points at a tool with no command; the Builtin preference
+    // must win over it.
+    run_git(repo, &["config", "merge.tool", "unconfigured-tool"]);
+    run_git(repo, &["config", "merge.tool2", "unused"]);
+    set_repo_local_mergetool_cmd_with_consent(
+        repo,
+        "fake",
+        cmd_copy_remote_to_merged_and_exit_success(),
+    );
+    run_git(repo, &["config", "mergetool.fake.trustExitCode", "true"]);
+
+    let backend = GixBackend;
+    let opened = backend.open(repo).unwrap();
+    let result = opened
+        .launch_mergetool(
+            Path::new("a.txt"),
+            &ExternalMergeToolSelection::Builtin {
+                id: "fake".to_string(),
+            },
+        )
+        .unwrap();
+    assert!(result.success);
+    assert_eq!(result.tool_name, "fake");
+    assert_eq!(
+        result.merged_contents.as_deref(),
+        Some("theirs\n".as_bytes())
+    );
+    assert_eq!(fs::read_to_string(repo.join("a.txt")).unwrap(), "theirs\n");
+}
+
+#[test]
+fn launch_mergetool_custom_preference_bypasses_git_config() {
+    if !require_git_shell_for_status_integration_tests() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path();
+    setup_both_modified_text_conflict(repo, "a.txt", "ours\n", "theirs\n");
+
+    // No merge.tool, no mergetool.* keys at all — the preference alone drives
+    // the launch, without touching git config.
+    let backend = GixBackend;
+    let opened = backend.open(repo).unwrap();
+    let result = opened
+        .launch_mergetool(
+            Path::new("a.txt"),
+            &ExternalMergeToolSelection::Custom {
+                command: cmd_copy_remote_to_merged_and_exit_success().to_string(),
+                trust_exit_code: true,
+            },
+        )
+        .unwrap();
+    assert!(result.success);
+    assert_eq!(result.tool_name, "worktree-custom");
+    assert_eq!(result.output.exit_code, Some(0));
+    assert_eq!(
+        result.merged_contents.as_deref(),
+        Some("theirs\n".as_bytes())
+    );
+    assert_eq!(fs::read_to_string(repo.join("a.txt")).unwrap(), "theirs\n");
+
+    let status = opened.status().unwrap();
+    assert!(
+        status
+            .staged
+            .iter()
+            .any(|e| e.path == Path::new("a.txt") && e.kind == FileStatusKind::Modified),
+        "expected custom-preference mergetool run to stage the resolution, got {status:?}"
+    );
+}
+
+#[test]
+fn launch_mergetool_custom_preference_empty_command_errors() {
+    if !require_git_shell_for_status_integration_tests() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path();
+    setup_both_modified_text_conflict(repo, "a.txt", "ours\n", "theirs\n");
+
+    let backend = GixBackend;
+    let opened = backend.open(repo).unwrap();
+    let err = opened
+        .launch_mergetool(
+            Path::new("a.txt"),
+            &ExternalMergeToolSelection::Custom {
+                command: "   ".to_string(),
+                trust_exit_code: true,
+            },
+        )
+        .expect_err("empty custom command must be rejected");
+
+    match err.kind() {
+        ErrorKind::Backend(msg) => {
+            assert!(
+                msg.contains("Custom merge command is empty"),
+                "unexpected backend error: {msg}"
+            );
+        }
+        other => panic!("expected Backend error, got {other:?}"),
+    }
+}
+
+#[test]
+fn launch_mergetool_custom_preference_trust_exit_code_false_requires_change() {
+    if !require_git_shell_for_status_integration_tests() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path();
+    setup_both_modified_text_conflict(repo, "a.txt", "ours\n", "theirs\n");
+
+    let backend = GixBackend;
+    let opened = backend.open(repo).unwrap();
+    let result = opened
+        .launch_mergetool(
+            Path::new("a.txt"),
+            &ExternalMergeToolSelection::Custom {
+                command: cmd_exit_success().to_string(),
+                trust_exit_code: false,
+            },
+        )
+        .unwrap();
+    assert!(
+        !result.success,
+        "exit 0 without an output change must not count as resolved"
+    );
+    assert_eq!(result.tool_name, "worktree-custom");
+    assert_eq!(result.output.exit_code, Some(0));
+    assert!(result.merged_contents.is_none());
+
+    let status = opened.status().unwrap();
+    assert!(
+        status.staged.iter().all(|e| e.path != Path::new("a.txt")),
+        "unexpected staged resolution when the custom command changed nothing: {status:?}"
+    );
+}
+
+#[test]
+fn launch_mergetool_builtin_preference_still_gates_repo_local_cmd() {
+    if !require_git_shell_for_status_integration_tests() {
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path();
+    setup_both_modified_text_conflict(repo, "a.txt", "ours\n", "theirs\n");
+
+    // Repo-local cmd WITHOUT the consent key: the Builtin preference forces
+    // the tool name but must not weaken the repository-local command gate.
+    run_git(repo, &["config", "merge.tool", "other"]);
+    run_git(repo, &["config", "mergetool.fake.cmd", "echo forbidden"]);
+
+    let backend = GixBackend;
+    let opened = backend.open(repo).unwrap();
+    let err = opened
+        .launch_mergetool(
+            Path::new("a.txt"),
+            &ExternalMergeToolSelection::Builtin {
+                id: "fake".to_string(),
+            },
+        )
+        .expect_err("repo-local cmd must stay gated under a Builtin preference");
+
+    match err.kind() {
+        ErrorKind::Backend(msg) => {
+            assert!(
+                msg.contains("Refusing to execute repository-local mergetool command"),
+                "unexpected backend error: {msg}"
+            );
+        }
+        other => panic!("expected Backend error, got {other:?}"),
+    }
+}
+
+#[test]
 fn launch_mergetool_rejects_unresolved_marker_output() {
     if !require_git_shell_for_status_integration_tests() {
         return;
@@ -3590,7 +3827,10 @@ fn launch_mergetool_rejects_unresolved_marker_output() {
     let backend = GixBackend;
     let opened = backend.open(repo).unwrap();
     let err = opened
-        .launch_mergetool(Path::new("a.txt"))
+        .launch_mergetool(
+            Path::new("a.txt"),
+            &ExternalMergeToolSelection::FromGitConfig,
+        )
         .expect_err("mergetool should fail when merged output still has markers");
 
     match err.kind() {
@@ -3649,7 +3889,9 @@ fn launch_mergetool_custom_cmd_supports_braced_env_variables() {
     let backend = GixBackend;
     let opened = backend.open(repo).unwrap();
     let path = Path::new(conflicted_path);
-    let result = opened.launch_mergetool(path).unwrap();
+    let result = opened
+        .launch_mergetool(path, &ExternalMergeToolSelection::FromGitConfig)
+        .unwrap();
     assert!(
         result.success,
         "expected braced variable expansion to succeed, got {result:?}"
@@ -3700,7 +3942,9 @@ fn launch_mergetool_custom_cmd_supports_cmd_percent_env_variables() {
     let backend = GixBackend;
     let opened = backend.open(repo).unwrap();
     let path = Path::new(conflicted_path);
-    let result = opened.launch_mergetool(path).unwrap();
+    let result = opened
+        .launch_mergetool(path, &ExternalMergeToolSelection::FromGitConfig)
+        .unwrap();
     assert!(result.success, "{result:?}");
     assert_eq!(result.tool_name, "fake");
     assert_eq!(result.output.exit_code, Some(0));
@@ -3731,7 +3975,9 @@ fn launch_mergetool_custom_cmd_supports_unicode_conflicted_path() {
     let backend = GixBackend;
     let opened = backend.open(repo).unwrap();
     let path = Path::new(conflicted_path);
-    let result = opened.launch_mergetool(path).unwrap();
+    let result = opened
+        .launch_mergetool(path, &ExternalMergeToolSelection::FromGitConfig)
+        .unwrap();
     assert!(
         result.success,
         "expected unicode conflicted path to resolve, got {result:?}"
@@ -3779,7 +4025,12 @@ fn launch_mergetool_prefers_merge_guitool_when_gui_default_true() {
 
     let backend = GixBackend;
     let opened = backend.open(repo).unwrap();
-    let result = opened.launch_mergetool(Path::new("a.txt")).unwrap();
+    let result = opened
+        .launch_mergetool(
+            Path::new("a.txt"),
+            &ExternalMergeToolSelection::FromGitConfig,
+        )
+        .unwrap();
     assert!(result.success);
     assert_eq!(result.tool_name, "gui");
     assert_eq!(result.merged_contents.as_deref(), Some("gui\n".as_bytes()));
@@ -3817,7 +4068,12 @@ fn launch_mergetool_uses_tool_path_override_without_custom_cmd() {
 
     let backend = GixBackend;
     let opened = backend.open(repo).unwrap();
-    let result = opened.launch_mergetool(Path::new("a.txt")).unwrap();
+    let result = opened
+        .launch_mergetool(
+            Path::new("a.txt"),
+            &ExternalMergeToolSelection::FromGitConfig,
+        )
+        .unwrap();
     assert!(result.success);
     assert_eq!(result.tool_name, "fake");
     assert_eq!(
@@ -3870,7 +4126,12 @@ fn launch_mergetool_builtin_tool_gets_merge_mode_arguments() {
 
     let backend = GixBackend;
     let opened = backend.open(repo).unwrap();
-    let result = opened.launch_mergetool(Path::new("a.txt")).unwrap();
+    let result = opened
+        .launch_mergetool(
+            Path::new("a.txt"),
+            &ExternalMergeToolSelection::FromGitConfig,
+        )
+        .unwrap();
 
     assert!(
         result.success,
@@ -3924,7 +4185,12 @@ fn launch_mergetool_rejects_builtin_tool_that_cannot_merge() {
 
     let backend = GixBackend;
     let opened = backend.open(repo).unwrap();
-    let err = opened.launch_mergetool(Path::new("a.txt")).unwrap_err();
+    let err = opened
+        .launch_mergetool(
+            Path::new("a.txt"),
+            &ExternalMergeToolSelection::FromGitConfig,
+        )
+        .unwrap_err();
 
     assert!(
         format!("{err}").contains("cannot merge"),
@@ -3970,7 +4236,12 @@ fn launch_mergetool_prefers_custom_cmd_over_tool_path_override() {
 
     let backend = GixBackend;
     let opened = backend.open(repo).unwrap();
-    let result = opened.launch_mergetool(Path::new("a.txt")).unwrap();
+    let result = opened
+        .launch_mergetool(
+            Path::new("a.txt"),
+            &ExternalMergeToolSelection::FromGitConfig,
+        )
+        .unwrap();
     assert!(result.success);
     assert_eq!(result.tool_name, "fake");
     assert_eq!(result.output.exit_code, Some(0));
@@ -3998,7 +4269,12 @@ fn launch_mergetool_write_to_temp_true_uses_temp_stage_paths() {
 
     let backend = GixBackend;
     let opened = backend.open(repo).unwrap();
-    let result = opened.launch_mergetool(Path::new("a.txt")).unwrap();
+    let result = opened
+        .launch_mergetool(
+            Path::new("a.txt"),
+            &ExternalMergeToolSelection::FromGitConfig,
+        )
+        .unwrap();
     assert!(result.success);
 
     let vars = read_stage_env_vars(&repo.join("a.txt.env"));
@@ -4041,7 +4317,12 @@ fn launch_mergetool_write_to_temp_false_uses_workdir_prefixed_stage_paths() {
 
     let backend = GixBackend;
     let opened = backend.open(repo).unwrap();
-    let result = opened.launch_mergetool(Path::new("docs/note.txt")).unwrap();
+    let result = opened
+        .launch_mergetool(
+            Path::new("docs/note.txt"),
+            &ExternalMergeToolSelection::FromGitConfig,
+        )
+        .unwrap();
     assert!(result.success, "{result:?}");
 
     let vars = read_stage_env_vars(&repo.join("docs/note.txt.env"));
@@ -4083,7 +4364,12 @@ fn launch_mergetool_write_to_temp_false_keep_temporaries_preserves_stage_files()
 
     let backend = GixBackend;
     let opened = backend.open(repo).unwrap();
-    let result = opened.launch_mergetool(Path::new("docs/note.txt")).unwrap();
+    let result = opened
+        .launch_mergetool(
+            Path::new("docs/note.txt"),
+            &ExternalMergeToolSelection::FromGitConfig,
+        )
+        .unwrap();
     assert!(result.success, "{result:?}");
 
     let vars = read_stage_env_vars(&repo.join("docs/note.txt.env"));
@@ -4123,7 +4409,12 @@ fn launch_mergetool_write_to_temp_false_keep_temporaries_preserves_stage_files_o
 
     let backend = GixBackend;
     let opened = backend.open(repo).unwrap();
-    let result = opened.launch_mergetool(Path::new("docs/note.txt")).unwrap();
+    let result = opened
+        .launch_mergetool(
+            Path::new("docs/note.txt"),
+            &ExternalMergeToolSelection::FromGitConfig,
+        )
+        .unwrap();
     assert!(
         !result.success,
         "tool exit failure should be reported as unresolved"
@@ -4162,7 +4453,12 @@ fn launch_mergetool_write_to_temp_true_keep_temporaries_preserves_stage_files() 
 
     let backend = GixBackend;
     let opened = backend.open(repo).unwrap();
-    let result = opened.launch_mergetool(Path::new("a.txt")).unwrap();
+    let result = opened
+        .launch_mergetool(
+            Path::new("a.txt"),
+            &ExternalMergeToolSelection::FromGitConfig,
+        )
+        .unwrap();
     assert!(result.success, "{result:?}");
 
     let vars = read_stage_env_vars(&repo.join("a.txt.env"));
@@ -4218,7 +4514,12 @@ fn launch_mergetool_write_to_temp_true_keep_temporaries_preserves_stage_files_on
 
     let backend = GixBackend;
     let opened = backend.open(repo).unwrap();
-    let result = opened.launch_mergetool(Path::new("a.txt")).unwrap();
+    let result = opened
+        .launch_mergetool(
+            Path::new("a.txt"),
+            &ExternalMergeToolSelection::FromGitConfig,
+        )
+        .unwrap();
     assert!(
         !result.success,
         "tool exit failure should be reported as unresolved"
@@ -4271,7 +4572,12 @@ fn launch_mergetool_no_base_conflict_passes_empty_base_file() {
 
     let backend = GixBackend;
     let opened = backend.open(repo).unwrap();
-    let result = opened.launch_mergetool(Path::new("new.txt")).unwrap();
+    let result = opened
+        .launch_mergetool(
+            Path::new("new.txt"),
+            &ExternalMergeToolSelection::FromGitConfig,
+        )
+        .unwrap();
     assert!(result.success, "{result:?}");
     assert_eq!(
         fs::read_to_string(repo.join("new.txt.base-size")).unwrap(),
@@ -10205,7 +10511,9 @@ fn remote_ssh_key_set_and_clear_round_trip() {
 
     // Clearing a configured key removes the config entry. `git config --get`
     // exits 1 when unset, which run_git_output reports as failure.
-    opened.set_remote_ssh_key_with_output("origin", None).unwrap();
+    opened
+        .set_remote_ssh_key_with_output("origin", None)
+        .unwrap();
     let cleared = git_command()
         .arg("-C")
         .arg(repo)
@@ -10219,7 +10527,9 @@ fn remote_ssh_key_set_and_clear_round_trip() {
     );
 
     // Clearing again when already unset is a no-op success.
-    opened.set_remote_ssh_key_with_output("origin", None).unwrap();
+    opened
+        .set_remote_ssh_key_with_output("origin", None)
+        .unwrap();
 }
 
 #[test]
@@ -10284,7 +10594,9 @@ fn fetch_and_push_succeed_with_remote_ssh_key_configured() {
         .unwrap();
 
     opened.fetch_all_with_output_prune(false).unwrap();
-    opened.push_set_upstream_with_output("origin", "main").unwrap();
+    opened
+        .push_set_upstream_with_output("origin", "main")
+        .unwrap();
     let remote_head = run_git_output(&origin, &["rev-parse", "HEAD"]);
     let local_head = run_git_output(&repo, &["rev-parse", "HEAD"]);
     assert_eq!(remote_head, local_head);

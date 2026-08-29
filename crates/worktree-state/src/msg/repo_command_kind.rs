@@ -1,9 +1,10 @@
+use std::path::PathBuf;
 use worktree_core::domain::CommitId;
+use worktree_core::external_merge_tool::ExternalMergeToolSelection;
 use worktree_core::services::{
     BisectVerdict, ConflictSide, ForcePushLease, InteractiveRebaseEntry, MergeRequestPushOptions,
     PullMode, RemoteUrlKind, ResetMode, SafePushAfterCommitTarget, SubmoduleTrustTarget,
 };
-use std::path::PathBuf;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RepoCommandKind {
@@ -150,6 +151,7 @@ pub enum RepoCommandKind {
     },
     LaunchMergetool {
         path: PathBuf,
+        preference: ExternalMergeToolSelection,
     },
     SaveWorktreeFile {
         path: PathBuf,

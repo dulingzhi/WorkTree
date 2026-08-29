@@ -1,26 +1,26 @@
 use crate::util::git_workdir_cmd_for as util_git_workdir_cmd_for;
-use worktree_core::conflict_session::ConflictSession;
-use worktree_core::domain::{
-    Branch, Commit, CommitDetails, CommitFileChange, CommitId, ContributorCommit, Diff, DiffArea,
-    DiffPreviewTextSide,
-    DiffTarget, FileDiffImage, FileDiffText, FileEntry, HistoryMode, LfsPointerChange, LogCursor,
-    LogPage, RecentCommitMessage, RefMetadata, ReflogEntry, Remote, RemoteBranch, RemoteTag,
-    RepoSpec,
-    RepoStatus, StashEntry, Submodule, SubmoduleDiffSummary, Tag, UpstreamDivergence, Worktree,
-};
-use worktree_core::error::{Error, ErrorKind};
-use worktree_core::git_ops_trace::{self, GitOpTraceKind};
-use worktree_core::services::{
-    BisectState, BisectVerdict, BlameLine, CancellationToken, CommandOutput,
-    CommitOperationOutcome, ConflictFileStages, ConflictSide, ForcePushLease, GitRepository,
-    InteractiveRebaseEntry, MergetoolResult, MergeRequestPushOptions, PullMode, RemoteUrlKind,
-    ResetMode, Result, SafePushAfterCommitContext, SafePushAfterCommitDecision,
-    SafePushAfterCommitTarget, SequencerState, SubmoduleTrustDecision, SubmoduleTrustTarget,
-};
 use rustc_hash::FxHashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
+use worktree_core::conflict_session::ConflictSession;
+use worktree_core::domain::{
+    Branch, Commit, CommitDetails, CommitFileChange, CommitId, ContributorCommit, Diff, DiffArea,
+    DiffPreviewTextSide, DiffTarget, FileDiffImage, FileDiffText, FileEntry, HistoryMode,
+    LfsPointerChange, LogCursor, LogPage, RecentCommitMessage, RefMetadata, ReflogEntry, Remote,
+    RemoteBranch, RemoteTag, RepoSpec, RepoStatus, StashEntry, Submodule, SubmoduleDiffSummary,
+    Tag, UpstreamDivergence, Worktree,
+};
+use worktree_core::error::{Error, ErrorKind};
+use worktree_core::external_merge_tool::ExternalMergeToolSelection;
+use worktree_core::git_ops_trace::{self, GitOpTraceKind};
+use worktree_core::services::{
+    BisectState, BisectVerdict, BlameLine, CancellationToken, CommandOutput,
+    CommitOperationOutcome, ConflictFileStages, ConflictSide, ForcePushLease, GitRepository,
+    InteractiveRebaseEntry, MergeRequestPushOptions, MergetoolResult, PullMode, RemoteUrlKind,
+    ResetMode, Result, SafePushAfterCommitContext, SafePushAfterCommitDecision,
+    SafePushAfterCommitTarget, SequencerState, SubmoduleTrustDecision, SubmoduleTrustTarget,
+};
 
 /// Convert a gix ObjectId to an `Arc<str>` hex string without intermediate String allocation.
 /// Uses a stack buffer + `hex_to_buf` → `Arc::from(&str)` (one heap allocation instead of two).
@@ -42,6 +42,7 @@ pub(super) fn bstr_to_arc_str(bytes: &[u8]) -> Arc<str> {
 }
 
 mod archive;
+mod assume_unchanged;
 mod blame;
 mod conflict_stages;
 mod diff;
@@ -49,7 +50,6 @@ mod discard;
 mod file_browser;
 mod git_ops;
 mod history;
-mod assume_unchanged;
 mod lfs;
 mod log;
 mod mergetool;
@@ -321,7 +321,13 @@ impl GitRepository for GixRepo {
     ) -> Result<LogPage> {
         let _scope = git_ops_trace::scope(GitOpTraceKind::LogWalk);
         self.log_history_mode_refs_page_streaming_impl(
-            mode, refs, author, limit, cursor, cancellation, on_chunk,
+            mode,
+            refs,
+            author,
+            limit,
+            cursor,
+            cancellation,
+            on_chunk,
         )
     }
 
@@ -631,10 +637,7 @@ impl GitRepository for GixRepo {
         self.checkout_remote_branch_impl(remote, branch, local_branch)
     }
 
-    fn lfs_new_side_smudged(
-        &self,
-        target: &DiffTarget,
-    ) -> Result<Option<Vec<u8>>> {
+    fn lfs_new_side_smudged(&self, target: &DiffTarget) -> Result<Option<Vec<u8>>> {
         self.lfs_new_side_smudged_impl(target)
     }
 
@@ -1035,8 +1038,12 @@ impl GitRepository for GixRepo {
         self.checkout_conflict_base_impl(path)
     }
 
-    fn launch_mergetool(&self, path: &Path) -> Result<MergetoolResult> {
-        self.launch_mergetool_impl(path)
+    fn launch_mergetool(
+        &self,
+        path: &Path,
+        preference: &ExternalMergeToolSelection,
+    ) -> Result<MergetoolResult> {
+        self.launch_mergetool_impl(path, preference)
     }
 
     fn export_patch_with_output(&self, commit_id: &CommitId, dest: &Path) -> Result<CommandOutput> {

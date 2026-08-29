@@ -1,12 +1,13 @@
 use crate::model::{ConflictFileLoadMode, RepoId};
+use std::path::PathBuf;
 use worktree_core::auth::StagedGitAuth;
 use worktree_core::domain::*;
+use worktree_core::external_merge_tool::ExternalMergeToolSelection;
 use worktree_core::services::{
     BisectVerdict, ConflictSide, ForcePushLease, InteractiveRebaseEntry, MergeRequestPushOptions,
-    PullMode, RemoteUrlKind, ResetMode,
-    SafePushAfterCommitContext, SafePushAfterCommitTarget, SubmoduleTrustTarget,
+    PullMode, RemoteUrlKind, ResetMode, SafePushAfterCommitContext, SafePushAfterCommitTarget,
+    SubmoduleTrustTarget,
 };
-use std::path::PathBuf;
 
 use super::RepoPathList;
 
@@ -700,6 +701,7 @@ pub enum Effect {
     LaunchMergetool {
         repo_id: RepoId,
         path: PathBuf,
+        preference: ExternalMergeToolSelection,
     },
     Stash {
         repo_id: RepoId,

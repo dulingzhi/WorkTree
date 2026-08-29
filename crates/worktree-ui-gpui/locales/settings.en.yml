@@ -15,6 +15,7 @@ settings:
     tags: Tags
     git_executable: Git executable
     gpg_signing: GPG signing
+    merge_tool: Merge tool
     environment: Environment
     links: Links
     no_match: No matching settings
@@ -174,6 +175,33 @@ settings:
     apply: Apply
     save_failed: Save failed
     scope_note: Reads and writes git's global config (commit.gpgsign, user.signingkey, gpg.program). Commits created here follow it automatically; signed commits show a check mark in history.
+  merge_tool:
+    row_label: External merge tool
+    from_git_config: From git config (merge.tool)
+    custom: Custom command
+    hint: Used by "Open external mergetool" on conflicted files. Built-in tools keep honoring their git config overrides (mergetool.<tool>.path/.cmd/.trustExitCode).
+    custom_command: Custom command
+    custom_command_placeholder: "code --wait --merge $REMOTE $LOCAL $BASE $MERGED"
+    custom_hint: Runs in a shell with $BASE, $LOCAL, $REMOTE and $MERGED pointing at the conflict files.
+    trust_exit_code: Trust exit code
+    trust_exit_code_hint: Off means a run only counts as resolved when the merged file actually changed.
+    checking: Checking PATH…
+    available: "Found on PATH: %{program}"
+    missing: "Not found on PATH: %{programs}"
+    unknown_preset: Unknown tool id — falling back to git config behavior for it.
+    scope_note: Stored in WorkTree's own settings, never in git config. "From git config" keeps whatever merge.tool / mergetool.<tool>.* already say.
+    tools:
+      kdiff3: KDiff3
+      meld: Meld
+      bc: Beyond Compare
+      p4merge: P4Merge
+      vscode: VS Code
+      smerge: Sublime Merge
+      araxis: Araxis Merge
+      winmerge: WinMerge
+      tortoisemerge: TortoiseGit Merge
+      opendiff: FileMerge (opendiff)
+      vimdiff: vimdiff
   git:
     detected_runtime: Detected runtime
     status_supported: "Git >= %{version}"

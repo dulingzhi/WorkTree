@@ -5,3 +5,5 @@
 git:
   ssh_host_verification_prompt: "SSH host verification prompt:\n"
   mergetool_command: "mergetool (%{tool})"
+  mergetool_custom_empty: "Custom merge command is empty. Configure it in Settings > Merge tool."
+  mergetool_preset_id_empty: "The configured merge tool id is empty. Pick a tool in Settings > Merge tool."

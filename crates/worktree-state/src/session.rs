@@ -1,5 +1,4 @@
 use crate::model::{AppState, DefaultTagType, GitLogTagFetchMode, RepoId};
-use worktree_core::domain::{HistoryMode, LogScope};
 use rustc_hash::FxHashSet;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
@@ -10,6 +9,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::{env, fs, io};
+use worktree_core::domain::{HistoryMode, LogScope};
+use worktree_core::external_merge_tool::ExternalMergeToolSelection;
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct UiSession {
@@ -94,6 +95,9 @@ pub struct UiSession {
     pub default_tag_type: Option<DefaultTagType>,
     pub git_executable_path: Option<PathBuf>,
     pub external_code_editor: Option<ExternalCodeEditorSetting>,
+    /// External merge tool for the conflicted-file context menu; `None`/`FromGitConfig`
+    /// resolves the tool from git config.
+    pub external_merge_tool: Option<ExternalMergeToolSelection>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -244,6 +248,7 @@ struct UiSessionFile {
     default_tag_type: Option<DefaultTagType>,
     git_executable_path: Option<String>,
     external_code_editor: Option<ExternalCodeEditorSettingFile>,
+    external_merge_tool: Option<ExternalMergeToolSelection>,
     repo_history_modes: Option<BTreeMap<String, HistoryModeSetting>>,
     repo_history_scopes: Option<BTreeMap<String, HistoryScopeSetting>>,
     repo_history_author_filters: Option<BTreeMap<String, Option<String>>>,
@@ -379,6 +384,7 @@ pub fn load_from_path(path: &Path) -> UiSession {
             .as_deref()
             .map(path_from_storage_key),
         external_code_editor: external_code_editor_from_file(file.external_code_editor),
+        external_merge_tool: file.external_merge_tool,
     }
 }
 
@@ -834,6 +840,9 @@ pub struct UiSettings {
     pub default_tag_type: Option<DefaultTagType>,
     pub git_executable_path: Option<Option<PathBuf>>,
     pub external_code_editor: Option<Option<ExternalCodeEditorSetting>>,
+    /// `FromGitConfig` is the "unconfigured" state, so a plain `Some` write
+    /// covers every reachable value.
+    pub external_merge_tool: Option<ExternalMergeToolSelection>,
 }
 
 pub fn persist_ui_settings(settings: UiSettings) -> io::Result<()> {
@@ -1032,6 +1041,9 @@ pub fn persist_ui_settings_to_path(settings: UiSettings, path: &Path) -> io::Res
         }
         if let Some(editor) = settings.external_code_editor {
             file.external_code_editor = editor.map(external_code_editor_to_file);
+        }
+        if let Some(merge_tool) = settings.external_merge_tool {
+            file.external_merge_tool = Some(merge_tool);
         }
 
         persist_to_path(path, &file)
@@ -2188,7 +2200,9 @@ mod tests {
 
         let loaded = load_repo_session_preferences_from_path(&session_file);
         assert_eq!(
-            loaded.repo_history_ref_filters.get(&path_storage_key(&repo_a)),
+            loaded
+                .repo_history_ref_filters
+                .get(&path_storage_key(&repo_a)),
             Some(&vec![
                 "refs/heads/dev".to_string(),
                 "refs/tags/v1".to_string()
@@ -2322,6 +2336,92 @@ mod tests {
         assert_eq!(
             load_from_path(&session_file).ai_commit_source,
             Some("claude-code".to_string())
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn persist_ui_settings_round_trips_external_merge_tool() {
+        let dir = env::temp_dir().join(format!(
+            "worktree-session-merge-tool-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        let _ = fs::create_dir_all(&dir);
+        let session_file = dir.join("session.json");
+
+        // Default (unset / pre-setting session file) resolves from git config.
+        assert_eq!(load_from_path(&session_file).external_merge_tool, None);
+
+        persist_ui_settings_to_path(
+            UiSettings {
+                external_merge_tool: Some(ExternalMergeToolSelection::Builtin {
+                    id: "vscode".to_string(),
+                }),
+                ..UiSettings::default()
+            },
+            &session_file,
+        )
+        .expect("persist builtin merge tool");
+        assert_eq!(
+            load_from_path(&session_file).external_merge_tool,
+            Some(ExternalMergeToolSelection::Builtin {
+                id: "vscode".to_string()
+            })
+        );
+
+        // A later settings write that doesn't touch the field preserves it.
+        persist_ui_settings_to_path(
+            UiSettings {
+                theme_mode: Some("dark".to_string()),
+                ..UiSettings::default()
+            },
+            &session_file,
+        )
+        .expect("persist theme");
+        assert_eq!(
+            load_from_path(&session_file).external_merge_tool,
+            Some(ExternalMergeToolSelection::Builtin {
+                id: "vscode".to_string()
+            })
+        );
+
+        persist_ui_settings_to_path(
+            UiSettings {
+                external_merge_tool: Some(ExternalMergeToolSelection::Custom {
+                    command: "code --wait --merge $REMOTE $LOCAL $BASE $MERGED".to_string(),
+                    trust_exit_code: true,
+                }),
+                ..UiSettings::default()
+            },
+            &session_file,
+        )
+        .expect("persist custom merge tool");
+        assert_eq!(
+            load_from_path(&session_file).external_merge_tool,
+            Some(ExternalMergeToolSelection::Custom {
+                command: "code --wait --merge $REMOTE $LOCAL $BASE $MERGED".to_string(),
+                trust_exit_code: true,
+            })
+        );
+
+        // A session file from before this setting existed loads without the field.
+        let legacy_dir = dir.join("legacy");
+        let _ = fs::create_dir_all(&legacy_dir);
+        let legacy_file = legacy_dir.join("session.json");
+        fs::write(
+            &legacy_file,
+            r#"{"version":3,"open_repos":[],"theme_mode":"dark"}"#,
+        )
+        .expect("write legacy session");
+        assert_eq!(load_from_path(&legacy_file).external_merge_tool, None);
+        assert_eq!(
+            load_from_path(&legacy_file).theme_mode,
+            Some("dark".to_string())
         );
 
         let _ = fs::remove_dir_all(&dir);

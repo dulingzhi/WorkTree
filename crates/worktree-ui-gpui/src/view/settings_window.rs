@@ -14,6 +14,15 @@ use gpui::{
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
+use worktree_core::domain::HistoryMode;
+use worktree_core::external_merge_tool::{
+    ExternalMergeToolSelection, MERGE_TOOL_PRESETS as MERGE_TOOL_PRESET_TABLE,
+};
+use worktree_core::process::{
+    GitExecutablePreference, GitRuntimeState, install_git_executable_path, refresh_git_runtime,
+};
+use worktree_state::model::{DefaultTagType, GitLogTagFetchMode};
+use worktree_state::session::ExternalCodeEditorSetting;
 
 const SETTINGS_WINDOW_MIN_WIDTH_PX: f32 = 620.0;
 const SETTINGS_WINDOW_MIN_HEIGHT_PX: f32 = 460.0;
@@ -194,6 +203,7 @@ enum SettingsSection {
     GitLogDefaultMode,
     GitLogColumns,
     GitLogTagFetch,
+    MergeTool,
 }
 
 impl SettingsSection {
@@ -213,6 +223,7 @@ impl SettingsSection {
             | Self::DateFormat
             | Self::Timezone => SettingsCategory::General,
             Self::TerminalExternal | Self::TerminalActionBar => SettingsCategory::Terminal,
+            Self::MergeTool => SettingsCategory::MergeTool,
             Self::ChangeTracking => SettingsCategory::ChangeTracking,
             Self::DiffContentMode | Self::Diff | Self::DiffViewMode => SettingsCategory::Diff,
             Self::GitLogDefaultMode | Self::GitLogColumns | Self::GitLogTagFetch => {
@@ -234,6 +245,49 @@ enum AiCommitModels {
     Error(String),
 }
 
+/// What the merge tool page shows for the selected built-in preset: the first
+/// program found on `PATH`, or the candidates that were all missing. Computed
+/// in the background so a render never touches the filesystem.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum MergeToolAvailability {
+    Available(String),
+    Missing(Vec<String>),
+}
+
+/// One selectable row of the merge tool dropdown: the git-config default, a
+/// built-in preset, or the custom command.
+enum MergeToolOption {
+    FromGitConfig,
+    Preset(&'static worktree_core::external_merge_tool::MergeToolPreset),
+    Custom,
+}
+
+/// The dropdown rows, in display order.
+fn merge_tool_options() -> Vec<MergeToolOption> {
+    let mut options = Vec::with_capacity(2 + MERGE_TOOL_PRESET_TABLE.len());
+    options.push(MergeToolOption::FromGitConfig);
+    options.extend(MERGE_TOOL_PRESET_TABLE.iter().map(MergeToolOption::Preset));
+    options.push(MergeToolOption::Custom);
+    options
+}
+
+/// Label shown for the current selection on the collapsed summary row.
+fn merge_tool_selection_summary(selection: &ExternalMergeToolSelection) -> SharedString {
+    match selection {
+        ExternalMergeToolSelection::FromGitConfig => {
+            tr_str("settings.merge_tool.from_git_config").into()
+        }
+        // A preset id the table no longer knows (hand-edited session, older
+        // build) still deserves an honest label rather than a silent reset.
+        ExternalMergeToolSelection::Builtin { id } => {
+            worktree_core::external_merge_tool::merge_tool_preset(id)
+                .map(|preset| SharedString::from(tr_str(preset.label_key)))
+                .unwrap_or_else(|| SharedString::from(id.clone()))
+        }
+        ExternalMergeToolSelection::Custom { .. } => tr_str("settings.merge_tool.custom").into(),
+    }
+}
+
 /// A top-level settings grouping, shown as a row in the left-hand navigation.
 /// Each category maps to one of the existing settings cards.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -247,6 +301,7 @@ enum SettingsCategory {
     Tags,
     GitExecutable,
     GpgSigning,
+    MergeTool,
     Environment,
     Links,
 }
@@ -262,6 +317,7 @@ impl SettingsCategory {
         SettingsCategory::Tags,
         SettingsCategory::GitExecutable,
         SettingsCategory::GpgSigning,
+        SettingsCategory::MergeTool,
         SettingsCategory::Environment,
         SettingsCategory::Links,
     ];
@@ -277,6 +333,7 @@ impl SettingsCategory {
             Self::Tags => tr_str("settings.nav.tags"),
             Self::GitExecutable => tr_str("settings.nav.git_executable"),
             Self::GpgSigning => tr_str("settings.nav.gpg_signing"),
+            Self::MergeTool => tr_str("settings.nav.merge_tool"),
             Self::Environment => tr_str("settings.nav.environment"),
             Self::Links => tr_str("settings.nav.links"),
         }
@@ -293,6 +350,7 @@ impl SettingsCategory {
             Self::Tags => "icons/tag.svg",
             Self::GitExecutable => "icons/git_branch.svg",
             Self::GpgSigning => "icons/check.svg",
+            Self::MergeTool => "icons/git_merge.svg",
             Self::Environment => "icons/computer.svg",
             Self::Links => "icons/link.svg",
         }
@@ -309,6 +367,7 @@ impl SettingsCategory {
             Self::Tags => "settings_window_nav_tags",
             Self::GitExecutable => "settings_window_nav_git_executable",
             Self::GpgSigning => "settings_window_nav_gpg_signing",
+            Self::MergeTool => "settings_window_nav_merge_tool",
             Self::Environment => "settings_window_nav_environment",
             Self::Links => "settings_window_nav_links",
         }
@@ -341,6 +400,11 @@ impl SettingsCategory {
             Self::GpgSigning => {
                 "gpg signing commit signing sign commits key program user.signingkey \
                  gpg.program verified signature"
+            }
+            Self::MergeTool => {
+                "merge tool external mergetool conflict resolution kdiff3 meld beyond compare \
+                 p4merge vs code sublime merge araxis winmerge tortoisegit filemerge vimdiff \
+                 custom command trust exit code merge.tool"
             }
             Self::Environment => "environment build operating system app version",
             Self::Links => {
@@ -542,6 +606,13 @@ pub(crate) struct SettingsWindowView {
     ai_commit_model_input: Entity<components::TextInput>,
     ai_commit_api_key_input: Entity<components::TextInput>,
     ai_commit_endpoint_input: Entity<components::TextInput>,
+    merge_tool_selection: ExternalMergeToolSelection,
+    merge_tool_scroll: UniformListScrollHandle,
+    /// Mirrors the custom-command input even when the selection is not
+    /// `Custom`, so text typed before switching is not lost.
+    merge_tool_custom_command_draft: String,
+    merge_tool_custom_command_input: Entity<components::TextInput>,
+    merge_tool_availability: Option<MergeToolAvailability>,
     expanded_section: Option<SettingsSection>,
     hover_resize_edge: Option<ResizeEdge>,
     title_drag_state: chrome::TitleBarDragState,
@@ -554,6 +625,7 @@ pub(crate) struct SettingsWindowView {
     _ai_commit_custom_command_input_subscription: gpui::Subscription,
     _ai_commit_api_key_input_subscription: gpui::Subscription,
     _ai_commit_endpoint_input_subscription: gpui::Subscription,
+    _merge_tool_custom_command_input_subscription: gpui::Subscription,
     _appearance_subscription: gpui::Subscription,
     _search_input_subscription: gpui::Subscription,
     #[cfg(test)]
@@ -1010,6 +1082,14 @@ impl SettingsWindowView {
         let ai_commit_api_key_draft = ai_commit_current.api_key;
         let ai_commit_endpoint_draft = ai_commit_current.endpoint;
         let ai_commit_custom_command_draft = ai_commit_current.custom_command;
+        // Seeded from the session file only — construction never installs the
+        // process global so tests stay side-effect free; the setter and app
+        // startup own installation.
+        let merge_tool_selection = ui_session.external_merge_tool.clone().unwrap_or_default();
+        let merge_tool_custom_command_draft = match &merge_tool_selection {
+            ExternalMergeToolSelection::Custom { command, .. } => command.clone(),
+            _ => String::new(),
+        };
         let theme = theme_mode.resolve_theme(window.appearance());
         let runtime_info = SettingsRuntimeInfo::detect();
         let git_executable_mode =
@@ -1262,6 +1342,41 @@ impl SettingsWindowView {
                 cx.notify();
             });
 
+        let merge_tool_custom_command_input = cx.new(|cx| {
+            let mut input = components::TextInput::new(
+                components::TextInputOptions {
+                    placeholder: tr("settings.merge_tool.custom_command_placeholder"),
+                    ..Default::default()
+                },
+                window,
+                cx,
+            );
+            input.set_theme(theme, cx);
+            input.set_text(merge_tool_custom_command_draft.clone(), cx);
+            input
+        });
+        let merge_tool_custom_command_input_subscription =
+            cx.observe(&merge_tool_custom_command_input, |this, input, cx| {
+                let next = input.read(cx).text().to_string();
+                if this.merge_tool_custom_command_draft == next {
+                    return;
+                }
+                this.merge_tool_custom_command_draft = next.clone();
+                // The typed text only becomes live once Custom is selected;
+                // otherwise it is just a draft remembered for the switch.
+                let mut selection_changed = false;
+                if let ExternalMergeToolSelection::Custom { command, .. } =
+                    &mut this.merge_tool_selection
+                {
+                    *command = next;
+                    selection_changed = true;
+                }
+                if selection_changed {
+                    this.persist_merge_tool_preference(cx);
+                }
+                cx.notify();
+            });
+
         let ai_commit_model_input = cx.new(|cx| {
             let mut input = components::TextInput::new(
                 components::TextInputOptions {
@@ -1457,6 +1572,11 @@ impl SettingsWindowView {
             ai_commit_model_input,
             ai_commit_api_key_input,
             ai_commit_endpoint_input,
+            merge_tool_selection,
+            merge_tool_scroll: UniformListScrollHandle::default(),
+            merge_tool_custom_command_draft,
+            merge_tool_custom_command_input,
+            merge_tool_availability: None,
             expanded_section: None,
             hover_resize_edge: None,
             title_drag_state: chrome::TitleBarDragState::default(),
@@ -1472,6 +1592,8 @@ impl SettingsWindowView {
                 ai_commit_custom_command_input_subscription,
             _ai_commit_api_key_input_subscription: ai_commit_api_key_input_subscription,
             _ai_commit_endpoint_input_subscription: ai_commit_endpoint_input_subscription,
+            _merge_tool_custom_command_input_subscription:
+                merge_tool_custom_command_input_subscription,
             _appearance_subscription: appearance_subscription,
             _search_input_subscription: search_input_subscription,
             #[cfg(test)]
@@ -1511,6 +1633,11 @@ impl SettingsWindowView {
             && self.ai_commit_source != crate::ai_commit_sources::AiSource::Manual
         {
             self.refresh_ai_commit_availability(cx);
+        }
+        // Same for the merge tool preset: what is on PATH may have changed
+        // since the window was last open.
+        if self.expanded_section == Some(SettingsSection::MergeTool) {
+            self.refresh_merge_tool_availability(cx);
         }
         cx.notify();
     }
@@ -1672,6 +1799,7 @@ impl SettingsWindowView {
             terminal_external_args: None,
             terminal_action_bar_target: None,
             external_code_editor: None,
+            external_merge_tool: Some(self.merge_tool_selection.clone()),
         };
         self.terminal_preferences
             .apply_to_ui_settings(&mut settings);
@@ -2300,6 +2428,90 @@ impl SettingsWindowView {
             custom_command: self.ai_commit_custom_command_draft.clone(),
         });
         self.persist_preferences(cx);
+    }
+
+    /// Install the selection into the process global (so the next conflicted
+    /// right-click already uses it) and persist it to the session file.
+    fn persist_merge_tool_preference(&mut self, cx: &mut gpui::Context<Self>) {
+        worktree_core::external_merge_tool::install_external_merge_tool(
+            self.merge_tool_selection.clone(),
+        );
+        self.persist_preferences(cx);
+    }
+
+    /// Switch the external merge tool. Switching to Custom adopts the current
+    /// command draft; switching away keeps the draft for a later switch back.
+    fn set_merge_tool_selection(
+        &mut self,
+        selection: ExternalMergeToolSelection,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self.merge_tool_selection == selection {
+            return;
+        }
+        self.merge_tool_selection = selection;
+        self.persist_merge_tool_preference(cx);
+        self.refresh_merge_tool_availability(cx);
+        cx.notify();
+    }
+
+    fn set_merge_tool_trust_exit_code(&mut self, value: bool, cx: &mut gpui::Context<Self>) {
+        let ExternalMergeToolSelection::Custom {
+            trust_exit_code, ..
+        } = &mut self.merge_tool_selection
+        else {
+            return;
+        };
+        if *trust_exit_code == value {
+            return;
+        }
+        *trust_exit_code = value;
+        self.persist_merge_tool_preference(cx);
+        cx.notify();
+    }
+
+    /// Check the selected built-in preset's program on `PATH` in the
+    /// background — the lookup touches the filesystem and must not stall a
+    /// render. `None` in `merge_tool_availability` means "in flight"; the row
+    /// is only shown for built-in presets at all.
+    fn refresh_merge_tool_availability(&mut self, cx: &mut gpui::Context<Self>) {
+        use crate::ai_commit_sources::{EnvAccess, find_executable};
+
+        let ExternalMergeToolSelection::Builtin { id } = &self.merge_tool_selection else {
+            self.merge_tool_availability = None;
+            return;
+        };
+        let Some(preset) = worktree_core::external_merge_tool::merge_tool_preset(id) else {
+            self.merge_tool_availability = None;
+            return;
+        };
+        let candidates = preset.program_candidates.to_vec();
+        self.merge_tool_availability = None;
+        cx.spawn(async move |this, cx| {
+            let availability = cx
+                .background_spawn(async move {
+                    let env = EnvAccess::real();
+                    match candidates
+                        .iter()
+                        .find_map(|name| find_executable(name, &env))
+                    {
+                        Some(path) => MergeToolAvailability::Available(
+                            path.file_name()
+                                .map(|name| name.to_string_lossy().into_owned())
+                                .unwrap_or_else(|| path.display().to_string()),
+                        ),
+                        None => MergeToolAvailability::Missing(
+                            candidates.iter().map(|name| name.to_string()).collect(),
+                        ),
+                    }
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.merge_tool_availability = Some(availability);
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     /// Switch the AI provider, resetting model and endpoint to the new
@@ -3690,6 +3902,59 @@ impl SettingsWindowView {
                     this.set_ai_commit_source(source, cx);
                 }))
                 .into_any_element()
+            })
+            .collect()
+    }
+
+    fn render_merge_tool_option_rows(
+        this: &mut Self,
+        range: Range<usize>,
+        _window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> Vec<AnyElement> {
+        let theme = this.theme;
+        range
+            .filter_map(|ix| merge_tool_options().into_iter().nth(ix))
+            .map(|option| {
+                let (row_id, label, selected, next_selection) = match option {
+                    MergeToolOption::FromGitConfig => (
+                        "settings_window_merge_tool_option_from_git_config".to_string(),
+                        tr_str("settings.merge_tool.from_git_config"),
+                        matches!(
+                            this.merge_tool_selection,
+                            ExternalMergeToolSelection::FromGitConfig
+                        ),
+                        ExternalMergeToolSelection::FromGitConfig,
+                    ),
+                    MergeToolOption::Preset(preset) => (
+                        format!("settings_window_merge_tool_option_{}", preset.id),
+                        tr_str(preset.label_key),
+                        matches!(
+                            &this.merge_tool_selection,
+                            ExternalMergeToolSelection::Builtin { id } if id == preset.id
+                        ),
+                        ExternalMergeToolSelection::Builtin {
+                            id: preset.id.to_string(),
+                        },
+                    ),
+                    MergeToolOption::Custom => (
+                        "settings_window_merge_tool_option_custom".to_string(),
+                        tr_str("settings.merge_tool.custom"),
+                        matches!(
+                            this.merge_tool_selection,
+                            ExternalMergeToolSelection::Custom { .. }
+                        ),
+                        ExternalMergeToolSelection::Custom {
+                            command: this.merge_tool_custom_command_draft.clone(),
+                            trust_exit_code: false,
+                        },
+                    ),
+                };
+                this.option_row(row_id, label, None, selected, theme)
+                    .on_click(cx.listener(move |this, _e: &ClickEvent, _window, cx| {
+                        this.set_merge_tool_selection(next_selection.clone(), cx);
+                    }))
+                    .into_any_element()
             })
             .collect()
     }
@@ -6397,6 +6662,193 @@ impl Render for SettingsWindowView {
                         );
                     }
 
+                    let merge_tool_row = self
+                        .summary_row(
+                            "settings_window_merge_tool_selection",
+                            tr_str("settings.merge_tool.row_label"),
+                            merge_tool_selection_summary(&self.merge_tool_selection),
+                            self.expanded_section == Some(SettingsSection::MergeTool),
+                            theme,
+                        )
+                        .on_click(cx.listener(|this, _e: &ClickEvent, _window, cx| {
+                            this.toggle_section(SettingsSection::MergeTool, cx);
+                        }));
+
+                    let merge_tool_custom = matches!(
+                        &self.merge_tool_selection,
+                        ExternalMergeToolSelection::Custom { .. }
+                    );
+                    let merge_tool_trust_exit_code = match &self.merge_tool_selection {
+                        ExternalMergeToolSelection::Custom {
+                            trust_exit_code, ..
+                        } => *trust_exit_code,
+                        _ => false,
+                    };
+                    let merge_tool_trust_exit_code_row = self
+                        .toggle_row(
+                            "settings_window_merge_tool_trust_exit_code",
+                            tr_str("settings.merge_tool.trust_exit_code"),
+                            merge_tool_trust_exit_code,
+                            theme,
+                        )
+                        .on_click(cx.listener(move |this, _e: &ClickEvent, _window, cx| {
+                            this.set_merge_tool_trust_exit_code(
+                                !matches!(
+                                    &this.merge_tool_selection,
+                                    ExternalMergeToolSelection::Custom {
+                                        trust_exit_code: true,
+                                        ..
+                                    }
+                                ),
+                                cx,
+                            );
+                        }));
+
+                    let mut merge_tool_card = self
+                        .card(
+                            "settings_window_merge_tool",
+                            tr_str("settings.nav.merge_tool"),
+                            theme,
+                        )
+                        .child(
+                            div()
+                                .id("settings_window_merge_tool_scope_note")
+                                .px_2()
+                                .pb_1()
+                                .text_xs()
+                                .text_color(theme.colors.foreground.secondary)
+                                .child(tr("settings.merge_tool.scope_note")),
+                        )
+                        .child(merge_tool_row);
+
+                    if self.expanded_section == Some(SettingsSection::MergeTool) {
+                        let option_count = merge_tool_options().len();
+                        let list = uniform_list(
+                            "settings_window_merge_tool_list",
+                            option_count,
+                            cx.processor(Self::render_merge_tool_option_rows),
+                        )
+                        .w_full()
+                        .min_w(px(0.0))
+                        .h_full()
+                        .min_h(px(0.0))
+                        .track_scroll(&self.merge_tool_scroll)
+                        .on_scroll_wheel(stop_dropdown_wheel_chaining(
+                            self.merge_tool_scroll.clone(),
+                        ));
+                        let list = restrict_scroll_to_vertical_axis(list).into_any_element();
+                        merge_tool_card = merge_tool_card.child(self.dropdown_list_container(
+                            "settings_window_merge_tool_list_container",
+                            "settings_window_merge_tool_scrollbar",
+                            self.merge_tool_scroll.clone(),
+                            option_count,
+                            SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
+                            SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
+                            list,
+                            theme,
+                        ));
+
+                        if let ExternalMergeToolSelection::Builtin { id } =
+                            &self.merge_tool_selection
+                        {
+                            let preset_missing =
+                                worktree_core::external_merge_tool::merge_tool_preset(id).is_none();
+                            let (status_text, status_color) = match &self.merge_tool_availability {
+                                None if preset_missing => (
+                                    tr("settings.merge_tool.unknown_preset"),
+                                    theme.colors.status.warning.foreground,
+                                ),
+                                None => (
+                                    tr("settings.merge_tool.checking"),
+                                    theme.colors.foreground.secondary,
+                                ),
+                                Some(MergeToolAvailability::Available(program)) => (
+                                    crate::i18n::t!(
+                                        "settings.merge_tool.available",
+                                        program = program
+                                    )
+                                    .into_owned()
+                                    .into(),
+                                    theme.colors.status.success.foreground,
+                                ),
+                                Some(MergeToolAvailability::Missing(candidates)) => (
+                                    crate::i18n::t!(
+                                        "settings.merge_tool.missing",
+                                        programs = candidates.join(", ")
+                                    )
+                                    .into_owned()
+                                    .into(),
+                                    theme.colors.status.warning.foreground,
+                                ),
+                            };
+                            merge_tool_card = merge_tool_card.child(
+                                div()
+                                    .id("settings_window_merge_tool_availability")
+                                    .debug_selector(|| {
+                                        "settings_window_merge_tool_availability".to_string()
+                                    })
+                                    .px_2()
+                                    .pb_1()
+                                    .text_xs()
+                                    .text_color(status_color)
+                                    .child(status_text),
+                            );
+                        }
+
+                        merge_tool_card = merge_tool_card.child(
+                            div()
+                                .id("settings_window_merge_tool_hint")
+                                .px_2()
+                                .pb_1()
+                                .text_xs()
+                                .text_color(theme.colors.foreground.secondary)
+                                .child(tr_str("settings.merge_tool.hint")),
+                        );
+
+                        if merge_tool_custom {
+                            merge_tool_card = merge_tool_card.child(
+                                self.detail_container(
+                                    "settings_window_merge_tool_custom_container",
+                                    theme,
+                                )
+                                .child(
+                                    div()
+                                        .px_2()
+                                        .pt_1()
+                                        .text_xs()
+                                        .text_color(theme.colors.foreground.secondary)
+                                        .child(tr_str("settings.merge_tool.custom_command")),
+                                )
+                                .child(
+                                    div()
+                                        .px_2()
+                                        .pb_1()
+                                        .w_full()
+                                        .min_w(px(0.0))
+                                        .child(self.merge_tool_custom_command_input.clone()),
+                                )
+                                .child(
+                                    div()
+                                        .px_2()
+                                        .pb_1()
+                                        .text_xs()
+                                        .text_color(theme.colors.foreground.secondary)
+                                        .child(tr_str("settings.merge_tool.custom_hint")),
+                                ),
+                            );
+                            merge_tool_card = merge_tool_card.child(merge_tool_trust_exit_code_row);
+                            merge_tool_card = merge_tool_card.child(
+                                div()
+                                    .id("settings_window_merge_tool_trust_exit_code_hint")
+                                    .px_2()
+                                    .pb_1()
+                                    .text_xs()
+                                    .text_color(theme.colors.foreground.secondary)
+                                    .child(tr_str("settings.merge_tool.trust_exit_code_hint")),
+                            );
+                        }
+                    }
+
                     let environment_card = self
                         .card(
                             "settings_window_environment",
@@ -6499,6 +6951,7 @@ impl Render for SettingsWindowView {
                         SettingsCategory::Tags => tags_card,
                         SettingsCategory::GitExecutable => git_executable_card,
                         SettingsCategory::GpgSigning => gpg_signing_card,
+                        SettingsCategory::MergeTool => merge_tool_card,
                         SettingsCategory::Environment => environment_card,
                         SettingsCategory::Links => links_card,
                     };
@@ -7952,6 +8405,323 @@ mod tests {
             );
             assert!(!settings.gpg_config.commit_signing_enabled);
         });
+    }
+
+    #[gpui::test]
+    fn merge_tool_category_renders_and_persists_selection(cx: &mut gpui::TestAppContext) {
+        let _visual_guard = lock_visual_test();
+        let _preference_lock = worktree_core::external_merge_tool::lock_external_merge_tool_test();
+        let _preference_guard =
+            worktree_core::external_merge_tool::ExternalMergeToolResetGuard::install(
+                ExternalMergeToolSelection::FromGitConfig,
+            );
+
+        let (store, events) = AppStore::new(std::sync::Arc::new(TestBackend));
+        let (_main_view, cx) =
+            cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
+
+        cx.update(|window, app| {
+            let _ = window.draw(app);
+            open_settings_window(app);
+        });
+        cx.run_until_parked();
+
+        let settings_window = cx.update(|_window, app| {
+            app.windows()
+                .into_iter()
+                .find_map(|window| window.downcast::<SettingsWindowView>())
+                .expect("settings window should be open")
+        });
+        let mut settings_cx = gpui::VisualTestContext::from_window(*settings_window.deref(), cx);
+        settings_cx.run_until_parked();
+
+        let _ = settings_window.update(&mut settings_cx, |settings, _window, cx| {
+            settings.select_category(SettingsCategory::MergeTool, cx);
+        });
+        settings_cx.run_until_parked();
+        settings_cx.update(|window, app| {
+            let _ = window.draw(app);
+        });
+
+        assert!(
+            settings_cx
+                .debug_bounds("settings_window_merge_tool")
+                .is_some(),
+            "merge tool card should render for its category"
+        );
+        assert!(
+            settings_cx
+                .debug_bounds("settings_window_merge_tool_list_container")
+                .is_none(),
+            "dropdown stays collapsed until the row is expanded"
+        );
+
+        let row_bounds = settings_cx
+            .debug_bounds("settings_window_merge_tool_selection")
+            .expect("merge tool summary row bounds");
+        settings_cx.simulate_click(row_bounds.center(), Modifiers::default());
+        settings_cx.run_until_parked();
+        settings_cx.update(|window, app| {
+            let _ = window.draw(app);
+        });
+
+        assert!(
+            settings_cx
+                .debug_bounds("settings_window_merge_tool_list_container")
+                .is_some(),
+            "dropdown should render once expanded"
+        );
+
+        let vscode_bounds = settings_cx
+            .debug_bounds("settings_window_merge_tool_option_vscode")
+            .expect("vscode preset row should be laid out");
+        settings_cx.simulate_click(vscode_bounds.center(), Modifiers::default());
+        settings_cx.run_until_parked();
+
+        let expected = ExternalMergeToolSelection::Builtin {
+            id: "vscode".to_string(),
+        };
+        let _ = settings_window.update(&mut settings_cx, |settings, _window, _cx| {
+            assert_eq!(settings.merge_tool_selection, expected);
+            assert_eq!(
+                settings.preference_settings().external_merge_tool,
+                Some(expected.clone()),
+                "the preference must ride along every settings persist"
+            );
+        });
+        assert_eq!(
+            worktree_core::external_merge_tool::current_external_merge_tool(),
+            expected,
+            "selecting a tool installs it for the next conflicted right-click"
+        );
+
+        let default_bounds = settings_cx
+            .debug_bounds("settings_window_merge_tool_option_from_git_config")
+            .expect("from-git-config row should be laid out");
+        settings_cx.simulate_click(default_bounds.center(), Modifiers::default());
+        settings_cx.run_until_parked();
+        let _ = settings_window.update(&mut settings_cx, |settings, _window, _cx| {
+            assert_eq!(
+                settings.merge_tool_selection,
+                ExternalMergeToolSelection::FromGitConfig
+            );
+        });
+    }
+
+    #[gpui::test]
+    fn merge_tool_custom_command_and_trust_toggle_only_for_custom(cx: &mut gpui::TestAppContext) {
+        let _visual_guard = lock_visual_test();
+        let _preference_lock = worktree_core::external_merge_tool::lock_external_merge_tool_test();
+        let _preference_guard =
+            worktree_core::external_merge_tool::ExternalMergeToolResetGuard::install(
+                ExternalMergeToolSelection::FromGitConfig,
+            );
+
+        let (store, events) = AppStore::new(std::sync::Arc::new(TestBackend));
+        let (_main_view, cx) =
+            cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
+
+        cx.update(|window, app| {
+            let _ = window.draw(app);
+            open_settings_window(app);
+        });
+        cx.run_until_parked();
+
+        let settings_window = cx.update(|_window, app| {
+            app.windows()
+                .into_iter()
+                .find_map(|window| window.downcast::<SettingsWindowView>())
+                .expect("settings window should be open")
+        });
+        let mut settings_cx = gpui::VisualTestContext::from_window(*settings_window.deref(), cx);
+        settings_cx.run_until_parked();
+
+        let _ = settings_window.update(&mut settings_cx, |settings, _window, cx| {
+            settings.select_category(SettingsCategory::MergeTool, cx);
+            settings.toggle_section(SettingsSection::MergeTool, cx);
+        });
+        settings_cx.run_until_parked();
+        settings_cx.update(|window, app| {
+            let _ = window.draw(app);
+        });
+
+        assert!(
+            settings_cx
+                .debug_bounds("settings_window_merge_tool_custom_container")
+                .is_none()
+                && settings_cx
+                    .debug_bounds("settings_window_merge_tool_trust_exit_code")
+                    .is_none(),
+            "custom command and trust toggle stay hidden for non-custom selections"
+        );
+
+        let _ = settings_window.update(&mut settings_cx, |settings, _window, cx| {
+            settings.set_merge_tool_selection(
+                ExternalMergeToolSelection::Custom {
+                    command: "code --wait --merge $REMOTE $LOCAL $BASE $MERGED".to_string(),
+                    trust_exit_code: false,
+                },
+                cx,
+            );
+        });
+        settings_cx.run_until_parked();
+        settings_cx.update(|window, app| {
+            let _ = window.draw(app);
+        });
+
+        assert!(
+            settings_cx
+                .debug_bounds("settings_window_merge_tool_custom_container")
+                .is_some()
+                && settings_cx
+                    .debug_bounds("settings_window_merge_tool_trust_exit_code")
+                    .is_some(),
+            "custom command and trust toggle appear for the custom selection"
+        );
+
+        // The trust row sits below the fold of the page scroller; bring it
+        // into view before clicking, like the links-page row tests do.
+        let _ = settings_window.update(&mut settings_cx, |settings, _window, cx| {
+            let max_offset = settings.settings_window_scroll.max_offset().y.max(px(0.0));
+            settings.settings_window_scroll.set_offset(point(
+                settings.settings_window_scroll.offset().x,
+                -max_offset,
+            ));
+            cx.notify();
+        });
+        settings_cx.run_until_parked();
+        settings_cx.update(|window, app| {
+            let _ = window.draw(app);
+        });
+        let trust_bounds = settings_cx
+            .debug_bounds("settings_window_merge_tool_trust_exit_code")
+            .expect("trust exit code row bounds after scrolling");
+        settings_cx.simulate_click(trust_bounds.center(), Modifiers::default());
+        settings_cx.run_until_parked();
+        let _ = settings_window.update(&mut settings_cx, |settings, _window, _cx| {
+            assert_eq!(
+                settings.merge_tool_selection,
+                ExternalMergeToolSelection::Custom {
+                    command: "code --wait --merge $REMOTE $LOCAL $BASE $MERGED".to_string(),
+                    trust_exit_code: true,
+                },
+                "clicking the toggle flips trust-exit-code on the selection"
+            );
+        });
+
+        // Typing in the command input updates the live selection.
+        let _ = settings_window.update(&mut settings_cx, |settings, _window, cx| {
+            settings
+                .merge_tool_custom_command_input
+                .update(cx, |input, cx| {
+                    input.set_text("meld $LOCAL $BASE $REMOTE $MERGED", cx);
+                });
+        });
+        settings_cx.run_until_parked();
+        let _ = settings_window.update(&mut settings_cx, |settings, _window, _cx| {
+            assert_eq!(
+                settings.merge_tool_selection,
+                ExternalMergeToolSelection::Custom {
+                    command: "meld $LOCAL $BASE $REMOTE $MERGED".to_string(),
+                    trust_exit_code: true,
+                },
+                "typing in the custom command input updates the selection"
+            );
+        });
+        assert_eq!(
+            worktree_core::external_merge_tool::current_external_merge_tool(),
+            ExternalMergeToolSelection::Custom {
+                command: "meld $LOCAL $BASE $REMOTE $MERGED".to_string(),
+                trust_exit_code: true,
+            },
+            "edits install immediately for the next conflicted right-click"
+        );
+    }
+
+    #[gpui::test]
+    fn merge_tool_availability_row_reports_status(cx: &mut gpui::TestAppContext) {
+        let _visual_guard = lock_visual_test();
+        let _preference_lock = worktree_core::external_merge_tool::lock_external_merge_tool_test();
+        let _preference_guard =
+            worktree_core::external_merge_tool::ExternalMergeToolResetGuard::install(
+                ExternalMergeToolSelection::FromGitConfig,
+            );
+
+        let (store, events) = AppStore::new(std::sync::Arc::new(TestBackend));
+        let (_main_view, cx) =
+            cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
+
+        cx.update(|window, app| {
+            let _ = window.draw(app);
+            open_settings_window(app);
+        });
+        cx.run_until_parked();
+
+        let settings_window = cx.update(|_window, app| {
+            app.windows()
+                .into_iter()
+                .find_map(|window| window.downcast::<SettingsWindowView>())
+                .expect("settings window should be open")
+        });
+        let mut settings_cx = gpui::VisualTestContext::from_window(*settings_window.deref(), cx);
+        settings_cx.run_until_parked();
+
+        let _ = settings_window.update(&mut settings_cx, |settings, _window, cx| {
+            settings.select_category(SettingsCategory::MergeTool, cx);
+            settings.set_merge_tool_selection(
+                ExternalMergeToolSelection::Builtin {
+                    id: "vscode".to_string(),
+                },
+                cx,
+            );
+            settings.toggle_section(SettingsSection::MergeTool, cx);
+        });
+        settings_cx.run_until_parked();
+        settings_cx.update(|window, app| {
+            let _ = window.draw(app);
+        });
+
+        // Whether `code` is on PATH depends on the machine; what must hold is
+        // that the background probe completes and renders a status row.
+        let _ = settings_window.update(&mut settings_cx, |settings, _window, _cx| {
+            assert!(
+                settings.merge_tool_availability.is_some(),
+                "the PATH probe should have completed after expanding"
+            );
+        });
+        assert!(
+            settings_cx
+                .debug_bounds("settings_window_merge_tool_availability")
+                .is_some(),
+            "availability status row should render for a built-in preset"
+        );
+
+        // An id the preset table does not know gets an honest warning instead
+        // of a silent reset.
+        let _ = settings_window.update(&mut settings_cx, |settings, _window, cx| {
+            settings.set_merge_tool_selection(
+                ExternalMergeToolSelection::Builtin {
+                    id: "not-a-real-tool".to_string(),
+                },
+                cx,
+            );
+        });
+        settings_cx.run_until_parked();
+        settings_cx.update(|window, app| {
+            let _ = window.draw(app);
+        });
+        let _ = settings_window.update(&mut settings_cx, |settings, _window, _cx| {
+            assert!(
+                settings.merge_tool_availability.is_none(),
+                "no probe runs for a preset the table does not know"
+            );
+        });
+        assert!(
+            settings_cx
+                .debug_bounds("settings_window_merge_tool_availability")
+                .is_some(),
+            "the unknown-id warning row should render in place of the probe"
+        );
     }
 
     #[gpui::test]
@@ -10144,6 +10914,381 @@ mod tests {
         assert!(
             outer_after_boundary_handoff > outer_before_boundary_handoff + px(0.5),
             "expected wheel scrolling to bubble to the outer settings page once the UI font list reaches its boundary"
+        );
+    }
+
+    /// Shared driver for dropdown wheel tests: wheel straight down over the
+    /// list must move the list while it can still scroll and hand off to the
+    /// page scroller only at the list's boundary.
+    fn assert_dropdown_wheel_stops_at_list(
+        cx: &mut gpui::TestAppContext,
+        list_container: &'static str,
+        window_height_px: f32,
+        scroll_of: impl Fn(&SettingsWindowView) -> &UniformListScrollHandle,
+        setup: impl FnOnce(&mut SettingsWindowView, &mut gpui::Context<SettingsWindowView>),
+    ) {
+        let _visual_guard = lock_visual_test();
+        let (store, events) = AppStore::new(std::sync::Arc::new(TestBackend));
+        let (_main_view, cx) =
+            cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
+
+        cx.update(|window, app| {
+            let _ = window.draw(app);
+            open_settings_window(app);
+        });
+        cx.run_until_parked();
+
+        let settings_window = cx.update(|_window, app| {
+            app.windows()
+                .into_iter()
+                .find_map(|window| window.downcast::<SettingsWindowView>())
+                .expect("settings window should be open")
+        });
+
+        cx.update(|_window, app| {
+            let _ = settings_window.update(app, |settings, _window, cx| {
+                setup(settings, cx);
+                settings.settings_window_scroll = ScrollHandle::default();
+                cx.notify();
+            });
+        });
+
+        let mut settings_cx = gpui::VisualTestContext::from_window(*settings_window.deref(), cx);
+        settings_cx.run_until_parked();
+        settings_cx.simulate_resize(size(
+            px(SETTINGS_WINDOW_DEFAULT_WIDTH_PX),
+            px(window_height_px),
+        ));
+        settings_cx.run_until_parked();
+        settings_cx.update(|window, app| {
+            let _ = window.draw(app);
+        });
+
+        let mut list_bounds = settings_cx
+            .debug_bounds(list_container)
+            .unwrap_or_else(|| panic!("expected `{list_container}` bounds"));
+
+        // A wheel only reaches hitboxes inside the viewport; lists deep in a
+        // tall card (AI source, merge tool) start below the fold of the short
+        // test window, so page-scroll them into view first.
+        if list_bounds.bottom() > px(window_height_px) {
+            let _ = settings_window.update(&mut settings_cx, |settings, _window, cx| {
+                let max_offset = settings.settings_window_scroll.max_offset().y.max(px(0.0));
+                let needed = (list_bounds.top() - px(40.0)).max(px(0.0)).min(max_offset);
+                settings
+                    .settings_window_scroll
+                    .set_offset(point(px(0.0), -needed));
+                cx.notify();
+            });
+            settings_cx.run_until_parked();
+            settings_cx.update(|window, app| {
+                let _ = window.draw(app);
+            });
+            list_bounds = settings_cx
+                .debug_bounds(list_container)
+                .expect("expected list bounds after scrolling into view");
+            assert!(
+                list_bounds.bottom() <= px(window_height_px) + px(0.5),
+                "the test window is too short to show the dropdown list even after scrolling"
+            );
+        }
+
+        let (outer_before, inner_before, outer_max, inner_max) = settings_window
+            .update(&mut settings_cx, |settings, _window, _cx| {
+                (
+                    absolute_scroll_y(&settings.settings_window_scroll),
+                    uniform_list_vertical_scroll_metrics(scroll_of(settings)).1,
+                    settings.settings_window_scroll.max_offset().y.max(px(0.0)),
+                    uniform_list_vertical_scroll_metrics(scroll_of(settings)).2,
+                )
+            })
+            .expect("settings window should remain readable");
+        assert!(
+            outer_max > px(0.0),
+            "expected the settings page to be scrollable during the test"
+        );
+        assert!(
+            inner_max > px(0.0),
+            "expected the dropdown list to be scrollable during the test"
+        );
+
+        settings_cx.simulate_mouse_move(list_bounds.center(), None, Modifiers::default());
+        settings_cx.simulate_event(ScrollWheelEvent {
+            position: list_bounds.center(),
+            delta: ScrollDelta::Pixels(point(px(0.0), px(-120.0))),
+            ..Default::default()
+        });
+        settings_cx.run_until_parked();
+        settings_cx.update(|window, app| {
+            let _ = window.draw(app);
+        });
+
+        let (outer_after, inner_after) = settings_window
+            .update(&mut settings_cx, |settings, _window, _cx| {
+                (
+                    absolute_scroll_y(&settings.settings_window_scroll),
+                    uniform_list_vertical_scroll_metrics(scroll_of(settings)).1,
+                )
+            })
+            .expect("settings window should remain readable");
+        assert!(
+            inner_after > inner_before + px(0.5),
+            "expected the dropdown list to consume wheel scroll first (inner {inner_before:?} -> {inner_after:?})"
+        );
+        assert!(
+            (outer_after - outer_before).abs() <= px(0.5),
+            "expected the outer settings page to stay still while the list can still scroll (outer {outer_before:?} -> {outer_after:?})"
+        );
+
+        // Jump the list to its boundary; the same wheel must now chain to the
+        // page behind it.
+        let _ = settings_window.update(&mut settings_cx, |settings, _window, cx| {
+            let (raw_offset, _scroll_offset, max_offset) =
+                uniform_list_vertical_scroll_metrics(scroll_of(settings));
+            let current_x = scroll_of(settings).0.borrow().base_handle.offset().x;
+            let target_y = if raw_offset > px(0.0) {
+                max_offset
+            } else {
+                -max_offset
+            };
+            scroll_of(settings)
+                .0
+                .borrow()
+                .base_handle
+                .set_offset(point(current_x, target_y));
+            cx.notify();
+        });
+        settings_cx.run_until_parked();
+        settings_cx.update(|window, app| {
+            let _ = window.draw(app);
+        });
+
+        settings_cx.simulate_mouse_move(list_bounds.center(), None, Modifiers::default());
+        settings_cx.simulate_event(ScrollWheelEvent {
+            position: list_bounds.center(),
+            delta: ScrollDelta::Pixels(point(px(0.0), px(-120.0))),
+            ..Default::default()
+        });
+        settings_cx.run_until_parked();
+        settings_cx.update(|window, app| {
+            let _ = window.draw(app);
+        });
+
+        let outer_after_boundary_handoff = settings_window
+            .update(&mut settings_cx, |settings, _window, _cx| {
+                absolute_scroll_y(&settings.settings_window_scroll)
+            })
+            .expect("settings window should remain readable");
+        assert!(
+            outer_after_boundary_handoff > outer_after + px(0.5),
+            "expected wheel scrolling to bubble to the outer settings page once the list reaches its boundary"
+        );
+    }
+
+    /// The chain-through counterpart for lists too short to scroll: the wheel
+    /// must pass straight to the page scroller.
+    fn assert_dropdown_wheel_chains_to_outer_page_when_list_cannot_scroll(
+        cx: &mut gpui::TestAppContext,
+        list_container: &'static str,
+        window_height_px: f32,
+        scroll_of: impl Fn(&SettingsWindowView) -> &UniformListScrollHandle,
+        setup: impl FnOnce(&mut SettingsWindowView, &mut gpui::Context<SettingsWindowView>),
+    ) {
+        let _visual_guard = lock_visual_test();
+        let (store, events) = AppStore::new(std::sync::Arc::new(TestBackend));
+        let (_main_view, cx) =
+            cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
+
+        cx.update(|window, app| {
+            let _ = window.draw(app);
+            open_settings_window(app);
+        });
+        cx.run_until_parked();
+
+        let settings_window = cx.update(|_window, app| {
+            app.windows()
+                .into_iter()
+                .find_map(|window| window.downcast::<SettingsWindowView>())
+                .expect("settings window should be open")
+        });
+
+        cx.update(|_window, app| {
+            let _ = settings_window.update(app, |settings, _window, cx| {
+                setup(settings, cx);
+                settings.settings_window_scroll = ScrollHandle::default();
+                cx.notify();
+            });
+        });
+
+        let mut settings_cx = gpui::VisualTestContext::from_window(*settings_window.deref(), cx);
+        settings_cx.run_until_parked();
+        settings_cx.simulate_resize(size(
+            px(SETTINGS_WINDOW_DEFAULT_WIDTH_PX),
+            px(window_height_px),
+        ));
+        settings_cx.run_until_parked();
+        settings_cx.update(|window, app| {
+            let _ = window.draw(app);
+        });
+
+        let mut list_bounds = settings_cx
+            .debug_bounds(list_container)
+            .unwrap_or_else(|| panic!("expected `{list_container}` bounds"));
+
+        // A wheel only reaches hitboxes inside the viewport; page-scroll the
+        // list into view before wheeling over it (see the stops-at-list
+        // variant above).
+        if list_bounds.bottom() > px(window_height_px) {
+            let _ = settings_window.update(&mut settings_cx, |settings, _window, cx| {
+                let max_offset = settings.settings_window_scroll.max_offset().y.max(px(0.0));
+                let needed = (list_bounds.top() - px(40.0)).max(px(0.0)).min(max_offset);
+                settings
+                    .settings_window_scroll
+                    .set_offset(point(px(0.0), -needed));
+                cx.notify();
+            });
+            settings_cx.run_until_parked();
+            settings_cx.update(|window, app| {
+                let _ = window.draw(app);
+            });
+            list_bounds = settings_cx
+                .debug_bounds(list_container)
+                .expect("expected list bounds after scrolling into view");
+            assert!(
+                list_bounds.bottom() <= px(window_height_px) + px(0.5),
+                "the test window is too short to show the dropdown list even after scrolling"
+            );
+        }
+
+        let (outer_before, inner_before, outer_max, inner_max) = settings_window
+            .update(&mut settings_cx, |settings, _window, _cx| {
+                (
+                    absolute_scroll_y(&settings.settings_window_scroll),
+                    uniform_list_vertical_scroll_metrics(scroll_of(settings)).1,
+                    settings.settings_window_scroll.max_offset().y.max(px(0.0)),
+                    uniform_list_vertical_scroll_metrics(scroll_of(settings)).2,
+                )
+            })
+            .expect("settings window should remain readable");
+        assert!(
+            inner_max <= px(0.0),
+            "expected the dropdown list to be too short to scroll"
+        );
+        assert!(
+            outer_max > px(0.0),
+            "expected the settings page to be scrollable during the test"
+        );
+
+        settings_cx.simulate_mouse_move(list_bounds.center(), None, Modifiers::default());
+        settings_cx.simulate_event(ScrollWheelEvent {
+            position: list_bounds.center(),
+            delta: ScrollDelta::Pixels(point(px(0.0), px(-120.0))),
+            ..Default::default()
+        });
+        settings_cx.run_until_parked();
+        settings_cx.update(|window, app| {
+            let _ = window.draw(app);
+        });
+
+        let (outer_after, inner_after) = settings_window
+            .update(&mut settings_cx, |settings, _window, _cx| {
+                (
+                    absolute_scroll_y(&settings.settings_window_scroll),
+                    uniform_list_vertical_scroll_metrics(scroll_of(settings)).1,
+                )
+            })
+            .expect("settings window should remain readable");
+        assert!(
+            outer_after > outer_before + px(0.5),
+            "expected the wheel to chain through a list that cannot scroll to the page"
+        );
+        assert!(
+            (inner_after - inner_before).abs() <= px(0.5),
+            "expected the unscrollable list to stay put"
+        );
+    }
+
+    #[gpui::test]
+    fn ai_commit_source_dropdown_wheel_scrolls_inner_list_before_outer_window(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        // 10 sources overflow the dropdown cap; before the fix, the wheel also
+        // scrolled the settings page behind the open list.
+        assert_dropdown_wheel_stops_at_list(
+            cx,
+            "settings_window_ai_commit_source_list_container",
+            560.0,
+            |settings| &settings.ai_commit_source_scroll,
+            |settings, _cx| {
+                settings.expanded_section = Some(SettingsSection::AiCommitMessage);
+            },
+        );
+    }
+
+    #[gpui::test]
+    fn ai_commit_model_dropdown_wheel_scrolls_inner_list_before_outer_window(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let synthetic_models: Arc<[String]> = (0..200)
+            .map(|ix| format!("Test Model {ix:03}"))
+            .collect::<Vec<_>>()
+            .into();
+        assert_dropdown_wheel_stops_at_list(
+            cx,
+            "settings_window_ai_commit_model_list_container",
+            560.0,
+            |settings| &settings.ai_commit_models_scroll,
+            |settings, _cx| {
+                settings.ai_commit_models = AiCommitModels::Ready(synthetic_models.clone());
+                settings.expanded_section = Some(SettingsSection::AiCommitMessage);
+            },
+        );
+    }
+
+    #[gpui::test]
+    fn merge_tool_dropdown_wheel_scrolls_inner_list_before_outer_window(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        assert_dropdown_wheel_stops_at_list(
+            cx,
+            "settings_window_merge_tool_list_container",
+            320.0,
+            |settings| &settings.merge_tool_scroll,
+            |settings, _cx| {
+                settings.expanded_section = Some(SettingsSection::MergeTool);
+            },
+        );
+    }
+
+    #[gpui::test]
+    fn avatar_source_dropdown_wheel_chains_to_outer_page_when_list_cannot_scroll(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        // Three sources fit without scrolling, so chaining to the page is the
+        // correct behavior — and what the handler must preserve.
+        assert_dropdown_wheel_chains_to_outer_page_when_list_cannot_scroll(
+            cx,
+            "settings_window_avatar_source_list_container",
+            420.0,
+            |settings| &settings.avatar_source_scroll,
+            |settings, _cx| {
+                settings.expanded_section = Some(SettingsSection::AvatarSource);
+            },
+        );
+    }
+
+    #[gpui::test]
+    fn ai_commit_provider_dropdown_wheel_chains_to_outer_page_when_list_cannot_scroll(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        assert_dropdown_wheel_chains_to_outer_page_when_list_cannot_scroll(
+            cx,
+            "settings_window_ai_commit_provider_list_container",
+            560.0,
+            |settings| &settings.ai_commit_provider_scroll,
+            |settings, _cx| {
+                settings.expanded_section = Some(SettingsSection::AiCommitMessage);
+            },
         );
     }
 }

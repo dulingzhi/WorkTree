@@ -191,6 +191,9 @@ impl MainPaneView {
                             this.store.dispatch(Msg::LaunchMergetool {
                                 repo_id,
                                 path: mergetool_path.clone(),
+                                preference:
+                                    worktree_core::external_merge_tool::current_external_merge_tool(
+                                    ),
                             });
                         }),
                     )
@@ -266,8 +269,8 @@ mod tests {
         DecisionRestoreAvailability, decision_restore_availability,
         decision_restore_sources_summary,
     };
-    use worktree_state::model::ConflictFile;
     use std::path::PathBuf;
+    use worktree_state::model::ConflictFile;
 
     fn empty_conflict_file() -> ConflictFile {
         ConflictFile {

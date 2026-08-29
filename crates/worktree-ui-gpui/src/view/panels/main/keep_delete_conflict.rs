@@ -203,6 +203,9 @@ impl MainPaneView {
                             this.store.dispatch(Msg::LaunchMergetool {
                                 repo_id,
                                 path: mergetool_path.clone(),
+                                preference:
+                                    worktree_core::external_merge_tool::current_external_merge_tool(
+                                    ),
                             });
                         }),
                     )
@@ -369,10 +372,10 @@ impl MainPaneView {
 #[cfg(test)]
 mod tests {
     use super::{conflict_side_has_payload, keep_delete_conflict_spec};
+    use std::path::PathBuf;
     use worktree_core::domain::FileConflictKind;
     use worktree_core::services::ConflictSide;
     use worktree_state::model::ConflictFile;
-    use std::path::PathBuf;
 
     fn empty_conflict_file() -> ConflictFile {
         ConflictFile {

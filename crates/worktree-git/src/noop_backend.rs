@@ -1,11 +1,11 @@
-#[cfg(test)]
-use worktree_core::domain::*;
-use worktree_core::error::{Error, ErrorKind};
-use worktree_core::services::{GitBackend, GitRepository, Result};
 use std::path::Path;
 #[cfg(test)]
 use std::path::PathBuf;
 use std::sync::Arc;
+#[cfg(test)]
+use worktree_core::domain::*;
+use worktree_core::error::{Error, ErrorKind};
+use worktree_core::services::{GitBackend, GitRepository, Result};
 
 #[derive(Default)]
 pub struct NoopBackend;
@@ -90,12 +90,12 @@ impl GitRepository for NoopRepo {
     }
 
     fn stash_create(
-            &self,
-            _message: &str,
-            _include_untracked: bool,
-            _keep_index: bool,
-            _paths: &[PathBuf],
-        ) -> Result<()> {
+        &self,
+        _message: &str,
+        _include_untracked: bool,
+        _keep_index: bool,
+        _paths: &[PathBuf],
+    ) -> Result<()> {
         Err(Error::new(ErrorKind::Unsupported("No Git backend enabled")))
     }
 
@@ -143,13 +143,14 @@ impl GitRepository for NoopRepo {
 #[cfg(test)]
 mod tests {
     use super::{NoopBackend, NoopRepo};
+    use std::path::{Path, PathBuf};
     use worktree_core::domain::{CommitId, DiffArea, DiffTarget, LogCursor, RepoSpec};
     use worktree_core::error::ErrorKind;
+    use worktree_core::external_merge_tool::ExternalMergeToolSelection;
     use worktree_core::services::{
         ConflictSide, GitBackend, GitRepository, PullMode, RemoteUrlKind, ResetMode, Result,
         SafePushAfterCommitTarget,
     };
-    use std::path::{Path, PathBuf};
 
     fn assert_unsupported<T>(result: Result<T>) {
         match result {
@@ -279,7 +280,9 @@ mod tests {
             "https://example.com/repo.git",
             RemoteUrlKind::Fetch,
         ));
-        assert_unsupported(repo.set_remote_ssh_key_with_output("origin", Some("~/.ssh/id_ed25519")));
+        assert_unsupported(
+            repo.set_remote_ssh_key_with_output("origin", Some("~/.ssh/id_ed25519")),
+        );
         assert_unsupported(repo.set_remote_ssh_key_with_output("origin", None));
         assert_unsupported(repo.fetch_all_with_output());
         assert_unsupported(repo.fetch_all_with_output_prune(true));
@@ -303,7 +306,7 @@ mod tests {
         assert_unsupported(repo.checkout_conflict_side(path, ConflictSide::Ours));
         assert_unsupported(repo.accept_conflict_deletion(path));
         assert_unsupported(repo.checkout_conflict_base(path));
-        assert_unsupported(repo.launch_mergetool(path));
+        assert_unsupported(repo.launch_mergetool(path, &ExternalMergeToolSelection::FromGitConfig));
         assert_unsupported(repo.export_patch_with_output(&commit, path));
         assert_unsupported(repo.archive_zip_with_output("HEAD", path));
         assert_unsupported(repo.lfs_enabled());

@@ -1315,7 +1315,14 @@ pub trait GitRepository: Send + Sync {
     /// Materializes BASE, LOCAL, REMOTE temp files from the conflict stages,
     /// invokes the configured (or specified) mergetool, reads back the merged
     /// output, writes it to the worktree, and stages the result.
-    fn launch_mergetool(&self, _path: &Path) -> Result<MergetoolResult> {
+    ///
+    /// `preference` is the app-level external-merge-tool selection from the
+    /// UI layer; `FromGitConfig` keeps the git-config-driven behavior.
+    fn launch_mergetool(
+        &self,
+        _path: &Path,
+        _preference: &crate::external_merge_tool::ExternalMergeToolSelection,
+    ) -> Result<MergetoolResult> {
         Err(Error::new(ErrorKind::Unsupported(
             "external mergetool is not implemented for this backend",
         )))

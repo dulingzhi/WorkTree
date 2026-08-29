@@ -1338,12 +1338,7 @@ impl PopoverHost {
                 // no return. The prompt carries the resolved paths so it stays
                 // correct even if the selection changes while it is open.
                 let (paths, _) = self.status_paths_for_action(repo_id, area, &path, cx);
-                self.open_popover_at(
-                    PopoverKind::StashPrompt { paths },
-                    anchor,
-                    window,
-                    cx,
-                );
+                self.open_popover_at(PopoverKind::StashPrompt { paths }, anchor, window, cx);
                 return;
             }
             ContextMenuAction::CheckoutConflictSideSelectionOrPath {
@@ -1367,7 +1362,13 @@ impl PopoverHost {
                 }
             }
             ContextMenuAction::LaunchMergetool { repo_id, path } => {
-                self.store.dispatch(Msg::LaunchMergetool { repo_id, path });
+                // Snapshot the app-level preference here: the store worker
+                // has no session state, so the Msg carries it explicitly.
+                self.store.dispatch(Msg::LaunchMergetool {
+                    repo_id,
+                    path,
+                    preference: worktree_core::external_merge_tool::current_external_merge_tool(),
+                });
             }
             ContextMenuAction::SetAssumeUnchangedPath { repo_id, path } => {
                 self.store.dispatch(Msg::SetAssumeUnchanged {
