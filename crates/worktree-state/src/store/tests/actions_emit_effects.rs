@@ -337,7 +337,10 @@ fn push_merge_request_emits_effect_marks_in_flight_and_summarizes() {
     );
     assert_eq!(state.repos[0].push_in_flight, 0);
     assert_eq!(
-        state.repos[0].command_log.last().map(|entry| entry.summary.as_str()),
+        state.repos[0]
+            .command_log
+            .last()
+            .map(|entry| entry.summary.as_str()),
         Some("Push with merge request: Everything up-to-date")
     );
 }
@@ -2446,9 +2449,7 @@ fn additional_routing_messages_emit_effects_and_update_counters() {
     );
     assert!(matches!(
         effects.as_slice(),
-        [Effect::CleanupRepo {
-            repo_id: RepoId(1),
-        }]
+        [Effect::CleanupRepo { repo_id: RepoId(1) }]
     ));
 
     let effects = reduce(
@@ -3206,6 +3207,7 @@ fn pull_request_list_load_messages_drive_the_loadable() {
                 head_ref: "fix".into(),
                 head_sha: CommitId("abc123".into()),
                 base_ref: "main".into(),
+                state: worktree_core::domain::PullRequestState::Open,
                 draft: false,
                 checks: None,
             }]),
@@ -5437,7 +5439,12 @@ fn plain_push_without_pull_retry_does_not_chain() {
     );
     let repo = &state.repos[0];
     assert!(!repo.push_pull_retry_pending);
-    assert!(repo.command_log.last().expect("push log entry").announce_failure);
+    assert!(
+        repo.command_log
+            .last()
+            .expect("push log entry")
+            .announce_failure
+    );
 }
 
 #[test]

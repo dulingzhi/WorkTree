@@ -1,16 +1,19 @@
 use super::*;
 use crate::ui_scale;
 use crate::view::components::InteractiveRowExt as _;
-use worktree_core::domain::LogScope;
-use worktree_core::domain::PullRequestChecksState;
-use worktree_core::domain::SubmoduleStatus;
 use palette::IntoColor;
 use std::num::NonZeroU32;
+use worktree_core::domain::LogScope;
+use worktree_core::domain::PullRequestChecksState;
+use worktree_core::domain::PullRequestState;
+use worktree_core::domain::SubmoduleStatus;
 
 pub(in crate::view) const WORKTREE_ICON_PATH: &str = "icons/git_worktree.svg";
 const STASH_ICON_PATH: &str = crate::view::icons::STASH_ICON_PATH;
 const TAG_ICON_PATH: &str = crate::view::icons::TAG_ICON_PATH;
 const PULL_REQUEST_ICON_PATH: &str = crate::view::icons::PULL_REQUEST_ICON_PATH;
+const PULL_REQUEST_CLOSED_ICON_PATH: &str = crate::view::icons::PULL_REQUEST_CLOSED_ICON_PATH;
+const GIT_MERGE_ICON_PATH: &str = crate::view::icons::GIT_MERGE_ICON_PATH;
 
 pub(in crate::view) fn listed_workspace_paths_by_branch(
     repo: &RepoState,
@@ -1108,14 +1111,15 @@ impl SidebarPaneView {
                         )
                         .when(show_pr_spinner, |d| {
                             d.child(
-                                div().debug_selector(move || {
-                                    format!("pull_requests_spinner_{}", repo_id.0)
-                                })
-                                .child(svg_spinner(
-                                    ("pull_requests_spinner", repo_id.0),
-                                    icon_muted,
-                                    12.0,
-                                )),
+                                div()
+                                    .debug_selector(move || {
+                                        format!("pull_requests_spinner_{}", repo_id.0)
+                                    })
+                                    .child(svg_spinner(
+                                        ("pull_requests_spinner", repo_id.0),
+                                        icon_muted,
+                                        12.0,
+                                    )),
                             )
                         })
                         .worktree_tooltip(
@@ -1132,10 +1136,7 @@ impl SidebarPaneView {
                         }))
                         .into_any_element()
                 }
-                BranchSidebarRow::PullRequestPlaceholder {
-                    message,
-                    retryable,
-                } => {
+                BranchSidebarRow::PullRequestPlaceholder { message, retryable } => {
                     let placeholder = div()
                         .id(("pr_placeholder", ix))
                         .h(scaled_px(22.0))
@@ -1150,7 +1151,10 @@ impl SidebarPaneView {
                             .cursor(CursorStyle::PointingHand)
                             .on_click(cx.listener(move |this, e: &ClickEvent, _w, cx| {
                                 if e.standard_click() {
-                                    this.fetch_pull_requests_now(cx);
+                                    this.fetch_pull_requests_now(
+                                        super::super::panes::PullRequestFetchReason::RetryRow,
+                                        cx,
+                                    );
                                     cx.notify();
                                 }
                             }))
@@ -1163,21 +1167,34 @@ impl SidebarPaneView {
                     number,
                     title,
                     author,
+                    state,
                     draft,
                     checks,
                 } => {
+                    // Settled PRs swap the icon the way GitHub's list does —
+                    // merged reads as a merge, closed as a crossed-out PR —
+                    // so a repository whose PRs are all settled still reads
+                    // correctly at a glance.
+                    let (icon_path, icon_color) = match state {
+                        PullRequestState::Open => (PULL_REQUEST_ICON_PATH, icon_primary),
+                        PullRequestState::Merged => {
+                            (GIT_MERGE_ICON_PATH, theme.colors.status.info.foreground)
+                        }
+                        PullRequestState::Closed => (
+                            PULL_REQUEST_CLOSED_ICON_PATH,
+                            theme.colors.status.danger.foreground,
+                        ),
+                    };
                     let context_menu_invoker: SharedString =
                         format!("pr_menu_{}_{}", repo_id.0, number).into();
                     let context_menu_active =
                         this.active_context_menu_invoker.as_ref() == Some(&context_menu_invoker);
                     let context_menu_invoker_for_right_click = context_menu_invoker.clone();
-                    let row_group: SharedString =
-                        format!("pr_row_{}_{}", repo_id.0, number).into();
+                    let row_group: SharedString = format!("pr_row_{}_{}", repo_id.0, number).into();
                     let row_state =
                         components::InteractiveRowState::default().open(context_menu_active);
                     let number_for_menu = number;
-                    let tooltip: SharedString =
-                        format!("#{number} · {title} · {author}").into();
+                    let tooltip: SharedString = format!("#{number} · {title} · {author}").into();
 
                     let mut end_accessories = div()
                         .ml_auto()
@@ -1214,8 +1231,7 @@ impl SidebarPaneView {
                     }
 
                     if let Some(checks_state) = checks {
-                        let (color, tooltip_key): (gpui::Rgba, &'static str) = match checks_state
-                        {
+                        let (color, tooltip_key): (gpui::Rgba, &'static str) = match checks_state {
                             PullRequestChecksState::Success => (
                                 theme.colors.status.success.foreground,
                                 "chrome.sidebar.pr.checks.success",
@@ -1241,12 +1257,7 @@ impl SidebarPaneView {
                                 .size(scaled_px(14.0))
                                 .rounded_full()
                                 .bg(with_alpha(color, 0.16))
-                                .child(
-                                    div()
-                                        .size(scaled_px(6.0))
-                                        .rounded_full()
-                                        .bg(color),
-                                )
+                                .child(div().size(scaled_px(6.0)).rounded_full().bg(color))
                                 .worktree_tooltip(theme, chip_tooltip),
                         );
                     }
@@ -1265,7 +1276,7 @@ impl SidebarPaneView {
                         .w_full()
                         .interactive_row(row_style, row_state)
                         .child(tree_toggle_slot(None))
-                        .child(tree_icon_slot(PULL_REQUEST_ICON_PATH, icon_primary, 12.0))
+                        .child(tree_icon_slot(icon_path, icon_color, 12.0))
                         .child(
                             div()
                                 .flex()
@@ -2962,7 +2973,15 @@ impl DetailsPaneView {
                     .get(ix)
                     .zip(file_rows.get(ix))
                     .zip(inputs.targets.get(ix))
-                    .map(|((f, row), target)| (ix, f.clone(), row.label.clone(), row.visuals, target.clone()))
+                    .map(|((f, row), target)| {
+                        (
+                            ix,
+                            f.clone(),
+                            row.label.clone(),
+                            row.visuals,
+                            target.clone(),
+                        )
+                    })
             })
             .map(|(ix, _f, path_label, visuals, (path, area))| {
                 let color = visuals.color(&theme);
@@ -3179,6 +3198,8 @@ impl DetailsPaneView {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::{Path, PathBuf};
+    use std::time::{Duration, Instant, SystemTime};
     use worktree_core::domain::{
         Branch, Commit, CommitId, DiffTarget, LogPage, PullRequest, PullRequestChecksState, Remote,
         RemoteBranch, RepoSpec, Upstream, UpstreamDivergence, Worktree,
@@ -3186,8 +3207,6 @@ mod tests {
     use worktree_core::services::{GitBackend, GitRepository, Result};
     use worktree_state::msg::{InternalMsg, Msg};
     use worktree_state::store::AppStore;
-    use std::path::{Path, PathBuf};
-    use std::time::{Duration, Instant, SystemTime};
 
     struct BlockingBackend;
 
@@ -4759,6 +4778,7 @@ mod tests {
                     head_ref: "fix/merge-focus".to_string(),
                     head_sha: commit_id("aa1111111111111111111111111111111111111111"),
                     base_ref: "main".to_string(),
+                    state: PullRequestState::Open,
                     draft: false,
                     // The status pass lands separately — first render has no chip.
                     checks: None,
@@ -4770,8 +4790,31 @@ mod tests {
                     head_ref: "kim/chips".to_string(),
                     head_sha: commit_id("bb2222222222222222222222222222222222222222"),
                     base_ref: "main".to_string(),
+                    state: PullRequestState::Open,
                     draft: true,
                     checks: Some(PullRequestChecksState::Pending),
+                },
+                PullRequest {
+                    number: 11,
+                    title: "Settled: faster graph".to_string(),
+                    author: "jai".to_string(),
+                    head_ref: "fast-graph".to_string(),
+                    head_sha: commit_id("cc3333333333333333333333333333333333333333"),
+                    base_ref: "main".to_string(),
+                    state: PullRequestState::Merged,
+                    draft: false,
+                    checks: None,
+                },
+                PullRequest {
+                    number: 13,
+                    title: "Dropped idea".to_string(),
+                    author: "mira".to_string(),
+                    head_ref: "idea".to_string(),
+                    head_sha: commit_id("dd4444444444444444444444444444444444444444"),
+                    base_ref: "main".to_string(),
+                    state: PullRequestState::Closed,
+                    draft: false,
+                    checks: None,
                 },
             ]),
         }));
@@ -4782,8 +4825,10 @@ mod tests {
         }));
         wait_until(cx, "pull requests loaded", |_cx| {
             let snapshot = store_for_assert.snapshot();
-            snapshot.repos.iter().any(|repo| repo.id == repo_id
-                && matches!(repo.pull_requests, Loadable::Ready(_)))
+            snapshot
+                .repos
+                .iter()
+                .any(|repo| repo.id == repo_id && matches!(repo.pull_requests, Loadable::Ready(_)))
         });
 
         // The section is default-collapsed: until it is expanded (the way a
@@ -4801,11 +4846,13 @@ mod tests {
             })
         });
         assert!(
-            cx.debug_bounds(leak_selector(format!("pull_requests_section_{header_ix}"))).is_some(),
+            cx.debug_bounds(leak_selector(format!("pull_requests_section_{header_ix}")))
+                .is_some(),
             "the pull-request section header renders"
         );
         assert!(
-            cx.debug_bounds(leak_selector("pr_sidebar_row_7".to_string())).is_none(),
+            cx.debug_bounds(leak_selector("pr_sidebar_row_7".to_string()))
+                .is_none(),
             "collapsed section must not render pull-request rows"
         );
 
@@ -4818,21 +4865,37 @@ mod tests {
         sync_view_for_tests(cx, &view);
 
         assert!(
-            cx.debug_bounds(leak_selector("pr_sidebar_row_7".to_string())).is_some(),
+            cx.debug_bounds(leak_selector("pr_sidebar_row_7".to_string()))
+                .is_some(),
             "expanded section renders the first pull-request row"
         );
         assert!(
-            cx.debug_bounds(leak_selector("pr_sidebar_row_9".to_string())).is_some(),
+            cx.debug_bounds(leak_selector("pr_sidebar_row_9".to_string()))
+                .is_some(),
             "expanded section renders the second pull-request row"
+        );
+        // Settled PRs list too — a repository whose PRs are all merged or
+        // closed is exactly the case the listing exists for.
+        assert!(
+            cx.debug_bounds(leak_selector("pr_sidebar_row_11".to_string()))
+                .is_some(),
+            "expanded section renders the merged pull-request row"
+        );
+        assert!(
+            cx.debug_bounds(leak_selector("pr_sidebar_row_13".to_string()))
+                .is_some(),
+            "expanded section renders the closed pull-request row"
         );
         // The late-arriving combined status of #7 renders as its chip; #9 was
         // seeded with its own.
         assert!(
-            cx.debug_bounds(leak_selector("pr_checks_chip_7".to_string())).is_some(),
+            cx.debug_bounds(leak_selector("pr_checks_chip_7".to_string()))
+                .is_some(),
             "pull request #7 renders a checks chip"
         );
         assert!(
-            cx.debug_bounds(leak_selector("pr_checks_chip_9".to_string())).is_some(),
+            cx.debug_bounds(leak_selector("pr_checks_chip_9".to_string()))
+                .is_some(),
             "pull request #9 renders a checks chip"
         );
     }

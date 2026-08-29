@@ -218,9 +218,11 @@ pub struct Remote {
     pub url: Option<String>,
 }
 
-/// One open pull request of the repo's GitHub remote, listed in the sidebar.
-/// The fields are what the list row and the checkout action need — everything
-/// else the API returns is dropped at the parse boundary.
+/// One pull request of the repo's GitHub remote, listed in the sidebar —
+/// open, merged, and closed alike, because a repository whose PRs are all
+/// settled would otherwise present an empty section that reads like a failed
+/// load. The fields are what the list row and the checkout action need —
+/// everything else the API returns is dropped at the parse boundary.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PullRequest {
     pub number: u64,
@@ -234,11 +236,21 @@ pub struct PullRequest {
     /// a PR updated after the list load still checks out its newest tip).
     pub head_sha: CommitId,
     pub base_ref: String,
+    pub state: PullRequestState,
     pub draft: bool,
     /// Combined CI state of `head_sha` (`None` until the status pass lands —
     /// or forever, when no token is configured and the status pass is
     /// skipped for rate-limit reasons).
     pub checks: Option<PullRequestChecksState>,
+}
+
+/// Where a pull request stands. Merged and closed stay distinguishable the
+/// way GitHub keeps them: `state=closed` plus a non-null `merged_at`.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum PullRequestState {
+    Open,
+    Merged,
+    Closed,
 }
 
 /// The CI verdict for one pull request head — GitHub's combined status, not

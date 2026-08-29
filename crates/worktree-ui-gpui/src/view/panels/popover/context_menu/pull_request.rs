@@ -102,7 +102,9 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
     use std::sync::Arc;
-    use worktree_core::domain::{CommitId, PullRequest, PullRequestChecksState, RepoSpec};
+    use worktree_core::domain::{
+        CommitId, PullRequest, PullRequestChecksState, PullRequestState, RepoSpec,
+    };
 
     fn github_repo_state() -> RepoState {
         let mut repo = RepoState::new_opening(
@@ -122,6 +124,7 @@ mod tests {
             head_ref: "fix/merge-focus".to_string(),
             head_sha: CommitId("aa1111111111111111111111111111111111111111".into()),
             base_ref: "main".to_string(),
+            state: PullRequestState::Open,
             draft: false,
             checks: Some(PullRequestChecksState::Success),
         }]));

@@ -102,7 +102,7 @@ chrome:
     unsaved_edits: 未保存的更改（%{count}）
     unsaved_discard_tooltip: 放弃未保存的更改，并从磁盘重新加载此文件
     pr:
-      empty: 没有打开的拉取请求。
+      empty: 没有拉取请求。
       draft: 草稿
       checks:
         success: 检查通过

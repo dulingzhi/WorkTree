@@ -1,6 +1,12 @@
 use crate::msg::RepoCommandKind;
 use crate::msg::RepoPath;
 use crate::session;
+use rustc_hash::{FxHashMap, FxHashSet};
+use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::SystemTime;
 use worktree_core::conflict_session::{
     ConflictPayload, ConflictSession, ConflictStageParts, canonicalize_stage_parts,
 };
@@ -10,12 +16,6 @@ use worktree_core::services::{
     BisectState, BlameLine, ForcePushLease, InteractiveRebaseEntry, SafePushAfterCommitContext,
     SequencerState, SubmoduleTrustTarget,
 };
-use rustc_hash::{FxHashMap, FxHashSet};
-use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::SystemTime;
 
 pub type Shared<T> = Arc<T>;
 
@@ -230,11 +230,12 @@ impl RepoLoadsInFlight {
         match &self.pending_log {
             // Scope, author, or ref-filter changes invalidate older pending
             // requests (including pagination).
-            Some(existing) if {
-                existing.scope != next.scope
-                    || existing.author != next.author
-                    || existing.refs != next.refs
-            } =>
+            Some(existing)
+                if {
+                    existing.scope != next.scope
+                        || existing.author != next.author
+                        || existing.refs != next.refs
+                } =>
             {
                 self.pending_log = Some(next);
             }
@@ -365,9 +366,10 @@ fn conflict_file_side_from_payload(
         ConflictPayload::Text(text) => (None, Some(text.clone())),
         // The pointer id doubles as its bytes so the side-pick view can both
         // show it and treat the side as present.
-        ConflictPayload::Submodule(pointer) => {
-            (Some(pointer.as_bytes().to_vec().into()), Some(pointer.clone()))
-        }
+        ConflictPayload::Submodule(pointer) => (
+            Some(pointer.as_bytes().to_vec().into()),
+            Some(pointer.clone()),
+        ),
         ConflictPayload::Binary(bytes) => (Some(bytes.clone()), None),
         ConflictPayload::Absent => (None, None),
     }
@@ -1535,11 +1537,7 @@ impl RepoState {
 
     /// Lands the CI verdict for one PR of the loaded list. No-op when the
     /// list no longer carries that number (a reload replaced it meanwhile).
-    pub(crate) fn set_pull_request_checks(
-        &mut self,
-        number: u64,
-        checks: PullRequestChecksState,
-    ) {
+    pub(crate) fn set_pull_request_checks(&mut self, number: u64, checks: PullRequestChecksState) {
         let Loadable::Ready(pull_requests) = &mut self.pull_requests else {
             return;
         };
@@ -1744,7 +1742,6 @@ impl RepoState {
         self.staged_status_rev = self.staged_status_rev.wrapping_add(1);
     }
 
-
     /// Incremental patch: drop the previous entries for `paths` from both
     /// lanes and splice in the fresh ones (which cover exactly those
     /// paths), keeping the backend's path-then-kind-priority ordering so
@@ -1790,27 +1787,26 @@ impl RepoState {
         }
     }
 
-
-// Mirrors the gix layer's `kind_priority` so a patched list is ordered
-// exactly like the full scan it will eventually be replaced by again.
-fn status_kind_priority(kind: FileStatusKind) -> u8 {
-    match kind {
-        FileStatusKind::Conflicted => 5,
-        FileStatusKind::Renamed => 4,
-        FileStatusKind::Deleted => 3,
-        FileStatusKind::Added => 2,
-        FileStatusKind::Modified => 1,
-        FileStatusKind::Untracked => 0,
+    // Mirrors the gix layer's `kind_priority` so a patched list is ordered
+    // exactly like the full scan it will eventually be replaced by again.
+    fn status_kind_priority(kind: FileStatusKind) -> u8 {
+        match kind {
+            FileStatusKind::Conflicted => 5,
+            FileStatusKind::Renamed => 4,
+            FileStatusKind::Deleted => 3,
+            FileStatusKind::Added => 2,
+            FileStatusKind::Modified => 1,
+            FileStatusKind::Untracked => 0,
+        }
     }
-}
 
-fn sort_status_entries(entries: &mut [FileStatus]) {
-    entries.sort_by(|a, b| {
-        a.path
-            .cmp(&b.path)
-            .then_with(|| Self::status_kind_priority(b.kind).cmp(&Self::status_kind_priority(a.kind)))
-    });
-}
+    fn sort_status_entries(entries: &mut [FileStatus]) {
+        entries.sort_by(|a, b| {
+            a.path.cmp(&b.path).then_with(|| {
+                Self::status_kind_priority(b.kind).cmp(&Self::status_kind_priority(a.kind))
+            })
+        });
+    }
 
     pub(crate) fn set_status(&mut self, status: Loadable<Shared<RepoStatus>>) {
         let next_worktree = match &status {
@@ -2772,7 +2768,8 @@ mod tests {
             committed_at_unix: 0,
             parent_ids: Vec::new(),
             files: Vec::new(),
-        signed: false,}));
+            signed: false,
+        }));
         repo.diff_state.diff = Loadable::Ready(Arc::new(Diff {
             target: DiffTarget::Commit {
                 commit_id: CommitId("c1".into()),
@@ -3468,6 +3465,7 @@ mod tests {
             head_ref: "feature".into(),
             head_sha: CommitId(format!("{number:040}").into()),
             base_ref: "main".into(),
+            state: worktree_core::domain::PullRequestState::Open,
             draft: false,
             checks: None,
         }

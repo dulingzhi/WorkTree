@@ -9,8 +9,6 @@ use worktree_core::domain::{FileEntry, FileEntryKind, LogScope};
 use worktree_state::model::{Loadable, SidebarDataRequest, SidebarMode};
 use worktree_state::msg::Msg;
 // Only the (non-test) network spawn below addresses the store directly.
-#[cfg(not(test))]
-use worktree_state::msg::InternalMsg;
 use palette::IntoColor;
 use rustc_hash::{FxHashSet, FxHasher};
 use std::collections::{BTreeMap, BTreeSet};
@@ -18,6 +16,8 @@ use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
+#[cfg(not(test))]
+use worktree_state::msg::InternalMsg;
 
 use crate::kit::TextInput;
 use crate::kit::TextInputOptions;
@@ -91,6 +91,35 @@ pub(in crate::view) enum CollapsedSidebarSection {
     Submodules,
     Stashes,
     Files,
+}
+
+/// What asked for a pull-request fetch. Explicit reasons name a user action,
+/// so their skips land in the log; the section-visible pass runs on every
+/// presentation update and must not.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in super::super) enum PullRequestFetchReason {
+    /// The sidebar section is expanded and the listing is stale.
+    SidebarSection,
+    /// The collapsed-rail popover opened onto the section.
+    PopoverOpened,
+    /// The error row's retry affordance was clicked.
+    RetryRow,
+}
+
+impl PullRequestFetchReason {
+    fn is_explicit(self) -> bool {
+        !matches!(self, Self::SidebarSection)
+    }
+}
+
+impl std::fmt::Display for PullRequestFetchReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::SidebarSection => "sidebar section visible",
+            Self::PopoverOpened => "popover opened",
+            Self::RetryRow => "retry row clicked",
+        })
+    }
 }
 
 impl CollapsedSidebarSection {
@@ -1444,7 +1473,7 @@ impl SidebarPaneView {
             CollapsedSidebarSection::PullRequests => {
                 // The popover renders the section regardless of the persisted
                 // collapse state, so opening it is itself fetch intent.
-                self.fetch_pull_requests_now(cx);
+                self.fetch_pull_requests_now(PullRequestFetchReason::PopoverOpened, cx);
             }
             CollapsedSidebarSection::Local | CollapsedSidebarSection::Remote => {}
         }
@@ -1463,18 +1492,25 @@ impl SidebarPaneView {
             .sidebar_collapsed_items_by_repo
             .get(&repo.spec.workdir)
             .map(|items| {
-                branch_sidebar::is_collapsed(items, branch_sidebar::pull_requests_section_storage_key())
+                branch_sidebar::is_collapsed(
+                    items,
+                    branch_sidebar::pull_requests_section_storage_key(),
+                )
             })
             .unwrap_or(true);
         if !collapsed {
-            self.fetch_pull_requests_now(cx);
+            self.fetch_pull_requests_now(PullRequestFetchReason::SidebarSection, cx);
         }
     }
 
     /// Fetch the active repository's pull requests from the GitHub API
     /// regardless of section visibility (the retry affordance on the error
     /// row). No-op for non-GitHub remotes and while a fetch is in flight.
-    pub(in super::super) fn fetch_pull_requests_now(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(in super::super) fn fetch_pull_requests_now(
+        &mut self,
+        reason: PullRequestFetchReason,
+        cx: &mut gpui::Context<Self>,
+    ) {
         // Every read from the borrowed repo is hoisted into owned values
         // first: the double-spawn guard below assigns into `self`, which
         // would conflict with the outstanding `active_repo` borrow.
@@ -1483,9 +1519,7 @@ impl SidebarPaneView {
                 return;
             };
             let slug = match &repo.remotes {
-                Loadable::Ready(remotes) => {
-                    super::super::github::github_slug_from_remotes(remotes)
-                }
+                Loadable::Ready(remotes) => super::super::github::github_slug_from_remotes(remotes),
                 _ => None,
             };
             (
@@ -1500,15 +1534,41 @@ impl SidebarPaneView {
         if settled {
             self.pull_requests_fetch_in_flight = false;
         }
-        if self.pull_requests_fetch_in_flight || !stale {
+        // The section-visible path calls this on every presentation pass, so
+        // only user-driven reasons log their skips — otherwise a loaded
+        // section would log on every render.
+        if self.pull_requests_fetch_in_flight {
+            if reason.is_explicit() {
+                worktree_core::applog_info!(
+                    "pull-request fetch skipped ({reason}): one is already in flight"
+                );
+            }
+            return;
+        }
+        if !stale {
+            if reason.is_explicit() {
+                worktree_core::applog_info!(
+                    "pull-request fetch skipped ({reason}): listing is already loaded"
+                );
+            }
             return;
         }
         let Some(slug) = slug else {
+            if reason.is_explicit() {
+                worktree_core::applog_info!(
+                    "pull-request fetch skipped ({reason}): no github.com remote"
+                );
+            }
             return;
         };
         self.pull_requests_fetch_in_flight = true;
-        self.store
-            .dispatch(Msg::LoadPullRequests { repo_id });
+        worktree_core::applog_info!(
+            "pull-request fetch started ({reason}): repo {}/{}, repo_id={}",
+            slug.owner,
+            slug.repo,
+            repo_id.0
+        );
+        self.store.dispatch(Msg::LoadPullRequests { repo_id });
 
         // Test builds compile the spawn out; keep the fetch inputs referenced
         // so the function body stays identical either way.
@@ -1542,10 +1602,15 @@ impl SidebarPaneView {
                 }));
                 // Combined CI status per PR head. Statuses are token-gated:
                 // unauthenticated requests share a 60/hour budget with the
-                // listing, so the chips wait for a resolved token.
+                // listing, so the chips wait for a resolved token. Only open
+                // PRs are polled — settled ones no longer run CI, and the
+                // per-PR requests are the listing's rate-limit bottleneck.
                 if super::super::github::github_token().is_some() {
                     for pull_request in pull_requests
                         .iter()
+                        .filter(|pull_request| {
+                            pull_request.state == worktree_core::domain::PullRequestState::Open
+                        })
                         .take(super::super::github::PULL_REQUEST_CHECKS_CAP)
                     {
                         let sha = pull_request.head_sha.as_ref();
@@ -1555,13 +1620,11 @@ impl SidebarPaneView {
                         if let Ok(Some(checks)) =
                             super::super::github::fetch_pull_request_checks(&slug, sha).await
                         {
-                            store.dispatch(Msg::Internal(
-                                InternalMsg::PullRequestChecksLoaded {
-                                    repo_id,
-                                    number: pull_request.number,
-                                    checks,
-                                },
-                            ));
+                            store.dispatch(Msg::Internal(InternalMsg::PullRequestChecksLoaded {
+                                repo_id,
+                                number: pull_request.number,
+                                checks,
+                            }));
                         }
                     }
                 }
@@ -1572,11 +1635,7 @@ impl SidebarPaneView {
 
     /// Open `url` in the system browser, surfacing a failure as a toast via
     /// the root view (the pane has no toast surface of its own).
-    pub(in super::super) fn open_url_in_browser(
-        &self,
-        url: &str,
-        cx: &mut gpui::Context<Self>,
-    ) {
+    pub(in super::super) fn open_url_in_browser(&self, url: &str, cx: &mut gpui::Context<Self>) {
         if let Err(err) = super::super::platform_open::open_url(url)
             && let Some(root) = self.root_view.upgrade()
         {

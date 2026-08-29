@@ -1120,6 +1120,10 @@ fn reduce_inner(
         Msg::LoadPullRequests { repo_id } => {
             if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
                 repo_state.set_pull_requests(Loadable::Loading);
+                worktree_core::applog_info!(
+                    "pull-request load state: loading (repo_id={})",
+                    repo_id.0
+                );
             }
             Vec::new()
         }
@@ -2436,6 +2440,17 @@ fn reduce_inner(
         }) => diff_selection::diff_file_image_loaded(state, repo_id, target, result),
         Msg::Internal(crate::msg::InternalMsg::PullRequestsLoaded { repo_id, result }) => {
             if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+                match &result {
+                    Ok(pull_requests) => worktree_core::applog_info!(
+                        "pull-request load state: {} pull requests stored (repo_id={})",
+                        pull_requests.len(),
+                        repo_id.0
+                    ),
+                    Err(error) => worktree_core::applog_warn!(
+                        "pull-request load state: error stored: {error} (repo_id={})",
+                        repo_id.0
+                    ),
+                }
                 repo_state.set_pull_requests(match result {
                     Ok(pull_requests) => Loadable::Ready(pull_requests),
                     Err(error) => Loadable::Error(error.to_string()),

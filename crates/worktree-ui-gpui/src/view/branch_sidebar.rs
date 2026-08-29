@@ -1,5 +1,4 @@
 use super::*;
-use worktree_core::domain::{PullRequestChecksState, SubmoduleStatus};
 use rustc_hash::{FxHashMap, FxHasher};
 use smallvec::SmallVec;
 use std::{
@@ -8,6 +7,7 @@ use std::{
     hash::{Hash, Hasher},
     num::NonZeroU32,
 };
+use worktree_core::domain::{PullRequestChecksState, PullRequestState, SubmoduleStatus};
 
 const PINNED_LOCAL_SECTION_KEY: &str = "section:pinned/local";
 const PINNED_REMOTE_SECTION_KEY: &str = "section:pinned/remote";
@@ -280,6 +280,7 @@ pub(super) enum BranchSidebarRow {
         number: u64,
         title: SharedString,
         author: SharedString,
+        state: PullRequestState,
         draft: bool,
         checks: Option<PullRequestChecksState>,
     },
@@ -443,8 +444,7 @@ impl BranchSidebarSourceFingerprintParts {
         let tags_rev = repo.tags_rev;
         let tags_reuse_identity = fingerprint::loadable_arc_identity(&repo.tags);
         let pull_requests_rev = repo.pull_requests_rev;
-        let pull_requests_reuse_identity =
-            fingerprint::loadable_arc_identity(&repo.pull_requests);
+        let pull_requests_reuse_identity = fingerprint::loadable_arc_identity(&repo.pull_requests);
 
         Self {
             local_revs,
@@ -806,6 +806,7 @@ fn hash_branch_sidebar_pull_requests_source<H: Hasher>(repo: &RepoState, hasher:
             pull_request.number.hash(hasher);
             pull_request.title.hash(hasher);
             pull_request.author.hash(hasher);
+            pull_request.state.hash(hasher);
             pull_request.draft.hash(hasher);
             pull_request.checks.hash(hasher);
         }
@@ -1277,6 +1278,7 @@ pub(super) fn branch_sidebar_rows(
                             number: pull_request.number,
                             title: pull_request.title.clone().into(),
                             author: pull_request.author.clone().into(),
+                            state: pull_request.state,
                             draft: pull_request.draft,
                             checks: pull_request.checks,
                         });
@@ -2238,14 +2240,14 @@ mod tests {
         assert_eq!(parse_branch_pin_key("garbage"), None);
     }
     use super::*;
+    use std::collections::BTreeSet;
+    use std::path::PathBuf;
+    use std::sync::Arc;
     use worktree_core::domain::{
         Branch, CommitId, FileStatus, FileStatusKind, PullRequest, PullRequestChecksState, Remote,
         RemoteBranch, RepoSpec, RepoStatus, StashEntry, Submodule, SubmoduleStatus, Upstream,
         Worktree,
     };
-    use std::collections::BTreeSet;
-    use std::path::PathBuf;
-    use std::sync::Arc;
 
     fn commit_id(id: &str) -> CommitId {
         CommitId(id.into())
@@ -2702,6 +2704,7 @@ mod tests {
                 head_ref: "fix/merge-focus".to_string(),
                 head_sha: commit_id("aa1111111111111111111111111111111111111111"),
                 base_ref: "main".to_string(),
+                state: PullRequestState::Open,
                 draft: false,
                 checks: Some(PullRequestChecksState::Success),
             },
@@ -2712,6 +2715,7 @@ mod tests {
                 head_ref: "kim/chips".to_string(),
                 head_sha: commit_id("bb2222222222222222222222222222222222222222"),
                 base_ref: "main".to_string(),
+                state: PullRequestState::Open,
                 draft: true,
                 checks: Some(PullRequestChecksState::Pending),
             },
@@ -2730,12 +2734,7 @@ mod tests {
     #[test]
     fn pull_request_rows_render_between_remote_branches_and_worktrees() {
         let repo = github_repo_with_pull_requests();
-        let rows = branch_sidebar_rows(
-            &repo,
-            &pr_section_expanded_items(),
-            &BTreeSet::new(),
-            "",
-        );
+        let rows = branch_sidebar_rows(&repo, &pr_section_expanded_items(), &BTreeSet::new(), "");
 
         let header = rows
             .iter()
@@ -2789,11 +2788,16 @@ mod tests {
 
         assert!(rows.iter().any(|row| matches!(
             row,
-            BranchSidebarRow::PullRequestsHeader { collapsed: true, .. }
+            BranchSidebarRow::PullRequestsHeader {
+                collapsed: true,
+                ..
+            }
         )));
-        assert!(!rows
-            .iter()
-            .any(|row| matches!(row, BranchSidebarRow::PullRequestItem { .. })));
+        assert!(
+            !rows
+                .iter()
+                .any(|row| matches!(row, BranchSidebarRow::PullRequestItem { .. }))
+        );
     }
 
     #[test]
@@ -2803,12 +2807,7 @@ mod tests {
             name: "origin".to_string(),
             url: Some("https://gitlab.com/acme/widgets.git".to_string()),
         }]));
-        let rows = branch_sidebar_rows(
-            &repo,
-            &pr_section_expanded_items(),
-            &BTreeSet::new(),
-            "",
-        );
+        let rows = branch_sidebar_rows(&repo, &pr_section_expanded_items(), &BTreeSet::new(), "");
 
         assert!(!rows.iter().any(|row| matches!(
             row,
@@ -2823,46 +2822,42 @@ mod tests {
         let mut repo = github_repo_with_pull_requests();
 
         repo.pull_requests = Loadable::Error("rate limited".into());
-        let rows = branch_sidebar_rows(
-            &repo,
-            &pr_section_expanded_items(),
-            &BTreeSet::new(),
-            "",
-        );
+        let rows = branch_sidebar_rows(&repo, &pr_section_expanded_items(), &BTreeSet::new(), "");
         assert!(matches!(
             rows.iter()
                 .find(|row| matches!(row, BranchSidebarRow::PullRequestPlaceholder { .. })),
-            Some(BranchSidebarRow::PullRequestPlaceholder { retryable: true, .. })
+            Some(BranchSidebarRow::PullRequestPlaceholder {
+                retryable: true,
+                ..
+            })
         ));
 
         repo.pull_requests = Loadable::NotLoaded;
-        let rows = branch_sidebar_rows(
-            &repo,
-            &pr_section_expanded_items(),
-            &BTreeSet::new(),
-            "",
-        );
+        let rows = branch_sidebar_rows(&repo, &pr_section_expanded_items(), &BTreeSet::new(), "");
         assert!(matches!(
             rows.iter()
                 .find(|row| matches!(row, BranchSidebarRow::PullRequestPlaceholder { .. })),
-            Some(BranchSidebarRow::PullRequestPlaceholder { retryable: false, .. })
+            Some(BranchSidebarRow::PullRequestPlaceholder {
+                retryable: false,
+                ..
+            })
         ));
 
         // Zero open PRs is a settled state: one hint row, nothing retryable.
         repo.pull_requests = Loadable::Ready(Arc::new(vec![]));
-        let rows = branch_sidebar_rows(
-            &repo,
-            &pr_section_expanded_items(),
-            &BTreeSet::new(),
-            "",
-        );
+        let rows = branch_sidebar_rows(&repo, &pr_section_expanded_items(), &BTreeSet::new(), "");
         assert!(matches!(
             rows.iter()
                 .find(|row| matches!(row, BranchSidebarRow::PullRequestPlaceholder { .. })),
-            Some(BranchSidebarRow::PullRequestPlaceholder { retryable: false, .. })
+            Some(BranchSidebarRow::PullRequestPlaceholder {
+                retryable: false,
+                ..
+            })
         ));
-        assert!(!rows
-            .iter()
-            .any(|row| matches!(row, BranchSidebarRow::PullRequestItem { .. })));
+        assert!(
+            !rows
+                .iter()
+                .any(|row| matches!(row, BranchSidebarRow::PullRequestItem { .. }))
+        );
     }
 }

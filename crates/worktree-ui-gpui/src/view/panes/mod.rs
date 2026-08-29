@@ -23,4 +23,4 @@ pub(in crate::view) use history::{
 pub(crate) use main::MainPaneView;
 pub(super) use reflog::{ReflogPaneInit, ReflogPaneView};
 pub(in crate::view) use sidebar::file_browser_search_is_active;
-pub(super) use sidebar::{CollapsedSidebarSection, SidebarPaneView};
+pub(super) use sidebar::{CollapsedSidebarSection, PullRequestFetchReason, SidebarPaneView};
