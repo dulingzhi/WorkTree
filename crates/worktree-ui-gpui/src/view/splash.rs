@@ -949,31 +949,31 @@ impl WorkTreeView {
                 *section != CollapsedSidebarSection::PullRequests || pull_requests_available
             })
             .map(|section| {
-            let is_active = active == Some(section);
-            let icon_color = if is_active {
-                theme.colors.foreground.primary
-            } else {
-                icon_muted
-            };
-            div()
-                .id(section.element_id())
-                .flex()
-                .items_center()
-                .justify_center()
-                .size(slot)
-                .rounded(px(theme.radii.control))
-                .cursor(CursorStyle::PointingHand)
-                .when(is_active, |d| d.bg(active_bg))
-                .hover(move |d| if is_active { d } else { d.bg(hover_bg) })
-                .child(svg_icon(section.icon_path(), icon_color, scaled_px(16.0)))
-                .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(move |this, _e, _window, cx| {
-                        this.toggle_sidebar_collapsed_popover(section, cx);
-                    }),
-                )
-                .worktree_tooltip(theme, section.title().into())
-        });
+                let is_active = active == Some(section);
+                let icon_color = if is_active {
+                    theme.colors.foreground.primary
+                } else {
+                    icon_muted
+                };
+                div()
+                    .id(section.element_id())
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .size(slot)
+                    .rounded(px(theme.radii.control))
+                    .cursor(CursorStyle::PointingHand)
+                    .when(is_active, |d| d.bg(active_bg))
+                    .hover(move |d| if is_active { d } else { d.bg(hover_bg) })
+                    .child(svg_icon(section.icon_path(), icon_color, scaled_px(16.0)))
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |this, _e, _window, cx| {
+                            this.toggle_sidebar_collapsed_popover(section, cx);
+                        }),
+                    )
+                    .worktree_tooltip(theme, section.title().into())
+            });
 
         div()
             .flex()

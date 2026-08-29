@@ -1049,12 +1049,12 @@ fn plan_summary_counts_deltas_conflicts_and_whitespace_like_kdiff3() {
 
 #[test]
 fn active_conflict_autosolve_trace_label_reports_rule_and_confidence() {
+    use std::path::PathBuf;
     use worktree_core::conflict_session::{
         AutosolveConfidence, AutosolveRule, ConflictPayload, ConflictRegion,
         ConflictRegionResolution as R, ConflictSession,
     };
     use worktree_core::domain::FileConflictKind;
-    use std::path::PathBuf;
 
     let mut session = ConflictSession::new(
         PathBuf::from("a.txt"),
@@ -1091,11 +1091,11 @@ fn active_conflict_autosolve_trace_label_reports_rule_and_confidence() {
 
 #[test]
 fn active_conflict_autosolve_trace_label_returns_none_when_not_auto_or_oob() {
+    use std::path::PathBuf;
     use worktree_core::conflict_session::{
         ConflictPayload, ConflictRegion, ConflictRegionResolution as R, ConflictSession,
     };
     use worktree_core::domain::FileConflictKind;
-    use std::path::PathBuf;
 
     let mut session = ConflictSession::new(
         PathBuf::from("a.txt"),

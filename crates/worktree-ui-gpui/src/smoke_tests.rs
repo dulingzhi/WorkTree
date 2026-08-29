@@ -1,14 +1,6 @@
 use crate::test_support::{lock_clipboard_test, lock_visual_test};
 use crate::view::components;
 use crate::{theme::AppTheme, ui_scale, view};
-use worktree_core::domain::*;
-use worktree_core::error::{Error, ErrorKind};
-use worktree_core::services::{GitBackend, GitRepository, PullMode, Result};
-use worktree_state::model::Loadable;
-use worktree_state::model::RepoId;
-use worktree_state::model::SidebarDataRequest;
-use worktree_state::msg::Msg;
-use worktree_state::store::AppStore;
 use gpui::prelude::*;
 use gpui::{
     ClipboardItem, Decorations, KeyBinding, Modifiers, MouseButton, MouseDownEvent, MouseUpEvent,
@@ -20,6 +12,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
+use worktree_core::domain::*;
+use worktree_core::error::{Error, ErrorKind};
+use worktree_core::services::{GitBackend, GitRepository, PullMode, Result};
+use worktree_state::model::Loadable;
+use worktree_state::model::RepoId;
+use worktree_state::model::SidebarDataRequest;
+use worktree_state::msg::Msg;
+use worktree_state::store::AppStore;
 
 fn assert_no_panic(label: &str, f: impl FnOnce()) {
     if std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).is_err() {
@@ -1310,12 +1310,12 @@ impl GitRepository for SlowSubmoduleRepo {
     }
 
     fn stash_create(
-            &self,
-            _message: &str,
-            _include_untracked: bool,
-            _keep_index: bool,
-            _paths: &[PathBuf],
-        ) -> Result<()> {
+        &self,
+        _message: &str,
+        _include_untracked: bool,
+        _keep_index: bool,
+        _paths: &[PathBuf],
+    ) -> Result<()> {
         Self::unsupported()
     }
 
@@ -1450,12 +1450,12 @@ impl GitRepository for SlowStashRepo {
     }
 
     fn stash_create(
-            &self,
-            _message: &str,
-            _include_untracked: bool,
-            _keep_index: bool,
-            _paths: &[PathBuf],
-        ) -> Result<()> {
+        &self,
+        _message: &str,
+        _include_untracked: bool,
+        _keep_index: bool,
+        _paths: &[PathBuf],
+    ) -> Result<()> {
         Self::unsupported()
     }
 

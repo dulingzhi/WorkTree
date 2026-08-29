@@ -183,7 +183,10 @@ fn unix_seconds(t: SystemTime) -> i64 {
 
 /// Local calendar day (days since 1970-01-01) of a unix timestamp.
 fn epoch_day_in_zone(unix: i64, timezone: Timezone) -> i64 {
-    floor_div(unix.saturating_add(timezone.offset_seconds_at(unix)), 86_400)
+    floor_div(
+        unix.saturating_add(timezone.offset_seconds_at(unix)),
+        86_400,
+    )
 }
 
 fn floor_div(a: i64, b: i64) -> i64 {
@@ -302,14 +305,38 @@ mod tests {
         // on Aug 22 and Aug 30 stay out.
         assert_eq!(model.week.total_commits, 3);
         assert_eq!(model.week.bars.len(), 7);
-        assert_eq!(model.week.bars[0], StatisticsBar { label_index: 0, count: 1 });
-        assert_eq!(model.week.bars[4], StatisticsBar { label_index: 4, count: 2 });
-        assert_eq!(model.week.bars[6], StatisticsBar { label_index: 6, count: 0 });
+        assert_eq!(
+            model.week.bars[0],
+            StatisticsBar {
+                label_index: 0,
+                count: 1
+            }
+        );
+        assert_eq!(
+            model.week.bars[4],
+            StatisticsBar {
+                label_index: 4,
+                count: 2
+            }
+        );
+        assert_eq!(
+            model.week.bars[6],
+            StatisticsBar {
+                label_index: 6,
+                count: 0
+            }
+        );
         assert_eq!(
             model.week.contributors,
             vec![
-                StatisticsContributor { author: Arc::from("Alice"), count: 2 },
-                StatisticsContributor { author: Arc::from("Bob"), count: 1 },
+                StatisticsContributor {
+                    author: Arc::from("Alice"),
+                    count: 2
+                },
+                StatisticsContributor {
+                    author: Arc::from("Bob"),
+                    count: 1
+                },
             ]
         );
     }
@@ -387,12 +414,7 @@ mod tests {
         ];
 
         let model = build_statistics_model(&commits, Timezone::Utc, now);
-        let names: Vec<&str> = model
-            .week
-            .contributors
-            .iter()
-            .map(|c| &*c.author)
-            .collect();
+        let names: Vec<&str> = model.week.contributors.iter().map(|c| &*c.author).collect();
         assert_eq!(names, vec!["Alice", "Bob", "Carol"]);
         assert!(model.week.contributors[0].count >= model.week.contributors[1].count);
     }

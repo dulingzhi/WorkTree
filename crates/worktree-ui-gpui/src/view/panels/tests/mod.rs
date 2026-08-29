@@ -8,13 +8,13 @@ pub(super) use super::*;
 pub(super) use crate::test_support::{lock_clipboard_test, lock_visual_test};
 pub(super) use crate::view::panes::main::PreparedSyntaxViewMode;
 pub(super) use crate::view::show_diff_file_navigation;
-pub(super) use worktree_core::error::{Error, ErrorKind};
-pub(super) use worktree_core::services::{GitBackend, GitRepository, Result};
-pub(super) use worktree_state::store::AppStore;
 pub(super) use gpui::{Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, Pixels, point, px};
 pub(super) use std::path::Path;
 pub(super) use std::sync::Arc;
 pub(super) use std::sync::atomic::{AtomicUsize, Ordering};
+pub(super) use worktree_core::error::{Error, ErrorKind};
+pub(super) use worktree_core::services::{GitBackend, GitRepository, Result};
+pub(super) use worktree_state::store::AppStore;
 
 pub(super) fn simulate_counted_click(
     cx: &mut gpui::VisualTestContext,

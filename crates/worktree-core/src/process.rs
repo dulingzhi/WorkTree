@@ -181,9 +181,7 @@ fn git_config_set_with(
         }
     }
     let output = cmd.output()?;
-    if output.status.success()
-        || (value.is_none() && output.status.code() == Some(5))
-    {
+    if output.status.success() || (value.is_none() && output.status.code() == Some(5)) {
         return Ok(());
     }
     Err(std::io::Error::other(format!(

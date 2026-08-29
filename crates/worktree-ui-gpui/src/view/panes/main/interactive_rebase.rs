@@ -1,8 +1,8 @@
 use super::super::super::*;
 use super::helpers::{ICommitEditorMode, IRebaseDragState, IRebaseViewState};
-use worktree_core::services::{InteractiveRebaseAction, InteractiveRebaseEntry};
 use rustc_hash::{FxHashMap, FxHasher};
 use std::{cell::RefCell, rc::Rc};
+use worktree_core::services::{InteractiveRebaseAction, InteractiveRebaseEntry};
 
 const ACTION_BTN_W: f32 = 76.0;
 

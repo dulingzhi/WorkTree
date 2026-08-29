@@ -4,7 +4,7 @@
 //! merge-request form. Self-hosted GitLab hosts are not guessed — only the
 //! hosts the permalink forge map already knows produce these URLs.
 
-use super::permalink::{parse_remote_url, ForgeKind, ForgeWebBase};
+use super::permalink::{ForgeKind, ForgeWebBase, parse_remote_url};
 use worktree_core::domain::Remote;
 
 /// The forges with a known create-request web shape.
@@ -78,14 +78,16 @@ pub(in crate::view) fn create_request_url(
     match kind {
         ForgeRequestKind::GitHub => match base_branch {
             Some(base) if branch_is_url_safe(base) => {
-                format!("{web_root}/compare/{}...{head}", encode_query_component(base))
+                format!(
+                    "{web_root}/compare/{}...{head}",
+                    encode_query_component(base)
+                )
             }
             _ => format!("{web_root}/pull/new/{head}"),
         },
         ForgeRequestKind::GitLab => {
-            let mut url = format!(
-                "{web_root}/-/merge_requests/new?merge_request[source_branch]={head}"
-            );
+            let mut url =
+                format!("{web_root}/-/merge_requests/new?merge_request[source_branch]={head}");
             if let Some(base) = base_branch.filter(|base| branch_is_url_safe(base)) {
                 url.push_str("&merge_request[target_branch]=");
                 url.push_str(&encode_query_component(base));
@@ -124,29 +126,28 @@ mod tests {
 
         // A self-hosted GitLab is indistinguishable from any generic host by
         // URL alone — no create-request URL is guessed for it.
-        assert!(forge_request_base_from_remotes(&[remote(
-            "origin",
-            "https://git.acme.dev/widgets.git"
-        )])
-        .is_none());
+        assert!(
+            forge_request_base_from_remotes(&[remote(
+                "origin",
+                "https://git.acme.dev/widgets.git"
+            )])
+            .is_none()
+        );
         // No URL at all: nothing to resolve from.
-        assert!(forge_request_base_from_remotes(&[Remote {
-            name: "origin".to_string(),
-            url: None,
-        }])
-        .is_none());
+        assert!(
+            forge_request_base_from_remotes(&[Remote {
+                name: "origin".to_string(),
+                url: None,
+            }])
+            .is_none()
+        );
     }
 
     #[test]
     fn github_urls_use_compare_with_a_base_and_pull_new_without() {
         let root = "https://github.com/acme/widgets";
         assert_eq!(
-            create_request_url(
-                ForgeRequestKind::GitHub,
-                root,
-                "feat/widget",
-                Some("main")
-            ),
+            create_request_url(ForgeRequestKind::GitHub, root, "feat/widget", Some("main")),
             "https://github.com/acme/widgets/compare/main...feat/widget"
         );
         assert_eq!(
@@ -159,12 +160,7 @@ mod tests {
     fn gitlab_urls_prefill_the_merge_request_form() {
         let root = "https://gitlab.com/acme/widgets";
         assert_eq!(
-            create_request_url(
-                ForgeRequestKind::GitLab,
-                root,
-                "feat/widget",
-                Some("main")
-            ),
+            create_request_url(ForgeRequestKind::GitLab, root, "feat/widget", Some("main")),
             "https://gitlab.com/acme/widgets/-/merge_requests/new\
              ?merge_request[source_branch]=feat/widget\
              &merge_request[target_branch]=main"

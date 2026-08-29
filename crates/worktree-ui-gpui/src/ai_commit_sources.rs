@@ -177,9 +177,7 @@ pub(crate) fn resolve_http_settings(
 fn resolve_claude_code(env: &EnvAccess) -> Option<AiCommitSettings> {
     // settings.json first, environment second — a settings block overrides,
     // an exported variable covers users who never opened the settings file.
-    let read = |name: &str| {
-        read_claude_settings_env(&env.home, name).or_else(|| env.var(name))
-    };
+    let read = |name: &str| read_claude_settings_env(&env.home, name).or_else(|| env.var(name));
     // Claude Code relays keep their credential in ANTHROPIC_AUTH_TOKEN, a
     // bearer token; a plain console key may sit in ANTHROPIC_API_KEY. The
     // auth token wins when both are set, and only it turns on Bearer auth.
@@ -209,8 +207,7 @@ fn read_claude_settings_env(home: &Path, name: &str) -> Option<String> {
 }
 
 fn resolve_codex(env: &EnvAccess) -> Option<AiCommitSettings> {
-    let api_key =
-        read_codex_api_key(&env.home).or_else(|| env.var("OPENAI_API_KEY"))?;
+    let api_key = read_codex_api_key(&env.home).or_else(|| env.var("OPENAI_API_KEY"))?;
     let (model, base_url) = read_codex_config(&env.home);
     Some(AiCommitSettings {
         provider: AiProvider::OpenAiCompatible,
@@ -288,11 +285,7 @@ fn strip_toml_value(raw: &str) -> String {
             return rest[..end].to_string();
         }
     }
-    raw.split('#')
-        .next()
-        .unwrap_or_default()
-        .trim()
-        .to_string()
+    raw.split('#').next().unwrap_or_default().trim().to_string()
 }
 
 fn resolve_copilot(env: &EnvAccess) -> Option<AiCommitSettings> {
@@ -528,8 +521,20 @@ pub(crate) fn unavailable_key(source: AiSource) -> &'static str {
 /// when naming one helps.
 pub(crate) fn unavailable_detail(source: AiSource, env: &EnvAccess) -> Option<String> {
     match source {
-        AiSource::ClaudeCode => Some(env.home.join(".claude").join("settings.json").display().to_string()),
-        AiSource::Codex => Some(env.home.join(".codex").join("auth.json").display().to_string()),
+        AiSource::ClaudeCode => Some(
+            env.home
+                .join(".claude")
+                .join("settings.json")
+                .display()
+                .to_string(),
+        ),
+        AiSource::Codex => Some(
+            env.home
+                .join(".codex")
+                .join("auth.json")
+                .display()
+                .to_string(),
+        ),
         _ => None,
     }
 }
@@ -566,7 +571,10 @@ mod tests {
         }
         assert_eq!(AiSource::from_key("nonsense"), None);
         // Old sessions with no stored source land on manual.
-        assert_eq!(AiSource::from_key("").or(Some(AiSource::Manual)), Some(AiSource::Manual));
+        assert_eq!(
+            AiSource::from_key("").or(Some(AiSource::Manual)),
+            Some(AiSource::Manual)
+        );
     }
 
     #[test]
@@ -618,7 +626,10 @@ mod tests {
         // Both set → the auth token wins.
         let env = env_with_vars(
             dir.path(),
-            &[("ANTHROPIC_AUTH_TOKEN", "tok-both"), ("ANTHROPIC_API_KEY", "sk-both")],
+            &[
+                ("ANTHROPIC_AUTH_TOKEN", "tok-both"),
+                ("ANTHROPIC_API_KEY", "sk-both"),
+            ],
         );
         let settings =
             resolve_http_settings(AiSource::ClaudeCode, &AiCommitSettings::default(), &env)
@@ -634,7 +645,11 @@ mod tests {
         );
 
         // Malformed JSON falls back to the environment rather than failing.
-        std::fs::write(dir.path().join(".claude").join("settings.json"), "{not json").unwrap();
+        std::fs::write(
+            dir.path().join(".claude").join("settings.json"),
+            "{not json",
+        )
+        .unwrap();
         let env = env_with_vars(dir.path(), &[("ANTHROPIC_AUTH_TOKEN", "tok-env2")]);
         let settings =
             resolve_http_settings(AiSource::ClaudeCode, &AiCommitSettings::default(), &env)
@@ -668,9 +683,8 @@ base_url = "https://unused.example.com"
         .unwrap();
 
         let env = env_with_home(dir.path());
-        let settings =
-            resolve_http_settings(AiSource::Codex, &AiCommitSettings::default(), &env)
-                .expect("codex credentials resolve");
+        let settings = resolve_http_settings(AiSource::Codex, &AiCommitSettings::default(), &env)
+            .expect("codex credentials resolve");
         assert_eq!(settings.provider, AiProvider::OpenAiCompatible);
         assert_eq!(settings.api_key, "sk-codex");
         assert_eq!(settings.model, "gpt-5.2-codex");
@@ -696,7 +710,9 @@ base_url = "https://unused.example.com"
         assert_eq!(settings.api_key, "sk-env");
 
         let env = env_with_home(dir.path());
-        assert!(resolve_http_settings(AiSource::Codex, &AiCommitSettings::default(), &env).is_none());
+        assert!(
+            resolve_http_settings(AiSource::Codex, &AiCommitSettings::default(), &env).is_none()
+        );
     }
 
     #[test]
@@ -722,26 +738,24 @@ base_url = "https://unused.example.com"
         .unwrap();
 
         let env = env_with_home(dir.path());
-        let settings =
-            resolve_http_settings(AiSource::Copilot, &AiCommitSettings::default(), &env)
-                .expect("hosts.yml token resolves");
+        let settings = resolve_http_settings(AiSource::Copilot, &AiCommitSettings::default(), &env)
+            .expect("hosts.yml token resolves");
         assert_eq!(settings.provider, AiProvider::OpenAiCompatible);
         assert_eq!(settings.api_key, "gho_abc");
         assert_eq!(settings.endpoint, "https://models.github.ai/inference");
         assert_eq!(settings.model, "gpt-4o");
 
         std::fs::remove_file(dir.path().join(".config").join("gh").join("hosts.yml")).unwrap();
-        let env = env_with_vars(
-            dir.path(),
-            &[("GITHUB_TOKEN", "ghp_env"), ("GH_TOKEN", "")],
-        );
+        let env = env_with_vars(dir.path(), &[("GITHUB_TOKEN", "ghp_env"), ("GH_TOKEN", "")]);
         // GH_TOKEN set but blank is skipped in favor of GITHUB_TOKEN.
         let settings =
             resolve_http_settings(AiSource::Copilot, &AiCommitSettings::default(), &env).unwrap();
         assert_eq!(settings.api_key, "ghp_env");
 
         let env = env_with_home(dir.path());
-        assert!(resolve_http_settings(AiSource::Copilot, &AiCommitSettings::default(), &env).is_none());
+        assert!(
+            resolve_http_settings(AiSource::Copilot, &AiCommitSettings::default(), &env).is_none()
+        );
     }
 
     #[test]
@@ -763,7 +777,10 @@ base_url = "https://unused.example.com"
 
         let env = env_with_vars(
             dir.path(),
-            &[("OPENAI_API_KEY", "sk-oai"), ("OPENAI_MODEL", "gpt-4.1-mini")],
+            &[
+                ("OPENAI_API_KEY", "sk-oai"),
+                ("OPENAI_MODEL", "gpt-4.1-mini"),
+            ],
         );
         let settings =
             resolve_http_settings(AiSource::Env, &AiCommitSettings::default(), &env).unwrap();
@@ -794,7 +811,10 @@ base_url = "https://unused.example.com"
         let claude = cli_spec(AiSource::CliClaude).unwrap();
         assert_eq!(claude.executable, "claude");
         assert_eq!(claude.args_template, "-p {PROMPT}");
-        assert_eq!(cli_spec(AiSource::CliOllama).unwrap().default_model, "llama3");
+        assert_eq!(
+            cli_spec(AiSource::CliOllama).unwrap().default_model,
+            "llama3"
+        );
         assert!(cli_spec(AiSource::Manual).is_none());
     }
 
@@ -849,21 +869,13 @@ base_url = "https://unused.example.com"
         let path_var = dir.path().display().to_string();
 
         let env = env_with_vars(Path::new("/nonexistent"), &[("PATH", &path_var)]);
-        let availability = check_availability(
-            AiSource::CliClaude,
-            &AiCommitSettings::default(),
-            "",
-            &env,
-        );
+        let availability =
+            check_availability(AiSource::CliClaude, &AiCommitSettings::default(), "", &env);
         assert!(availability.detected);
 
         let env = env_with_vars(Path::new("/nonexistent"), &[("PATH", "/empty")]);
-        let availability = check_availability(
-            AiSource::CliClaude,
-            &AiCommitSettings::default(),
-            "",
-            &env,
-        );
+        let availability =
+            check_availability(AiSource::CliClaude, &AiCommitSettings::default(), "", &env);
         assert!(!availability.detected);
         assert_eq!(
             availability.message,
@@ -871,24 +883,15 @@ base_url = "https://unused.example.com"
         );
 
         let env = env_with_home(Path::new("/nonexistent"));
-        let availability = check_availability(
-            AiSource::Custom,
-            &AiCommitSettings::default(),
-            "",
-            &env,
-        );
+        let availability =
+            check_availability(AiSource::Custom, &AiCommitSettings::default(), "", &env);
         assert!(!availability.detected);
         assert_eq!(
             availability.message.unwrap().0,
             "settings.ai_commit.missing.custom_empty"
         );
 
-        let availability = check_availability(
-            AiSource::Manual,
-            &manual_settings("sk-x"),
-            "",
-            &env,
-        );
+        let availability = check_availability(AiSource::Manual, &manual_settings("sk-x"), "", &env);
         assert!(availability.detected);
     }
 }

@@ -2011,9 +2011,7 @@ fn commit_tag_and_branch_menus_offer_archive_zip(cx: &mut gpui::TestAppContext) 
 
     let archive_entry = |model: &ContextMenuModel| {
         model.items.iter().find_map(|item| match item {
-            ContextMenuItem::Entry { label, action, .. }
-                if label.as_ref() == "Archive to ZIP…" =>
-            {
+            ContextMenuItem::Entry { label, action, .. } if label.as_ref() == "Archive to ZIP…" => {
                 Some((**action).clone())
             }
             _ => None,
@@ -2021,40 +2019,39 @@ fn commit_tag_and_branch_menus_offer_archive_zip(cx: &mut gpui::TestAppContext) 
     };
 
     cx.update(|_window, app| {
-        let (commit_model, tag_model, branch_model) = view
-            .update(app, |this, cx| {
-                this.popover_host.update(cx, |host, cx| {
-                    let commit_model = host
-                        .context_menu_model(
-                            &PopoverKind::CommitMenu {
-                                repo_id,
-                                commit_id: commit_id.clone(),
-                            },
-                            cx,
-                        )
-                        .expect("commit menu");
-                    let tag_model = host
-                        .context_menu_model(
-                            &PopoverKind::TagMenu {
-                                repo_id,
-                                commit_id: commit_id.clone(),
-                            },
-                            cx,
-                        )
-                        .expect("tag menu");
-                    let branch_model = host
-                        .context_menu_model(
-                            &PopoverKind::BranchMenu {
-                                repo_id,
-                                section: BranchSection::Local,
-                                name: "feat/badges".to_string(),
-                            },
-                            cx,
-                        )
-                        .expect("branch menu");
-                    (commit_model, tag_model, branch_model)
-                })
-            });
+        let (commit_model, tag_model, branch_model) = view.update(app, |this, cx| {
+            this.popover_host.update(cx, |host, cx| {
+                let commit_model = host
+                    .context_menu_model(
+                        &PopoverKind::CommitMenu {
+                            repo_id,
+                            commit_id: commit_id.clone(),
+                        },
+                        cx,
+                    )
+                    .expect("commit menu");
+                let tag_model = host
+                    .context_menu_model(
+                        &PopoverKind::TagMenu {
+                            repo_id,
+                            commit_id: commit_id.clone(),
+                        },
+                        cx,
+                    )
+                    .expect("tag menu");
+                let branch_model = host
+                    .context_menu_model(
+                        &PopoverKind::BranchMenu {
+                            repo_id,
+                            section: BranchSection::Local,
+                            name: "feat/badges".to_string(),
+                        },
+                        cx,
+                    )
+                    .expect("branch menu");
+                (commit_model, tag_model, branch_model)
+            })
+        });
 
         match archive_entry(&commit_model).expect("commit menu archive entry") {
             ContextMenuAction::ArchiveZip {

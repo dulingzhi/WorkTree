@@ -9,9 +9,9 @@
 //! view.
 
 use super::*;
-use worktree_core::domain::{Commit, CommitId};
 use std::collections::HashSet;
 use std::rc::Rc;
+use worktree_core::domain::{Commit, CommitId};
 
 /// Height the row list caps at. Shared with the keyboard navigation that
 /// scrolls it, for the same windowing reason as the remote picker's.
@@ -133,9 +133,8 @@ pub(super) fn cached(
             for commit in &page.commits {
                 loaded_ids.insert(&commit.id);
                 items.push(
-                    commit_row(commit, now).section(crate::i18n::tr(
-                        "ui.picker.commit_search.section.loaded",
-                    )),
+                    commit_row(commit, now)
+                        .section(crate::i18n::tr("ui.picker.commit_search.section.loaded")),
                 );
                 rows.push(CommitSearchPickerRow::Commit(commit.id.clone()));
             }
@@ -193,7 +192,8 @@ pub(super) fn activate(
 ) {
     match row {
         CommitSearchPickerRow::Commit(reference) => {
-            this.store.dispatch(Msg::RevealCommit { repo_id, reference });
+            this.store
+                .dispatch(Msg::RevealCommit { repo_id, reference });
             this.close_popover(cx);
         }
         CommitSearchPickerRow::SearchAll => {
@@ -201,9 +201,11 @@ pub(super) fn activate(
                 return;
             };
             let query = search.read(cx).text().trim().to_string();
-            if query.is_empty() || this.state.repos.iter().any(|repo| {
-                repo.id == repo_id && matches!(repo.commit_search, Loadable::Loading)
-            }) {
+            if query.is_empty()
+                || this.state.repos.iter().any(|repo| {
+                    repo.id == repo_id && matches!(repo.commit_search, Loadable::Loading)
+                })
+            {
                 return;
             }
             this.store.dispatch(Msg::SearchCommits { repo_id, query });
@@ -265,12 +267,17 @@ pub(super) fn panel(
                 .empty_text(crate::i18n::tr("ui.picker.commit_search.empty"))
                 .max_height(scaled_px(COMMIT_SEARCH_PICKER_LIST_MAX_HEIGHT_PX))
                 .selected_index(this.commit_search_picker_selected_index)
-                .render(theme, ui_scale_percent, cx, move |this, ix, _e, _window, cx| {
-                    let Some(row) = rows.get(ix).cloned() else {
-                        return;
-                    };
-                    activate(this, repo_id, row, cx);
-                }),
+                .render(
+                    theme,
+                    ui_scale_percent,
+                    cx,
+                    move |this, ix, _e, _window, cx| {
+                        let Some(row) = rows.get(ix).cloned() else {
+                            return;
+                        };
+                        activate(this, repo_id, row, cx);
+                    },
+                ),
         );
 
     components::context_menu(theme, menu).w(width.preferred_px(ui_scale))

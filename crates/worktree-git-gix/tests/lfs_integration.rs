@@ -57,13 +57,16 @@ fn commit_all(repo: &Path, message: &str) {
 }
 
 fn head_commit_id(repo: &Path) -> CommitId {
-    CommitId(run_git_output(repo, &["rev-parse", "HEAD"]).trim().to_string().into())
+    CommitId(
+        run_git_output(repo, &["rev-parse", "HEAD"])
+            .trim()
+            .to_string()
+            .into(),
+    )
 }
 
 fn pointer_file(oid: &str, size: u64) -> String {
-    format!(
-        "version https://git-lfs.github.com/spec/v1\noid sha256:{oid}\nsize {size}\n"
-    )
+    format!("version https://git-lfs.github.com/spec/v1\noid sha256:{oid}\nsize {size}\n")
 }
 
 #[test]
@@ -93,7 +96,11 @@ fn lfs_is_filtered_reads_filter_attribute() {
     let dir = tempfile::tempdir().unwrap();
     let repo = dir.path();
     init_repo(repo);
-    fs::write(repo.join(".gitattributes"), "*.bin filter=lfs diff=lfs merge=lfs -text\n").unwrap();
+    fs::write(
+        repo.join(".gitattributes"),
+        "*.bin filter=lfs diff=lfs merge=lfs -text\n",
+    )
+    .unwrap();
     fs::write(repo.join("art.bin"), "placeholder\n").unwrap();
     fs::write(repo.join("a.txt"), "text\n").unwrap();
     commit_all(repo, "attributes + files");

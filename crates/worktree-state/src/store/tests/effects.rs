@@ -344,7 +344,8 @@ fn clone_repo_effect_clones_local_repo_and_emits_finished_and_open_repo() {
             url: src.display().to_string(),
             dest: dest.clone(),
             auth: None,
-        ssh_key: None,},
+            ssh_key: None,
+        },
     );
 
     let start = Instant::now();
@@ -427,7 +428,8 @@ fn clone_repo_effect_abort_removes_partially_created_destination() {
             url: local_file_url(&src),
             dest: dest.clone(),
             auth: None,
-        ssh_key: None,},
+            ssh_key: None,
+        },
     );
 
     let start = Instant::now();
@@ -678,10 +680,10 @@ fn load_conflict_file_effect_reads_worktree_and_emits_loaded() {
 
 #[test]
 fn load_conflict_file_effect_reuses_conflict_session_payloads_without_stage_fetch() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use worktree_core::conflict_session::{ConflictPayload, ConflictSession};
     use worktree_core::domain::FileConflictKind;
     use worktree_core::services::ConflictFileStages;
-    use std::sync::atomic::{AtomicUsize, Ordering};
 
     struct Backend;
     impl GitBackend for Backend {
@@ -898,10 +900,10 @@ fn load_conflict_file_effect_reuses_conflict_session_payloads_without_stage_fetc
 
 #[test]
 fn load_conflict_file_effect_preserves_binary_payloads_when_reusing_session() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use worktree_core::conflict_session::{ConflictPayload, ConflictSession};
     use worktree_core::domain::FileConflictKind;
     use worktree_core::services::ConflictFileStages;
-    use std::sync::atomic::{AtomicUsize, Ordering};
 
     struct Backend;
     impl GitBackend for Backend {
@@ -1129,11 +1131,11 @@ fn load_conflict_file_effect_preserves_binary_payloads_when_reusing_session() {
 
 #[test]
 fn load_conflict_file_effect_reuses_absent_current_payload_without_rereading_worktree() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use worktree_core::conflict_session::{ConflictPayload, ConflictSession};
     use worktree_core::domain::FileConflictKind;
     use worktree_core::mergetool_trace::{self, MergetoolTraceStage};
     use worktree_core::services::ConflictFileStages;
-    use std::sync::atomic::{AtomicUsize, Ordering};
 
     struct Backend;
     impl GitBackend for Backend {
@@ -3539,12 +3541,12 @@ impl GitRepository for UnsupportedRepo {
     }
 
     fn stash_create(
-            &self,
-            _message: &str,
-            _include_untracked: bool,
-            _keep_index: bool,
-            _paths: &[PathBuf],
-        ) -> Result<()> {
+        &self,
+        _message: &str,
+        _include_untracked: bool,
+        _keep_index: bool,
+        _paths: &[PathBuf],
+    ) -> Result<()> {
         unsupported_repo_result()
     }
     fn stash_list(&self) -> Result<Vec<StashEntry>> {
@@ -3691,12 +3693,12 @@ impl GitRepository for MetadataSchedulingRepo {
         unsupported_repo_result()
     }
     fn stash_create(
-            &self,
-            _message: &str,
-            _include_untracked: bool,
-            _keep_index: bool,
-            _paths: &[PathBuf],
-        ) -> Result<()> {
+        &self,
+        _message: &str,
+        _include_untracked: bool,
+        _keep_index: bool,
+        _paths: &[PathBuf],
+    ) -> Result<()> {
         unsupported_repo_result()
     }
     fn stash_list(&self) -> Result<Vec<StashEntry>> {
@@ -3819,12 +3821,12 @@ impl GitRepository for SelectedDiffSchedulingRepo {
         unsupported_repo_result()
     }
     fn stash_create(
-            &self,
-            _message: &str,
-            _include_untracked: bool,
-            _keep_index: bool,
-            _paths: &[PathBuf],
-        ) -> Result<()> {
+        &self,
+        _message: &str,
+        _include_untracked: bool,
+        _keep_index: bool,
+        _paths: &[PathBuf],
+    ) -> Result<()> {
         unsupported_repo_result()
     }
     fn stash_list(&self) -> Result<Vec<StashEntry>> {
@@ -3949,12 +3951,12 @@ impl GitRepository for RecordingLogRepo {
         unsupported_repo_result()
     }
     fn stash_create(
-            &self,
-            _message: &str,
-            _include_untracked: bool,
-            _keep_index: bool,
-            _paths: &[PathBuf],
-        ) -> Result<()> {
+        &self,
+        _message: &str,
+        _include_untracked: bool,
+        _keep_index: bool,
+        _paths: &[PathBuf],
+    ) -> Result<()> {
         unsupported_repo_result()
     }
     fn stash_list(&self) -> Result<Vec<StashEntry>> {
@@ -4075,12 +4077,12 @@ impl GitRepository for RecordingCheckoutRepo {
     }
 
     fn stash_create(
-            &self,
-            _message: &str,
-            _include_untracked: bool,
-            _keep_index: bool,
-            _paths: &[PathBuf],
-        ) -> Result<()> {
+        &self,
+        _message: &str,
+        _include_untracked: bool,
+        _keep_index: bool,
+        _paths: &[PathBuf],
+    ) -> Result<()> {
         unsupported_repo_result()
     }
     fn stash_list(&self) -> Result<Vec<StashEntry>> {
@@ -5849,7 +5851,10 @@ fn status_for_paths_patch_replaces_and_appends_covered_entries() {
             }),
         }),
     );
-    assert!(effects.is_empty(), "a mergeable patch runs no further effects");
+    assert!(
+        effects.is_empty(),
+        "a mergeable patch runs no further effects"
+    );
     let status = state.repos[0].status.ready().unwrap();
     assert_eq!(
         status
@@ -6031,7 +6036,10 @@ fn lfs_image_preview_loads_on_request_and_lands_gated_by_target() {
         Loadable::Ready(Some(image)) => {
             assert_eq!(image.path, PathBuf::from("art/logo.png"));
             assert!(image.old.is_none());
-            assert_eq!(image.new.as_deref(), Some(b"fake-smudged-image-bytes".as_slice()));
+            assert_eq!(
+                image.new.as_deref(),
+                Some(b"fake-smudged-image-bytes".as_slice())
+            );
         }
         other => panic!("expected a ready preview, got {other:?}"),
     }

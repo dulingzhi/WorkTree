@@ -66,9 +66,7 @@ fn open_backend(repo: &Path) -> Arc<dyn GitRepository> {
 fn setup_linear_history(repo: &Path) -> Vec<String> {
     init_repo(repo);
     (1..=7)
-        .map(|i| {
-            commit_file(repo, "file.txt", &format!("line {i}\n"), &format!("c{i}"))
-        })
+        .map(|i| commit_file(repo, "file.txt", &format!("line {i}\n"), &format!("c{i}")))
         .collect()
 }
 
@@ -98,7 +96,10 @@ fn bisect_round_trip_start_skip_mark_reset() {
     let output = backend
         .bisect_start_with_output(Some(newest), &[oldest.clone()])
         .expect("start bisect");
-    assert_eq!(output.command, format!("git bisect start {newest} {oldest}"));
+    assert_eq!(
+        output.command,
+        format!("git bisect start {newest} {oldest}")
+    );
     assert_eq!(
         git_stdout(repo, &["branch", "--show-current"]),
         "",
@@ -200,7 +201,10 @@ fn bisect_start_bare_then_mark_converges_to_first_bad_commit() {
         state.bad.as_ref().map(AsRef::<str>::as_ref),
         Some(shas[4].as_str())
     );
-    assert_eq!(state.current, state.bad, "converged session sits on the first bad commit");
+    assert_eq!(
+        state.current, state.bad,
+        "converged session sits on the first bad commit"
+    );
 
     backend.bisect_reset_with_output().expect("reset bisect");
     assert_eq!(backend.bisect_state().unwrap(), None);

@@ -36,13 +36,13 @@
 //! 5. Compares actual output/alignment against expected result when present.
 //! 6. On mismatch, writes `{prefix}_actual_result.{ext}` for manual diff.
 
+use std::collections::{BTreeMap, HashSet};
+use std::panic::{self, AssertUnwindSafe};
+use std::path::{Path, PathBuf};
 use worktree_core::merge::{
     ConflictStyle, DiffAlgorithm, MergeError, MergeOptions, MergeStrategy, build_merge_plan,
     merge_file, merge_file_bytes,
 };
-use std::collections::{BTreeMap, HashSet};
-use std::panic::{self, AssertUnwindSafe};
-use std::path::{Path, PathBuf};
 
 /// A single discovered merge fixture.
 #[derive(Debug)]

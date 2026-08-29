@@ -9,7 +9,6 @@
 
 use crate::kit::scrollbar::{ScrollbarAxis, ScrollbarDriver};
 use crate::theme::AppTheme;
-use worktree_core::merge::MinimapRowKind;
 use gpui::prelude::*;
 use gpui::{
     App, Bounds, CursorStyle, DispatchPhase, ElementId, Hitbox, HitboxBehavior, MouseButton,
@@ -17,6 +16,7 @@ use gpui::{
     size,
 };
 use std::sync::Arc;
+use worktree_core::merge::MinimapRowKind;
 
 /// Column width, matching kdiff3's `setFixedWidth(20)`.
 pub const MINIMAP_COLUMN_WIDTH_PX: f32 = 20.0;

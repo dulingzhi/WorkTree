@@ -464,7 +464,8 @@ impl HistoryView {
             .unwrap_or_else(|| crate::i18n::tr_str("misc.history_panel.author_tooltip").to_string())
             .into();
         let ref_filter_invoker: SharedString = "history_ref_filter_header".into();
-        let ref_filter_anchor_bounds: Rc<RefCell<Option<Bounds<Pixels>>>> = Rc::new(RefCell::new(None));
+        let ref_filter_anchor_bounds: Rc<RefCell<Option<Bounds<Pixels>>>> =
+            Rc::new(RefCell::new(None));
         let ref_filter_anchor_bounds_for_prepaint = Rc::clone(&ref_filter_anchor_bounds);
         let ref_filter_anchor_bounds_for_click = Rc::clone(&ref_filter_anchor_bounds);
         let ref_filter_count = self

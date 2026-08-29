@@ -72,7 +72,8 @@ impl CoverageReport {
                 let (Some(line_no), Some(hits)) = (parts.next(), parts.next()) else {
                     continue;
                 };
-                let (Ok(line_no), Ok(hits)) = (line_no.trim().parse::<u32>(), hits.trim().parse::<i64>())
+                let (Ok(line_no), Ok(hits)) =
+                    (line_no.trim().parse::<u32>(), hits.trim().parse::<i64>())
                 else {
                     continue;
                 };
@@ -181,8 +182,14 @@ end_of_record
     #[test]
     fn line_status_reports_zero_as_missed() {
         let report = CoverageReport::parse_lcov(SAMPLE).unwrap();
-        assert_eq!(report.line_status("src/lib.rs", 1), Some(CoverageLineStatus::Covered));
-        assert_eq!(report.line_status("src/lib.rs", 2), Some(CoverageLineStatus::Missed));
+        assert_eq!(
+            report.line_status("src/lib.rs", 1),
+            Some(CoverageLineStatus::Covered)
+        );
+        assert_eq!(
+            report.line_status("src/lib.rs", 2),
+            Some(CoverageLineStatus::Missed)
+        );
         // Unknown line and unknown file both read as "no data".
         assert_eq!(report.line_status("src/lib.rs", 99), None);
         assert_eq!(report.line_status("other.rs", 1), None);
@@ -197,7 +204,10 @@ end_of_record
     fn parse_lcov_survives_truncation_and_negative_hits() {
         let truncated = "SF:src/a.rs\nDA:1,3\n"; // no end_of_record
         let report = CoverageReport::parse_lcov(truncated).unwrap();
-        assert_eq!(report.line_status("src/a.rs", 1), Some(CoverageLineStatus::Covered));
+        assert_eq!(
+            report.line_status("src/a.rs", 1),
+            Some(CoverageLineStatus::Covered)
+        );
 
         let negative = "SF:src/b.rs\nDA:7,-1\nend_of_record\n";
         let report = CoverageReport::parse_lcov(negative).unwrap();
@@ -211,7 +221,10 @@ end_of_record
     #[test]
     fn parse_lcov_rejects_files_without_any_records() {
         let error = CoverageReport::parse_lcov("hello world\n").unwrap_err();
-        assert!(error.contains("lcov"), "the error should point at the format: {error}");
+        assert!(
+            error.contains("lcov"),
+            "the error should point at the format: {error}"
+        );
     }
 
     #[test]

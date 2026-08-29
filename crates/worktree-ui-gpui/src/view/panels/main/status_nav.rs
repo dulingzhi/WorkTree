@@ -488,7 +488,8 @@ mod tests {
                         deletions: None,
                     },
                 ],
-            signed: false,}));
+                signed: false,
+            }));
 
         let target = DiffTarget::Commit {
             commit_id: commit_id.clone(),

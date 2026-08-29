@@ -965,9 +965,7 @@ impl MainPaneView {
             } => path,
             _ => return None,
         };
-        let normalized = worktree_core::coverage::normalize_coverage_path(
-            &path.to_string_lossy(),
-        );
+        let normalized = worktree_core::coverage::normalize_coverage_path(&path.to_string_lossy());
         (!normalized.is_empty()).then_some((report, normalized))
     }
 
@@ -994,7 +992,9 @@ impl MainPaneView {
         };
         let blame_ctx = this.blame_render_ctx();
         let coverage = this.diff_coverage_context();
-        let coverage = coverage.as_ref().map(|(report, path)| (report.as_ref(), path.as_str()));
+        let coverage = coverage
+            .as_ref()
+            .map(|(report, path)| (report.as_ref(), path.as_str()));
 
         if this.is_collapsed_diff_projection_active() {
             let theme = this.theme;
@@ -1737,8 +1737,9 @@ impl MainPaneView {
         let stage_area = this.diff_stage_gutter_area();
         let stage_hover = this.diff_stage_gutter_hover;
         let coverage = this.diff_coverage_context();
-        let coverage =
-            coverage.as_ref().map(|(report, path)| (report.as_ref(), path.as_str()));
+        let coverage = coverage
+            .as_ref()
+            .map(|(report, path)| (report.as_ref(), path.as_str()));
         let min_width =
             this.diff_horizontal_layout_min_width(if matches!(column, PatchSplitColumn::Right) {
                 DiffHorizontalScrollColumn::SplitRight
@@ -2981,9 +2982,7 @@ fn patch_split_column_row(
     // has no coverage meaning.
     let gutter_fg = if column == PatchSplitColumn::Right {
         coverage
-            .and_then(|(report, path)| {
-                coverage_gutter_color(theme, report, path, row.new_line)
-            })
+            .and_then(|(report, path)| coverage_gutter_color(theme, report, path, row.new_line))
             .unwrap_or(gutter_fg)
     } else {
         gutter_fg

@@ -776,8 +776,8 @@ pub(super) fn build_unified_patch_for_selected_lines_across_hunks(
     diff: &[AnnotatedDiffLine],
     selected_src_ixs: &FxHashSet<usize>,
 ) -> Option<String> {
-    use worktree_core::domain::DiffLineKind as K;
     use std::collections::BTreeMap;
+    use worktree_core::domain::DiffLineKind as K;
 
     if selected_src_ixs.is_empty() {
         return None;
@@ -814,8 +814,8 @@ pub(super) fn build_unified_patch_for_selected_lines_across_hunks_for_reverse_ap
     diff: &[AnnotatedDiffLine],
     selected_src_ixs: &FxHashSet<usize>,
 ) -> Option<String> {
-    use worktree_core::domain::DiffLineKind as K;
     use std::collections::BTreeMap;
+    use worktree_core::domain::DiffLineKind as K;
 
     if selected_src_ixs.is_empty() {
         return None;

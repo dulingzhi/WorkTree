@@ -3,6 +3,11 @@ use crate::model::{
     AiCommitContext, CloneOpStatus, CloneProgressStage, DiagnosticKind, Loadable, RepoState,
 };
 use crate::msg::{Effect, RepoActionKind, RepoCommandKind};
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
+use std::time::{Duration, Instant, SystemTime};
 use worktree_core::domain::{
     Branch, Commit, CommitDetails, CommitId, DiffArea, DiffTarget, LogCursor, LogPage, LogScope,
     ReflogEntry, Remote, RemoteBranch, RepoSpec, RepoStatus, StashEntry,
@@ -13,11 +18,6 @@ use worktree_core::process::{
     GitExecutablePreference, current_git_executable_preference, install_git_executable_preference,
 };
 use worktree_core::services::{CancellationToken, CommandOutput, PullMode, Result};
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
-use std::time::{Duration, Instant, SystemTime};
 
 pub(in crate::store) struct DummyRepo {
     spec: RepoSpec,
@@ -38,10 +38,7 @@ impl GitRepository for DummyRepo {
         &self.spec
     }
 
-    fn lfs_new_side_smudged(
-        &self,
-        _target: &DiffTarget,
-    ) -> Result<Option<Vec<u8>>> {
+    fn lfs_new_side_smudged(&self, _target: &DiffTarget) -> Result<Option<Vec<u8>>> {
         // A deterministic stand-in for `git lfs smudge`: the preview tests
         // must not require the git-lfs binary.
         Ok(Some(b"fake-smudged-image-bytes".to_vec()))
@@ -95,12 +92,12 @@ impl GitRepository for DummyRepo {
     }
 
     fn stash_create(
-            &self,
-            _message: &str,
-            _include_untracked: bool,
-            _keep_index: bool,
-            _paths: &[PathBuf],
-        ) -> Result<()> {
+        &self,
+        _message: &str,
+        _include_untracked: bool,
+        _keep_index: bool,
+        _paths: &[PathBuf],
+    ) -> Result<()> {
         unimplemented!()
     }
     fn stash_list(&self) -> Result<Vec<StashEntry>> {

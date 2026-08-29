@@ -2,9 +2,9 @@ use super::super::workspace_picker::{self, WorkspaceRow};
 use super::*;
 use crate::view::panels::tests::{app_state_with_repo, opening_repo_state};
 use crate::view::test_support::{push_test_state, redraw};
+use std::path::PathBuf;
 use worktree_core::domain::{CommitId, Worktree};
 use worktree_state::model::{Loadable, RepoId, RepoState};
-use std::path::PathBuf;
 
 fn worktree(path: &str, branch: Option<&str>, head: Option<&str>) -> Worktree {
     Worktree {

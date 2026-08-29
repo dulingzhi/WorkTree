@@ -1,16 +1,3 @@
-use worktree_core::auth::{
-    CachedPassphraseEntry, WORKTREE_AUTH_CACHE_PROMPT_ENV_PREFIX,
-    WORKTREE_AUTH_CACHE_SECRET_ENV_PREFIX, WORKTREE_AUTH_CACHE_SIZE_ENV, WORKTREE_AUTH_KIND_ENV,
-    WORKTREE_AUTH_KIND_HOST_VERIFICATION, WORKTREE_AUTH_KIND_PASSPHRASE,
-    WORKTREE_AUTH_KIND_PASSPHRASE_CACHED, WORKTREE_AUTH_KIND_USERNAME_PASSWORD,
-    WORKTREE_AUTH_SECRET_ENV, WORKTREE_AUTH_USERNAME_ENV, GitAuthKind, StagedGitAuth,
-    load_session_passphrases, remember_passphrase_prompt_from_staged_git_auth,
-    take_staged_git_auth,
-};
-use worktree_core::domain::{Commit, CommitId, CommitParentIds, LogPage};
-use worktree_core::error::{Error, ErrorKind, GitFailure, GitFailureId};
-use worktree_core::process::{configure_background_command, git_command};
-use worktree_core::services::{CancellationToken, CommandOutput, Result};
 use std::fs;
 use std::io::{self, BufRead as _};
 use std::path::{Path, PathBuf};
@@ -18,12 +5,24 @@ use std::process::{ChildStdout, Command, Output, Stdio};
 use std::sync::{Arc, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
+use worktree_core::auth::{
+    CachedPassphraseEntry, GitAuthKind, StagedGitAuth, WORKTREE_AUTH_CACHE_PROMPT_ENV_PREFIX,
+    WORKTREE_AUTH_CACHE_SECRET_ENV_PREFIX, WORKTREE_AUTH_CACHE_SIZE_ENV, WORKTREE_AUTH_KIND_ENV,
+    WORKTREE_AUTH_KIND_HOST_VERIFICATION, WORKTREE_AUTH_KIND_PASSPHRASE,
+    WORKTREE_AUTH_KIND_PASSPHRASE_CACHED, WORKTREE_AUTH_KIND_USERNAME_PASSWORD,
+    WORKTREE_AUTH_SECRET_ENV, WORKTREE_AUTH_USERNAME_ENV, load_session_passphrases,
+    remember_passphrase_prompt_from_staged_git_auth, take_staged_git_auth,
+};
+use worktree_core::domain::{Commit, CommitId, CommitParentIds, LogPage};
+use worktree_core::error::{Error, ErrorKind, GitFailure, GitFailureId};
+use worktree_core::process::{configure_background_command, git_command};
+use worktree_core::services::{CancellationToken, CommandOutput, Result};
 
 // Used by test-only helpers below.
 #[cfg(test)]
-use worktree_core::domain::RemoteBranch;
-#[cfg(test)]
 use std::ffi::OsString;
+#[cfg(test)]
+use worktree_core::domain::RemoteBranch;
 
 const GIT_COMMAND_TIMEOUT_ENV: &str = "WORKTREE_GIT_COMMAND_TIMEOUT_SECS";
 const GIT_COMMAND_TIMEOUT_DEFAULT_SECS: u64 = 300;

@@ -8,7 +8,6 @@ use crate::i18n::t;
 use crate::launch_guard::run_with_panic_guard;
 use crate::theme::AppTheme;
 use crate::view::components;
-use worktree_state::session;
 use gpui::prelude::*;
 use gpui::{
     App, Bounds, FocusHandle, Focusable, FontWeight, KeyBinding, Pixels, Render, ScrollHandle,
@@ -17,6 +16,7 @@ use gpui::{
 };
 use std::sync::Arc;
 use std::sync::atomic::{AtomicI32, Ordering};
+use worktree_state::session;
 
 // ── Actions ──────────────────────────────────────────────────────────
 

@@ -488,7 +488,8 @@ fn select_diff_for_deleted_commit_file_skips_patch_diff_and_loads_file_preview()
             additions: None,
             deletions: None,
         }],
-    signed: false,}));
+        signed: false,
+    }));
     state.repos.push(repo_state);
     state.active_repo = Some(RepoId(1));
 
@@ -1023,7 +1024,8 @@ fn commit_details_loaded_replans_selected_deleted_commit_file_to_preview_text_fi
                     additions: None,
                     deletions: None,
                 }],
-            signed: false,}),
+                signed: false,
+            }),
         }),
     );
 

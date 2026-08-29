@@ -72,15 +72,45 @@ fn conflicted_submodule_superproject() -> (PathBuf, String, String, String) {
     // superproject records that pointer — while `side` and `wip` carry the
     // two divergent tips the branches will move it to.
     run_git(&sub, &["init", "--initial-branch=main"]);
-    run_git(&sub, &["-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "base"]);
+    run_git(
+        &sub,
+        &[
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "base",
+        ],
+    );
     let base_tip = git_stdout(&sub, &["rev-parse", "HEAD"]);
 
     run_git(&sub, &["checkout", "-b", "side"]);
-    run_git(&sub, &["-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "theirs"]);
+    run_git(
+        &sub,
+        &[
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "theirs",
+        ],
+    );
     let theirs_tip = git_stdout(&sub, &["rev-parse", "HEAD"]);
 
     run_git(&sub, &["checkout", "-b", "wip", "main"]);
-    run_git(&sub, &["-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "ours"]);
+    run_git(
+        &sub,
+        &[
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "ours",
+        ],
+    );
     let ours_tip = git_stdout(&sub, &["rev-parse", "HEAD"]);
 
     run_git(&sub, &["checkout", "main"]);
@@ -104,19 +134,46 @@ fn conflicted_submodule_superproject() -> (PathBuf, String, String, String) {
         "git submodule add failed\nstderr: {}",
         String::from_utf8_lossy(&add_output.stderr)
     );
-    run_git(&super_repo, &["-c", "commit.gpgsign=false", "commit", "-m", "record submodule"]);
+    run_git(
+        &super_repo,
+        &[
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-m",
+            "record submodule",
+        ],
+    );
 
     // side: move the pointer to theirs_tip.
     run_git(&super_repo, &["checkout", "-b", "side"]);
     run_git(super_repo.join("sub").as_path(), &["checkout", &theirs_tip]);
     run_git(&super_repo, &["add", "--", "sub"]);
-    run_git(&super_repo, &["-c", "commit.gpgsign=false", "commit", "-m", "side moves sub"]);
+    run_git(
+        &super_repo,
+        &[
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-m",
+            "side moves sub",
+        ],
+    );
 
     // main: move the pointer to ours_tip, then merge side → conflict.
     run_git(&super_repo, &["checkout", "main"]);
     run_git(super_repo.join("sub").as_path(), &["checkout", &ours_tip]);
     run_git(&super_repo, &["add", "--", "sub"]);
-    run_git(&super_repo, &["-c", "commit.gpgsign=false", "commit", "-m", "main moves sub"]);
+    run_git(
+        &super_repo,
+        &[
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-m",
+            "main moves sub",
+        ],
+    );
     let _ = git_command()
         .arg("-C")
         .arg(&super_repo)
@@ -146,13 +203,7 @@ fn submodule_conflict_stages_carry_the_pointer_commits_as_text() {
         "the base stage is the shared pre-divergence pointer"
     );
 
-    std::fs::remove_dir_all(
-        super_repo
-            .parent()
-            .expect("temp root")
-            .to_path_buf(),
-    )
-    .ok();
+    std::fs::remove_dir_all(super_repo.parent().expect("temp root").to_path_buf()).ok();
 }
 
 #[test]

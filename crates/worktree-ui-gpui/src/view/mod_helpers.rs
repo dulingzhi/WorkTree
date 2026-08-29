@@ -1,8 +1,8 @@
 use super::*;
-use worktree_core::path_utils::canonicalize_or_original;
-use worktree_core::services::InteractiveRebaseAction;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::path::PathBuf;
+use worktree_core::path_utils::canonicalize_or_original;
+use worktree_core::services::InteractiveRebaseAction;
 
 type AlacrittyTermLock = super::terminal_alacritty::AlacrittyTermLock;
 

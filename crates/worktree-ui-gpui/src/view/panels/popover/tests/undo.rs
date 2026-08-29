@@ -1,4 +1,4 @@
-use super::branch::{create_tracking_store, wait_until, TrackingRepo};
+use super::branch::{TrackingRepo, create_tracking_store, wait_until};
 use super::*;
 use worktree_core::domain::{CommitId, ReflogEntry};
 use worktree_state::model::Loadable;
@@ -38,9 +38,11 @@ fn seed_reflog(store: &AppStore, repo: &TrackingRepo, entries: Vec<ReflogEntry>)
         },
     ));
     wait_until("seeded reflog to land in the store", || {
-        store.snapshot().repos.iter().any(|repo| {
-            repo.id == repo_id && matches!(&repo.reflog, Loadable::Ready(_))
-        })
+        store
+            .snapshot()
+            .repos
+            .iter()
+            .any(|repo| repo.id == repo_id && matches!(&repo.reflog, Loadable::Ready(_)))
     });
     repo_id
 }
@@ -63,10 +65,7 @@ fn open_undo_popover(
     });
 }
 
-fn popover_is_open(
-    view: &gpui::Entity<WorkTreeView>,
-    app: &mut gpui::App,
-) -> bool {
+fn popover_is_open(view: &gpui::Entity<WorkTreeView>, app: &mut gpui::App) -> bool {
     view.read_with(app, |this, cx| this.popover_host.read(cx).popover.is_some())
 }
 
@@ -98,7 +97,12 @@ fn undo_popover_resets_a_completed_merge_in_default_mixed_mode(cx: &mut gpui::Te
 
     // The reset-back dialog renders: mode chips (mixed preselected, per the
     // merge plan) and a Go button. No abort button — nothing is in flight.
-    for selector in ["undo_mode_chip_soft", "undo_mode_chip_mixed", "undo_mode_chip_hard", "undo_go"] {
+    for selector in [
+        "undo_mode_chip_soft",
+        "undo_mode_chip_mixed",
+        "undo_mode_chip_hard",
+        "undo_go",
+    ] {
         assert!(
             cx.debug_bounds(selector).is_some(),
             "expected {selector} in debug bounds for a completed merge"
@@ -112,7 +116,9 @@ fn undo_popover_resets_a_completed_merge_in_default_mixed_mode(cx: &mut gpui::Te
     // Go without touching the chips: the plan's default mode (mixed) is used.
     click_debug_selector(cx, "undo_go");
     wait_until("reset to reach the tracking repo", || {
-        repo.actions().iter().any(|a| a == "reset:Mixed:abcdef0123456789")
+        repo.actions()
+            .iter()
+            .any(|a| a == "reset:Mixed:abcdef0123456789")
     });
     cx.update(|_window, app| {
         assert!(
@@ -140,7 +146,9 @@ fn undo_popover_mode_chip_switches_to_hard(cx: &mut gpui::TestAppContext) {
     click_debug_selector(cx, "undo_mode_chip_hard");
     click_debug_selector(cx, "undo_go");
     wait_until("hard reset to reach the tracking repo", || {
-        repo.actions().iter().any(|a| a == "reset:Hard:abcdef0123456789")
+        repo.actions()
+            .iter()
+            .any(|a| a == "reset:Hard:abcdef0123456789")
     });
 }
 
@@ -158,8 +166,7 @@ fn undo_popover_aborts_a_merge_waiting_to_conclude(cx: &mut gpui::TestAppContext
     ));
     wait_until("pending merge message to land in the store", || {
         store.snapshot().repos.iter().any(|repo| {
-            repo.id == repo_id
-                && matches!(&repo.merge_commit_message, Loadable::Ready(Some(_)))
+            repo.id == repo_id && matches!(&repo.merge_commit_message, Loadable::Ready(Some(_)))
         })
     });
 
@@ -199,7 +206,11 @@ fn undo_popover_aborts_a_merge_waiting_to_conclude(cx: &mut gpui::TestAppContext
 fn undo_popover_with_nothing_undoable_shows_the_notice(cx: &mut gpui::TestAppContext) {
     let (store, events, repo, _workdir) = create_tracking_store("undo-nothing");
     // One entry: below the two-entry minimum every classification needs.
-    let repo_id = seed_reflog(&store, &repo, vec![entry(0, "abcdef0123456789", "commit: only")]);
+    let repo_id = seed_reflog(
+        &store,
+        &repo,
+        vec![entry(0, "abcdef0123456789", "commit: only")],
+    );
     let store_for_view = store.clone();
     let (view, cx) = cx
         .add_window_view(|window, cx| WorkTreeView::new(store_for_view, events, None, window, cx));

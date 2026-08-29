@@ -2033,10 +2033,7 @@ fn search_commits_stores_query_and_drops_superseded_results() {
             query: "   ".to_string(),
         },
     );
-    assert!(matches!(
-        &state.repos[0].commit_search,
-        Loadable::NotLoaded
-    ));
+    assert!(matches!(&state.repos[0].commit_search, Loadable::NotLoaded));
     assert_eq!(state.repos[0].commit_search_query, None);
 }
 
@@ -2942,10 +2939,7 @@ fn ref_filter_change_starts_its_load_while_a_walk_is_in_flight() {
         &mut state,
         Msg::SetHistoryRefFilters {
             repo_id: RepoId(1),
-            refs: vec![
-                "refs/tags/v2".to_string(),
-                "refs/heads/dev".to_string(),
-            ],
+            refs: vec!["refs/tags/v2".to_string(), "refs/heads/dev".to_string()],
         },
     );
 
@@ -3031,8 +3025,7 @@ fn ref_filter_change_normalizes_and_noops_when_unchanged() {
         "re-setting the same filter set must be a no-op, got {effects:?}"
     );
     assert_eq!(
-        state.repos[0].history_state.log_rev,
-        before,
+        state.repos[0].history_state.log_rev, before,
         "a no-op must not bump the log revision the repaints key on"
     );
 }
@@ -3947,7 +3940,10 @@ fn a_reply_for_an_abandoned_source_still_releases_the_lane() {
     );
 }
 
-fn file_status(path: &str, kind: worktree_core::domain::FileStatusKind) -> Loadable<Arc<Vec<worktree_core::domain::FileStatus>>> {
+fn file_status(
+    path: &str,
+    kind: worktree_core::domain::FileStatusKind,
+) -> Loadable<Arc<Vec<worktree_core::domain::FileStatus>>> {
     Loadable::Ready(Arc::new(vec![worktree_core::domain::FileStatus {
         path: PathBuf::from(path),
         kind,
@@ -3976,8 +3972,10 @@ fn select_working_tree_summary_displaces_other_selections_and_synthesizes_detail
     {
         let repo = &mut state.repos[0];
         repo.detached_head_commit = Some(CommitId("abc123".into()));
-        repo.staged_status = file_status("staged.txt", worktree_core::domain::FileStatusKind::Added);
-        repo.worktree_status = file_status("b.txt", worktree_core::domain::FileStatusKind::Modified);
+        repo.staged_status =
+            file_status("staged.txt", worktree_core::domain::FileStatusKind::Added);
+        repo.worktree_status =
+            file_status("b.txt", worktree_core::domain::FileStatusKind::Modified);
         repo.history_state.selected_commit = Some(CommitId("f00d".into()));
         repo.history_state.multi_selection = crate::model::CommitMultiSelection {
             commits: vec![CommitId("f00d".into()), CommitId("abc123".into())],
@@ -4048,7 +4046,10 @@ fn select_working_tree_summary_displaces_other_selections_and_synthesizes_detail
         Msg::SelectWorkingTreeSummary { repo_id },
     );
     assert_eq!(state.repos[0].history_state.selected_commit_rev, rev_before);
-    assert_eq!(state.repos[0].history_state.commit_details_rev, details_rev_before);
+    assert_eq!(
+        state.repos[0].history_state.commit_details_rev,
+        details_rev_before
+    );
 }
 
 #[test]
@@ -4084,7 +4085,11 @@ fn working_tree_details_resync_after_status_replies() {
         panic!("details stay synthesized");
     };
     assert_eq!(
-        details.files.iter().map(|f| f.path.clone()).collect::<Vec<_>>(),
+        details
+            .files
+            .iter()
+            .map(|f| f.path.clone())
+            .collect::<Vec<_>>(),
         vec![PathBuf::from("c.txt")],
         "the review follows the status reply"
     );
@@ -4146,7 +4151,12 @@ fn log_replacement_keeps_the_working_tree_selection() {
             }),
         }),
     );
-    assert!(effects.is_empty() || effects.iter().all(|e| !matches!(e, Effect::LoadCommitDetails { .. })));
+    assert!(
+        effects.is_empty()
+            || effects
+                .iter()
+                .all(|e| !matches!(e, Effect::LoadCommitDetails { .. }))
+    );
     assert_eq!(
         state.repos[0].history_state.selected_commit,
         Some(CommitId::uncommitted()),
@@ -4179,7 +4189,13 @@ fn select_commit_with_the_sentinel_routes_to_the_working_tree_row() {
         state.repos[0].history_state.selected_commit,
         Some(CommitId::uncommitted())
     );
-    assert!(state.repos[0].history_state.multi_selection.commits.is_empty());
+    assert!(
+        state.repos[0]
+            .history_state
+            .multi_selection
+            .commits
+            .is_empty()
+    );
 }
 
 /// The statistics window's commits: the dialog's open dispatches the load

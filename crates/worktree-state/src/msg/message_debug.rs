@@ -76,18 +76,14 @@ impl std::fmt::Debug for InternalMsg {
                 .field("result", result)
                 .finish(),
             InternalMsg::LfsImagePreviewLoaded {
-                repo_id,
-                result,
-                ..
+                repo_id, result, ..
             } => f
                 .debug_struct("LfsImagePreviewLoaded")
                 .field("repo_id", repo_id)
                 .field("ok", &result.is_ok())
                 .finish(),
             InternalMsg::StatusForPathsLoaded {
-                repo_id,
-                result,
-                ..
+                repo_id, result, ..
             } => f
                 .debug_struct("StatusForPathsLoaded")
                 .field("repo_id", repo_id)

@@ -101,12 +101,10 @@ impl MainPaneView {
                     crate::i18n::tr("diff.common.loading"),
                 )
                 .into_any_element(),
-                Some(Loadable::Error(e)) => components::empty_state(
-                    theme,
-                    crate::i18n::tr("diff.pane.diff"),
-                    e,
-                )
-                .into_any_element(),
+                Some(Loadable::Error(e)) => {
+                    components::empty_state(theme, crate::i18n::tr("diff.pane.diff"), e)
+                        .into_any_element()
+                }
                 Some(Loadable::Ready(None)) => components::empty_state(
                     theme,
                     crate::i18n::tr("diff.pane.diff"),

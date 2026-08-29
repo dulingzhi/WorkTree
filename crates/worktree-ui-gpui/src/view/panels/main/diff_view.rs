@@ -1,12 +1,12 @@
 use super::*;
 use crate::view::panes::main::DiffHorizontalScrollColumn;
 use crate::view::panes::main::diff_search::DiffSearchOptions;
+use gpui::Focusable;
 use worktree_core::domain::{
     SubmoduleDiffRangeKind, SubmoduleDiffSummary, SubmoduleDiffSummaryMode, SubmoduleInnerChange,
     SubmoduleStatus,
 };
 use worktree_state::model::{InlineSubmoduleDiffEntry, InlineSubmoduleDiffSection};
-use gpui::Focusable;
 
 struct DiffSearchOverlayLayer {
     child: AnyElement,
@@ -2582,28 +2582,24 @@ impl MainPaneView {
         // screen from the session baseline, inside the agent worktree.
         // Resolved through the root view because the session is keyed by
         // the main repo while this pane is showing the worktree's tab.
-        let agent_restore = self
-            .root_view
-            .upgrade()
-            .and_then(|root| {
-                let root_view = root.read(cx);
-                let active_id = root_view.active_repo_id()?;
-                let session = root_view
-                    .agent_sessions
-                    .values()
-                    .find(|session| session.worktree_repo_id == Some(active_id))?;
-                let target = root_view
-                    .state
-                    .repos
-                    .iter()
-                    .find(|repo| repo.id == active_id)?
-                    .diff_state
-                    .diff_target
-                    .clone()?;
-                let (worktree, path) =
-                    agent_workbench::agent_restore_context(session, Some(&target))?;
-                Some((active_id, worktree, session.baseline.clone(), path))
-            });
+        let agent_restore = self.root_view.upgrade().and_then(|root| {
+            let root_view = root.read(cx);
+            let active_id = root_view.active_repo_id()?;
+            let session = root_view
+                .agent_sessions
+                .values()
+                .find(|session| session.worktree_repo_id == Some(active_id))?;
+            let target = root_view
+                .state
+                .repos
+                .iter()
+                .find(|repo| repo.id == active_id)?
+                .diff_state
+                .diff_target
+                .clone()?;
+            let (worktree, path) = agent_workbench::agent_restore_context(session, Some(&target))?;
+            Some((active_id, worktree, session.baseline.clone(), path))
+        });
         if let Some((repo_id, worktree, baseline, path)) = agent_restore {
             controls = controls.child(
                 components::Button::new(
@@ -4160,11 +4156,11 @@ impl MainPaneView {
 #[cfg(test)]
 mod submodule_helpers_tests {
     use super::*;
+    use std::path::{Path, PathBuf};
     use worktree_core::domain::{
         SubmoduleDiffRange, SubmoduleDiffRangeKind, SubmoduleDiffSummary, SubmoduleDiffSummaryMode,
         SubmoduleInnerChange,
     };
-    use std::path::{Path, PathBuf};
 
     fn commit(id: &str) -> CommitId {
         CommitId(id.into())
@@ -4172,11 +4168,20 @@ mod submodule_helpers_tests {
 
     #[test]
     fn short_hash_truncates_to_twelve_and_missing_falls_back() {
-        assert_eq!(short_submodule_hash(&commit("abcdef1234567890")), "abcdef123456");
+        assert_eq!(
+            short_submodule_hash(&commit("abcdef1234567890")),
+            "abcdef123456"
+        );
         assert_eq!(short_submodule_hash(&commit("short")), "short");
         // A missing side reads as missing in both hash forms, never "".
-        assert_eq!(full_submodule_hash_opt(None), crate::i18n::tr_str("diff.submodule.missing").to_string());
-        assert_eq!(full_submodule_hash_opt(None), short_submodule_hash_opt(None));
+        assert_eq!(
+            full_submodule_hash_opt(None),
+            crate::i18n::tr_str("diff.submodule.missing").to_string()
+        );
+        assert_eq!(
+            full_submodule_hash_opt(None),
+            short_submodule_hash_opt(None)
+        );
         assert_eq!(
             full_submodule_hash_opt(Some(&commit("cafe"))),
             "cafe".to_string()
@@ -4262,11 +4267,17 @@ mod submodule_helpers_tests {
         }
         assert!(matches!(
             &entries[1].target,
-            DiffTarget::WorkingTree { area: DiffArea::Staged, .. }
+            DiffTarget::WorkingTree {
+                area: DiffArea::Staged,
+                ..
+            }
         ));
         assert!(matches!(
             &entries[2].target,
-            DiffTarget::WorkingTree { area: DiffArea::Unstaged, .. }
+            DiffTarget::WorkingTree {
+                area: DiffArea::Unstaged,
+                ..
+            }
         ));
     }
 }

@@ -369,10 +369,8 @@ impl Render for ActionBarView {
         let bisect_no_candidate = bisect_session
             .as_ref()
             .is_some_and(|s| s.current.is_some() && s.current == s.bad);
-        let bisect_waiting_good = bisect_no_candidate
-            && bisect_session
-                .as_ref()
-                .is_some_and(|s| s.good.is_empty());
+        let bisect_waiting_good =
+            bisect_no_candidate && bisect_session.as_ref().is_some_and(|s| s.good.is_empty());
 
         let (pull_count, push_count) = self
             .active_repo()
@@ -690,8 +688,10 @@ impl Render for ActionBarView {
                         let head = match &repo.head_branch {
                             Loadable::Ready(head) => head.clone(),
                             _ => {
-                                this.store
-                                    .dispatch(Msg::Push { repo_id, pull_retry });
+                                this.store.dispatch(Msg::Push {
+                                    repo_id,
+                                    pull_retry,
+                                });
                                 return;
                             }
                         };
@@ -736,8 +736,10 @@ impl Render for ActionBarView {
                             return;
                         }
 
-                        this.store
-                            .dispatch(Msg::Push { repo_id, pull_retry });
+                        this.store.dispatch(Msg::Push {
+                            repo_id,
+                            pull_retry,
+                        });
                     }),
                     push_menu.on_click_with_bounds(
                         theme,
@@ -774,7 +776,12 @@ impl Render for ActionBarView {
             .disabled(!can_stash)
             .on_click_with_bounds(theme, cx, move |this, _e, bounds, window, cx| {
                 this.activate_context_menu_invoker(stash_prompt_invoker.clone(), cx);
-                this.open_popover_for_bounds(PopoverKind::StashPrompt { paths: Vec::new() }, bounds, window, cx);
+                this.open_popover_for_bounds(
+                    PopoverKind::StashPrompt { paths: Vec::new() },
+                    bounds,
+                    window,
+                    cx,
+                );
             })
             .worktree_tooltip(
                 theme,
@@ -1092,9 +1099,9 @@ impl Render for ActionBarView {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
     use worktree_core::domain::RepoSpec;
     use worktree_core::domain::Upstream;
-    use std::path::PathBuf;
 
     fn test_branch(name: &str, upstream: Option<Upstream>) -> Branch {
         Branch {

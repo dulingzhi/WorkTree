@@ -743,12 +743,12 @@ mod repo_tabs_bar;
 pub(super) use action_bar::{ActionBarView, action_bar_height};
 pub(super) use bottom_status_bar::BottomStatusBarView;
 pub(super) use popover::PopoverHost;
+pub(in crate::view) use popover::merge_request_push::git_output;
 /// The reflog pane's header button asks whether an undo is available before
 /// rendering, so the resolver ships one hop out of the private popover tree.
 pub(in crate::view) use popover::undo_last_action::{UndoResolution, resolve_undo};
 #[cfg(feature = "benchmarks")]
 pub(in crate::view) use popover::{benchmark_branch_checkout_rows, benchmark_workspace_rows};
-pub(in crate::view) use popover::merge_request_push::git_output;
 /// Layout guards outside this module assert against the tab padding, so they
 /// follow the constant instead of hardcoding the current value.
 #[cfg(test)]

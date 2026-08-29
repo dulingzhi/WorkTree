@@ -1,7 +1,5 @@
 use crate::view::WorkTreeView;
 use crate::view::mod_helpers::PopoverKind;
-use worktree_core::domain::CommitId;
-use worktree_state::model::RepoId;
 use gpui::prelude::*;
 use gpui::{
     ElementId, Entity, MouseButton, MouseUpEvent, Pixels, Point, SharedString, WeakEntity, Window,
@@ -9,6 +7,8 @@ use gpui::{
 };
 use std::ops::Range;
 use std::sync::Arc;
+use worktree_core::domain::CommitId;
+use worktree_state::model::RepoId;
 
 /// What a link inside a read-only text input points at.
 #[derive(Clone, Debug, Eq, PartialEq)]

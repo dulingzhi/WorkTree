@@ -1,4 +1,8 @@
 use super::*;
+use std::path::Path;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use worktree_core::domain::{
     Branch, CommitId, FileEntry, FileEntryKind, Remote, RemoteBranch, RepoSpec, StashEntry,
     Submodule, SubmoduleStatus, Tag, Upstream, Worktree,
@@ -8,10 +12,6 @@ use worktree_core::process::{GitExecutableAvailability, GitExecutablePreference,
 use worktree_core::services::{GitBackend, GitRepository, Result};
 use worktree_state::model::{AppState, AuthPromptState, AuthRetryOperation, RepoId, RepoState};
 use worktree_state::store::AppStore;
-use std::path::Path;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
 
 struct TestBackend;
 
@@ -4098,7 +4098,8 @@ fn apply_state_snapshot_routes_clone_progress_errors_into_global_banner(
         progress: worktree_state::model::CloneProgressMeter::default(),
         seq: 1,
         output_tail: std::collections::VecDeque::new(),
-    ssh_key: None,});
+        ssh_key: None,
+    });
     let next = Arc::new(next);
 
     cx.update(|window, app| {
@@ -4134,7 +4135,7 @@ fn try_auth_prompt_submit_passphrase_without_secret_shows_error(cx: &mut gpui::T
         operation: AuthRetryOperation::Clone {
             url: "git@example.com:repo.git".to_string(),
             dest: PathBuf::from("/tmp/repo"),
-        ssh_key: None,
+            ssh_key: None,
         },
     });
     let state = Arc::new(state);
@@ -4171,7 +4172,7 @@ fn try_auth_prompt_submit_passphrase_dispatches_submit(cx: &mut gpui::TestAppCon
         operation: AuthRetryOperation::Clone {
             url: "git@example.com:repo.git".to_string(),
             dest: PathBuf::from("/tmp/repo"),
-        ssh_key: None,
+            ssh_key: None,
         },
     });
     let state = Arc::new(state);
@@ -4209,7 +4210,7 @@ fn try_auth_prompt_submit_username_password_empty_username_shows_error(
         operation: AuthRetryOperation::Clone {
             url: "https://example.com/repo.git".to_string(),
             dest: PathBuf::from("/tmp/repo"),
-        ssh_key: None,
+            ssh_key: None,
         },
     });
     let state = Arc::new(state);
@@ -4248,7 +4249,7 @@ fn try_auth_prompt_submit_username_password_dispatches_submit(cx: &mut gpui::Tes
         operation: AuthRetryOperation::Clone {
             url: "https://example.com/repo.git".to_string(),
             dest: PathBuf::from("/tmp/repo"),
-        ssh_key: None,
+            ssh_key: None,
         },
     });
     let state = Arc::new(state);

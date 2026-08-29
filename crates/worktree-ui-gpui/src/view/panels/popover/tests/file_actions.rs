@@ -431,7 +431,8 @@ fn unopened_submodule_menus_disable_open_in_code_editor(cx: &mut gpui::TestAppCo
                         additions: None,
                         deletions: None,
                     }],
-                signed: false,}
+                    signed: false,
+                }
                 .into(),
             );
             repo.status = Loadable::Ready(

@@ -126,7 +126,10 @@ fn agent_sessions_stop_ends_the_session(cx: &mut gpui::TestAppContext) {
         "stopping ends the session record along with the terminal session"
     );
     let popover_closed = cx.update(|_window, app| {
-        view.read(app).popover_host.read(app).popover_kind_for_tests()
+        view.read(app)
+            .popover_host
+            .read(app)
+            .popover_kind_for_tests()
             != Some(PopoverKind::AgentSessions { repo_id })
     });
     assert!(popover_closed, "the roster closes after its action");

@@ -1,10 +1,10 @@
+use std::fs;
+use std::path::Path;
+use std::process::Command;
 use worktree_core::error::ErrorKind;
 use worktree_core::path_utils::canonicalize_or_original;
 use worktree_core::services::GitBackend;
 use worktree_git_gix::GixBackend;
-use std::fs;
-use std::path::Path;
-use std::process::Command;
 
 fn run_git(repo: &Path, args: &[&str]) {
     let status = Command::new("git")

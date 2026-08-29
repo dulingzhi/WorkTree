@@ -55,7 +55,10 @@ pub(super) fn target_branch_is_safe(target: &str) -> bool {
 /// Run one git invocation in `workdir` and collect stdout, mapping a
 /// non-zero exit to the trimmed stderr. Blocking — callers wrap it in
 /// `smol::unblock`.
-pub(in crate::view) fn git_output(workdir: &std::path::Path, args: &[&str]) -> Result<String, String> {
+pub(in crate::view) fn git_output(
+    workdir: &std::path::Path,
+    args: &[&str],
+) -> Result<String, String> {
     let mut command = worktree_core::process::git_command();
     command.current_dir(workdir).args(args);
     let output = command
@@ -89,19 +92,13 @@ pub(super) fn collect_mr_description_context(
         return Err(crate::i18n::tr_str("input.mr_push.target_unsafe").to_string());
     }
     let range = format!("{target}..HEAD");
-    let log = git_output(
-        workdir,
-        &["log", "--pretty=%h%x1f%s%x1e", range.as_str()],
-    )?;
+    let log = git_output(workdir, &["log", "--pretty=%h%x1f%s%x1e", range.as_str()])?;
     let commits = parse_mr_description_commits(&log);
     if commits.is_empty() {
         return Err(crate::i18n::tr_str("input.mr_push.no_commits").to_string());
     }
     let stat_range = format!("{target}...HEAD");
-    let stat = git_output(
-        workdir,
-        &["diff", "--stat", stat_range.as_str()],
-    )?;
+    let stat = git_output(workdir, &["diff", "--stat", stat_range.as_str()])?;
     Ok((commits, stat))
 }
 
@@ -184,7 +181,9 @@ pub(super) fn panel(
                 cx.notify();
             })),
         )
-        .child(super::merge_request_push_description::section(this, theme, cx));
+        .child(super::merge_request_push_description::section(
+            this, theme, cx,
+        ));
 
     body = body.child(
         div()
@@ -194,22 +193,22 @@ pub(super) fn panel(
             .items_center()
             .justify_between()
             .child(
-                cancel_button("mr_push_cancel", "mr_push_cancel_hint", theme)
-                    .on_click(theme, cx, |this, _e, window, cx| {
+                cancel_button("mr_push_cancel", "mr_push_cancel_hint", theme).on_click(
+                    theme,
+                    cx,
+                    |this, _e, window, cx| {
                         this.dismiss_prompt_popover(window, cx);
-                    }),
+                    },
+                ),
             )
             .child(
-                components::Button::new(
-                    "mr_push_go",
-                    crate::i18n::tr("input.mr_push.push"),
-                )
-                .separated_end_slot(super::hotkey_hint(theme, "mr_push_go_hint", "Enter"))
-                .style(components::ButtonStyle::Filled)
-                .disabled(!can_push)
-                .on_click(theme, cx, |this, _e, window, cx| {
-                    this.submit_mr_push(window, cx);
-                }),
+                components::Button::new("mr_push_go", crate::i18n::tr("input.mr_push.push"))
+                    .separated_end_slot(super::hotkey_hint(theme, "mr_push_go_hint", "Enter"))
+                    .style(components::ButtonStyle::Filled)
+                    .disabled(!can_push)
+                    .on_click(theme, cx, |this, _e, window, cx| {
+                        this.submit_mr_push(window, cx);
+                    }),
             ),
     );
 
@@ -255,10 +254,7 @@ mod tests {
         );
         assert_eq!(resolve_mr_description_target("", None), None);
         assert_eq!(
-            resolve_mr_description_target(
-                "",
-                Some("refs/remotes/origin/main\n")
-            ),
+            resolve_mr_description_target("", Some("refs/remotes/origin/main\n")),
             Some("main".to_string()),
             "the remote default branch stands in for an empty target"
         );

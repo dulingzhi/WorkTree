@@ -32,9 +32,10 @@ pub(super) fn patch_summary(patch: &str) -> String {
         .find_map(|line| line.strip_prefix("+++ b/"))
         .map(str::to_string)
         .or_else(|| {
-            patch.lines().find_map(|line| line.strip_prefix("diff --git a/")).and_then(|rest| {
-                rest.split_once(" b/").map(|(path, _)| path.to_string())
-            })
+            patch
+                .lines()
+                .find_map(|line| line.strip_prefix("diff --git a/"))
+                .and_then(|rest| rest.split_once(" b/").map(|(path, _)| path.to_string()))
         })
         .unwrap_or_default();
     let hunk = patch

@@ -25,6 +25,19 @@ use crate::view::panes::main::{
     diff_search_query_reuse,
 };
 use crate::view::path_display;
+use rustc_hash::FxHasher;
+use std::cell::{Cell, RefCell};
+use std::fmt::Write as _;
+use std::fs;
+use std::hash::{Hash, Hasher};
+use std::io::Write as _;
+use std::ops::Range;
+use std::path::Path;
+use std::process::{Command, Stdio};
+use std::rc::Rc;
+use std::sync::Arc;
+use std::time::{Duration, Instant, SystemTime};
+use tempfile::TempDir;
 use worktree_core::domain::DiffLineKind;
 use worktree_core::domain::{
     Branch, Commit, CommitDetails, CommitFileChange, CommitId, Diff, DiffArea, DiffLine,
@@ -42,19 +55,6 @@ use worktree_state::benchmarks::{
 };
 use worktree_state::model::{AppState, ConflictFile, Loadable, RepoId, RepoState};
 use worktree_state::msg::{Effect, InternalMsg, Msg, RepoPath, RepoPathList};
-use rustc_hash::FxHasher;
-use std::cell::{Cell, RefCell};
-use std::fmt::Write as _;
-use std::fs;
-use std::hash::{Hash, Hasher};
-use std::io::Write as _;
-use std::ops::Range;
-use std::path::Path;
-use std::process::{Command, Stdio};
-use std::rc::Rc;
-use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
-use tempfile::TempDir;
 
 mod conflict;
 mod diff_fixtures;

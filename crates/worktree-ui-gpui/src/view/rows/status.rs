@@ -1,8 +1,8 @@
 use super::*;
-use worktree_core::domain::SubmoduleStatus;
 use std::sync::Arc;
 #[cfg(any(debug_assertions, feature = "benchmarks"))]
 use std::sync::atomic::{AtomicU64, Ordering};
+use worktree_core::domain::SubmoduleStatus;
 
 const STATUS_ROW_HEIGHT_PX: f32 = 24.0;
 

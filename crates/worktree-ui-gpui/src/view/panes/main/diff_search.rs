@@ -1,6 +1,5 @@
 use super::*;
 use crate::kit::text_model::TextModelSnapshot;
-use worktree_core::domain::Diff;
 use memchr::{memchr_iter, memchr2_iter};
 use regex::{Regex, RegexBuilder};
 use rustc_hash::FxHashMap;
@@ -9,6 +8,7 @@ use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::ops::Range;
 use std::time::Duration;
+use worktree_core::domain::Diff;
 
 const FILE_PREVIEW_SEARCH_SCAN_CHUNK_BYTES: usize = 32 * 1024;
 const FILE_PREVIEW_REGEX_SEARCH_WINDOW_BYTES: usize = 256 * 1024;

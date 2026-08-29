@@ -132,12 +132,12 @@ impl GitRepository for RepoActivationRecordingRepo {
     }
 
     fn stash_create(
-            &self,
-            _message: &str,
-            _include_untracked: bool,
-            _keep_index: bool,
-            _paths: &[PathBuf],
-        ) -> Result<()> {
+        &self,
+        _message: &str,
+        _include_untracked: bool,
+        _keep_index: bool,
+        _paths: &[PathBuf],
+    ) -> Result<()> {
         Ok(())
     }
 

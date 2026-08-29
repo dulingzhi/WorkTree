@@ -8,10 +8,10 @@
 //! [`Language`] held in the [`AppLanguage`] gpui global — the same shape as
 //! `ui_scale`'s global.
 
-use worktree_state::session;
 use gpui::{BorrowAppContext, SharedString};
 use std::borrow::Cow;
 use std::sync::OnceLock;
+use worktree_state::session;
 
 pub(crate) use rust_i18n::t;
 

@@ -47,8 +47,12 @@ pub(super) fn panel(
     )
     .text(
         theme,
-        crate::i18n::t!("confirm.merge_commit.body", short = short, current = current_branch)
-            .into_owned(),
+        crate::i18n::t!(
+            "confirm.merge_commit.body",
+            short = short,
+            current = current_branch
+        )
+        .into_owned(),
     )
     .note(theme, crate::i18n::tr("confirm.merge_commit.note"));
     if !summary.is_empty() {
@@ -59,9 +63,12 @@ pub(super) fn panel(
         theme,
         dialog_cancel_button("merge_commit_cancel", "merge_commit_cancel_hint", theme, cx),
         div().flex().items_center().gap_1().child(
-            components::Button::new("merge_commit_confirm", crate::i18n::tr("confirm.merge_commit.go"))
-                .style(components::ButtonStyle::Filled)
-                .on_click(theme, cx, move |this, _e, _w, cx| dispatch(this, cx)),
+            components::Button::new(
+                "merge_commit_confirm",
+                crate::i18n::tr("confirm.merge_commit.go"),
+            )
+            .style(components::ButtonStyle::Filled)
+            .on_click(theme, cx, move |this, _e, _w, cx| dispatch(this, cx)),
         ),
         cx,
     )

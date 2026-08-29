@@ -1,9 +1,9 @@
 use crate::theme::{AppTheme, GRAPH_LANE_PALETTE_SIZE};
-use worktree_core::domain::{Commit, CommitId};
 use gpui::Rgba;
 use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
 use smallvec::SmallVec;
+use worktree_core::domain::{Commit, CommitId};
 
 const LANE_COLOR_PALETTE_SIZE: usize = GRAPH_LANE_PALETTE_SIZE;
 /// `LanePaint` is two bytes, so eight columns fit in the same 24-byte `SmallVec`
@@ -750,8 +750,8 @@ fn resolve_first_parent_ix<C: GraphCommitLike>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use worktree_core::domain::CommitId;
     use std::time::SystemTime;
+    use worktree_core::domain::CommitId;
 
     fn commit(id: &str, parent_ids: Vec<&str>) -> Commit {
         Commit {

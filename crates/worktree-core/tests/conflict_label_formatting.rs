@@ -1,5 +1,5 @@
-use worktree_core::conflict_labels::{BaseLabelScenario, format_base_label};
 use std::path::PathBuf;
+use worktree_core::conflict_labels::{BaseLabelScenario, format_base_label};
 
 #[test]
 fn label_no_base() {

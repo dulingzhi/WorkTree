@@ -930,13 +930,17 @@ fn repo_monitor_thread(
     // such path drops the whole set to the coarse refresh.
     let relativize_paths = |paths: Option<Vec<PathBuf>>| {
         paths.and_then(|paths| {
-            let relative: Option<Vec<PathBuf>> =
-                paths.iter().map(|p| p.strip_prefix(&workdir).ok().map(Path::to_path_buf)).collect();
+            let relative: Option<Vec<PathBuf>> = paths
+                .iter()
+                .map(|p| p.strip_prefix(&workdir).ok().map(Path::to_path_buf))
+                .collect();
             relative.map(|mut relative| {
                 relative.retain(|p| !p.as_os_str().is_empty());
                 relative.sort();
                 relative.dedup();
-                (!relative.is_empty()).then_some(relative).unwrap_or_default()
+                (!relative.is_empty())
+                    .then_some(relative)
+                    .unwrap_or_default()
             })
         })
     };
@@ -1845,7 +1849,6 @@ mod tests {
         }
     }
 
-
     use super::*;
     use notify::EventKind;
     use notify::event::{AccessKind, AccessMode, CreateKind, DataChange, ModifyKind, RemoveKind};
@@ -2160,7 +2163,10 @@ mod tests {
         let base = Instant::now();
         let mut d = DebouncedChange::new(Duration::from_millis(100), Duration::from_millis(250));
 
-        assert_eq!(d.push(RepoExternalChange::Worktree, vec![PathBuf::from("a")], base), None);
+        assert_eq!(
+            d.push(RepoExternalChange::Worktree, vec![PathBuf::from("a")], base),
+            None
+        );
         assert!(d.is_pending());
 
         // Another event resets debounce window.
@@ -2180,7 +2186,10 @@ mod tests {
         // Due by debounce at 150ms from base (last at 50ms + 100ms).
         assert_eq!(
             d.take_if_due(base + Duration::from_millis(150)),
-            Some(flushed(RepoExternalChange::Worktree, Some(vec![PathBuf::from("a")])))
+            Some(flushed(
+                RepoExternalChange::Worktree,
+                Some(vec![PathBuf::from("a")])
+            ))
         );
         assert!(!d.is_pending());
 
@@ -3048,7 +3057,10 @@ mod tests {
         let mut d = DebouncedChange::new(Duration::from_millis(500), Duration::from_millis(100));
 
         assert_eq!(d.take_if_due(base), None);
-        assert_eq!(d.push(RepoExternalChange::Worktree, vec![PathBuf::from("a")], base), None);
+        assert_eq!(
+            d.push(RepoExternalChange::Worktree, vec![PathBuf::from("a")], base),
+            None
+        );
 
         let timeout = d
             .next_timeout(base + Duration::from_millis(90))
@@ -3425,7 +3437,10 @@ fn coalescer_accumulates_paths_until_a_coarse_event_or_the_cap() {
     assert_eq!(flushed.change, RepoExternalChange::Worktree);
     assert_eq!(
         flushed.worktree_paths,
-        Some(vec![PathBuf::from("/tmp/repo/a"), PathBuf::from("/tmp/repo/b")]),
+        Some(vec![
+            PathBuf::from("/tmp/repo/a"),
+            PathBuf::from("/tmp/repo/b")
+        ]),
         "the coalesced burst carries its unique worktree paths"
     );
 
@@ -3439,7 +3454,11 @@ fn coalescer_accumulates_paths_until_a_coarse_event_or_the_cap() {
         None
     );
     assert_eq!(
-        d.push(RepoExternalChange::GitState, Vec::new(), base + Duration::from_millis(10)),
+        d.push(
+            RepoExternalChange::GitState,
+            Vec::new(),
+            base + Duration::from_millis(10)
+        ),
         None
     );
     let flushed = d.take().expect("a pending flush");
@@ -3461,10 +3480,7 @@ fn coalescer_accumulates_paths_until_a_coarse_event_or_the_cap() {
     let many: Vec<PathBuf> = (0..=INCREMENTAL_STATUS_PATH_CAP)
         .map(|ix| PathBuf::from(format!("/tmp/repo/f{ix}")))
         .collect();
-    assert_eq!(
-        d.push(RepoExternalChange::Worktree, many, base),
-        None
-    );
+    assert_eq!(d.push(RepoExternalChange::Worktree, many, base), None);
     let flushed = d.take().expect("a pending flush");
     assert_eq!(flushed.change, RepoExternalChange::Worktree);
     assert_eq!(flushed.worktree_paths, None);

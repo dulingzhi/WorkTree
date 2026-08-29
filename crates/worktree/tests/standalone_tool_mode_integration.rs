@@ -1,11 +1,11 @@
-use worktree_core::path_utils::canonicalize_or_original;
-use worktree_core::process::background_command as no_window_command;
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 #[cfg(windows)]
 use std::sync::OnceLock;
+use worktree_core::path_utils::canonicalize_or_original;
+use worktree_core::process::background_command as no_window_command;
 
 fn worktree_bin() -> PathBuf {
     for env_key in ["CARGO_BIN_EXE_worktree"] {

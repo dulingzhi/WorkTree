@@ -120,30 +120,29 @@ pub(super) fn panel(
             })),
         );
 
-    panel
-        .child(
-            div()
-                .px_2()
-                .py_1()
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(
-                    cancel_button("stash_cancel", "stash_cancel_hint", theme)
-                        .focus_handle(this.stash_focus.cancel.clone())
-                        .on_click(theme, cx, |this, _e, window, cx| {
-                            this.dismiss_prompt_popover(window, cx);
-                        }),
-                )
-                .child(
-                    components::Button::new("stash_go", crate::i18n::tr("input.stash.stash"))
-                        .focus_handle(this.stash_focus.submit.clone())
-                        .separated_end_slot(super::hotkey_hint(theme, "stash_go_hint", "Enter"))
-                        .style(components::ButtonStyle::Filled)
-                        .disabled(!can_stash)
-                        .on_click(theme, cx, |this, _e, window, cx| {
-                            this.submit_stash(window, cx);
-                        }),
-                ),
-        )
+    panel.child(
+        div()
+            .px_2()
+            .py_1()
+            .flex()
+            .items_center()
+            .justify_between()
+            .child(
+                cancel_button("stash_cancel", "stash_cancel_hint", theme)
+                    .focus_handle(this.stash_focus.cancel.clone())
+                    .on_click(theme, cx, |this, _e, window, cx| {
+                        this.dismiss_prompt_popover(window, cx);
+                    }),
+            )
+            .child(
+                components::Button::new("stash_go", crate::i18n::tr("input.stash.stash"))
+                    .focus_handle(this.stash_focus.submit.clone())
+                    .separated_end_slot(super::hotkey_hint(theme, "stash_go_hint", "Enter"))
+                    .style(components::ButtonStyle::Filled)
+                    .disabled(!can_stash)
+                    .on_click(theme, cx, |this, _e, window, cx| {
+                        this.submit_stash(window, cx);
+                    }),
+            ),
+    )
 }

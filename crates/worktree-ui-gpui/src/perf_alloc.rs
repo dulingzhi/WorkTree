@@ -1,11 +1,11 @@
+use mimalloc::MiMalloc;
+use serde_json::{Map, Value, json};
+use stats_alloc::{Region, Stats, StatsAlloc};
 use worktree_tree_sitter_alloc::{
     AllocMetrics as TreeSitterAllocMetrics,
     install_tracking_allocator as install_tree_sitter_tracking_allocator_impl,
     measure_allocations as measure_tree_sitter_allocations,
 };
-use mimalloc::MiMalloc;
-use serde_json::{Map, Value, json};
-use stats_alloc::{Region, Stats, StatsAlloc};
 
 pub type PerfTrackingAllocator = StatsAlloc<MiMalloc>;
 

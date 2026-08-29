@@ -86,12 +86,16 @@ pub(super) fn panel(
                                         crate::i18n::tr("chrome.agent.view_changes"),
                                     )
                                     .style(components::ButtonStyle::Filled)
-                                    .on_click(theme, cx, move |this, _e, _window, cx| {
-                                        let _ = this.root_view.update(cx, |root, cx| {
-                                            root.view_agent_changes(cx)
-                                        });
-                                        this.close_popover(cx);
-                                    }),
+                                    .on_click(
+                                        theme,
+                                        cx,
+                                        move |this, _e, _window, cx| {
+                                            let _ = this
+                                                .root_view
+                                                .update(cx, |root, cx| root.view_agent_changes(cx));
+                                            this.close_popover(cx);
+                                        },
+                                    ),
                                 ),
                         )
                         .child(
@@ -103,16 +107,20 @@ pub(super) fn panel(
                                         crate::i18n::tr("chrome.agent.stop_session"),
                                     )
                                     .style(components::ButtonStyle::Outlined)
-                                    .on_click(theme, cx, move |this, _e, _window, cx| {
-                                        // Closing the repo's terminal session
-                                        // ends the session record with it; the
-                                        // worktree survives for the regular
-                                        // worktree management UI.
-                                        let _ = this.root_view.update(cx, |root, cx| {
-                                            root.close_terminal_for_repo(repo_id, cx)
-                                        });
-                                        this.close_popover(cx);
-                                    }),
+                                    .on_click(
+                                        theme,
+                                        cx,
+                                        move |this, _e, _window, cx| {
+                                            // Closing the repo's terminal session
+                                            // ends the session record with it; the
+                                            // worktree survives for the regular
+                                            // worktree management UI.
+                                            let _ = this.root_view.update(cx, |root, cx| {
+                                                root.close_terminal_for_repo(repo_id, cx)
+                                            });
+                                            this.close_popover(cx);
+                                        },
+                                    ),
                                 ),
                         ),
                 );
@@ -143,26 +151,24 @@ pub(super) fn panel(
             crate::view::agent_workbench::AgentKind::Codex => "agent_start_codex",
         };
         body = body.child(
-            div()
-                .debug_selector(move || selector.to_string())
-                .child(
-                    components::Button::new(
-                        selector,
-                        crate::i18n::t!("chrome.agent.start", agent = kind.display_label()),
-                    )
-                    .start_slot(crate::view::icons::svg_icon(
-                        "icons/sparkle.svg",
-                        theme.colors.accent.foreground,
-                        px(13.0),
-                    ))
-                    .disabled(!available)
-                    .on_click(theme, cx, move |this, _e, window, cx| {
-                        let _ = this.root_view.update(cx, |root, cx| {
-                            root.start_agent_session(kind, window, cx)
-                        });
-                        this.close_popover(cx);
-                    }),
-                ),
+            div().debug_selector(move || selector.to_string()).child(
+                components::Button::new(
+                    selector,
+                    crate::i18n::t!("chrome.agent.start", agent = kind.display_label()),
+                )
+                .start_slot(crate::view::icons::svg_icon(
+                    "icons/sparkle.svg",
+                    theme.colors.accent.foreground,
+                    px(13.0),
+                ))
+                .disabled(!available)
+                .on_click(theme, cx, move |this, _e, window, cx| {
+                    let _ = this
+                        .root_view
+                        .update(cx, |root, cx| root.start_agent_session(kind, window, cx));
+                    this.close_popover(cx);
+                }),
+            ),
         );
     }
 

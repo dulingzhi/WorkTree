@@ -1,8 +1,8 @@
 use super::*;
 use crate::view::fingerprint as view_fingerprint;
-use worktree_state::model::CloneProgressStage;
 use rustc_hash::FxHasher;
 use std::hash::{Hash, Hasher};
+use worktree_state::model::CloneProgressStage;
 
 pub(super) fn notify_fingerprint(state: &AppState, popover: &PopoverKind) -> u64 {
     let mut hasher = FxHasher::default();
@@ -215,7 +215,7 @@ fn repo_for_popover<'a>(state: &'a AppState, popover: &PopoverKind) -> Option<&'
         | PopoverKind::CommitShaLinkMenu { repo_id, .. }
         | PopoverKind::ReflogEntryMenu { repo_id, .. }
         | PopoverKind::AgentSessions { repo_id } => Some(*repo_id),
-        | PopoverKind::RepoSettingsPrompt { repo_id } => Some(*repo_id),
+        PopoverKind::RepoSettingsPrompt { repo_id } => Some(*repo_id),
     }?;
 
     state.repos.iter().find(|r| r.id == repo_id)
@@ -1214,8 +1214,8 @@ fn hash_reset_mode<H: Hasher>(mode: ResetMode, hasher: &mut H) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use worktree_core::domain::{Branch, CommitId, Upstream};
     use std::sync::Arc;
+    use worktree_core::domain::{Branch, CommitId, Upstream};
 
     fn hash_kind(kind: PopoverKind) -> u64 {
         let mut hasher = FxHasher::default();

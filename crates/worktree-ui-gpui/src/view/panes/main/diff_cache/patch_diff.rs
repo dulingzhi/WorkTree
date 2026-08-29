@@ -1,7 +1,7 @@
 use super::super::*;
 use crate::view::diff_utils::diff_content_line_text;
-use worktree_core::domain::DiffRowProvider;
 use smallvec::SmallVec;
+use worktree_core::domain::DiffRowProvider;
 
 pub(in crate::view) const PATCH_DIFF_PAGE_SIZE: usize = 256;
 
@@ -880,8 +880,8 @@ pub(super) fn scrollbar_markers_from_visible_flags(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use worktree_core::domain::{Diff, DiffArea, DiffTarget};
     use std::path::PathBuf;
+    use worktree_core::domain::{Diff, DiffArea, DiffTarget};
 
     fn split_visible_meta_for_diff(diff: &Diff) -> PatchSplitVisibleMeta {
         let line_kinds = diff.lines.iter().map(|line| line.kind).collect::<Vec<_>>();

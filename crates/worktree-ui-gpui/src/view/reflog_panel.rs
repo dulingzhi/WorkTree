@@ -283,12 +283,12 @@ fn bottom_panel_tab_close(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
+    use std::sync::Arc;
     use worktree_core::error::{Error, ErrorKind};
     use worktree_core::services::{GitBackend, GitRepository, Result};
     use worktree_state::model::RepoState;
     use worktree_state::store::AppStore;
-    use std::path::Path;
-    use std::sync::Arc;
 
     struct TestBackend;
 

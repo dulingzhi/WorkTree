@@ -3,6 +3,8 @@ use crate::view::conflict_resolver::{
     self, ConflictBlock, ConflictChoice, ConflictPickSide, ConflictSegment,
     ConflictSplitStyledTextCache, ThreeWayVisibleItem, TwoWayWordHighlights, WordHighlights,
 };
+use std::path::PathBuf;
+use std::time::Instant;
 use worktree_core::conflict_session::{ConflictPayload, ConflictSession};
 use worktree_core::mergetool_trace::{
     self, MergetoolTraceEvent, MergetoolTraceRenderingMode, MergetoolTraceSideStats,
@@ -10,8 +12,6 @@ use worktree_core::mergetool_trace::{
 };
 use worktree_state::model::ConflictFile;
 use worktree_state::msg::RepoPath;
-use std::path::PathBuf;
-use std::time::Instant;
 
 fn word_ranges_for_line(highlights: &WordHighlights, line_ix: usize) -> &[Range<usize>] {
     highlights

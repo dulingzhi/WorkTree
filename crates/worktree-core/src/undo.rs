@@ -170,14 +170,20 @@ mod tests {
             entry(1, "a", "commit: x"),
         ];
         assert!(classify_undo(&entries).is_none());
-        let entries = vec![entry(0, "b", "stash: WIP on main"), entry(1, "a", "commit: x")];
+        let entries = vec![
+            entry(0, "b", "stash: WIP on main"),
+            entry(1, "a", "commit: x"),
+        ];
         assert!(classify_undo(&entries).is_none());
     }
 
     #[test]
     fn commit_prefix_matches_plain_and_merge_commits() {
         for message in ["commit: add feature", "commit (merge): merge branch 'x'"] {
-            let entries = vec![entry(0, "b", message), entry(1, "a", "reset: moving to HEAD")];
+            let entries = vec![
+                entry(0, "b", message),
+                entry(1, "a", "reset: moving to HEAD"),
+            ];
             let plan = classify_undo(&entries).unwrap_or_else(|| panic!("{message}"));
             assert_eq!(plan.kind, UndoKind::Commit);
             assert_eq!(plan.operation.as_ref(), message);
@@ -196,7 +202,11 @@ mod tests {
     #[test]
     fn merge_pull_and_reset_return_to_the_previous_position() {
         for (message, kind, mode) in [
-            ("merge main: Fast-forward", UndoKind::Merge, ResetMode::Mixed),
+            (
+                "merge main: Fast-forward",
+                UndoKind::Merge,
+                ResetMode::Mixed,
+            ),
             (
                 "merge origin/main: Merge made by the 'ort' strategy.",
                 UndoKind::Merge,
@@ -208,7 +218,11 @@ mod tests {
                 UndoKind::Pull,
                 ResetMode::Mixed,
             ),
-            ("reset: moving to origin/main", UndoKind::Reset, ResetMode::Hard),
+            (
+                "reset: moving to origin/main",
+                UndoKind::Reset,
+                ResetMode::Hard,
+            ),
         ] {
             let entries = vec![entry(0, "b", message), entry(1, "a", "commit: base")];
             let plan = classify_undo(&entries).unwrap_or_else(|| panic!("{message}"));

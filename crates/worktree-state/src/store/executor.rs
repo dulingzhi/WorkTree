@@ -1,10 +1,10 @@
 use super::send_diagnostics::{SendFailureKind, send_or_log};
-use worktree_core::mergetool_trace;
 use std::panic::{self, AssertUnwindSafe};
 #[cfg(any(test, feature = "test-support"))]
 use std::sync::OnceLock;
 use std::sync::{Arc, mpsc};
 use std::thread;
+use worktree_core::mergetool_trace;
 
 type Task = Box<dyn FnOnce() + Send + 'static>;
 

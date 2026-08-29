@@ -10,7 +10,6 @@ use super::diff_text::{
 use super::*;
 use crate::view::panes::main::DiffHorizontalScrollColumn;
 use crate::view::panes::main::diff_search::{DiffSearchMatcher, DiffSearchOptions};
-use worktree_core::domain::{DiffArea, DiffLineKind};
 use gpui::{
     App, Bounds, CursorStyle, DispatchPhase, HighlightStyle, Hitbox, HitboxBehavior, Pixels,
     Styled, TextRun, TextStyle, TransformationMatrix, TruncateFrom, Window, fill, point, px, size,
@@ -23,6 +22,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::Range;
 use std::sync::Arc;
 use std::sync::OnceLock;
+use worktree_core::domain::{DiffArea, DiffLineKind};
 
 const DIFF_FONT_SCALE: f32 = 0.80;
 

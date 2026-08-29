@@ -1,4 +1,9 @@
 use super::*;
+use rustc_hash::FxHashMap;
+use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 use worktree_core::domain::{
     Branch, CommitDetails, CommitId, LogPage, ReflogEntry, RepoSpec, RepoStatus, StashEntry,
 };
@@ -6,11 +11,6 @@ use worktree_core::path_utils::canonicalize_or_original;
 use worktree_core::services::{CommandOutput, PullMode};
 use worktree_state::model::Loadable;
 use worktree_state::msg::{Msg, StoreEvent};
-use rustc_hash::FxHashMap;
-use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
-use std::sync::Mutex;
-use std::time::{Duration, Instant};
 
 fn click_debug_selector(cx: &mut gpui::VisualTestContext, selector: &'static str) {
     let center = cx
@@ -55,10 +55,7 @@ impl TrackingRepo {
     /// Seeds the bisect session this repo reports. Every refresh reloads it,
     /// so the UI state survives any number of refreshes — unlike a one-shot
     /// `BisectStateLoaded` dispatch, which the next refresh overwrites.
-    pub(super) fn set_bisect_state(
-        &self,
-        state: Option<worktree_core::services::BisectState>,
-    ) {
+    pub(super) fn set_bisect_state(&self, state: Option<worktree_core::services::BisectState>) {
         *self
             .bisect
             .lock()
@@ -297,9 +294,7 @@ impl GitRepository for TrackingRepo {
         Ok(CommandOutput::empty_success("git push"))
     }
 
-    fn bisect_state(
-        &self,
-    ) -> Result<Option<worktree_core::services::BisectState>> {
+    fn bisect_state(&self) -> Result<Option<worktree_core::services::BisectState>> {
         // Reads triggered by refreshes must not pollute `actions()` — prompt
         // tests assert on its exact contents.
         Ok(self

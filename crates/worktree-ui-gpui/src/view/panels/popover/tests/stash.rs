@@ -368,9 +368,8 @@ fn stash_prompt_enter_with_empty_input_does_not_close_or_stash(cx: &mut gpui::Te
 fn stash_prompt_with_paths_renders_count_and_option_toggles(cx: &mut gpui::TestAppContext) {
     let (store, events, _repo, _workdir) = create_tracking_store("stash-paths-render");
     let store_for_view = store.clone();
-    let (view, cx) = cx.add_window_view(|window, cx| {
-        WorkTreeView::new(store_for_view, events, None, window, cx)
-    });
+    let (view, cx) = cx
+        .add_window_view(|window, cx| WorkTreeView::new(store_for_view, events, None, window, cx));
 
     cx.update(|window, app| {
         let _ = window.draw(app);
@@ -430,9 +429,8 @@ fn stash_prompt_with_paths_renders_count_and_option_toggles(cx: &mut gpui::TestA
 fn stash_prompt_submit_carries_options_and_paths(cx: &mut gpui::TestAppContext) {
     let (store, events, repo, _workdir) = create_tracking_store("stash-options-submit");
     let store_for_view = store.clone();
-    let (view, cx) = cx.add_window_view(|window, cx| {
-        WorkTreeView::new(store_for_view, events, None, window, cx)
-    });
+    let (view, cx) = cx
+        .add_window_view(|window, cx| WorkTreeView::new(store_for_view, events, None, window, cx));
 
     cx.update(|window, app| {
         app.bind_keys([gpui::KeyBinding::new(
@@ -483,9 +481,8 @@ fn stash_menu_branch_entry_opens_prefilled_prompt_and_submits(cx: &mut gpui::Tes
     let (store, events, repo, _workdir) = create_tracking_store("stash-branch-prompt");
     let repo_id = store.snapshot().active_repo.expect("expected active repo");
     let store_for_view = store.clone();
-    let (view, cx) = cx.add_window_view(|window, cx| {
-        WorkTreeView::new(store_for_view, events, None, window, cx)
-    });
+    let (view, cx) = cx
+        .add_window_view(|window, cx| WorkTreeView::new(store_for_view, events, None, window, cx));
 
     cx.update(|window, app| {
         app.bind_keys([gpui::KeyBinding::new(
@@ -533,10 +530,7 @@ fn stash_menu_branch_entry_opens_prefilled_prompt_and_submits(cx: &mut gpui::Tes
         view.update(app, |this, cx| {
             this.popover_host.update(cx, |host, cx| {
                 host.open_popover_centered(
-                    PopoverKind::StashBranchPrompt {
-                        repo_id,
-                        index: 3,
-                    },
+                    PopoverKind::StashBranchPrompt { repo_id, index: 3 },
                     window,
                     cx,
                 );
@@ -550,8 +544,9 @@ fn stash_menu_branch_entry_opens_prefilled_prompt_and_submits(cx: &mut gpui::Tes
     // The prompt opens with a suggested branch name derived from the index.
     cx.update(|_window, app| {
         let prefilled = view.update(app, |this, cx| {
-            this.popover_host
-                .read_with(cx, |host, _| host.create_branch_input.read(cx).text().to_string())
+            this.popover_host.read_with(cx, |host, _| {
+                host.create_branch_input.read(cx).text().to_string()
+            })
         });
         assert_eq!(prefilled, "stash-3");
     });

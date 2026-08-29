@@ -98,6 +98,8 @@ pub fn reset_conflict_resolutions_sync(state: &mut AppState, repo_id: RepoId, pa
 mod tests {
     use super::*;
     use crate::model::{Loadable, RepoState};
+    use std::path::PathBuf;
+    use std::sync::Arc;
     use worktree_core::conflict_session::{
         ConflictPayload, ConflictRegion, ConflictRegionResolution, ConflictRegionText,
         ConflictSession,
@@ -105,8 +107,6 @@ mod tests {
     use worktree_core::domain::FileConflictKind;
     use worktree_core::domain::RepoSpec;
     use worktree_core::domain::{DiffArea, DiffTarget, RepoStatus};
-    use std::path::PathBuf;
-    use std::sync::Arc;
 
     fn add_conflict_repo(
         state: &mut AppState,

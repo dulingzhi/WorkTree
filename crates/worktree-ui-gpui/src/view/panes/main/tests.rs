@@ -31,11 +31,11 @@ use crate::view::conflict_resolver::{
 };
 use crate::view::rows;
 use crate::view::{ConflictResolverUiState, WorkTreeViewMode};
-use worktree_core::domain::{CommitId, DiffTarget, FileSource, RepoSpec};
-use worktree_state::model::{ConflictFile, Loadable, RepoId, RepoState};
 use palette::IntoColor;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use worktree_core::domain::{CommitId, DiffTarget, FileSource, RepoSpec};
+use worktree_state::model::{ConflictFile, Loadable, RepoId, RepoState};
 
 /// Block ownership for output text that still reads back exactly as the
 /// segments render, which is what these marker tests build.

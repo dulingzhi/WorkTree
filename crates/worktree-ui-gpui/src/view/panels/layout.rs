@@ -1962,11 +1962,18 @@ impl DetailsPaneView {
                                                         div()
                                                             .id("commit_details_signed_badge")
                                                             .debug_selector(|| {
-                                                                "commit_details_signed_badge".to_string()
+                                                                "commit_details_signed_badge"
+                                                                    .to_string()
                                                             })
                                                             .flex_none()
                                                             .text_xs()
-                                                            .text_color(theme.colors.status.success.foreground)
+                                                            .text_color(
+                                                                theme
+                                                                    .colors
+                                                                    .status
+                                                                    .success
+                                                                    .foreground,
+                                                            )
                                                             .worktree_tooltip(
                                                                 theme,
                                                                 tr("layout.commit_details.signed"),
@@ -3614,10 +3621,10 @@ impl DetailsPaneView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use worktree_core::domain::{Branch, CommitId, LogPage, RepoSpec};
-    use worktree_state::model::{Loadable, RepoId, RepoState};
     use std::path::PathBuf;
     use std::sync::Arc;
+    use worktree_core::domain::{Branch, CommitId, LogPage, RepoSpec};
+    use worktree_state::model::{Loadable, RepoId, RepoState};
 
     fn test_repo() -> RepoState {
         RepoState::new_opening(

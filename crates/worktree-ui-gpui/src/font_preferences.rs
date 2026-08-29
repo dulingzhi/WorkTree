@@ -1,8 +1,8 @@
 use crate::bundled_fonts;
-use worktree_state::session;
 use gpui::{App, BorrowAppContext, FontFeatures, TextSystem};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
+use worktree_state::session;
 
 pub(crate) const UI_SYSTEM_FONT_FAMILY: &str = ".SystemUIFont";
 pub(crate) const DEFAULT_UI_FONT_FAMILY: &str = bundled_fonts::IBM_PLEX_SANS_FONT_FAMILY;

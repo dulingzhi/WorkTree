@@ -11702,8 +11702,8 @@ fn yaml_commit_patch_diff_full_fixture_keeps_consistent_highlighting_across_file
 fn yaml_commit_patch_diff_matches_commit_file_diff_for_build_release_artifacts(
     cx: &mut gpui::TestAppContext,
 ) {
-    use worktree_core::domain::DiffLineKind;
     use std::collections::{BTreeMap, BTreeSet};
+    use worktree_core::domain::DiffLineKind;
 
     #[derive(Clone, Debug, PartialEq)]
     struct LineSyntaxSnapshot {
@@ -15031,9 +15031,9 @@ fn yaml_file_diff_keeps_consistent_highlighting_for_added_paths_and_keys(
 fn yaml_file_diff_fallback_matches_prepared_document_for_deployment_ci(
     cx: &mut gpui::TestAppContext,
 ) {
+    use std::collections::BTreeMap;
     use worktree_core::domain::DiffLineKind;
     use worktree_core::file_diff::FileDiffRowKind;
-    use std::collections::BTreeMap;
 
     #[derive(Clone, Debug, PartialEq)]
     struct LineSyntaxSnapshot {
@@ -16077,9 +16077,9 @@ fn yaml_file_diff_keeps_consistent_highlighting_for_build_release_artifacts(
 fn yaml_file_diff_matches_prepared_document_for_build_release_artifacts(
     cx: &mut gpui::TestAppContext,
 ) {
+    use std::collections::BTreeMap;
     use worktree_core::domain::DiffLineKind;
     use worktree_core::file_diff::FileDiffRowKind;
-    use std::collections::BTreeMap;
 
     #[derive(Clone, Debug, PartialEq)]
     struct LineSyntaxSnapshot {
@@ -18003,16 +18003,15 @@ diff --git a/art.bin b/art.bin
             // Production shape: the text load resolves (keeping the file
             // view's cache machinery current), then the LFS result lands and
             // the panel takes over rendering.
-            repo.diff_state.diff_file = worktree_state::model::Loadable::Ready(Some(
-                Arc::new(worktree_core::domain::FileDiffText::new(
+            repo.diff_state.diff_file = worktree_state::model::Loadable::Ready(Some(Arc::new(
+                worktree_core::domain::FileDiffText::new(
                     path.clone(),
                     Some("version https://git-lfs.github.com/spec/v1\n".to_string()),
                     Some("version https://git-lfs.github.com/spec/v1\n".to_string()),
-                )),
-            ));
-            repo.diff_state.diff_file_lfs = worktree_state::model::Loadable::Ready(Some(
-                Arc::new(pointer_change),
-            ));
+                ),
+            )));
+            repo.diff_state.diff_file_lfs =
+                worktree_state::model::Loadable::Ready(Some(Arc::new(pointer_change)));
             push_test_state(this, app_state_with_repo(repo, repo_id), cx);
         });
     });

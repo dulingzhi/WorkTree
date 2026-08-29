@@ -222,12 +222,10 @@ mod tests {
     #[test]
     fn agent_restore_context_matches_only_the_sessions_own_compare() {
         let session = session_with_worktree();
-        let range = |to: Option<&str>, path: Option<&str>| {
-            DiffTarget::CommitRange {
-                from_commit_id: session.baseline.clone(),
-                to_commit_id: to.map(|sha| CommitId(sha.into())),
-                path: path.map(std::path::PathBuf::from),
-            }
+        let range = |to: Option<&str>, path: Option<&str>| DiffTarget::CommitRange {
+            from_commit_id: session.baseline.clone(),
+            to_commit_id: to.map(|sha| CommitId(sha.into())),
+            path: path.map(std::path::PathBuf::from),
         };
 
         let target = range(None, Some("src/lib.rs"));
@@ -247,14 +245,14 @@ mod tests {
             "no single file on screen — nothing to restore"
         );
 
-        let committed = range(Some("bbbb111122223333444455556666777788889999"), Some("src/lib.rs"));
+        let committed = range(
+            Some("bbbb111122223333444455556666777788889999"),
+            Some("src/lib.rs"),
+        );
         assert_eq!(agent_restore_context(&session, Some(&committed)), None);
 
         let mut other_base = range(None, Some("src/lib.rs"));
-        if let DiffTarget::CommitRange {
-            from_commit_id, ..
-        } = &mut other_base
-        {
+        if let DiffTarget::CommitRange { from_commit_id, .. } = &mut other_base {
             *from_commit_id = CommitId("cccc111122223333444455556666777788889999".into());
         }
         assert_eq!(

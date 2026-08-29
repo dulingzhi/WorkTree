@@ -78,8 +78,7 @@ fn assume_unchanged_round_trips_through_the_index() {
     // The plumbing view of the same fact: git lowercases the tag exactly when
     // the assume-unchanged bit is set.
     assert!(
-        run_git_output(repo, &["ls-files", "-v", "tracked.txt"])
-            .starts_with('h'),
+        run_git_output(repo, &["ls-files", "-v", "tracked.txt"]).starts_with('h'),
         "ls-files -v must report the lowercase tag"
     );
 
@@ -88,8 +87,7 @@ fn assume_unchanged_round_trips_through_the_index() {
         .unwrap();
     assert!(opened.assume_unchanged_list().unwrap().is_empty());
     assert!(
-        run_git_output(repo, &["ls-files", "-v", "tracked.txt"])
-            .starts_with('H'),
+        run_git_output(repo, &["ls-files", "-v", "tracked.txt"]).starts_with('H'),
         "ls-files -v must report the uppercase tag after clearing"
     );
 }
@@ -106,7 +104,9 @@ fn assume_unchanged_list_survives_modified_files() {
 
     let backend = GixBackend;
     let opened = backend.open(repo).unwrap();
-    opened.set_assume_unchanged(Path::new("a.txt"), true).unwrap();
+    opened
+        .set_assume_unchanged(Path::new("a.txt"), true)
+        .unwrap();
 
     fs::write(repo.join("a.txt"), "changed\n").unwrap();
     assert_eq!(

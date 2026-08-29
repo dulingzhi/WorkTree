@@ -16,14 +16,14 @@
 //! writing, ensuring that the public API is integration-tested alongside the
 //! merge algorithm invariants.
 
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use worktree_core::merge::{MergeOptions, merge_file};
 use worktree_core::merge_extraction::{
     ExtractedMergeCase, MergeExtractionOptions, discover_merge_commits, extract_merge_cases,
     extract_merge_cases_from_repo, write_fixture_files,
 };
-use std::collections::HashSet;
-use std::path::{Path, PathBuf};
-use std::process::Command;
 
 // ---------------------------------------------------------------------------
 // Invariant validation

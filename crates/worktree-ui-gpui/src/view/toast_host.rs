@@ -911,11 +911,11 @@ impl Render for ToastHost {
 mod tests {
     use super::*;
     use crate::theme::with_alpha;
-    use worktree_state::model::{CloneProgressMeter, CloneProgressStage};
     use palette::IntoColor;
     use std::collections::VecDeque;
     use std::path::PathBuf;
     use std::sync::Arc;
+    use worktree_state::model::{CloneProgressMeter, CloneProgressStage};
 
     fn clone_op(
         dest: Arc<PathBuf>,

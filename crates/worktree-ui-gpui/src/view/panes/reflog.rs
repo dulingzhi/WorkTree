@@ -2,10 +2,10 @@ use super::super::*;
 use crate::ui_scale::UiScale;
 use crate::view::date_time::{DateTimeFormat, Timezone};
 use crate::view::perf::{self, ViewPerfRenderLane};
-use worktree_core::domain::ReflogEntry;
 use rustc_hash::FxHasher;
 use std::hash::{Hash, Hasher};
 use std::time::SystemTime;
+use worktree_core::domain::ReflogEntry;
 
 const REFLOG_ROW_HEIGHT_PX: f32 = 28.0;
 
@@ -574,11 +574,10 @@ impl ReflogPaneView {
             .get(&repo_id)
             .map(|panel| panel.query_input.clone());
         let text_color = theme.colors.interaction.selected_foreground;
-        let undo_available =
-            !matches!(
-                panels::resolve_undo(self.state.repos.iter().find(|repo| repo.id == repo_id)),
-                panels::UndoResolution::Nothing
-            );
+        let undo_available = !matches!(
+            panels::resolve_undo(self.state.repos.iter().find(|repo| repo.id == repo_id)),
+            panels::UndoResolution::Nothing
+        );
 
         let close = div()
             .id("reflog_panel_tab_close")
@@ -661,27 +660,24 @@ impl ReflogPaneView {
                 } else {
                     crate::i18n::tr("panels.undo.button_nothing_tooltip").into()
                 };
-                components::Button::new(
-                    "reflog_undo_button",
-                    crate::i18n::tr("panels.undo.button"),
-                )
-                .start_slot(svg_icon(
-                    "icons/undo.svg",
-                    theme.colors.foreground.secondary,
-                    px(12.0),
-                ))
-                .style(components::ButtonStyle::Subtle)
-                .disabled(!undo_available)
-                .on_click_with_bounds(theme, cx, move |this, _e, bounds, window, cx| {
-                    this.open_popover_at(
-                        PopoverKind::UndoLastActionPrompt { repo_id },
-                        bounds.bottom_left(),
-                        window,
-                        cx,
-                    );
-                })
-                .debug_selector(|| "reflog_undo_button".to_string())
-                .worktree_tooltip(theme, tooltip)
+                components::Button::new("reflog_undo_button", crate::i18n::tr("panels.undo.button"))
+                    .start_slot(svg_icon(
+                        "icons/undo.svg",
+                        theme.colors.foreground.secondary,
+                        px(12.0),
+                    ))
+                    .style(components::ButtonStyle::Subtle)
+                    .disabled(!undo_available)
+                    .on_click_with_bounds(theme, cx, move |this, _e, bounds, window, cx| {
+                        this.open_popover_at(
+                            PopoverKind::UndoLastActionPrompt { repo_id },
+                            bounds.bottom_left(),
+                            window,
+                            cx,
+                        );
+                    })
+                    .debug_selector(|| "reflog_undo_button".to_string())
+                    .worktree_tooltip(theme, tooltip)
             })
             .child(
                 div()
@@ -961,9 +957,9 @@ mod tests {
 #[cfg(test)]
 mod view_tests {
     use super::*;
-    use worktree_state::model::RepoState;
     use std::cell::Cell;
     use std::rc::Rc;
+    use worktree_state::model::RepoState;
 
     const ENTRY_COUNT: usize = 200;
     /// Tall enough to show a handful of 28px rows, short enough that the list

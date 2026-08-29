@@ -1,9 +1,9 @@
 use super::*;
 use crate::view::panes::main::{DiffWrapVisibleCacheKey, DiffWrapVisualRow};
-use worktree_core::conflict_session::{ConflictPayload, ConflictSession};
-use worktree_core::domain::{CommitDetails, CommitFileChange};
 use gpui::{ScrollDelta, ScrollWheelEvent};
 use std::time::{Duration, Instant};
+use worktree_core::conflict_session::{ConflictPayload, ConflictSession};
+use worktree_core::domain::{CommitDetails, CommitFileChange};
 
 fn copied_path_ends_with(text: &str, suffix: &std::path::Path) -> bool {
     let normalize = |value: &str| value.replace('\\', "/");
@@ -1211,10 +1211,7 @@ fn history_ref_filter_keeps_its_header_highlighted(cx: &mut gpui::TestAppContext
     apply_state(
         cx,
         &view,
-        app_state_with_active_repo(ref_filter_fixture_repo(
-            repo_id,
-            &["refs/heads/dev"],
-        )),
+        app_state_with_active_repo(ref_filter_fixture_repo(repo_id, &["refs/heads/dev"])),
     );
 
     let invoker: SharedString = "history_ref_filter_header".into();
@@ -2433,7 +2430,8 @@ fn commit_details_file_navigation_scrolls_selected_row_into_view(cx: &mut gpui::
         committed_at_unix: 0,
         parent_ids: vec![],
         files: files.clone(),
-    signed: false,}));
+        signed: false,
+    }));
     repo.diff_state.diff_target = Some(DiffTarget::Commit {
         commit_id: commit_id.clone(),
         path: Some(files[start_ix].path.clone()),
@@ -2635,7 +2633,8 @@ fn commit_details_text_input_f4_navigates_files_without_stealing_focus(
         committed_at_unix: 0,
         parent_ids: vec![],
         files: files.clone(),
-    signed: false,}));
+        signed: false,
+    }));
     repo.diff_state.diff_target = Some(DiffTarget::Commit {
         commit_id: commit_id.clone(),
         path: Some(files[0].path.clone()),
@@ -5039,7 +5038,8 @@ fn commit_message_text_input_secondary_f_without_visible_diff_opens_commit_searc
     );
     // With nothing to page through, secondary-f falls back to the commit
     // search picker — Ctrl+F still means "search" in a repo with no diff.
-    let popover = cx.update(|_window, app| crate::view::test_support::popover_kind(view.read(app), app));
+    let popover =
+        cx.update(|_window, app| crate::view::test_support::popover_kind(view.read(app), app));
     assert!(
         matches!(
             popover,

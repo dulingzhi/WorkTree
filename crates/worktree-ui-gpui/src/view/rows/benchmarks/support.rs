@@ -361,7 +361,8 @@ pub(crate) fn build_repo_switch_repo_state(
                     deletions: None,
                 })
                 .collect(),
-        signed: false,}));
+            signed: false,
+        }));
         repo.history_state.commit_details_rev = 1;
     }
 
@@ -842,7 +843,7 @@ pub(crate) fn build_synthetic_commit_details_with_message(
         committed_at_unix: 0,
         parent_ids: vec![CommitId("c".repeat(40).into())],
         files: out,
-signed: false,
+        signed: false,
     }
 }
 
@@ -902,7 +903,7 @@ pub(crate) fn build_synthetic_commit_details_unique_paths(
         committed_at_unix: 0,
         parent_ids: vec![CommitId("d".repeat(40).into())],
         files: out,
-signed: false,
+        signed: false,
     }
 }
 

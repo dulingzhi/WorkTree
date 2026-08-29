@@ -1,5 +1,5 @@
-use worktree_core::path_utils::git_dir_for_workdir;
 use std::path::Path;
+use worktree_core::path_utils::git_dir_for_workdir;
 
 /// Open the repository backing the worktree at `workdir`.
 ///

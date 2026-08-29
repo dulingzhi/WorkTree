@@ -2019,11 +2019,7 @@ impl WorkTreeView {
         else {
             self.push_toast(
                 components::ToastKind::Error,
-                crate::i18n::t!(
-                    "chrome.agent.not_installed",
-                    name = kind.executable()
-                )
-                .to_string(),
+                crate::i18n::t!("chrome.agent.not_installed", name = kind.executable()).to_string(),
                 cx,
             );
             return;
@@ -2043,15 +2039,20 @@ impl WorkTreeView {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|elapsed| elapsed.as_secs())
             .unwrap_or(0);
-        let (worktree_path, _branch) = agent_workbench::agent_worktree_layout(&workdir, unix_seconds);
+        let (worktree_path, _branch) =
+            agent_workbench::agent_worktree_layout(&workdir, unix_seconds);
         let worktree_arg = worktree_path.to_string_lossy().into_owned();
         if let Err(error) =
             panels::git_output(&workdir, &["worktree", "add", worktree_arg.as_str()])
         {
             self.push_toast(
                 components::ToastKind::Error,
-                crate::i18n::t!("chrome.agent.worktree_failed", path = worktree_arg.as_str(), err = error)
-                    .to_string(),
+                crate::i18n::t!(
+                    "chrome.agent.worktree_failed",
+                    path = worktree_arg.as_str(),
+                    err = error
+                )
+                .to_string(),
                 cx,
             );
             return;
@@ -2061,8 +2062,7 @@ impl WorkTreeView {
             let repo_name = terminal_repo_name(&workdir);
             self.open_terminal_for_repo(repo_id, workdir.clone(), repo_name, window, cx);
         }
-        let Some(instance) =
-            self.spawn_agent_terminal_instance(&worktree_path, program, kind, cx)
+        let Some(instance) = self.spawn_agent_terminal_instance(&worktree_path, program, kind, cx)
         else {
             return;
         };
@@ -2167,7 +2167,6 @@ impl WorkTreeView {
         }
         cx.notify();
     }
-
 
     /// Like [`Self::spawn_terminal_instance`] but running an agent command
     /// instead of the user's shell, with the agent as the seeded tab title.

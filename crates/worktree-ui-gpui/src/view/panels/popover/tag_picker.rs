@@ -143,12 +143,17 @@ pub(super) fn panel(
                 .empty_text(crate::i18n::tr("ui.picker.tag.empty"))
                 .max_height(scaled_px(TAG_PICKER_LIST_MAX_HEIGHT_PX))
                 .selected_index(this.tag_picker_selected_index)
-                .render(theme, ui_scale_percent, cx, move |this, ix, _e, _window, cx| {
-                    let Some(name) = names.get(ix).cloned() else {
-                        return;
-                    };
-                    activate(this, repo_id, name, cx);
-                }),
+                .render(
+                    theme,
+                    ui_scale_percent,
+                    cx,
+                    move |this, ix, _e, _window, cx| {
+                        let Some(name) = names.get(ix).cloned() else {
+                            return;
+                        };
+                        activate(this, repo_id, name, cx);
+                    },
+                ),
         );
 
     components::context_menu(theme, menu).w(width.preferred_px(ui_scale))

@@ -3,8 +3,8 @@ use crate::view::diff_utils::compute_diff_yaml_block_scalar_for_src_ix;
 use crate::view::markdown_preview;
 use crate::view::perf::{self, ViewPerfSpan};
 use crate::view::rows;
-use worktree_core::domain::DiffRowProvider;
 use rustc_hash::FxHasher;
+use worktree_core::domain::DiffRowProvider;
 
 mod file_diff;
 mod image_cache;
@@ -3182,9 +3182,9 @@ impl MainPaneView {
 mod tests {
     use super::*;
     use crate::view::markdown_preview::MarkdownPreviewRefusal;
-    use worktree_core::domain::{DiffArea, DiffLine, DiffLineKind, DiffTarget};
     use std::path::Path;
     use std::path::PathBuf;
+    use worktree_core::domain::{DiffArea, DiffLine, DiffLineKind, DiffTarget};
 
     fn patch_diff_for_visual_tests(
         lines: Vec<(DiffLineKind, &str)>,

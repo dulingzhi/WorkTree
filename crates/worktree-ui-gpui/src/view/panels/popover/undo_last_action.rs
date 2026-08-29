@@ -1,6 +1,6 @@
 use super::*;
 use worktree_core::services::SequencerState;
-use worktree_core::undo::{classify_undo, UndoAction, UndoPlan};
+use worktree_core::undo::{UndoAction, UndoPlan, classify_undo};
 
 /// What "undo the last action" means for a repository right now. An
 /// in-progress operation is aborted rather than reversed; a completed one is
@@ -50,51 +50,49 @@ pub(super) fn panel(
     let resolution = resolve_undo(this.state.repos.iter().find(|repo| repo.id == repo_id));
 
     match resolution {
-        UndoResolution::AbortMerge => ConfirmDialog::new(
-            crate::i18n::tr("panels.undo.title"),
-            DIALOG_380_WIDTH,
-        )
-        .text(theme, crate::i18n::tr("confirm.merge_abort.body_merge"))
-        .command(theme, "git merge --abort")
-        .render(
-            theme,
-            dialog_cancel_button("undo_cancel", "undo_cancel_hint", theme, cx),
-            components::Button::new(
-                "undo_abort_merge_go",
-                crate::i18n::tr("panels.action_bar.abort_merge"),
-            )
-            .style(components::ButtonStyle::Danger)
-            .on_click(theme, cx, move |this, _e, _w, cx| {
-                this.store.dispatch(Msg::MergeAbort { repo_id });
-                this.close_popover(cx);
-            })
-            .debug_selector(|| "undo_abort_merge_go".to_string()),
-            cx,
-        ),
-        UndoResolution::AbortRebase => ConfirmDialog::new(
-            crate::i18n::tr("panels.undo.title"),
-            DIALOG_380_WIDTH,
-        )
-        .text(
-            theme,
-            crate::i18n::tr("confirm.merge_abort.body_rebase_or_apply"),
-        )
-        .command(theme, "git rebase --abort")
-        .render(
-            theme,
-            dialog_cancel_button("undo_cancel", "undo_cancel_hint", theme, cx),
-            components::Button::new(
-                "undo_abort_rebase_go",
-                crate::i18n::tr("panels.action_bar.abort"),
-            )
-            .style(components::ButtonStyle::Danger)
-            .on_click(theme, cx, move |this, _e, _w, cx| {
-                this.store.dispatch(Msg::RebaseAbort { repo_id });
-                this.close_popover(cx);
-            })
-            .debug_selector(|| "undo_abort_rebase_go".to_string()),
-            cx,
-        ),
+        UndoResolution::AbortMerge => {
+            ConfirmDialog::new(crate::i18n::tr("panels.undo.title"), DIALOG_380_WIDTH)
+                .text(theme, crate::i18n::tr("confirm.merge_abort.body_merge"))
+                .command(theme, "git merge --abort")
+                .render(
+                    theme,
+                    dialog_cancel_button("undo_cancel", "undo_cancel_hint", theme, cx),
+                    components::Button::new(
+                        "undo_abort_merge_go",
+                        crate::i18n::tr("panels.action_bar.abort_merge"),
+                    )
+                    .style(components::ButtonStyle::Danger)
+                    .on_click(theme, cx, move |this, _e, _w, cx| {
+                        this.store.dispatch(Msg::MergeAbort { repo_id });
+                        this.close_popover(cx);
+                    })
+                    .debug_selector(|| "undo_abort_merge_go".to_string()),
+                    cx,
+                )
+        }
+        UndoResolution::AbortRebase => {
+            ConfirmDialog::new(crate::i18n::tr("panels.undo.title"), DIALOG_380_WIDTH)
+                .text(
+                    theme,
+                    crate::i18n::tr("confirm.merge_abort.body_rebase_or_apply"),
+                )
+                .command(theme, "git rebase --abort")
+                .render(
+                    theme,
+                    dialog_cancel_button("undo_cancel", "undo_cancel_hint", theme, cx),
+                    components::Button::new(
+                        "undo_abort_rebase_go",
+                        crate::i18n::tr("panels.action_bar.abort"),
+                    )
+                    .style(components::ButtonStyle::Danger)
+                    .on_click(theme, cx, move |this, _e, _w, cx| {
+                        this.store.dispatch(Msg::RebaseAbort { repo_id });
+                        this.close_popover(cx);
+                    })
+                    .debug_selector(|| "undo_abort_rebase_go".to_string()),
+                    cx,
+                )
+        }
         UndoResolution::ResetBack { plan } => {
             let UndoAction::ResetBack {
                 target,
@@ -102,8 +100,7 @@ pub(super) fn panel(
             } = &plan.action;
             let mode = this.undo_reset_mode.unwrap_or(*default_mode);
             let target = target.as_ref().to_string();
-            let short_target: SharedString =
-                target.get(0..8).unwrap_or(&target).to_owned().into();
+            let short_target: SharedString = target.get(0..8).unwrap_or(&target).to_owned().into();
             let mode_note = match mode {
                 ResetMode::Hard => crate::i18n::tr("confirm.reset.note_hard"),
                 ResetMode::Mixed => crate::i18n::tr("confirm.reset.note_mixed"),
@@ -154,22 +151,24 @@ pub(super) fn panel(
                     cx,
                 )
         }
-        UndoResolution::Nothing => ConfirmDialog::new(
-            crate::i18n::tr("panels.undo.title"),
-            DIALOG_380_WIDTH,
-        )
-        .text(theme, crate::i18n::tr("panels.undo.nothing_body"))
-        .render(
-            theme,
-            dialog_cancel_button("undo_cancel", "undo_cancel_hint", theme, cx),
-            components::Button::new("undo_nothing_ok", crate::i18n::tr("panels.undo.close"))
-                .style(components::ButtonStyle::Outlined)
-                .on_click(theme, cx, |this, _e, _w, cx| {
-                    this.close_popover(cx);
-                })
-                .debug_selector(|| "undo_nothing_ok".to_string()),
-            cx,
-        ),
+        UndoResolution::Nothing => {
+            ConfirmDialog::new(crate::i18n::tr("panels.undo.title"), DIALOG_380_WIDTH)
+                .text(theme, crate::i18n::tr("panels.undo.nothing_body"))
+                .render(
+                    theme,
+                    dialog_cancel_button("undo_cancel", "undo_cancel_hint", theme, cx),
+                    components::Button::new(
+                        "undo_nothing_ok",
+                        crate::i18n::tr("panels.undo.close"),
+                    )
+                    .style(components::ButtonStyle::Outlined)
+                    .on_click(theme, cx, |this, _e, _w, cx| {
+                        this.close_popover(cx);
+                    })
+                    .debug_selector(|| "undo_nothing_ok".to_string()),
+                    cx,
+                )
+        }
     }
 }
 
@@ -287,7 +286,10 @@ mod tests {
         // The reflog alone would classify the newest commit as undoable; the
         // in-progress merge must win, because resetting mid-merge strands the
         // MERGE_HEAD state.
-        assert_eq!(resolve_undo(Some(&in_progress_repo())), UndoResolution::AbortMerge);
+        assert_eq!(
+            resolve_undo(Some(&in_progress_repo())),
+            UndoResolution::AbortMerge
+        );
     }
 
     #[test]
@@ -299,10 +301,7 @@ mod tests {
         repo.rebase_in_progress = Loadable::Ready(true);
         assert_eq!(resolve_undo(Some(&repo)), UndoResolution::AbortRebase);
 
-        let mut repo = repo_with(vec![
-            entry("b", "commit: pick"),
-            entry("a", "commit: base"),
-        ]);
+        let mut repo = repo_with(vec![entry("b", "commit: pick"), entry("a", "commit: base")]);
         repo.sequencer_state = Loadable::Ready(SequencerState::CherryPick);
         assert_eq!(resolve_undo(Some(&repo)), UndoResolution::AbortRebase);
     }
@@ -317,14 +316,20 @@ mod tests {
             panic!("expected a reset-back plan");
         };
         assert_eq!(plan.kind, worktree_core::undo::UndoKind::Merge);
-        let UndoAction::ResetBack { target, default_mode } = plan.action;
+        let UndoAction::ResetBack {
+            target,
+            default_mode,
+        } = plan.action;
         assert_eq!(target.as_ref(), "a");
         assert_eq!(default_mode, ResetMode::Mixed);
     }
 
     #[test]
     fn an_empty_or_unloaded_reflog_resolves_to_nothing() {
-        assert_eq!(resolve_undo(Some(&repo_with(Vec::new()))), UndoResolution::Nothing);
+        assert_eq!(
+            resolve_undo(Some(&repo_with(Vec::new()))),
+            UndoResolution::Nothing
+        );
         let mut repo = repo_with(Vec::new());
         repo.reflog = Loadable::NotLoaded;
         assert_eq!(resolve_undo(Some(&repo)), UndoResolution::Nothing);

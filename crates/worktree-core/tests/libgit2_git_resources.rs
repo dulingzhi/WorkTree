@@ -1,10 +1,10 @@
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use worktree_core::merge::{MergeOptions, merge_file};
 use worktree_core::merge_extraction::{
     MergeExtractionOptions, discover_merge_commits, extract_merge_cases_from_repo,
 };
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::Command;
 
 fn resource_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))

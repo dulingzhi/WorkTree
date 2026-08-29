@@ -1,7 +1,7 @@
 use super::color::with_alpha;
 use crate::theme::AppTheme;
-use worktree_state::model::{CloneOpState, CloneOpStatus, CloneProgressStage};
 use std::path::Path;
+use worktree_state::model::{CloneOpState, CloneOpStatus, CloneProgressStage};
 
 pub(crate) fn clone_progress_loading_color(theme: AppTheme) -> gpui::Rgba {
     with_alpha(
@@ -95,10 +95,10 @@ pub(crate) fn clone_progress_dest_label(dest: &Path) -> String {
 mod tests {
     use super::*;
     use crate::theme::with_alpha;
-    use worktree_state::model::{CloneProgressMeter, CloneProgressStage};
     use std::collections::VecDeque;
     use std::path::PathBuf;
     use std::sync::Arc;
+    use worktree_state::model::{CloneProgressMeter, CloneProgressStage};
 
     fn clone_op(status: CloneOpStatus, stage: CloneProgressStage, percent: u8) -> CloneOpState {
         CloneOpState {

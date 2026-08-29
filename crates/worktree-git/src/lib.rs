@@ -2,8 +2,8 @@ mod noop_backend;
 
 pub(crate) use noop_backend::NoopBackend;
 
-use worktree_core::services::GitBackend;
 use std::sync::Arc;
+use worktree_core::services::GitBackend;
 
 pub fn default_backend() -> Arc<dyn GitBackend> {
     Arc::new(NoopBackend)
@@ -20,8 +20,8 @@ pub(crate) fn open_repo(
 #[cfg(test)]
 mod tests {
     use super::{default_backend, open_repo};
-    use worktree_core::error::ErrorKind;
     use std::path::Path;
+    use worktree_core::error::ErrorKind;
 
     #[test]
     fn default_backend_is_noop_and_reports_unsupported() {

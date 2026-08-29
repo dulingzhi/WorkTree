@@ -1,9 +1,9 @@
-use worktree_state::model::{AppState, Loadable};
 use serde_json::{Map, Value, json};
 use std::env;
 use std::io::Write as _;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use worktree_state::model::{AppState, Loadable};
 
 const EVENT_PREFIX: &str = "WORKTREE_PERF_STARTUP_EVENT ";
 const ENABLED_ENV: &str = "WORKTREE_PERF_STARTUP_PROBE";
@@ -186,9 +186,9 @@ fn current_rss_kib() -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::{count_ready_repos, pack_repo_progress, parse_bool_flag};
+    use std::path::PathBuf;
     use worktree_core::domain::RepoSpec;
     use worktree_state::model::{AppState, Loadable, RepoId, RepoState};
-    use std::path::PathBuf;
 
     #[test]
     fn parse_bool_flag_accepts_common_truthy_values() {

@@ -483,9 +483,9 @@ pub(in crate::view) use diff_text::{
 #[cfg(test)]
 mod tests {
     use super::*;
-    use worktree_core::domain::{CommitFileChange, FileStatusKind};
     use std::path::PathBuf;
     use std::sync::Arc;
+    use worktree_core::domain::{CommitFileChange, FileStatusKind};
 
     fn reset_line_number_string_cache() {
         LINE_NUMBER_STRINGS.with(|cache| {

@@ -3,7 +3,6 @@ use super::branch_sidebar::{
     branch_sidebar_source_matches_cached,
 };
 use super::*;
-use worktree_core::domain::{Branch, LogScope, RemoteBranch, StashEntry, Tag};
 use rustc_hash::FxHasher;
 use smallvec::SmallVec;
 use std::cell::RefCell;
@@ -12,6 +11,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::Range;
 use std::rc::Rc;
 use std::time::SystemTime;
+use worktree_core::domain::{Branch, LogScope, RemoteBranch, StashEntry, Tag};
 
 #[derive(Clone, Debug)]
 pub(super) struct HistoryCache {

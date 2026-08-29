@@ -58,7 +58,11 @@ fn stash_prompt_renders_cancel_hint(cx: &mut gpui::TestAppContext) {
         let _ = window.draw(app);
     });
 
-    open_popover_and_draw(&view, PopoverKind::StashPrompt { paths: Vec::new() }, &mut cx);
+    open_popover_and_draw(
+        &view,
+        PopoverKind::StashPrompt { paths: Vec::new() },
+        &mut cx,
+    );
     cx.debug_bounds("stash_cancel_hint")
         .expect("expected stash Cancel shortcut hint");
 }
@@ -122,7 +126,11 @@ fn stash_prompt_escape_closes(cx: &mut gpui::TestAppContext) {
         let _ = window.draw(app);
     });
 
-    open_popover_and_draw(&view, PopoverKind::StashPrompt { paths: Vec::new() }, &mut cx);
+    open_popover_and_draw(
+        &view,
+        PopoverKind::StashPrompt { paths: Vec::new() },
+        &mut cx,
+    );
     cx.update(|_window, app| assert_popover_open(&view, app, true));
     cx.simulate_keystrokes("escape");
     cx.run_until_parked();

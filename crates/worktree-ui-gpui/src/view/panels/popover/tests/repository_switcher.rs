@@ -1,7 +1,7 @@
 use super::*;
+use std::time::{Duration, Instant};
 use worktree_core::path_utils::canonicalize_or_original;
 use worktree_core::process::background_command as no_window_command;
-use std::time::{Duration, Instant};
 
 const SESSION_FILE_ENV: &str = "WORKTREE_SESSION_FILE";
 

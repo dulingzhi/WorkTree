@@ -1,5 +1,5 @@
-use worktree_state::session;
 use gpui::{BorrowAppContext, Pixels, Size, Window, px, size};
+use worktree_state::session;
 
 pub(crate) const DEFAULT_UI_SCALE_PERCENT: u32 = 100;
 pub(crate) const UI_SCALE_PRESETS: &[u32] = &[80, 90, 100, 110, 125, 150, 175, 200];

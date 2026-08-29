@@ -1,9 +1,9 @@
 use crate::repo::GixRepo;
+use std::path::Path;
+use std::sync::Arc;
 use worktree_core::error::{Error, ErrorKind};
 use worktree_core::path_utils::strip_windows_verbatim_prefix;
 use worktree_core::services::{CancellationToken, GitBackend, GitRepository, Result};
-use std::path::Path;
-use std::sync::Arc;
 
 pub struct GixBackend;
 

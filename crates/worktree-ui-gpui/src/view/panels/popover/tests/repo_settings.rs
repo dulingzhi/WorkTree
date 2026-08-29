@@ -92,11 +92,13 @@ fn repo_settings_prompt_renders_fields_and_cycles_the_sign_tri_state(
     // An unchanged draft applies nothing: Apply closes without touching git.
     click(cx, "repo_settings_apply");
     let closed = cx.update(|_window, app| {
-        view.read(app).popover_host.read(app).popover_kind_for_tests()
+        view.read(app)
+            .popover_host
+            .read(app)
+            .popover_kind_for_tests()
             != Some(PopoverKind::RepoSettingsPrompt { repo_id })
     });
     assert!(closed, "an empty plan closes the prompt");
-
 }
 
 fn open_repo_settings_prompt(

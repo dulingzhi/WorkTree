@@ -1,8 +1,8 @@
-use worktree_core::domain::{DiffArea, DiffTarget};
-use worktree_state::model::Loadable;
 use rustc_hash::FxHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
+use worktree_core::domain::{DiffArea, DiffTarget};
+use worktree_state::model::Loadable;
 
 pub(super) fn hash_diff_target<H: Hasher>(target: &DiffTarget, hasher: &mut H) {
     match target {

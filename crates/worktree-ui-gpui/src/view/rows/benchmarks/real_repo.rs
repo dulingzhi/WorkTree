@@ -1,9 +1,9 @@
 use super::*;
-use worktree_core::conflict_session::{ConflictPayload, ConflictSession};
-use worktree_core::domain::FileConflictKind;
 use serde::Deserialize;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
+use worktree_core::conflict_session::{ConflictPayload, ConflictSession};
+use worktree_core::domain::FileConflictKind;
 
 const DEFAULT_MONOREPO_HISTORY_LIMIT: usize = 10_000;
 const DEFAULT_DEEP_HISTORY_LIMIT: usize = 50_000;

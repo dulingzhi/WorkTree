@@ -1,9 +1,9 @@
 use super::super::path_display;
 use super::super::*;
 use crate::kit::text_truncation::path_alignment_visible_signature;
-use worktree_state::model::{AuthRetryOperation, CommandLogEntry};
 use rustc_hash::FxHasher;
 use std::hash::{Hash, Hasher};
+use worktree_state::model::{AuthRetryOperation, CommandLogEntry};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct PendingCommitAmend {
@@ -53,10 +53,7 @@ pub(in super::super) struct WorktreeFileListInputs {
 
 /// The cached [`WorkingTreeReviewInputs`] and the status revisions they were
 /// derived from: repo, worktree-status lane, staged-status lane.
-type WorkingTreeReviewInputsCacheEntry = (
-    (RepoId, u64, u64),
-    Arc<WorkingTreeReviewInputs>,
-);
+type WorkingTreeReviewInputsCacheEntry = ((RepoId, u64, u64), Arc<WorkingTreeReviewInputs>);
 
 /// This checkout's uncommitted changes in the shape the review view needs: the
 /// rows render from `files`, and a click opens the entry's own diff via its
@@ -154,9 +151,8 @@ pub(in super::super) struct DetailsPaneView {
     /// rather than per frame. Keyed on both status lanes' revisions; the rows
     /// cache below shares the key for the same reason.
     working_tree_file_inputs: std::cell::RefCell<Option<WorkingTreeReviewInputsCacheEntry>>,
-    working_tree_file_rows: std::cell::RefCell<
-        crate::view::rows::CommitFileRowPresentationCache<(RepoId, u64, u64)>,
-    >,
+    working_tree_file_rows:
+        std::cell::RefCell<crate::view::rows::CommitFileRowPresentationCache<(RepoId, u64, u64)>>,
     pub(in super::super) working_tree_scroll: UniformListScrollHandle,
     pub(in super::super) working_tree_files_path_alignment_group:
         components::PathTruncationAlignmentGroup,
@@ -1718,9 +1714,9 @@ impl Render for DetailsPaneView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use worktree_state::model::{AuthPromptState, PendingCommitRetry};
     use std::path::PathBuf;
     use std::time::{Duration, UNIX_EPOCH};
+    use worktree_state::model::{AuthPromptState, PendingCommitRetry};
 
     fn repo_state(id: RepoId, path: &str) -> RepoState {
         RepoState::new_opening(

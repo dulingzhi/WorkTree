@@ -1,12 +1,12 @@
-use worktree_core::domain::{HistoryMode, LogScope, RepoSpec};
-use worktree_state::model::{AppState, RepoId, RepoState};
-use worktree_state::session::{self, ExternalCodeEditorSetting, UiSession, UiSettings};
 use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
+use worktree_core::domain::{HistoryMode, LogScope, RepoSpec};
+use worktree_state::model::{AppState, RepoId, RepoState};
+use worktree_state::session::{self, ExternalCodeEditorSetting, UiSession, UiSettings};
 
 const SESSION_FILE_ENV: &str = "WORKTREE_SESSION_FILE";
 const DISABLE_SESSION_PERSIST_ENV: &str = "WORKTREE_DISABLE_SESSION_PERSIST";

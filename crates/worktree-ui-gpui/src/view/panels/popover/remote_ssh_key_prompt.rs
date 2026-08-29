@@ -45,15 +45,11 @@ pub(super) fn panel(
                 .items_center()
                 .justify_between()
                 .child(
-                    cancel_button(
-                        "remote_ssh_key_cancel",
-                        "remote_ssh_key_cancel_hint",
-                        theme,
-                    )
-                    .focus_handle(this.remote_ssh_key_focus.cancel.clone())
-                    .on_click(theme, cx, |this, _e, window, cx| {
-                        this.dismiss_prompt_popover(window, cx);
-                    }),
+                    cancel_button("remote_ssh_key_cancel", "remote_ssh_key_cancel_hint", theme)
+                        .focus_handle(this.remote_ssh_key_focus.cancel.clone())
+                        .on_click(theme, cx, |this, _e, window, cx| {
+                            this.dismiss_prompt_popover(window, cx);
+                        }),
                 )
                 .child(
                     div()

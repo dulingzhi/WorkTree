@@ -3,6 +3,7 @@ use worktree_core::services::InteractiveRebaseAction;
 
 mod add_repo_menu;
 mod add_to_gitignore_prompt;
+mod agent_sessions;
 mod app_menu;
 mod assume_unchanged_manager;
 mod author_filter;
@@ -42,26 +43,25 @@ mod remote_remove_confirm;
 mod remote_ssh_key_prompt;
 mod rename_branch_prompt;
 mod repo_picker;
+mod repo_settings;
 mod reset_prompt;
 mod rows_cache;
 mod search_inputs;
 mod squash_prompt;
 mod stage_conflict_markers_confirm;
-mod agent_sessions;
-mod repo_settings;
-mod statistics;
-mod stash_drop_confirm;
 mod stash_branch_prompt;
+mod stash_drop_confirm;
 mod stash_picker_prompt;
 mod stash_prompt;
+mod statistics;
 mod submodule_add_prompt;
 mod submodule_change_pointer_prompt;
 mod submodule_picker;
 mod submodule_remove_confirm;
 mod submodule_trust_confirm;
+mod tag_picker;
 mod terminal_shutdown_confirm;
 pub(crate) mod undo_last_action;
-mod tag_picker;
 mod unsaved_file_edits_confirm;
 mod upstream_picker;
 mod workspace_picker;
@@ -1009,8 +1009,8 @@ pub(in super::super) fn popover_width_spec(kind: &PopoverKind) -> Option<Popover
             kind:
                 RepoPopoverKind::Remote(
                     RemotePopoverKind::AddPrompt
-                        | RemotePopoverKind::EditUrlPrompt { .. }
-                        | RemotePopoverKind::SshKeyPrompt { .. },
+                    | RemotePopoverKind::EditUrlPrompt { .. }
+                    | RemotePopoverKind::SshKeyPrompt { .. },
                 ),
             ..
         }
@@ -1705,7 +1705,11 @@ impl PopoverHost {
                 |this, window, cx| this.submit_repo_settings_open(window, cx),
             ));
         }
-        for input in [&clone_repo_url_input, &clone_repo_parent_dir_input, &clone_ssh_key_input] {
+        for input in [
+            &clone_repo_url_input,
+            &clone_repo_parent_dir_input,
+            &clone_ssh_key_input,
+        ] {
             prompt_input_subscriptions.push(Self::prompt_enter_subscription(
                 input,
                 window,
@@ -1760,7 +1764,12 @@ impl PopoverHost {
             &mr_push_target_input,
             window,
             cx,
-            |this| matches!(this.popover, Some(PopoverKind::MergeRequestPushPrompt { .. })),
+            |this| {
+                matches!(
+                    this.popover,
+                    Some(PopoverKind::MergeRequestPushPrompt { .. })
+                )
+            },
             |this, window, cx| this.submit_mr_push(window, cx),
         ));
         prompt_input_subscriptions.push(Self::prompt_enter_subscription(
@@ -2647,8 +2656,7 @@ impl PopoverHost {
             .clone_ssh_key_input
             .read_with(cx, |input, _| input.text().trim().to_string());
         let ssh_key = (!ssh_key.is_empty()).then_some(ssh_key);
-        self.store
-            .dispatch(Msg::CloneRepo { url, dest, ssh_key });
+        self.store.dispatch(Msg::CloneRepo { url, dest, ssh_key });
         self.close_popover(cx);
     }
 
@@ -2838,8 +2846,10 @@ impl PopoverHost {
             }) => {
                 // The branch context menu merges refs without a confirm; the
                 // picker matches it. An unwanted merge is abortable.
-                self.store
-                    .dispatch(Msg::MergeRef { repo_id, reference: name });
+                self.store.dispatch(Msg::MergeRef {
+                    repo_id,
+                    reference: name,
+                });
                 self.close_popover(cx);
             }
             _ => {
@@ -3047,7 +3057,10 @@ impl PopoverHost {
     /// The merge-request push is always submittable while its prompt is up:
     /// every option is optional and the target branch defaults server-side.
     fn can_submit_mr_push(&self) -> bool {
-        matches!(self.popover, Some(PopoverKind::MergeRequestPushPrompt { .. }))
+        matches!(
+            self.popover,
+            Some(PopoverKind::MergeRequestPushPrompt { .. })
+        )
     }
 
     fn submit_mr_push(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
@@ -3111,18 +3124,17 @@ impl PopoverHost {
             cx.spawn(async move |this, cx| {
                 // Collecting context runs git — keep it off the executor.
                 let context = smol::unblock(move || {
-                    let origin_head =
-                        merge_request_push::git_output(
-                            &workdir,
-                            &["symbolic-ref", "refs/remotes/origin/HEAD"],
-                        )
-                        .ok();
+                    let origin_head = merge_request_push::git_output(
+                        &workdir,
+                        &["symbolic-ref", "refs/remotes/origin/HEAD"],
+                    )
+                    .ok();
                     let Some(target) = merge_request_push::resolve_mr_description_target(
                         &target_input,
                         origin_head.as_deref(),
                     ) else {
                         return Err(
-                            crate::i18n::tr_str("input.mr_push.target_required").to_string(),
+                            crate::i18n::tr_str("input.mr_push.target_required").to_string()
                         );
                     };
                     merge_request_push::collect_mr_description_context(&workdir, &target)
@@ -3133,11 +3145,7 @@ impl PopoverHost {
                     Err(message) => Err(message),
                     Ok((target, (commits, diff_stat))) => {
                         crate::ai_commit::generate_mr_description(
-                            &settings,
-                            &target,
-                            &commits,
-                            &diff_stat,
-                            &locale,
+                            &settings, &target, &commits, &diff_stat, &locale,
                         )
                         .await
                     }
@@ -3514,10 +3522,7 @@ impl PopoverHost {
             // reopen, keep a successful one (it covers 400 days, so a stale
             // window only matters across month boundaries and the popover is
             // short-lived).
-            if matches!(
-                repo.statistics,
-                Loadable::NotLoaded | Loadable::Error(_)
-            ) {
+            if matches!(repo.statistics, Loadable::NotLoaded | Loadable::Error(_)) {
                 self.store.dispatch(Msg::LoadRepoStatistics { repo_id });
             }
             return;
@@ -4116,19 +4121,13 @@ impl PopoverHost {
                     self.repo_settings_user_input.update(cx, |input, cx| {
                         input.clear_transient_key_presses();
                         input.set_theme(theme, cx);
-                        input.set_text(
-                            current.user_name.clone().unwrap_or_default(),
-                            cx,
-                        );
+                        input.set_text(current.user_name.clone().unwrap_or_default(), cx);
                         cx.notify();
                     });
                     self.repo_settings_email_input.update(cx, |input, cx| {
                         input.clear_transient_key_presses();
                         input.set_theme(theme, cx);
-                        input.set_text(
-                            current.user_email.clone().unwrap_or_default(),
-                            cx,
-                        );
+                        input.set_text(current.user_email.clone().unwrap_or_default(), cx);
                         cx.notify();
                     });
                     self.repo_settings_sign_commits = current.sign_commits;
@@ -4763,12 +4762,8 @@ impl PopoverHost {
                 assume_unchanged_manager::panel(self, repo_id, cx)
             }
             PopoverKind::Statistics { repo_id } => statistics::panel(self, repo_id, cx),
-        PopoverKind::AgentSessions { repo_id } => {
-            agent_sessions::panel(self, repo_id, cx)
-        }
-        PopoverKind::RepoSettingsPrompt { repo_id } => {
-            repo_settings::panel(self, repo_id, cx)
-        }
+            PopoverKind::AgentSessions { repo_id } => agent_sessions::panel(self, repo_id, cx),
+            PopoverKind::RepoSettingsPrompt { repo_id } => repo_settings::panel(self, repo_id, cx),
             PopoverKind::UndoLastActionPrompt { repo_id } => {
                 undo_last_action::panel(self, repo_id, cx)
             }
@@ -4911,9 +4906,7 @@ impl PopoverHost {
             PopoverKind::RemotePicker { repo_id, purpose } => {
                 remote_picker::panel(self, repo_id, purpose, cx)
             }
-            PopoverKind::DeleteTagPicker { repo_id } => {
-                tag_picker::panel(self, repo_id, cx)
-            }
+            PopoverKind::DeleteTagPicker { repo_id } => tag_picker::panel(self, repo_id, cx),
             PopoverKind::CommitSearchPicker { repo_id } => {
                 commit_search_picker::panel(self, repo_id, cx)
             }

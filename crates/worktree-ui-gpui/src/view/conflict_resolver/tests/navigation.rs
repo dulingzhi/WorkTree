@@ -1,8 +1,8 @@
 use super::*;
+use std::path::PathBuf;
 use worktree_core::conflict_session::{ConflictPayload, ConflictRegionResolution, ConflictSession};
 use worktree_core::domain::FileConflictKind;
 use worktree_core::merge::{MergeBlockId, MergeSource};
-use std::path::PathBuf;
 
 fn text_payload(text: &str) -> ConflictPayload {
     ConflictPayload::Text(text.into())

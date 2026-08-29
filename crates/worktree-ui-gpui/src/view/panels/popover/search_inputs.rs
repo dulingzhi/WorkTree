@@ -672,46 +672,45 @@ impl PopoverHost {
             cx,
         );
         if self._remote_picker_search_input_subscription.is_none() {
-            self._remote_picker_search_input_subscription =
-                Some(Self::picker_search_subscription(
-                    &input,
-                    window,
-                    cx,
-                    |this| remote_picker_state(this).is_some(),
-                    |this| &mut this.remote_picker_selected_index,
-                    |this, query, _cx| {
-                        let (repo_id, purpose) = remote_picker_state(this)?;
-                        Some(remote_picker::nav_targets(this, repo_id, purpose, query))
-                    },
-                    |this, cx| this.close_popover(cx),
-                    |this, sel, cx| {
-                        let Some((repo_id, purpose)) = remote_picker_state(this) else {
-                            return;
-                        };
-                        let query = this
-                            .remote_picker_search_input
-                            .as_ref()
-                            .map(|input| input.read(cx).text().trim().to_string())
-                            .unwrap_or_default();
-                        let rows = remote_picker::cached(this, repo_id, purpose, &query);
-                        this.scroll_picker_prompt_to_row(
-                            &rows.items,
-                            &rows.layout,
-                            sel,
-                            remote_picker::REMOTE_PICKER_LIST_MAX_HEIGHT_PX,
-                            cx,
-                        );
-                    },
-                    |this, payload, _query, window, cx| {
-                        let Some(row) = payload else {
-                            return;
-                        };
-                        let Some((repo_id, purpose)) = remote_picker_state(this) else {
-                            return;
-                        };
-                        remote_picker::activate(this, repo_id, purpose, row, None, window, cx);
-                    },
-                ));
+            self._remote_picker_search_input_subscription = Some(Self::picker_search_subscription(
+                &input,
+                window,
+                cx,
+                |this| remote_picker_state(this).is_some(),
+                |this| &mut this.remote_picker_selected_index,
+                |this, query, _cx| {
+                    let (repo_id, purpose) = remote_picker_state(this)?;
+                    Some(remote_picker::nav_targets(this, repo_id, purpose, query))
+                },
+                |this, cx| this.close_popover(cx),
+                |this, sel, cx| {
+                    let Some((repo_id, purpose)) = remote_picker_state(this) else {
+                        return;
+                    };
+                    let query = this
+                        .remote_picker_search_input
+                        .as_ref()
+                        .map(|input| input.read(cx).text().trim().to_string())
+                        .unwrap_or_default();
+                    let rows = remote_picker::cached(this, repo_id, purpose, &query);
+                    this.scroll_picker_prompt_to_row(
+                        &rows.items,
+                        &rows.layout,
+                        sel,
+                        remote_picker::REMOTE_PICKER_LIST_MAX_HEIGHT_PX,
+                        cx,
+                    );
+                },
+                |this, payload, _query, window, cx| {
+                    let Some(row) = payload else {
+                        return;
+                    };
+                    let Some((repo_id, purpose)) = remote_picker_state(this) else {
+                        return;
+                    };
+                    remote_picker::activate(this, repo_id, purpose, row, None, window, cx);
+                },
+            ));
         }
         self.reset_picker_search_input(&input, window, cx);
         input
@@ -784,7 +783,10 @@ impl PopoverHost {
             window,
             cx,
         );
-        if self._commit_search_picker_search_input_subscription.is_none() {
+        if self
+            ._commit_search_picker_search_input_subscription
+            .is_none()
+        {
             self._commit_search_picker_search_input_subscription =
                 Some(Self::picker_search_subscription(
                     &input,

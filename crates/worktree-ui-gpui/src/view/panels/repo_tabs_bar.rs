@@ -1251,11 +1251,11 @@ mod tests {
         RepoTabsBarView, repo_tab_close_button_fill, repo_tab_drag_direction,
         repo_tab_insert_before_for_drag_cursor, repo_tab_insert_before_for_drop,
     };
+    use gpui::{Bounds, point, px, size};
+    use std::path::PathBuf;
     use worktree_core::domain::RepoSpec;
     use worktree_state::model::{RepoId, RepoState};
     use worktree_state::msg::Msg;
-    use gpui::{Bounds, point, px, size};
-    use std::path::PathBuf;
 
     fn repo_state(path: &str) -> RepoState {
         RepoState::new_opening(

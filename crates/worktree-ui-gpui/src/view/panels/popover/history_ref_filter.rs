@@ -94,10 +94,26 @@ pub(super) fn filter_rows_by_query(rows: RefRows, query: &str) -> RefRows {
     }
     let matches = |label: &str| label.to_ascii_lowercase().contains(&query);
     RefRows {
-        local: rows.local.into_iter().filter(|row| matches(&row.label)).collect(),
-        remote: rows.remote.into_iter().filter(|row| matches(&row.label)).collect(),
-        tags: rows.tags.into_iter().filter(|row| matches(&row.label)).collect(),
-        missing: rows.missing.into_iter().filter(|name| matches(name)).collect(),
+        local: rows
+            .local
+            .into_iter()
+            .filter(|row| matches(&row.label))
+            .collect(),
+        remote: rows
+            .remote
+            .into_iter()
+            .filter(|row| matches(&row.label))
+            .collect(),
+        tags: rows
+            .tags
+            .into_iter()
+            .filter(|row| matches(&row.label))
+            .collect(),
+        missing: rows
+            .missing
+            .into_iter()
+            .filter(|name| matches(name))
+            .collect(),
     }
 }
 
@@ -212,13 +228,20 @@ fn toggle_row(
             let Some(repo) = this.state.repos.iter().find(|repo| repo.id == repo_id) else {
                 return;
             };
-            let refs = toggled(&repo.history_state.history_ref_filters, &full_name_for_click);
+            let refs = toggled(
+                &repo.history_state.history_ref_filters,
+                &full_name_for_click,
+            );
             apply(this, repo_id, refs);
             cx.notify();
         }))
 }
 
-fn section_label(theme: AppTheme, scaled_px: impl Fn(f32) -> Pixels, key: &'static str) -> gpui::Div {
+fn section_label(
+    theme: AppTheme,
+    scaled_px: impl Fn(f32) -> Pixels,
+    key: &'static str,
+) -> gpui::Div {
     div()
         .px_2()
         .pt(scaled_px(4.0))
@@ -290,117 +313,152 @@ pub(super) fn panel(
 
     // Sections in display order; empty ones are skipped below so a checkout
     // with no tags never shows a "TAGS" headline over nothing.
-    let list_body: AnyElement = match repo.map(|repo| {
-        (
-            &repo.branches,
-            &repo.remote_branches,
-            &repo.tags,
-        )
-    }) {
-        None => components::context_menu_label(
-            theme,
-            ui_scale_percent,
-            crate::i18n::tr("ui.common.no_repository"),
-            Some(tooltip_host.clone()),
-            cx,
-        )
-        .into_any_element(),
-        // The open path dispatches the loads, so NotLoaded is the brief moment
-        // before the Loading transition lands — same face for both.
-        Some((Loadable::NotLoaded, ..) | (Loadable::Loading, ..) | (_, Loadable::NotLoaded, _) | (_, Loadable::Loading, _) | (.., Loadable::NotLoaded) | (.., Loadable::Loading)) => {
-            components::context_menu_label(
+    let list_body: AnyElement =
+        match repo.map(|repo| (&repo.branches, &repo.remote_branches, &repo.tags)) {
+            None => components::context_menu_label(
+                theme,
+                ui_scale_percent,
+                crate::i18n::tr("ui.common.no_repository"),
+                Some(tooltip_host.clone()),
+                cx,
+            )
+            .into_any_element(),
+            // The open path dispatches the loads, so NotLoaded is the brief moment
+            // before the Loading transition lands — same face for both.
+            Some(
+                (Loadable::NotLoaded, ..)
+                | (Loadable::Loading, ..)
+                | (_, Loadable::NotLoaded, _)
+                | (_, Loadable::Loading, _)
+                | (.., Loadable::NotLoaded)
+                | (.., Loadable::Loading),
+            ) => components::context_menu_label(
                 theme,
                 ui_scale_percent,
                 crate::i18n::tr("ui.common.loading_ellipsis"),
                 Some(tooltip_host.clone()),
                 cx,
             )
-            .into_any_element()
-        }
-        Some((Loadable::Error(e), ..) | (_, Loadable::Error(e), _) | (.., Loadable::Error(e))) => {
-            components::context_menu_label(
+            .into_any_element(),
+            Some(
+                (Loadable::Error(e), ..) | (_, Loadable::Error(e), _) | (.., Loadable::Error(e)),
+            ) => components::context_menu_label(
                 theme,
                 ui_scale_percent,
                 e.clone(),
                 Some(tooltip_host.clone()),
                 cx,
             )
-            .into_any_element()
-        }
-        Some((Loadable::Ready(branches), Loadable::Ready(remote_branches), Loadable::Ready(tags))) => {
-            let rows = filter_rows_by_query(rows(branches, remote_branches, tags, &filters), &query);
-            let mut list = div().flex().flex_col();
-            let mut row_ix = 0usize;
+            .into_any_element(),
+            Some((
+                Loadable::Ready(branches),
+                Loadable::Ready(remote_branches),
+                Loadable::Ready(tags),
+            )) => {
+                let rows =
+                    filter_rows_by_query(rows(branches, remote_branches, tags, &filters), &query);
+                let mut list = div().flex().flex_col();
+                let mut row_ix = 0usize;
 
-            if !rows.local.is_empty() {
-                list = list.child(section_label(theme, scaled_px, "panels.ref_filter.section_local"));
-                for row in rows.local {
+                if !rows.local.is_empty() {
+                    list = list.child(section_label(
+                        theme,
+                        scaled_px,
+                        "panels.ref_filter.section_local",
+                    ));
+                    for row in rows.local {
+                        list = list.child(toggle_row(
+                            row_ix,
+                            row,
+                            false,
+                            repo_id,
+                            theme,
+                            &tooltip_host,
+                            cx,
+                        ));
+                        row_ix += 1;
+                    }
+                }
+                if !rows.remote.is_empty() {
+                    list = list.child(section_label(
+                        theme,
+                        scaled_px,
+                        "panels.ref_filter.section_remote",
+                    ));
+                    for row in rows.remote {
+                        list = list.child(toggle_row(
+                            row_ix,
+                            row,
+                            false,
+                            repo_id,
+                            theme,
+                            &tooltip_host,
+                            cx,
+                        ));
+                        row_ix += 1;
+                    }
+                }
+                if !rows.tags.is_empty() {
+                    list = list.child(section_label(
+                        theme,
+                        scaled_px,
+                        "panels.ref_filter.section_tags",
+                    ));
+                    for row in rows.tags {
+                        list = list.child(toggle_row(
+                            row_ix,
+                            row,
+                            false,
+                            repo_id,
+                            theme,
+                            &tooltip_host,
+                            cx,
+                        ));
+                        row_ix += 1;
+                    }
+                }
+                for full_name in rows.missing {
                     list = list.child(toggle_row(
-                        row_ix, row, false, repo_id, theme, &tooltip_host, cx,
+                        row_ix,
+                        RefRow {
+                            full_name: full_name.clone(),
+                            label: full_name,
+                        },
+                        true,
+                        repo_id,
+                        theme,
+                        &tooltip_host,
+                        cx,
                     ));
                     row_ix += 1;
                 }
-            }
-            if !rows.remote.is_empty() {
-                list = list.child(section_label(theme, scaled_px, "panels.ref_filter.section_remote"));
-                for row in rows.remote {
-                    list = list.child(toggle_row(
-                        row_ix, row, false, repo_id, theme, &tooltip_host, cx,
-                    ));
-                    row_ix += 1;
-                }
-            }
-            if !rows.tags.is_empty() {
-                list = list.child(section_label(theme, scaled_px, "panels.ref_filter.section_tags"));
-                for row in rows.tags {
-                    list = list.child(toggle_row(
-                        row_ix, row, false, repo_id, theme, &tooltip_host, cx,
-                    ));
-                    row_ix += 1;
-                }
-            }
-            for full_name in rows.missing {
-                list = list.child(toggle_row(
-                    row_ix,
-                    RefRow {
-                        full_name: full_name.clone(),
-                        label: full_name,
-                    },
-                    true,
-                    repo_id,
-                    theme,
-                    &tooltip_host,
-                    cx,
-                ));
-                row_ix += 1;
-            }
 
-            if row_ix == 0 {
-                components::context_menu_label(
-                    theme,
-                    ui_scale_percent,
-                    if query.is_empty() {
-                        crate::i18n::tr("panels.ref_filter.empty")
-                    } else {
-                        crate::i18n::tr("panels.ref_filter.no_match")
-                    },
-                    Some(tooltip_host.clone()),
-                    cx,
-                )
-                .into_any_element()
-            } else {
-                div()
-                    .id("history_ref_filter_rows")
-                    .debug_selector(|| "history_ref_filter_rows".to_string())
-                    .max_h(scaled_px(REF_FILTER_LIST_MAX_HEIGHT_PX))
-                    .overflow_y_scroll()
-                    .flex()
-                    .flex_col()
-                    .child(list)
+                if row_ix == 0 {
+                    components::context_menu_label(
+                        theme,
+                        ui_scale_percent,
+                        if query.is_empty() {
+                            crate::i18n::tr("panels.ref_filter.empty")
+                        } else {
+                            crate::i18n::tr("panels.ref_filter.no_match")
+                        },
+                        Some(tooltip_host.clone()),
+                        cx,
+                    )
                     .into_any_element()
+                } else {
+                    div()
+                        .id("history_ref_filter_rows")
+                        .debug_selector(|| "history_ref_filter_rows".to_string())
+                        .max_h(scaled_px(REF_FILTER_LIST_MAX_HEIGHT_PX))
+                        .overflow_y_scroll()
+                        .flex()
+                        .flex_col()
+                        .child(list)
+                        .into_any_element()
+                }
             }
-        }
-    };
+        };
 
     components::context_menu(
         theme,
@@ -409,9 +467,7 @@ pub(super) fn panel(
             .debug_selector(|| "history_ref_filter".to_string())
             .flex()
             .flex_col()
-            .w(super::HISTORY_REF_FILTER_WIDTH.preferred_px(
-                super::popover_ui_scale(cx),
-            ))
+            .w(super::HISTORY_REF_FILTER_WIDTH.preferred_px(super::popover_ui_scale(cx)))
             .child(header)
             .child(super::dialog_divider(theme))
             .child(
@@ -477,14 +533,20 @@ mod tests {
     fn rows_compose_full_names_and_sort_within_sections() {
         let rows = rows(
             &[branch("dev"), branch("main")],
-            &[remote_branch("upstream", "release"), remote_branch("origin", "main")],
+            &[
+                remote_branch("upstream", "release"),
+                remote_branch("origin", "main"),
+            ],
             &[tag("v2"), tag("v1")],
             &[],
         );
 
         // The walk resolves full ref names, so that is what every row carries;
         // the label stays the short form the sidebar shows.
-        assert_eq!(full_names(&rows.local), ["refs/heads/dev", "refs/heads/main"]);
+        assert_eq!(
+            full_names(&rows.local),
+            ["refs/heads/dev", "refs/heads/main"]
+        );
         assert_eq!(rows.local[0].label, "dev");
         assert_eq!(
             full_names(&rows.remote),
@@ -499,26 +561,42 @@ mod tests {
     fn filter_rows_by_query_narrows_labels_case_insensitively() {
         let rows = RefRows {
             local: vec![
-                RefRow { full_name: "refs/heads/main".into(), label: "main".into() },
-                RefRow { full_name: "refs/heads/feat/Widget".into(), label: "feat/Widget".into() },
+                RefRow {
+                    full_name: "refs/heads/main".into(),
+                    label: "main".into(),
+                },
+                RefRow {
+                    full_name: "refs/heads/feat/Widget".into(),
+                    label: "feat/Widget".into(),
+                },
             ],
             remote: vec![RefRow {
                 full_name: "refs/remotes/origin/MAIN".into(),
                 label: "origin/MAIN".into(),
             }],
-            tags: vec![RefRow { full_name: "refs/tags/v1".into(), label: "v1".into() }],
+            tags: vec![RefRow {
+                full_name: "refs/tags/v1".into(),
+                label: "v1".into(),
+            }],
             missing: vec!["refs/heads/gone-Main".into()],
         };
 
         let filtered = filter_rows_by_query(rows.clone(), "main");
         assert_eq!(
-            filtered.local.iter().map(|row| row.label.as_str()).collect::<Vec<_>>(),
+            filtered
+                .local
+                .iter()
+                .map(|row| row.label.as_str())
+                .collect::<Vec<_>>(),
             vec!["main"],
             "the label match is case-insensitive"
         );
         assert_eq!(filtered.remote.len(), 1);
         assert_eq!(filtered.missing, vec!["refs/heads/gone-Main"]);
-        assert!(filtered.tags.is_empty(), "an unmatched section simply empties");
+        assert!(
+            filtered.tags.is_empty(),
+            "an unmatched section simply empties"
+        );
 
         // An empty (or whitespace) query is a no-op, not a wipe.
         let untouched = filter_rows_by_query(rows, "  ");

@@ -240,7 +240,8 @@ fn ref_filter_popover_lists_missing_filters_for_removal(cx: &mut gpui::TestAppCo
     });
 
     assert!(
-        cx.debug_bounds("history_ref_filter_row_refs/heads/gone").is_some(),
+        cx.debug_bounds("history_ref_filter_row_refs/heads/gone")
+            .is_some(),
         "a filter no listed ref explains is still shown, so it can be removed"
     );
     click_debug_selector(cx, "history_ref_filter_row_refs/heads/gone");

@@ -1,5 +1,4 @@
 use super::*;
-use worktree_state::msg::CommitSelectMode;
 use gpui::{
     Bounds, ContentMask, CursorStyle, DispatchPhase, HitboxBehavior, MouseButton, TruncateFrom,
     fill, point, px, size,
@@ -8,6 +7,7 @@ use palette::IntoColor;
 use rustc_hash::FxHasher;
 use smallvec::SmallVec;
 use std::cell::RefCell;
+use worktree_state::msg::CommitSelectMode;
 
 const HISTORY_TAG_CHIP_HEIGHT_PX: f32 = 18.0;
 const HISTORY_TAG_CHIP_PADDING_X_PX: f32 = 6.0;
@@ -1176,21 +1176,15 @@ pub(super) fn history_commit_row_canvas(
                         }
                         if let Some(verdict) = bisect_mark {
                             let (glyph, key, color) = match verdict {
-                                worktree_core::services::BisectVerdict::Good => (
-                                    "✓",
-                                    u64::from(b'g'),
-                                    theme.colors.status.success.foreground,
-                                ),
-                                worktree_core::services::BisectVerdict::Bad => (
-                                    "✗",
-                                    u64::from(b'b'),
-                                    theme.colors.status.danger.foreground,
-                                ),
-                                worktree_core::services::BisectVerdict::Skip => (
-                                    "⊘",
-                                    u64::from(b's'),
-                                    theme.colors.foreground.secondary,
-                                ),
+                                worktree_core::services::BisectVerdict::Good => {
+                                    ("✓", u64::from(b'g'), theme.colors.status.success.foreground)
+                                }
+                                worktree_core::services::BisectVerdict::Bad => {
+                                    ("✗", u64::from(b'b'), theme.colors.status.danger.foreground)
+                                }
+                                worktree_core::services::BisectVerdict::Skip => {
+                                    ("⊘", u64::from(b's'), theme.colors.foreground.secondary)
+                                }
                             };
                             paint_tag(glyph, key, color, window, cx);
                         }

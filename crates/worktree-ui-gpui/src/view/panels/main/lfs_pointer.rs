@@ -15,41 +15,40 @@ impl MainPaneView {
         let oid_font = crate::font_preferences::current_editor_font_family(cx);
         let preview_section = self.render_lfs_image_preview_section(theme, change, cx);
 
-        let pointer_row =
-            |label: &'static str, pointer: Option<&LfsPointer>| -> gpui::Div {
-                let oid_label: SharedString = match pointer.and_then(|p| p.oid.as_deref()) {
-                    Some(oid) => format!("sha256:{}", &oid[..oid.len().min(12)]).into(),
-                    None => crate::i18n::tr("diff.lfs.oid_absent"),
-                };
-                let size_label = format_lfs_size(pointer.and_then(|p| p.size));
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .px_3()
-                    .py_1()
-                    .child(
-                        div()
-                            .text_sm()
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(theme.colors.foreground.primary)
-                            .w(px(64.0))
-                            .child(label),
-                    )
-                    .child(
-                        div()
-                            .text_xs()
-                            .font_family(oid_font.clone())
-                            .text_color(theme.colors.foreground.secondary)
-                            .child(oid_label),
-                    )
-                    .child(
-                        div()
-                            .text_sm()
-                            .text_color(theme.colors.foreground.secondary)
-                            .child(size_label),
-                    )
+        let pointer_row = |label: &'static str, pointer: Option<&LfsPointer>| -> gpui::Div {
+            let oid_label: SharedString = match pointer.and_then(|p| p.oid.as_deref()) {
+                Some(oid) => format!("sha256:{}", &oid[..oid.len().min(12)]).into(),
+                None => crate::i18n::tr("diff.lfs.oid_absent"),
             };
+            let size_label = format_lfs_size(pointer.and_then(|p| p.size));
+            div()
+                .flex()
+                .items_center()
+                .gap_2()
+                .px_3()
+                .py_1()
+                .child(
+                    div()
+                        .text_sm()
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(theme.colors.foreground.primary)
+                        .w(px(64.0))
+                        .child(label),
+                )
+                .child(
+                    div()
+                        .text_xs()
+                        .font_family(oid_font.clone())
+                        .text_color(theme.colors.foreground.secondary)
+                        .child(oid_label),
+                )
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(theme.colors.foreground.secondary)
+                        .child(size_label),
+                )
+        };
 
         div()
             .id("diff_lfs_panel")
@@ -171,19 +170,20 @@ impl MainPaneView {
                 .line_clamp(2)
                 .child(message.clone())
                 .into_any_element(),
-            Some(Loadable::Ready(image)) => match image.as_ref().and_then(|image| image.new.as_ref())
-            {
-                Some(bytes) => gpui::img(std::sync::Arc::new(gpui::Image::from_bytes(
-                    format,
-                    bytes.clone(),
-                )))
+            Some(Loadable::Ready(image)) => {
+                match image.as_ref().and_then(|image| image.new.as_ref()) {
+                    Some(bytes) => gpui::img(std::sync::Arc::new(gpui::Image::from_bytes(
+                        format,
+                        bytes.clone(),
+                    )))
                     .max_w_full()
                     .max_h(scaled_px(320.0))
                     .object_fit(gpui::ObjectFit::Contain)
                     .debug_selector(|| "lfs_image_preview".to_string())
                     .into_any_element(),
-                None => return None,
-            },
+                    None => return None,
+                }
+            }
             None => return None,
         };
         Some(

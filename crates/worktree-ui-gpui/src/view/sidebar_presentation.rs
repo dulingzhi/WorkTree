@@ -5,12 +5,12 @@ use super::caches::{
     branch_sidebar_cache_store,
 };
 use super::*;
-use worktree_state::model::SidebarDataRequest;
 use rustc_hash::FxHashMap;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
+use worktree_state::model::SidebarDataRequest;
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(in crate::view) struct WorkspaceBadgeIndex {

@@ -1,9 +1,9 @@
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use worktree_core::domain::{DiffArea, DiffTarget};
 use worktree_core::git_ops_trace::{self, GitOpTraceKind};
 use worktree_core::services::GitBackend;
 use worktree_git_gix::GixBackend;
-use std::path::{Path, PathBuf};
-use std::process::Command;
 
 fn run_git(repo: &Path, args: &[&str], empty_config: &Path) {
     let status = Command::new("git")

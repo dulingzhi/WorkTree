@@ -1,9 +1,3 @@
-use worktree_core::services::GitBackend;
-use worktree_ui_gpui::perf_alloc::{PerfAllocMetrics, TRACKING_MIMALLOC};
-use worktree_ui_gpui::perf_ram_guard::{
-    benchmark_ram_limit_kib, install_benchmark_process_ram_guard, process_rss_kib,
-};
-use worktree_ui_gpui::perf_sidecar::{PerfSidecarReport, write_criterion_sidecar};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, json};
 use std::collections::VecDeque;
@@ -20,6 +14,12 @@ use std::sync::mpsc::TryRecvError;
 use std::thread;
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
+use worktree_core::services::GitBackend;
+use worktree_ui_gpui::perf_alloc::{PerfAllocMetrics, TRACKING_MIMALLOC};
+use worktree_ui_gpui::perf_ram_guard::{
+    benchmark_ram_limit_kib, install_benchmark_process_ram_guard, process_rss_kib,
+};
+use worktree_ui_gpui::perf_sidecar::{PerfSidecarReport, write_criterion_sidecar};
 
 const EVENT_PREFIX: &str = "WORKTREE_PERF_STARTUP_EVENT ";
 const DEFAULT_BENCH: &str = "app_launch/cold_empty_workspace";

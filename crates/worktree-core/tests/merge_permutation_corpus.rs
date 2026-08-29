@@ -6,8 +6,8 @@
 //! unchanged / modified / deleted / added lines without violating basic
 //! invariants.
 
-use worktree_core::merge::{MergeOptions, merge_file};
 use std::collections::HashSet;
+use worktree_core::merge::{MergeOptions, merge_file};
 
 const DEFAULT_LINES: [&str; 5] = ["aaa\n", "bbb\n", "ccc\n", "ddd\n", "eee\n"];
 

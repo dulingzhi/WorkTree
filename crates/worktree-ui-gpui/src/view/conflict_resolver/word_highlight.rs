@@ -332,8 +332,8 @@ pub fn compute_word_highlights_for_texts(old: &str, new: &str) -> Option<TwoWayW
 #[cfg(all(test, feature = "benchmarks"))]
 mod tests {
     use super::*;
-    use worktree_core::file_diff::{FileDiffLineText, FileDiffRow, FileDiffRowKind};
     use std::sync::Arc;
+    use worktree_core::file_diff::{FileDiffLineText, FileDiffRow, FileDiffRowKind};
 
     fn modify_row(old: &'static str, new: &'static str) -> FileDiffRow {
         FileDiffRow {

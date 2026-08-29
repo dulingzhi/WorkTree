@@ -10,8 +10,7 @@ fn hunk_explanation_fixture_repo(repo_id: RepoId) -> RepoState {
         "worktree_ui_test_{}_hunk_explain",
         std::process::id()
     ));
-    let mut repo =
-        RepoState::new_opening(repo_id, worktree_core::domain::RepoSpec { workdir });
+    let mut repo = RepoState::new_opening(repo_id, worktree_core::domain::RepoSpec { workdir });
     let target = DiffTarget::WorkingTree {
         path: "src/lib.rs".into(),
         area: DiffArea::Unstaged,
@@ -100,10 +99,7 @@ fn hunk_menu_offers_explain_entry(cx: &mut gpui::TestAppContext) {
         .update(|_window, app| {
             view.update(app, |this, cx| {
                 this.popover_host.update(cx, |host, cx| {
-                    host.context_menu_model(
-                        &PopoverKind::DiffHunkMenu { repo_id, src_ix: 3 },
-                        cx,
-                    )
+                    host.context_menu_model(&PopoverKind::DiffHunkMenu { repo_id, src_ix: 3 }, cx)
                 })
             })
         })
@@ -120,9 +116,7 @@ fn hunk_menu_offers_explain_entry(cx: &mut gpui::TestAppContext) {
                 disabled,
                 action,
                 ..
-            } if label.as_ref() == "Explain this change" => {
-                Some((*disabled, (**action).clone()))
-            }
+            } if label.as_ref() == "Explain this change" => Some((*disabled, (**action).clone())),
             _ => None,
         })
         .unwrap_or_else(|| panic!("expected `Explain this change` entry"));
@@ -210,9 +204,7 @@ fn explain_hunk_popover_generates_then_lands_the_reply(cx: &mut gpui::TestAppCon
 }
 
 #[gpui::test]
-fn explain_hunk_popover_shows_errors_and_retries_the_same_snapshot(
-    cx: &mut gpui::TestAppContext,
-) {
+fn explain_hunk_popover_shows_errors_and_retries_the_same_snapshot(cx: &mut gpui::TestAppContext) {
     let (store, events) = AppStore::new(Arc::new(TestBackend));
     let (view, cx) =
         cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));

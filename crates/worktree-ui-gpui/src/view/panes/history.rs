@@ -1541,7 +1541,8 @@ impl HistoryView {
         repo_id: RepoId,
         cx: &mut gpui::Context<Self>,
     ) {
-        self.store.dispatch(Msg::SelectWorkingTreeSummary { repo_id });
+        self.store
+            .dispatch(Msg::SelectWorkingTreeSummary { repo_id });
         self.dismiss_history_refs_hover(cx);
         self.history_scroll
             .scroll_to_item_strict(0, gpui::ScrollStrategy::Center);
@@ -3072,13 +3073,13 @@ fn history_row_attribution_branch<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::{Path, PathBuf};
+    use std::sync::Arc;
+    use std::time::{Duration, Instant, SystemTime};
     use worktree_core::domain::{CommitId, LogCursor, LogPage, RepoSpec};
     use worktree_core::services::{GitBackend, GitRepository, Result};
     use worktree_state::model::AppState;
     use worktree_state::store::AppStore;
-    use std::path::{Path, PathBuf};
-    use std::sync::Arc;
-    use std::time::{Duration, Instant, SystemTime};
 
     /// The linked-worktree rows live in this table, so the two revs behind them
     /// have to move the fingerprint. Without them a finished scan -- or a row
@@ -6839,7 +6840,8 @@ mod tests {
                 committed_at_unix: 0,
                 parent_ids: vec![],
                 files: vec![],
-            signed: false,}));
+                signed: false,
+            }));
         repo.branches = Loadable::Ready(Arc::new(vec![branch("feature", "c00")]));
         repo.branches_rev = 1;
         repo.remote_branches = Loadable::Ready(Arc::new(Vec::new()));

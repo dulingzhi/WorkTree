@@ -12,9 +12,9 @@ use crate::view::markdown_preview::{
 };
 use crate::view::panes::main::diff_search::DiffSearchMatcher;
 use crate::view::perf::{self, ViewPerfRenderLane, ViewPerfSpan};
-use worktree_state::msg::CommitSelectMode;
-use worktree_core::services::BisectVerdict;
 use rustc_hash::FxHasher;
+use worktree_core::services::BisectVerdict;
+use worktree_state::msg::CommitSelectMode;
 
 #[derive(Clone)]
 struct WorktreePreviewPreparedSyntaxSource {
@@ -2947,8 +2947,9 @@ impl HistoryView {
         );
         // The pinned row's own column, for whichever row sits directly below
         // it and must stub up into the node without a seam.
-        let working_tree_summary_node_col =
-            plan.show_working_tree_summary_row().then_some(worktree_node_col);
+        let working_tree_summary_node_col = plan
+            .show_working_tree_summary_row()
+            .then_some(worktree_node_col);
 
         let worktree_dirty = match &repo.worktree_dirty {
             Loadable::Ready(dirty) => Some(Arc::clone(dirty)),
@@ -3922,7 +3923,8 @@ fn working_tree_summary_history_row(
         })
         .when(show_sha, |row| row.child(div().w(col_sha)))
         .on_click(cx.listener(move |this, _e: &ClickEvent, _w, cx| {
-            this.store.dispatch(Msg::SelectWorkingTreeSummary { repo_id });
+            this.store
+                .dispatch(Msg::SelectWorkingTreeSummary { repo_id });
             cx.notify();
         }));
 
@@ -3960,10 +3962,10 @@ mod tests {
     use crate::view::{
         HISTORY_COL_HANDLE_PX, HISTORY_MESSAGE_BORDER_GAP_PX, HISTORY_MESSAGE_BORDER_W_PX,
     };
-    use worktree_core::domain::LogScope;
     use gpui::{FontWeight, SharedString, px};
     use std::sync::Arc;
     use std::time::{Duration, UNIX_EPOCH};
+    use worktree_core::domain::LogScope;
 
     fn markdown_row(kind: MarkdownPreviewRowKind) -> MarkdownPreviewRow {
         MarkdownPreviewRow {
@@ -4102,7 +4104,11 @@ mod tests {
     /// node hangs on HEAD's own lane -- both its column and its dot colour.
     #[test]
     fn history_worktree_node_sits_on_the_head_lane_when_head_leads_the_page() {
-        let row = test_graph_row(&[super::history_graph::LanePaint::lane(5, true, false)], 0, 5);
+        let row = test_graph_row(
+            &[super::history_graph::LanePaint::lane(5, true, false)],
+            0,
+            5,
+        );
         let rows = [row];
         assert_eq!(
             history_worktree_node_placement(Some(&rows), Some(0)),
@@ -4131,7 +4137,11 @@ mod tests {
     /// row below draws upward has always connected through that column.
     #[test]
     fn history_worktree_node_stays_on_column_zero_when_head_is_not_the_first_row() {
-        let row = test_graph_row(&[super::history_graph::LanePaint::lane(3, true, false)], 1, 3);
+        let row = test_graph_row(
+            &[super::history_graph::LanePaint::lane(3, true, false)],
+            1,
+            3,
+        );
         let rows = [row.clone(), row];
         assert_eq!(
             history_worktree_node_placement(Some(&rows), Some(1)),

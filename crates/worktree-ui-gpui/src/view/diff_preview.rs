@@ -142,9 +142,9 @@ pub(super) fn build_deleted_file_preview_from_diff(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
     use worktree_core::diff::AnnotatedDiffLine;
     use worktree_core::domain::{DiffArea, DiffLineKind};
-    use std::path::PathBuf;
 
     fn line(kind: DiffLineKind, text: &str) -> AnnotatedDiffLine {
         AnnotatedDiffLine {

@@ -1,11 +1,11 @@
-use worktree_core::domain::{Upstream, UpstreamDivergence};
-use worktree_core::services::GitBackend;
-use worktree_git_gix::GixBackend;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
 #[cfg(windows)]
 use std::sync::OnceLock;
+use worktree_core::domain::{Upstream, UpstreamDivergence};
+use worktree_core::services::GitBackend;
+use worktree_git_gix::GixBackend;
 
 fn run_git(repo: &Path, args: &[&str]) {
     let status = Command::new("git")

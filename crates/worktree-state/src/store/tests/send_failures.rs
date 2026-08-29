@@ -83,7 +83,8 @@ impl GitRepository for ReadyOpenRepo {
             committed_at_unix: 0,
             parent_ids: Vec::new(),
             files: Vec::new(),
-        signed: false,})
+            signed: false,
+        })
     }
 
     fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
@@ -143,12 +144,12 @@ impl GitRepository for ReadyOpenRepo {
         Ok(())
     }
     fn stash_create(
-            &self,
-            _message: &str,
-            _include_untracked: bool,
-            _keep_index: bool,
-            _paths: &[PathBuf],
-        ) -> Result<()> {
+        &self,
+        _message: &str,
+        _include_untracked: bool,
+        _keep_index: bool,
+        _paths: &[PathBuf],
+    ) -> Result<()> {
         Ok(())
     }
     fn stash_list(&self) -> Result<Vec<StashEntry>> {
@@ -336,7 +337,8 @@ impl GitRepository for BlockingDiffRepo {
             committed_at_unix: 0,
             parent_ids: Vec::new(),
             files: Vec::new(),
-        signed: false,})
+            signed: false,
+        })
     }
 
     fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
@@ -399,12 +401,12 @@ impl GitRepository for BlockingDiffRepo {
         Ok(())
     }
     fn stash_create(
-            &self,
-            _message: &str,
-            _include_untracked: bool,
-            _keep_index: bool,
-            _paths: &[PathBuf],
-        ) -> Result<()> {
+        &self,
+        _message: &str,
+        _include_untracked: bool,
+        _keep_index: bool,
+        _paths: &[PathBuf],
+    ) -> Result<()> {
         Ok(())
     }
     fn stash_list(&self) -> Result<Vec<StashEntry>> {

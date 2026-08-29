@@ -21,9 +21,9 @@
 //! interest in settings-window entities and only needs to know whether the
 //! feature is configured.
 
-use worktree_state::session;
 use gpui::SharedString;
 use std::sync::{LazyLock, RwLock};
+use worktree_state::session;
 
 /// Ceiling on the diff text sent to the model; longer diffs are truncated.
 pub(crate) const MAX_DIFF_LENGTH: usize = 4000;
@@ -168,10 +168,7 @@ impl AiCommitSettings {
     pub(crate) fn auth_headers(&self) -> Vec<(&'static str, String)> {
         match self.provider {
             AiProvider::Anthropic if self.bearer_auth => vec![
-                (
-                    "Authorization",
-                    format!("Bearer {}", self.api_key.trim()),
-                ),
+                ("Authorization", format!("Bearer {}", self.api_key.trim())),
                 ("anthropic-version", "2023-06-01".to_string()),
             ],
             AiProvider::Anthropic => vec![
@@ -465,10 +462,7 @@ pub(crate) fn build_mr_description_request(
 /// stops it on timeout, because the timeout arm drops that future (borrowing
 /// the child for an explicit `kill` does not convince the borrow checker).
 #[cfg(not(test))]
-pub(crate) async fn generate_via_cli(
-    executable: &str,
-    args: &[String],
-) -> Result<String, String> {
+pub(crate) async fn generate_via_cli(executable: &str, args: &[String]) -> Result<String, String> {
     let mut command = smol::process::Command::new(executable);
     command
         .args(args)
@@ -479,11 +473,11 @@ pub(crate) async fn generate_via_cli(
     let run = command.output();
 
     let outcome =
-        futures::future::select(Box::pin(run), Box::pin(smol::Timer::after(CLI_TIMEOUT)))
-            .await;
+        futures::future::select(Box::pin(run), Box::pin(smol::Timer::after(CLI_TIMEOUT))).await;
     let output = match outcome {
-        futures::future::Either::Left((output, _timer)) => output
-            .map_err(|err| format!("could not run `{executable}`: {err}"))?,
+        futures::future::Either::Left((output, _timer)) => {
+            output.map_err(|err| format!("could not run `{executable}`: {err}"))?
+        }
         futures::future::Either::Right((_expired, run)) => {
             // Dropping the run future kills the child (kill_on_drop).
             drop(run);
@@ -667,9 +661,11 @@ pub(crate) async fn generate(
     diff: &str,
     recent_subjects: &[String],
 ) -> Result<String, String> {
-    generate_from_source(settings, build_cli_prompt(diff, recent_subjects), |resolved| {
-        build_request(resolved, diff, recent_subjects)
-    })
+    generate_from_source(
+        settings,
+        build_cli_prompt(diff, recent_subjects),
+        |resolved| build_request(resolved, diff, recent_subjects),
+    )
     .await
 }
 
@@ -703,9 +699,7 @@ pub(crate) async fn generate_mr_description(
     generate_from_source(
         settings,
         build_mr_description_cli_prompt(target, commits, diff_stat, locale),
-        |resolved| {
-            build_mr_description_request(resolved, target, commits, diff_stat, locale)
-        },
+        |resolved| build_mr_description_request(resolved, target, commits, diff_stat, locale),
     )
     .await
 }
@@ -721,8 +715,7 @@ async fn generate_from_source(
     http_request: impl FnOnce(&AiCommitSettings) -> AiCommitRequest,
 ) -> Result<String, String> {
     use crate::ai_commit_sources::{
-        build_cli_args, cli_spec, custom_cli_spec, resolve_http_settings, AiSource,
-        EnvAccess,
+        AiSource, EnvAccess, build_cli_args, cli_spec, custom_cli_spec, resolve_http_settings,
     };
 
     let source = settings.source;
@@ -745,11 +738,10 @@ async fn generate_from_source(
 
     // Resolution reads config files — keep that off the async executor.
     let manual = settings.clone();
-    let resolved = smol::unblock(move || {
-        resolve_http_settings(source, &manual, &EnvAccess::real())
-    })
-    .await
-    .ok_or_else(|| source_unavailable_message(source))?;
+    let resolved =
+        smol::unblock(move || resolve_http_settings(source, &manual, &EnvAccess::real()))
+            .await
+            .ok_or_else(|| source_unavailable_message(source))?;
 
     let request = http_request(&resolved);
     let response = crate::http::post_json(
@@ -767,7 +759,7 @@ async fn generate_from_source(
 /// here (main thread) rather than inside the background resolution.
 #[cfg(not(test))]
 fn source_unavailable_message(source: crate::ai_commit_sources::AiSource) -> String {
-    use crate::ai_commit_sources::{unavailable_detail, unavailable_key, EnvAccess};
+    use crate::ai_commit_sources::{EnvAccess, unavailable_detail, unavailable_key};
     let env = EnvAccess::real();
     let key = unavailable_key(source);
     match unavailable_detail(source, &env) {
@@ -1210,7 +1202,8 @@ mod tests {
 
     #[test]
     fn explanation_request_swaps_the_system_prompt() {
-        let request = build_explanation_request(&settings(AiProvider::Anthropic), "the patch", "en");
+        let request =
+            build_explanation_request(&settings(AiProvider::Anthropic), "the patch", "en");
         let body: serde_json::Value = serde_json::from_str(&request.body).unwrap();
         assert_eq!(body["system"], EXPLAIN_SYSTEM_PROMPT);
         assert_ne!(body["system"], SYSTEM_PROMPT);
@@ -1231,7 +1224,10 @@ mod tests {
     fn mr_commits() -> Vec<(String, String)> {
         vec![
             ("abc1234".to_string(), "Fix widget focus ring".to_string()),
-            ("def5678".to_string(), "Add focus regression test".to_string()),
+            (
+                "def5678".to_string(),
+                "Add focus regression test".to_string(),
+            ),
         ]
     }
 
@@ -1257,8 +1253,7 @@ mod tests {
     #[test]
     fn mr_description_prompt_truncates_a_huge_diffstat() {
         let long = "file.rs | 1000 ++++++++++\n".repeat(MAX_DIFF_LENGTH / 8);
-        let content =
-            build_mr_description_user_content("main", &mr_commits(), &long, "en");
+        let content = build_mr_description_user_content("main", &mr_commits(), &long, "en");
         assert!(
             content.contains("\n[truncated]"),
             "the diffstat shares the commit path's diff budget"

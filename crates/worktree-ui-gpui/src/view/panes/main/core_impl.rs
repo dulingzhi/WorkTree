@@ -2,13 +2,13 @@ use super::helpers::*;
 use super::*;
 use crate::kit::text_model::TextModelSnapshot;
 use crate::view::branch_sidebar::BranchSection;
+use rustc_hash::{FxHashMap, FxHashSet, FxHasher};
+use std::sync::Arc;
+use std::time::Instant;
 use worktree_core::domain::{Diff, FileDiffImage, FileDiffText, LfsPointerChange, LogScope};
 use worktree_core::mergetool_trace::{
     self, MergetoolTraceEvent, MergetoolTraceSideStats, MergetoolTraceStage,
 };
-use rustc_hash::{FxHashMap, FxHashSet, FxHasher};
-use std::sync::Arc;
-use std::time::Instant;
 
 fn line_ranges_intersect(a: &Range<usize>, b: &Range<usize>) -> bool {
     a.start < b.end && b.start < a.end
@@ -4266,13 +4266,12 @@ impl MainPaneView {
     pub(in crate::view) fn rendered_file_lfs_diff_loadable(
         &self,
     ) -> Option<
-        &worktree_state::model::Loadable<
-            Option<worktree_state::model::Shared<LfsPointerChange>>,
-        >,
+        &worktree_state::model::Loadable<Option<worktree_state::model::Shared<LfsPointerChange>>>,
     > {
         // Inline submodule diffs keep the plain text path — the submodule
         // workdir's LFS wiring is not introspected, so no panel there.
-        self.active_repo().map(|repo| &repo.diff_state.diff_file_lfs)
+        self.active_repo()
+            .map(|repo| &repo.diff_state.diff_file_lfs)
     }
 
     pub(in crate::view) fn rendered_file_diff_rev(&self) -> u64 {
@@ -6483,10 +6482,10 @@ mod tests {
 
     #[test]
     fn notify_fingerprint_tracks_cherry_pick_message_readiness() {
+        use std::path::PathBuf;
         use worktree_core::domain::RepoSpec;
         use worktree_core::services::{InteractiveRebaseAction, InteractiveRebaseEntry};
         use worktree_state::model::{InteractiveCherryPickSetup, RepoState};
-        use std::path::PathBuf;
 
         let mut state = AppState::default();
         state.active_repo = Some(RepoId(1));

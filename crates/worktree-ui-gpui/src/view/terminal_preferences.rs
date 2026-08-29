@@ -1,8 +1,8 @@
-use worktree_state::session;
 use std::env;
 use std::ffi::OsString;
 use std::io;
 use std::path::{Path, PathBuf};
+use worktree_state::session;
 
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 const LINUX_AUTOMATIC_TERMINALS: &[LinuxAutomaticTerminal] = &[

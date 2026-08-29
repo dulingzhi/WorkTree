@@ -6,13 +6,13 @@ use crate::launch_guard::{UiLaunchError, run_with_panic_guard};
 use crate::ui_scale;
 use crate::view::{
     DiffNextFile, DiffNextSearchMatchOrChange, DiffPrevFile, DiffPrevSearchMatchOrChange,
-    FocusedMergetoolLabels, FocusedMergetoolViewConfig, WorkTreeView, WorkTreeViewConfig,
-    WorkTreeViewMode, InitialRepositoryLaunchMode, LocateFileInExplorer, MainPaneView,
-    OpenActiveViewSearch, PopoverPromptDismiss, PopoverPromptTabNext, PopoverPromptTabPrev,
-    SettingsWindowView, StartupCrashReport, TerminalCopy, TerminalPaste, TerminalSelectAll,
-    TextInputCommitSubmit, TextInputDiffNextChange, TextInputDiffNextFile,
-    TextInputDiffNextSearchMatchOrChange, TextInputDiffPrevChange, TextInputDiffPrevFile,
-    TextInputDiffPrevSearchMatchOrChange, ToggleCommandPalette, is_diff_shortcut_candidate,
+    FocusedMergetoolLabels, FocusedMergetoolViewConfig, InitialRepositoryLaunchMode,
+    LocateFileInExplorer, MainPaneView, OpenActiveViewSearch, PopoverPromptDismiss,
+    PopoverPromptTabNext, PopoverPromptTabPrev, SettingsWindowView, StartupCrashReport,
+    TerminalCopy, TerminalPaste, TerminalSelectAll, TextInputCommitSubmit, TextInputDiffNextChange,
+    TextInputDiffNextFile, TextInputDiffNextSearchMatchOrChange, TextInputDiffPrevChange,
+    TextInputDiffPrevFile, TextInputDiffPrevSearchMatchOrChange, ToggleCommandPalette,
+    WorkTreeView, WorkTreeViewConfig, WorkTreeViewMode, is_diff_shortcut_candidate,
 };
 use worktree_core::path_utils::canonicalize_or_original;
 use worktree_core::services::GitBackend;
@@ -2050,11 +2050,11 @@ mod tests {
     const INITIALIZE_REPOSITORY: &str = "Initialize repository";
 
     use crate::test_support::lock_visual_test;
+    use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant};
     use worktree_core::error::{Error, ErrorKind};
     use worktree_core::services::{GitRepository, Result};
     use worktree_state::msg::Msg;
-    use std::sync::{Arc, Mutex};
-    use std::time::{Duration, Instant};
 
     struct TestBackend;
 

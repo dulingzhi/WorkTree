@@ -26,18 +26,16 @@ pub(super) fn repo_settings_apply_plan(
     let mut plan = Vec::new();
     // An empty draft unsets the local override (inherit); a filled one equal
     // to the current override is already in place — nothing to write.
-    let field = |draft_value: &str, current: &Option<String>, key: &'static str, plan: &mut Vec<(&'static str, Option<String>)>| {
+    let field = |draft_value: &str,
+                 current: &Option<String>,
+                 key: &'static str,
+                 plan: &mut Vec<(&'static str, Option<String>)>| {
         let next = (!draft_value.trim().is_empty()).then(|| draft_value.trim().to_string());
         if next != *current {
             plan.push((key, next));
         }
     };
-    field(
-        &draft.user_name,
-        &current.user_name,
-        "user.name",
-        &mut plan,
-    );
+    field(&draft.user_name, &current.user_name, "user.name", &mut plan);
     field(
         &draft.user_email,
         &current.user_email,
@@ -66,8 +64,7 @@ impl RepoSettingsCurrent {
     /// inputs start from; the globals decide what an empty input means.
     pub(super) fn load(workdir: &std::path::Path) -> Self {
         let read_bool = |key: &str| {
-            worktree_core::process::git_config_local_get(workdir, key)
-                .map(|value| value == "true")
+            worktree_core::process::git_config_local_get(workdir, key).map(|value| value == "true")
         };
         Self {
             user_name: worktree_core::process::git_config_local_get(workdir, "user.name"),
@@ -117,7 +114,11 @@ impl PopoverHost {
     }
 
     /// Enter on either input applies, resolving the repo from the open kind.
-    pub(super) fn submit_repo_settings_open(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) {
+    pub(super) fn submit_repo_settings_open(
+        &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
         let Some(PopoverKind::RepoSettingsPrompt { repo_id }) = self.popover else {
             return;
         };
@@ -225,13 +226,19 @@ pub(super) fn panel(
         };
         this.repo_settings_user_input.update(cx, |input, cx| {
             input.set_placeholder(
-                placeholder(&current.global_user_name, crate::i18n::tr_str("input.repo_settings.inherit")),
+                placeholder(
+                    &current.global_user_name,
+                    crate::i18n::tr_str("input.repo_settings.inherit"),
+                ),
                 cx,
             );
         });
         this.repo_settings_email_input.update(cx, |input, cx| {
             input.set_placeholder(
-                placeholder(&current.global_user_email, crate::i18n::tr_str("input.repo_settings.inherit")),
+                placeholder(
+                    &current.global_user_email,
+                    crate::i18n::tr_str("input.repo_settings.inherit"),
+                ),
                 cx,
             );
         });
@@ -248,7 +255,10 @@ pub(super) fn panel(
     let mut body = div().flex().flex_col().gap(scaled_px(6.0)).px_2().py_1();
 
     body = body
-        .child(input_label(theme, crate::i18n::tr_str("input.repo_settings.user_label")))
+        .child(input_label(
+            theme,
+            crate::i18n::tr_str("input.repo_settings.user_label"),
+        ))
         .child(
             div()
                 .id("repo_settings_user_row")
@@ -257,7 +267,10 @@ pub(super) fn panel(
                 .min_w(px(0.0))
                 .child(this.repo_settings_user_input.clone()),
         )
-        .child(input_label(theme, crate::i18n::tr_str("input.repo_settings.email_label")))
+        .child(input_label(
+            theme,
+            crate::i18n::tr_str("input.repo_settings.email_label"),
+        ))
         .child(
             div()
                 .id("repo_settings_email_row")
@@ -342,9 +355,13 @@ pub(super) fn panel(
                                     theme,
                                 )
                                 .focus_handle(this.repo_settings_focus.cancel.clone())
-                                .on_click(theme, cx, |this, _e, window, cx| {
-                                    this.dismiss_prompt_popover(window, cx);
-                                }),
+                                .on_click(
+                                    theme,
+                                    cx,
+                                    |this, _e, window, cx| {
+                                        this.dismiss_prompt_popover(window, cx);
+                                    },
+                                ),
                             ),
                     )
                     .child(
@@ -357,9 +374,13 @@ pub(super) fn panel(
                                 )
                                 .focus_handle(this.repo_settings_focus.submit.clone())
                                 .style(components::ButtonStyle::Filled)
-                                .on_click(theme, cx, move |this, _e, _w, cx| {
-                                    this.submit_repo_settings(repo_id, workdir.clone(), cx);
-                                }),
+                                .on_click(
+                                    theme,
+                                    cx,
+                                    move |this, _e, _w, cx| {
+                                        this.submit_repo_settings(repo_id, workdir.clone(), cx);
+                                    },
+                                ),
                             ),
                     ),
             ),
@@ -388,11 +409,7 @@ mod tests {
         };
 
         // Nothing differs from the overrides already in place.
-        assert!(repo_settings_apply_plan(
-            &draft("Old", "", None),
-            &current
-        )
-        .is_empty());
+        assert!(repo_settings_apply_plan(&draft("Old", "", None), &current).is_empty());
 
         // A filled field sets, an emptied field unsets (inherits), and the
         // untouched signing override is not written at all.

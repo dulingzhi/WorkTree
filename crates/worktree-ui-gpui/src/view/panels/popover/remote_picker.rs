@@ -258,15 +258,7 @@ pub(super) fn panel(
                         let Some(row) = rows.get(ix).cloned() else {
                             return;
                         };
-                        activate(
-                            this,
-                            repo_id,
-                            purpose,
-                            row,
-                            Some(e.position()),
-                            window,
-                            cx,
-                        );
+                        activate(this, repo_id, purpose, row, Some(e.position()), window, cx);
                     },
                 ),
         );

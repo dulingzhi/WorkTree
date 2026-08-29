@@ -354,8 +354,8 @@ fn blame_worktree_surfaces_historical_path_after_rename() {
 
 #[test]
 fn resolve_file_path_at_commit_follows_renames_both_directions() {
-    use worktree_core::domain::CommitId;
     use std::sync::Arc;
+    use worktree_core::domain::CommitId;
 
     let (dir, base_id) = rename_repo();
     let repo = dir.path();

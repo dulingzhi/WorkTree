@@ -8,14 +8,14 @@ use super::core_impl::uniform_list_base_handle;
 use super::helpers::*;
 use super::*;
 use crate::kit::text_model::TextModelSnapshot;
-use worktree_core::mergetool_trace::{
-    self, MergetoolTraceEvent, MergetoolTraceRenderingMode, MergetoolTraceSideStats,
-    MergetoolTraceStage,
-};
 use rustc_hash::{FxHashMap, FxHasher};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
+use worktree_core::mergetool_trace::{
+    self, MergetoolTraceEvent, MergetoolTraceRenderingMode, MergetoolTraceSideStats,
+    MergetoolTraceStage,
+};
 
 /// Render the current semantic plan decisions into the marker/text projection
 /// consumed by the resolver UI. This differs from `marker_projection`, which

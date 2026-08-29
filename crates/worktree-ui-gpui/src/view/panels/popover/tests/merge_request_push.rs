@@ -31,8 +31,8 @@ fn push_menu_offers_merge_request_entry(cx: &mut gpui::TestAppContext) {
     let (store, events, _repo, _workdir) = create_tracking_store("mr-push-menu");
     let repo_id = store.snapshot().active_repo.expect("expected active repo");
     let store_for_view = store.clone();
-    let (view, cx) =
-        cx.add_window_view(|window, cx| WorkTreeView::new(store_for_view, events, None, window, cx));
+    let (view, cx) = cx
+        .add_window_view(|window, cx| WorkTreeView::new(store_for_view, events, None, window, cx));
 
     cx.update(|window, app| {
         let _ = window.draw(app);
@@ -41,8 +41,9 @@ fn push_menu_offers_merge_request_entry(cx: &mut gpui::TestAppContext) {
     let entry = cx.update(|_window, app| {
         let model = view
             .update(app, |this, cx| {
-                this.popover_host
-                    .update(cx, |host, cx| host.context_menu_model(&PopoverKind::PushPicker, cx))
+                this.popover_host.update(cx, |host, cx| {
+                    host.context_menu_model(&PopoverKind::PushPicker, cx)
+                })
             })
             .expect("expected push menu model");
 
@@ -71,8 +72,8 @@ fn mr_push_prompt_submits_enter_carried_options(cx: &mut gpui::TestAppContext) {
     let (store, events, repo, _workdir) = create_tracking_store("mr-push-submit");
     let repo_id = store.snapshot().active_repo.expect("expected active repo");
     let store_for_view = store.clone();
-    let (view, cx) =
-        cx.add_window_view(|window, cx| WorkTreeView::new(store_for_view, events, None, window, cx));
+    let (view, cx) = cx
+        .add_window_view(|window, cx| WorkTreeView::new(store_for_view, events, None, window, cx));
 
     cx.update(|window, app| {
         app.bind_keys([gpui::KeyBinding::new(
@@ -137,8 +138,8 @@ fn mr_push_toggle_clicks_flip_options_without_closing(cx: &mut gpui::TestAppCont
     let (store, events, _repo, _workdir) = create_tracking_store("mr-push-toggle");
     let repo_id = store.snapshot().active_repo.expect("expected active repo");
     let store_for_view = store.clone();
-    let (view, cx) =
-        cx.add_window_view(|window, cx| WorkTreeView::new(store_for_view, events, None, window, cx));
+    let (view, cx) = cx
+        .add_window_view(|window, cx| WorkTreeView::new(store_for_view, events, None, window, cx));
 
     cx.update(|window, app| {
         let _ = window.draw(app);
@@ -169,7 +170,10 @@ fn mr_push_toggle_clicks_flip_options_without_closing(cx: &mut gpui::TestAppCont
     let defaults = cx.update(|_window, app| {
         view.update(app, |this, cx| {
             this.popover_host.read_with(cx, |host, _| {
-                (host.mr_push_remove_source_branch, host.mr_push_push_to_mr_branch)
+                (
+                    host.mr_push_remove_source_branch,
+                    host.mr_push_push_to_mr_branch,
+                )
             })
         })
     });
@@ -181,7 +185,10 @@ fn mr_push_toggle_clicks_flip_options_without_closing(cx: &mut gpui::TestAppCont
     let flipped = cx.update(|_window, app| {
         view.update(app, |this, cx| {
             this.popover_host.read_with(cx, |host, _| {
-                (host.mr_push_remove_source_branch, host.mr_push_push_to_mr_branch)
+                (
+                    host.mr_push_remove_source_branch,
+                    host.mr_push_push_to_mr_branch,
+                )
             })
         })
     });
@@ -342,8 +349,8 @@ fn push_menu_create_request_entry_follows_the_remote_forge(cx: &mut gpui::TestAp
     let (store, events, _repo, _workdir) = create_tracking_store("push-menu-create-pr");
     let repo_id = store.snapshot().active_repo.expect("expected active repo");
     let store_for_view = store.clone();
-    let (view, cx) =
-        cx.add_window_view(|window, cx| WorkTreeView::new(store_for_view, events, None, window, cx));
+    let (view, cx) = cx
+        .add_window_view(|window, cx| WorkTreeView::new(store_for_view, events, None, window, cx));
     cx.update(|window, app| {
         let _ = window.draw(app);
     });
@@ -351,11 +358,10 @@ fn push_menu_create_request_entry_follows_the_remote_forge(cx: &mut gpui::TestAp
     // The entry reads the current branch and the remotes; both arrive through
     // the store, so the test seeds them there and syncs the view.
     let entry_disabled = |cx: &mut gpui::VisualTestContext, url: Option<&str>| {
-        store
-            .dispatch(Msg::Internal(InternalMsg::HeadBranchLoaded {
-                repo_id,
-                result: Ok("feat/widget".to_string()),
-            }));
+        store.dispatch(Msg::Internal(InternalMsg::HeadBranchLoaded {
+            repo_id,
+            result: Ok("feat/widget".to_string()),
+        }));
         store.dispatch(Msg::Internal(InternalMsg::RemotesLoaded {
             repo_id,
             result: Ok(vec![worktree_core::domain::Remote {
@@ -388,14 +394,16 @@ fn push_menu_create_request_entry_follows_the_remote_forge(cx: &mut gpui::TestAp
         cx.update(|_window, app| {
             view.update(app, |this, cx| {
                 this.popover_host
-                    .update(cx, |host, cx| host.context_menu_model(&PopoverKind::PushPicker, cx))
+                    .update(cx, |host, cx| {
+                        host.context_menu_model(&PopoverKind::PushPicker, cx)
+                    })
                     .expect("push menu model")
                     .items
                     .iter()
                     .find_map(|item| match item {
-                        ContextMenuItem::Entry { label, disabled, .. }
-                            if label.as_ref() == "Create pull request on the web…" =>
-                        {
+                        ContextMenuItem::Entry {
+                            label, disabled, ..
+                        } if label.as_ref() == "Create pull request on the web…" => {
                             Some(*disabled)
                         }
                         _ => None,

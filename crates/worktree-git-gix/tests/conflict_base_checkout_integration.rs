@@ -1,10 +1,10 @@
-use worktree_core::domain::FileStatusKind;
-use worktree_core::services::GitBackend;
-use worktree_git_gix::GixBackend;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use worktree_core::domain::FileStatusKind;
+use worktree_core::services::GitBackend;
+use worktree_git_gix::GixBackend;
 
 fn run_git(repo: &Path, args: &[&str]) {
     let status = Command::new("git")

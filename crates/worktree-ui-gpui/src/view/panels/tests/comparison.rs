@@ -556,9 +556,7 @@ mod working_tree_review {
     /// to the commit-details empty state -- it becomes the working tree's own
     /// review, with every changed file a row.
     #[gpui::test]
-    fn selecting_the_working_tree_row_takes_over_the_details_pane(
-        cx: &mut gpui::TestAppContext,
-    ) {
+    fn selecting_the_working_tree_row_takes_over_the_details_pane(cx: &mut gpui::TestAppContext) {
         let (_view, cx) = draw_review(
             cx,
             RepoId(95),
@@ -611,9 +609,7 @@ mod working_tree_review {
     /// patch for staged entries, the working-tree patch for unstaged ones --
     /// the same target clicking the file in the status sections produces.
     #[gpui::test]
-    fn clicking_a_review_file_selects_its_working_tree_diff(
-        cx: &mut gpui::TestAppContext,
-    ) {
+    fn clicking_a_review_file_selects_its_working_tree_diff(cx: &mut gpui::TestAppContext) {
         let (view, cx) = draw_review(
             cx,
             RepoId(97),

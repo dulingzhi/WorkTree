@@ -1,11 +1,11 @@
 use super::super::perf::{self, ViewPerfSpan};
 use super::*;
-use worktree_core::domain::DiffLineKind;
 use memchr::memchr2_iter;
 use rustc_hash::FxHasher;
 use std::cell::RefCell;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, OnceLock};
+use worktree_core::domain::DiffLineKind;
 
 mod build;
 mod prepared;

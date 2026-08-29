@@ -1,7 +1,5 @@
 use crate::model::{AppState, RepoId};
 use crate::msg::{Msg, RepoExternalChange, StoreEvent};
-use worktree_core::path_utils::{canonicalize_or_original, git_dir_for_workdir};
-use worktree_core::services::{GitBackend, GitRepository};
 use rustc_hash::FxHashMap;
 use std::collections::VecDeque;
 use std::path::PathBuf;
@@ -10,6 +8,8 @@ use std::sync::atomic::Ordering;
 use std::sync::{Arc, RwLock, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
+use worktree_core::path_utils::{canonicalize_or_original, git_dir_for_workdir};
+use worktree_core::services::{GitBackend, GitRepository};
 
 mod effects;
 mod executor;
@@ -728,10 +728,10 @@ impl AppStore {
                                 &id_alloc,
                                 app_state,
                                 Msg::RepoExternallyChanged {
-                                repo_id,
-                                change,
-                                worktree_paths: None,
-                            },
+                                    repo_id,
+                                    change,
+                                    worktree_paths: None,
+                                },
                             );
                             reducer_diagnostics::record_reducer_pass(reduce_started.elapsed());
                             effects

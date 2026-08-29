@@ -18,7 +18,6 @@
 //! the bytes are cached on disk under the OS cache dir, decoded once per
 //! process into a [`RenderImage`], and every window repaints when it arrives.
 
-use worktree_state::session;
 use gpui::App;
 use gpui::RenderImage;
 use gpui::SharedString;
@@ -29,6 +28,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
+use worktree_state::session;
 
 /// Requested pixel size. Avatars render at 16–32 px, so one generous size
 /// serves every site at 2x sharpness while staying a tiny download.

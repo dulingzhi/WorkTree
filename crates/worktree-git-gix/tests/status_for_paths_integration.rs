@@ -49,7 +49,10 @@ fn fixture_repo(tag: &str) -> PathBuf {
     std::fs::write(dir.join("committed.txt"), "base\n").unwrap();
     std::fs::write(dir.join("clean.txt"), "clean\n").unwrap();
     run_git(&dir, &["add", "--", "."]);
-    run_git(&dir, &["-c", "commit.gpgsign=false", "commit", "-m", "base"]);
+    run_git(
+        &dir,
+        &["-c", "commit.gpgsign=false", "commit", "-m", "base"],
+    );
 
     // Every lane at once: staged modification with a further unstaged edit,
     // a plain untracked file, and a new directory with an untracked file.
@@ -159,7 +162,13 @@ fn status_for_paths_answers_needs_full_scan_for_renames() {
     run_git(&dir, &["add", "--", "untracked.txt"]);
     run_git(
         &dir,
-        &["-c", "commit.gpgsign=false", "commit", "-m", "add untracked"],
+        &[
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-m",
+            "add untracked",
+        ],
     );
     // A staged rename produces a `2` record in porcelain v2.
     run_git(&dir, &["mv", "untracked.txt", "renamed.txt"]);
@@ -180,10 +189,26 @@ fn status_for_paths_reports_conflicted_paths_with_their_kind() {
     run_git(&dir, &["add", "--", "untracked.txt"]);
     run_git(
         &dir,
-        &["-c", "commit.gpgsign=false", "commit", "-m", "add untracked"],
+        &[
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-m",
+            "add untracked",
+        ],
     );
     run_git(&dir, &["checkout", "-b", "side"]);
-    run_git(&dir, &["-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "side"]);
+    run_git(
+        &dir,
+        &[
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "side",
+        ],
+    );
     run_git(&dir, &["checkout", "main"]);
     std::fs::write(dir.join("committed.txt"), "main edit\n").unwrap();
     run_git(&dir, &["add", "--", "committed.txt"]);

@@ -4,6 +4,24 @@ use crate::app::{
 use crate::kit::{Scrollbar, ScrollbarAxis};
 use crate::theme::AppTheme;
 use crate::ui_scale;
+use gpui::prelude::*;
+use gpui::{
+    Anchor, Animation, AnimationExt, AnyElement, AnyView, App, Bounds, ClickEvent, CursorStyle,
+    Decorations, DispatchPhase, Element, ElementId, Entity, FocusHandle, FontWeight,
+    GlobalElementId, InspectorElementId, IsZero, LayoutId, MouseButton, MouseDownEvent,
+    MouseMoveEvent, MouseUpEvent, Pixels, Point, Render, ResizeEdge, ScrollHandle,
+    ScrollWheelEvent, ShapedLine, SharedString, Size, Style, StyleRefinement, Styled, TextRun,
+    Tiling, UniformListScrollHandle, WeakEntity, Window, WindowControlArea, actions, anchored, div,
+    fill, point, px, relative, size, uniform_list,
+};
+use rustc_hash::{FxHashMap, FxHashSet};
+#[cfg(test)]
+use std::collections::BTreeMap;
+use std::hash::Hash;
+use std::ops::Range;
+use std::sync::Arc;
+use std::sync::atomic::AtomicI32;
+use std::time::{Duration, Instant};
 use worktree_core::diff::AnnotatedDiffLine;
 #[cfg(test)]
 use worktree_core::diff::annotate_unified;
@@ -23,24 +41,6 @@ use worktree_state::model::{
 use worktree_state::msg::{Msg, StoreEvent};
 use worktree_state::session;
 use worktree_state::store::AppStore;
-use gpui::prelude::*;
-use gpui::{
-    Anchor, Animation, AnimationExt, AnyElement, AnyView, App, Bounds, ClickEvent, CursorStyle,
-    Decorations, DispatchPhase, Element, ElementId, Entity, FocusHandle, FontWeight,
-    GlobalElementId, InspectorElementId, IsZero, LayoutId, MouseButton, MouseDownEvent,
-    MouseMoveEvent, MouseUpEvent, Pixels, Point, Render, ResizeEdge, ScrollHandle,
-    ScrollWheelEvent, ShapedLine, SharedString, Size, Style, StyleRefinement, Styled, TextRun,
-    Tiling, UniformListScrollHandle, WeakEntity, Window, WindowControlArea, actions, anchored, div,
-    fill, point, px, relative, size, uniform_list,
-};
-use rustc_hash::{FxHashMap, FxHashSet};
-#[cfg(test)]
-use std::collections::BTreeMap;
-use std::hash::Hash;
-use std::ops::Range;
-use std::sync::Arc;
-use std::sync::atomic::AtomicI32;
-use std::time::{Duration, Instant};
 
 const REPO_ACTIVATION_THROTTLE: Duration = Duration::from_secs(5);
 
@@ -140,6 +140,7 @@ fn repo_activation_msg(
     Some(Msg::RepoActivated { repo_id })
 }
 
+mod agent_workbench;
 mod app_model;
 mod branch_sidebar;
 mod caches;
@@ -159,11 +160,10 @@ mod diff_text_model;
 mod diff_text_selection;
 mod diff_utils;
 mod file_diff_display;
-mod github;
-mod agent_workbench;
-mod forge_request;
 mod file_icons;
 mod fingerprint;
+mod forge_request;
+mod github;
 mod history_graph;
 pub(crate) mod history_mode;
 mod history_refs_hover;
@@ -250,8 +250,8 @@ use history_refs_hover::{HISTORY_REFS_HOVER_MENU_INVOKER_PREFIX, HistoryRefsHove
 pub(crate) use mod_helpers::TerminalPanelResizeState;
 use mod_helpers::*;
 pub use mod_helpers::{
-    FocusedMergetoolLabels, FocusedMergetoolViewConfig, WorkTreeView, WorkTreeViewConfig,
-    WorkTreeViewMode, InitialRepositoryLaunchMode, StartupCrashReport,
+    FocusedMergetoolLabels, FocusedMergetoolViewConfig, InitialRepositoryLaunchMode,
+    StartupCrashReport, WorkTreeView, WorkTreeViewConfig, WorkTreeViewMode,
 };
 use panels::{ActionBarView, BottomStatusBarView, PopoverHost, RepoTabsBarView, action_bar_height};
 pub(crate) use panes::MainPaneView;
@@ -783,9 +783,7 @@ impl WorkTreeView {
                 let result = smol::unblock(move || {
                     std::fs::read_to_string(&path)
                         .map_err(|err| format!("{}: {err}", path.display()))
-                        .and_then(|text| {
-                            worktree_core::coverage::CoverageReport::parse_lcov(&text)
-                        })
+                        .and_then(|text| worktree_core::coverage::CoverageReport::parse_lcov(&text))
                 })
                 .await;
                 let _ = weak.update(cx, |this, cx| match result {
@@ -965,11 +963,7 @@ impl WorkTreeView {
                 if let Some(repo_id) = self.active_repo_id()
                     && let Some(window) = window
                 {
-                    self.open_popover_centered(
-                        PopoverKind::Statistics { repo_id },
-                        window,
-                        cx,
-                    );
+                    self.open_popover_centered(PopoverKind::Statistics { repo_id }, window, cx);
                 }
             }
             "import-coverage" => {
@@ -981,11 +975,7 @@ impl WorkTreeView {
             }
             "agent-claude" => {
                 if let Some(window) = window {
-                    self.start_agent_session(
-                        agent_workbench::AgentKind::ClaudeCode,
-                        window,
-                        cx,
-                    );
+                    self.start_agent_session(agent_workbench::AgentKind::ClaudeCode, window, cx);
                 }
             }
             "agent-codex" => {
@@ -1014,11 +1004,7 @@ impl WorkTreeView {
                 if let Some(repo_id) = self.active_repo_id()
                     && let Some(window) = window
                 {
-                    self.open_popover_centered(
-                        PopoverKind::AgentSessions { repo_id },
-                        window,
-                        cx,
-                    );
+                    self.open_popover_centered(PopoverKind::AgentSessions { repo_id }, window, cx);
                 }
             }
             "clear-coverage" => {
@@ -2272,7 +2258,7 @@ impl WorkTreeView {
             show_timezone,
             change_tracking_view,
             terminal_preferences,
-    terminal_sessions: FxHashMap::default(),
+            terminal_sessions: FxHashMap::default(),
             agent_sessions: FxHashMap::default(),
             terminal_panel_height: px(TERMINAL_PANEL_DEFAULT_HEIGHT_PX),
             terminal_panel_resize: None,
@@ -4456,9 +4442,7 @@ impl Render for WorkTreeView {
                 let diff_context = {
                     let main = this.main_pane.read(cx);
                     main.diff_search_active
-                        || main
-                            .diff_panel_focus_handle
-                            .contains_focused(window, cx)
+                        || main.diff_panel_focus_handle.contains_focused(window, cx)
                 };
                 if !commit_search_picker_open && diff_context {
                     let handled = this

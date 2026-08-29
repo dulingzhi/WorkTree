@@ -52,7 +52,11 @@ pub(super) enum StatisticsPeriod {
 
 impl StatisticsPeriod {
     fn all() -> [StatisticsPeriod; 3] {
-        [StatisticsPeriod::Week, StatisticsPeriod::Month, StatisticsPeriod::Year]
+        [
+            StatisticsPeriod::Week,
+            StatisticsPeriod::Month,
+            StatisticsPeriod::Year,
+        ]
     }
 
     fn id_key(self) -> &'static str {
@@ -102,12 +106,9 @@ pub(super) fn panel(
                 .child(crate::i18n::tr("ui.statistics.title")),
         )
         .child(
-            components::Button::new(
-                "statistics_close",
-                crate::i18n::tr("ui.statistics.close"),
-            )
-            .style(components::ButtonStyle::Outlined)
-            .on_click(theme, cx, |this, _e, _w, cx| this.close_popover(cx)),
+            components::Button::new("statistics_close", crate::i18n::tr("ui.statistics.close"))
+                .style(components::ButtonStyle::Outlined)
+                .on_click(theme, cx, |this, _e, _w, cx| this.close_popover(cx)),
         );
 
     let body: AnyElement = match repo.map(|r| &r.statistics) {
@@ -272,10 +273,7 @@ fn chart(
                 } else {
                     let h = (full_h - px(2.0)) * (*count as f32 / max);
                     window.paint_quad(fill(
-                        Bounds::new(
-                            point(x, bounds.origin.y + full_h - h),
-                            size(bar_w, h),
-                        ),
+                        Bounds::new(point(x, bounds.origin.y + full_h - h), size(bar_w, h)),
                         bar_color,
                     ));
                 }
@@ -332,19 +330,12 @@ fn contributor_list(
     period: &PeriodModel,
     scaled_px: &impl Fn(f32) -> Pixels,
 ) -> gpui::Div {
-    let section = div()
-        .px_2()
-        .pb_2()
-        .pt_2()
-        .flex()
-        .flex_col()
-        .gap_1()
-        .child(
-            div()
-                .text_xs()
-                .font_weight(FontWeight::BOLD)
-                .child(crate::i18n::tr("ui.statistics.contributors")),
-        );
+    let section = div().px_2().pb_2().pt_2().flex().flex_col().gap_1().child(
+        div()
+            .text_xs()
+            .font_weight(FontWeight::BOLD)
+            .child(crate::i18n::tr("ui.statistics.contributors")),
+    );
 
     if period.contributors.is_empty() {
         return section.child(
@@ -391,18 +382,13 @@ fn contributor_list(
                         .child(contributor.author.to_string()),
                 )
                 .child(
-                    div()
-                        .flex_1()
-                        .h(px(4.0))
-                        .rounded_sm()
-                        .bg(track)
-                        .child(
-                            div()
-                                .w(relative(fraction))
-                                .h_full()
-                                .rounded_sm()
-                                .bg(theme.colors.accent.solid),
-                        ),
+                    div().flex_1().h(px(4.0)).rounded_sm().bg(track).child(
+                        div()
+                            .w(relative(fraction))
+                            .h_full()
+                            .rounded_sm()
+                            .bg(theme.colors.accent.solid),
+                    ),
                 )
                 .child(
                     div()

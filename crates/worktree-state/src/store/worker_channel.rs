@@ -1,9 +1,9 @@
 use crate::msg::Msg;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, mpsc};
 use worktree_core::services::CancellationToken;
 #[cfg(any(test, feature = "test-support"))]
 use worktree_core::services::GitRepository;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, mpsc};
 
 use super::RepoId;
 use super::repo_load_trace;

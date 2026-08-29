@@ -1,4 +1,4 @@
-use super::branch::{create_tracking_store, wait_until, TrackingRepo};
+use super::branch::{TrackingRepo, create_tracking_store, wait_until};
 use super::*;
 use crate::view::panels::tests::{app_state_with_repo, push_test_state};
 use worktree_core::domain::CommitId;
@@ -109,9 +109,7 @@ fn commit_menu_idle_offers_bisect_start_at_commit(cx: &mut gpui::TestAppContext)
             .iter()
             .find_map(|item| match item {
                 ContextMenuItem::Entry {
-                    label,
-                    disabled,
-                    ..
+                    label, disabled, ..
                 } if label.as_ref() == "Start bisect here as bad…" => Some(*disabled),
                 _ => None,
             })
@@ -128,7 +126,10 @@ fn commit_menu_idle_offers_bisect_start_at_commit(cx: &mut gpui::TestAppContext)
         };
         assert_eq!(action_repo, repo_id);
         assert_eq!(bad.as_deref(), Some(commit_id.as_ref()));
-        assert!(goods.is_empty(), "the good end is marked from another commit later");
+        assert!(
+            goods.is_empty(),
+            "the good end is marked from another commit later"
+        );
     });
 }
 
@@ -211,11 +212,7 @@ fn click_debug_selector(cx: &mut gpui::VisualTestContext, selector: &'static str
     cx.run_until_parked();
 }
 
-fn seed_bisect_session(
-    store: &AppStore,
-    repo: &TrackingRepo,
-    state: BisectState,
-) -> RepoId {
+fn seed_bisect_session(store: &AppStore, repo: &TrackingRepo, state: BisectState) -> RepoId {
     let repo_id = store.snapshot().active_repo.expect("expected active repo");
     // The tracking repo keeps reporting the session on every refresh, so no
     // later load can clear it. Dispatch is async (a channel into the reducer
@@ -229,17 +226,18 @@ fn seed_bisect_session(
         },
     ));
     wait_until("seeded bisect session to land in the store", || {
-        store.snapshot().repos.iter().any(|repo| {
-            repo.id == repo_id && matches!(&repo.bisect, Loadable::Ready(Some(_)))
-        })
+        store
+            .snapshot()
+            .repos
+            .iter()
+            .any(|repo| repo.id == repo_id && matches!(&repo.bisect, Loadable::Ready(Some(_))))
     });
     repo_id
 }
 
 #[gpui::test]
 fn bisect_strip_marks_candidate_and_resets(cx: &mut gpui::TestAppContext) {
-    let (store, events, repo, _workdir) =
-        create_tracking_store("bisect-strip-mark-reset");
+    let (store, events, repo, _workdir) = create_tracking_store("bisect-strip-mark-reset");
     seed_bisect_session(&store, &repo, bisect_session_mid());
     let store_for_view = store.clone();
     let (_view, cx) = cx
@@ -270,8 +268,7 @@ fn bisect_strip_marks_candidate_and_resets(cx: &mut gpui::TestAppContext) {
 
 #[gpui::test]
 fn bisect_strip_converged_disables_marks(cx: &mut gpui::TestAppContext) {
-    let (store, events, repo, _workdir) =
-        create_tracking_store("bisect-strip-converged");
+    let (store, events, repo, _workdir) = create_tracking_store("bisect-strip-converged");
     seed_bisect_session(&store, &repo, bisect_session_converged());
     let store_for_view = store.clone();
     let (_view, cx) = cx
@@ -288,7 +285,11 @@ fn bisect_strip_converged_disables_marks(cx: &mut gpui::TestAppContext) {
 
     // current == bad means no candidate is checked out: every mark button is
     // disabled, so clicking must not dispatch anything.
-    for selector in ["bisect_bad_button", "bisect_good_button", "bisect_skip_button"] {
+    for selector in [
+        "bisect_bad_button",
+        "bisect_good_button",
+        "bisect_skip_button",
+    ] {
         assert!(
             cx.debug_bounds(selector).is_some(),
             "expected {selector} in debug bounds"

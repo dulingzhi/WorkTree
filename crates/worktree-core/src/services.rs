@@ -5,8 +5,8 @@ use rustc_hash::FxHashMap;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::SystemTime;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::SystemTime;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -1340,11 +1340,7 @@ pub trait GitRepository: Send + Sync {
 
     /// Write a zip archive of `revision`'s tree to `dest`
     /// (`git archive --format=zip --output=<dest> <revision>`).
-    fn archive_zip_with_output(
-        &self,
-        _revision: &str,
-        _dest: &Path,
-    ) -> Result<CommandOutput> {
+    fn archive_zip_with_output(&self, _revision: &str, _dest: &Path) -> Result<CommandOutput> {
         Err(Error::new(ErrorKind::Unsupported(
             "archive export is not implemented for this backend",
         )))

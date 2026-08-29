@@ -347,7 +347,15 @@ fn refs_page(
 ) -> worktree_core::services::Result<worktree_core::domain::LogPage> {
     let cancellation = worktree_core::services::CancellationToken::new();
     let refs: Vec<String> = refs.iter().map(|r| r.to_string()).collect();
-    opened.log_history_mode_refs_page_streaming(mode, &refs, None, 20, None, &cancellation, &mut |_| {})
+    opened.log_history_mode_refs_page_streaming(
+        mode,
+        &refs,
+        None,
+        20,
+        None,
+        &cancellation,
+        &mut |_| {},
+    )
 }
 
 fn ref_walk_summaries(
@@ -372,7 +380,11 @@ fn ref_filtered_history_walks_only_from_the_named_refs() {
     // feature's history alone: HEAD (the merge, main) is not reachable from
     // refs/heads/feature.
     assert_eq!(
-        ref_walk_summaries(&*opened, HistoryMode::FullReachable, &["refs/heads/feature"]),
+        ref_walk_summaries(
+            &*opened,
+            HistoryMode::FullReachable,
+            &["refs/heads/feature"]
+        ),
         vec!["feature", "base"]
     );
     assert_eq!(
@@ -402,10 +414,7 @@ fn ref_filtered_history_accepts_remote_and_tag_refs() {
     let fixture = HistoryModeFixture::new();
     // A tag on the side tip and a remote-tracking ref pointing at main: both
     // spellings the popover offers, both must resolve.
-    run_git(
-        fixture.repo(),
-        &["tag", "v-side", fixture.side_id.as_str()],
-    );
+    run_git(fixture.repo(), &["tag", "v-side", fixture.side_id.as_str()]);
     run_git(
         fixture.repo(),
         &[

@@ -1,6 +1,4 @@
-use worktree_core::services::{
-    GitBackend, MergeRequestPushOptions, PullMode, RemoteUrlKind,
-};
+use worktree_core::services::{GitBackend, MergeRequestPushOptions, PullMode, RemoteUrlKind};
 use worktree_git_gix::GixBackend;
 #[path = "support/test_git_env.rs"]
 mod test_git_env;
@@ -1168,9 +1166,7 @@ fn push_merge_request_with_output_carries_push_options() {
         output.command
     );
     assert!(
-        output
-            .command
-            .contains("-o merge_request.target=main"),
+        output.command.contains("-o merge_request.target=main"),
         "command label should carry the target option: {}",
         output.command
     );
