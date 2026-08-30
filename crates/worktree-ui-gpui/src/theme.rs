@@ -2786,6 +2786,192 @@ mod tests {
         assert_eq!(theme_label("sunset_veil"), Some("Sunset Veil".to_string()));
     }
 
+    // Load tests for the ported third-party themes. Ports deliberately stay out
+    // of `bundled_light_theme_foregrounds_have_strong_canvas_contrast`: that
+    // gate is for in-house palettes tuned to it, while a faithful port of e.g.
+    // Solarized is ~4.5:1 by design -- darkening every token to 7.0 would stop
+    // being the theme it claims to be. They do join the hierarchy and
+    // content-header tests, which are about structural consistency a port can
+    // keep without losing its identity.
+    #[test]
+    fn built_in_dracula_theme_loads_from_embedded_json() {
+        let theme = AppTheme::from_key("dracula").expect("Dracula theme should load");
+
+        assert!(theme.is_dark);
+        assert_eq!(theme.colors.surface.canvas, gpui::rgba(0x282a36ff));
+        assert_eq!(theme.colors.surface.chrome, gpui::rgba(0x2e303eff));
+        assert_eq!(theme.colors.accent.foreground, gpui::rgba(0xbd93f9ff));
+        assert_eq!(theme.colors.accent.on_solid, gpui::rgba(0x282a36ff));
+        assert_eq!(
+            theme.colors.status.danger.foreground,
+            gpui::rgba(0xff5555ff)
+        );
+        assert_eq!(theme.syntax.keyword, gpui::rgba(0xff79c6ff));
+        assert_eq!(theme.syntax.string, gpui::rgba(0xf1fa8cff));
+        assert_eq!(theme.syntax.function, gpui::rgba(0x50fa7bff));
+        assert_eq!(theme.syntax.variable, Some(gpui::rgba(0xf8f8f2ff)));
+        assert_eq!(theme.graph_lane_palette.as_slice().len(), 7);
+    }
+
+    #[test]
+    fn built_in_nord_theme_loads_from_embedded_json() {
+        let theme = AppTheme::from_key("nord").expect("Nord theme should load");
+
+        assert!(theme.is_dark);
+        assert_eq!(theme.colors.surface.canvas, gpui::rgba(0x2e3440ff));
+        assert_eq!(theme.colors.surface.chrome, gpui::rgba(0x353c4bff));
+        assert_eq!(theme.colors.accent.foreground, gpui::rgba(0x88c0d0ff));
+        assert_eq!(
+            theme.colors.status.danger.foreground,
+            gpui::rgba(0xbf616aff)
+        );
+        assert_eq!(theme.syntax.comment, gpui::rgba(0x616e88ff));
+        assert_eq!(theme.syntax.keyword, gpui::rgba(0x81a1c1ff));
+        assert_eq!(theme.syntax.string, gpui::rgba(0xa3be8cff));
+        assert_eq!(theme.syntax.variable, Some(gpui::rgba(0xd8dee9ff)));
+        assert_eq!(theme.graph_lane_palette.as_slice().len(), 8);
+    }
+
+    #[test]
+    fn built_in_gruvbox_dark_theme_loads_from_embedded_json() {
+        let theme = AppTheme::from_key("gruvbox_dark").expect("Gruvbox Dark theme should load");
+
+        assert!(theme.is_dark);
+        assert_eq!(theme.colors.surface.canvas, gpui::rgba(0x282828ff));
+        assert_eq!(theme.colors.surface.chrome, gpui::rgba(0x343130ff));
+        assert_eq!(theme.colors.accent.foreground, gpui::rgba(0xfabd2fff));
+        assert_eq!(
+            theme.colors.status.danger.foreground,
+            gpui::rgba(0xfb4934ff)
+        );
+        assert_eq!(theme.syntax.comment, gpui::rgba(0x928374ff));
+        assert_eq!(theme.syntax.keyword, gpui::rgba(0xfb4934ff));
+        assert_eq!(theme.syntax.string, gpui::rgba(0xb8bb26ff));
+        assert_eq!(theme.syntax.variable, Some(gpui::rgba(0xebdbb2ff)));
+        assert_eq!(theme.graph_lane_palette.as_slice().len(), 7);
+    }
+
+    #[test]
+    fn built_in_one_dark_theme_loads_from_embedded_json() {
+        let theme = AppTheme::from_key("one_dark").expect("One Dark theme should load");
+
+        assert!(theme.is_dark);
+        assert_eq!(theme.colors.surface.canvas, gpui::rgba(0x282c34ff));
+        assert_eq!(theme.colors.surface.chrome, gpui::rgba(0x2e333cff));
+        assert_eq!(theme.colors.accent.foreground, gpui::rgba(0x61afefff));
+        assert_eq!(
+            theme.colors.status.danger.foreground,
+            gpui::rgba(0xe06c75ff)
+        );
+        assert_eq!(theme.syntax.comment, gpui::rgba(0x5c6370ff));
+        assert_eq!(theme.syntax.keyword, gpui::rgba(0xc678ddff));
+        assert_eq!(theme.syntax.string, gpui::rgba(0x98c379ff));
+        assert_eq!(theme.syntax.property, gpui::rgba(0xe06c75ff));
+        assert_eq!(theme.syntax.variable, Some(gpui::rgba(0xabb2bfff)));
+        assert_eq!(theme.graph_lane_palette.as_slice().len(), 7);
+    }
+
+    #[test]
+    fn built_in_catppuccin_latte_theme_loads_from_embedded_json() {
+        let theme = AppTheme::from_key("catppuccin_latte").expect("Catppuccin Latte should load");
+
+        assert!(!theme.is_dark);
+        assert_eq!(theme.colors.surface.canvas, gpui::rgba(0xeff1f5ff));
+        assert_eq!(theme.colors.surface.chrome, gpui::rgba(0xccd0daff));
+        assert_eq!(theme.colors.accent.foreground, gpui::rgba(0x1e66f5ff));
+        assert_eq!(theme.colors.accent.on_solid, gpui::rgba(0xffffffff));
+        assert_eq!(
+            theme.colors.status.danger.foreground,
+            gpui::rgba(0xd20f39ff)
+        );
+        assert_eq!(theme.syntax.comment, gpui::rgba(0x9ca0b0ff));
+        assert_eq!(theme.syntax.keyword, gpui::rgba(0x8839efff));
+        assert_eq!(theme.syntax.string, gpui::rgba(0x40a02bff));
+        assert_eq!(theme.syntax.variable, Some(gpui::rgba(0x4c4f69ff)));
+        assert_eq!(
+            theme_label("catppuccin_latte"),
+            Some("Catppuccin Latte".to_string())
+        );
+    }
+
+    #[test]
+    fn built_in_catppuccin_frappe_theme_loads_from_embedded_json() {
+        let theme = AppTheme::from_key("catppuccin_frappe").expect("Catppuccin Frappé should load");
+
+        assert!(theme.is_dark);
+        assert_eq!(theme.colors.surface.canvas, gpui::rgba(0x303446ff));
+        assert_eq!(theme.colors.surface.chrome, gpui::rgba(0x414559ff));
+        assert_eq!(theme.colors.accent.foreground, gpui::rgba(0x8caaeeff));
+        assert_eq!(theme.syntax.keyword, gpui::rgba(0xca9ee6ff));
+        assert_eq!(theme.syntax.string, gpui::rgba(0xa6d189ff));
+        assert_eq!(theme.syntax.variable, Some(gpui::rgba(0xc6d0f5ff)));
+        assert_eq!(theme.colors.tooltip.background, gpui::rgba(0x292c3cff));
+    }
+
+    #[test]
+    fn built_in_catppuccin_macchiato_theme_loads_from_embedded_json() {
+        let theme =
+            AppTheme::from_key("catppuccin_macchiato").expect("Catppuccin Macchiato should load");
+
+        assert!(theme.is_dark);
+        assert_eq!(theme.colors.surface.canvas, gpui::rgba(0x24273aff));
+        assert_eq!(theme.colors.surface.chrome, gpui::rgba(0x363a4fff));
+        assert_eq!(theme.colors.accent.foreground, gpui::rgba(0x8aadf4ff));
+        assert_eq!(theme.syntax.keyword, gpui::rgba(0xc6a0f6ff));
+        assert_eq!(theme.syntax.string, gpui::rgba(0xa6da95ff));
+        assert_eq!(theme.syntax.variable, Some(gpui::rgba(0xcad3f5ff)));
+        assert_eq!(theme.colors.tooltip.background, gpui::rgba(0x1e2030ff));
+    }
+
+    #[test]
+    fn built_in_catppuccin_mocha_theme_loads_from_embedded_json() {
+        let theme = AppTheme::from_key("catppuccin_mocha").expect("Catppuccin Mocha should load");
+
+        assert!(theme.is_dark);
+        assert_eq!(theme.colors.surface.canvas, gpui::rgba(0x1e1e2eff));
+        assert_eq!(theme.colors.surface.chrome, gpui::rgba(0x313244ff));
+        assert_eq!(theme.colors.accent.foreground, gpui::rgba(0x89b4faff));
+        assert_eq!(theme.syntax.keyword, gpui::rgba(0xcba6f7ff));
+        assert_eq!(theme.syntax.string, gpui::rgba(0xa6e3a1ff));
+        assert_eq!(theme.syntax.variable, Some(gpui::rgba(0xcdd6f4ff)));
+        assert_eq!(theme.colors.tooltip.background, gpui::rgba(0x181825ff));
+    }
+
+    #[test]
+    fn built_in_solarized_light_theme_loads_from_embedded_json() {
+        let theme = AppTheme::from_key("solarized_light").expect("Solarized Light should load");
+
+        assert!(!theme.is_dark);
+        assert_eq!(theme.colors.surface.canvas, gpui::rgba(0xfdf6e3ff));
+        assert_eq!(theme.colors.surface.chrome, gpui::rgba(0xe4dec9ff));
+        assert_eq!(theme.colors.accent.foreground, gpui::rgba(0x268bd2ff));
+        assert_eq!(theme.colors.foreground.primary, gpui::rgba(0x586e75ff));
+        assert_eq!(
+            theme.colors.status.danger.foreground,
+            gpui::rgba(0xdc322fff)
+        );
+        assert_eq!(theme.syntax.comment, gpui::rgba(0x93a1a1ff));
+        assert_eq!(theme.syntax.keyword, gpui::rgba(0x859900ff));
+        assert_eq!(theme.syntax.string, gpui::rgba(0x2aa198ff));
+        assert_eq!(theme.syntax.variable, Some(gpui::rgba(0x586e75ff)));
+    }
+
+    #[test]
+    fn built_in_solarized_dark_theme_loads_from_embedded_json() {
+        let theme = AppTheme::from_key("solarized_dark").expect("Solarized Dark should load");
+
+        assert!(theme.is_dark);
+        assert_eq!(theme.colors.surface.canvas, gpui::rgba(0x002b36ff));
+        assert_eq!(theme.colors.surface.chrome, gpui::rgba(0x073642ff));
+        assert_eq!(theme.colors.accent.foreground, gpui::rgba(0x268bd2ff));
+        assert_eq!(theme.colors.foreground.primary, gpui::rgba(0x93a1a1ff));
+        assert_eq!(theme.syntax.comment, gpui::rgba(0x586e75ff));
+        assert_eq!(theme.syntax.keyword, gpui::rgba(0x859900ff));
+        assert_eq!(theme.syntax.string, gpui::rgba(0x2aa198ff));
+        assert_eq!(theme.syntax.variable, Some(gpui::rgba(0x93a1a1ff)));
+        assert_eq!(theme.graph_lane_palette.as_slice().len(), 8);
+    }
+
     #[test]
     fn bundled_themes_keep_the_canvas_and_chrome_hierarchy_for_their_appearance() {
         assert_eq!(
@@ -2803,7 +2989,12 @@ mod tests {
             "Sunset Veil should use a warm light-orange canvas"
         );
 
-        for key in ["worktree_light", "sunset_veil"] {
+        for key in [
+            "worktree_light",
+            "sunset_veil",
+            "catppuccin_latte",
+            "solarized_light",
+        ] {
             let theme = AppTheme::from_key(key).expect("light theme should load");
             let colors = theme.colors;
 
@@ -2824,7 +3015,18 @@ mod tests {
             );
         }
 
-        for key in ["worktree_dark", "tokyo_night"] {
+        for key in [
+            "worktree_dark",
+            "tokyo_night",
+            "dracula",
+            "nord",
+            "gruvbox_dark",
+            "one_dark",
+            "catppuccin_frappe",
+            "catppuccin_macchiato",
+            "catppuccin_mocha",
+            "solarized_dark",
+        ] {
             let theme = AppTheme::from_key(key).expect("dark theme should load");
             assert!(
                 relative_luminance(theme.colors.surface.canvas)
@@ -2993,7 +3195,18 @@ mod tests {
 
     #[test]
     fn content_header_bg_matches_the_canvas_on_dark_and_is_distinct_on_light() {
-        for key in ["worktree_dark", "tokyo_night"] {
+        for key in [
+            "worktree_dark",
+            "tokyo_night",
+            "dracula",
+            "nord",
+            "gruvbox_dark",
+            "one_dark",
+            "catppuccin_frappe",
+            "catppuccin_macchiato",
+            "catppuccin_mocha",
+            "solarized_dark",
+        ] {
             let theme = AppTheme::from_key(key).expect("dark theme should load");
             assert_eq!(
                 content_header_bg(theme),
@@ -3002,7 +3215,12 @@ mod tests {
             );
         }
 
-        for key in ["worktree_light", "sunset_veil"] {
+        for key in [
+            "worktree_light",
+            "sunset_veil",
+            "catppuccin_latte",
+            "solarized_light",
+        ] {
             let theme = AppTheme::from_key(key).expect("light theme should load");
             assert_eq!(
                 content_header_bg(theme),

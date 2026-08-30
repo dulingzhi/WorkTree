@@ -23,6 +23,11 @@ const SETTINGS_WINDOW_MIN_HEIGHT_PX: f32 = 460.0;
 const SETTINGS_WINDOW_DEFAULT_WIDTH_PX: f32 = 720.0;
 const SETTINGS_WINDOW_DEFAULT_HEIGHT_PX: f32 = 620.0;
 const SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX: f32 = 224.0;
+// The theme list is the one bundled dropdown that outgrew the standard cap:
+// Automatic plus every embedded theme at the compact row height. It gets its
+// own bound so it expands fully instead of growing an inner scrollbar, while
+// every other dropdown keeps the standard-cap geometry.
+const SETTINGS_THEME_DROPDOWN_LIST_MAX_HEIGHT_PX: f32 = 448.0;
 const SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX: f32 = 28.0;
 const SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX: f32 = 20.0;
 const SETTINGS_DROPDOWN_DETAIL_ROW_HEIGHT_PX: f32 = 42.0;
@@ -879,11 +884,12 @@ fn settings_dropdown_height(
     item_count: usize,
     estimated_row_height_px: f32,
     extra_height_px: f32,
+    max_height_px: f32,
     ui_scale_percent: u32,
 ) -> Pixels {
     ui_scale::design_px_from_percent(
         (((item_count.max(1) as f32) * estimated_row_height_px) + extra_height_px)
-            .min(SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX),
+            .min(max_height_px),
         ui_scale_percent,
     )
 }
@@ -3171,6 +3177,7 @@ impl SettingsWindowView {
         item_count: usize,
         estimated_row_height_px: f32,
         extra_height_px: f32,
+        max_list_height_px: f32,
         list: AnyElement,
         theme: AppTheme,
     ) -> Stateful<gpui::Div> {
@@ -3178,6 +3185,7 @@ impl SettingsWindowView {
             item_count,
             estimated_row_height_px,
             extra_height_px,
+            max_list_height_px,
             self.ui_scale_percent,
         );
         // `h` includes the 1px border on each edge, so keep the requested
@@ -5001,6 +5009,7 @@ impl Render for SettingsWindowView {
                             theme_mode_count,
                             SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
                             SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
+                            SETTINGS_THEME_DROPDOWN_LIST_MAX_HEIGHT_PX,
                             list,
                             theme,
                         ));
@@ -5062,6 +5071,7 @@ impl Render for SettingsWindowView {
                             language_count,
                             SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
                             SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
+                            SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                             list,
                             theme,
                         ));
@@ -5091,6 +5101,7 @@ impl Render for SettingsWindowView {
                             source_count,
                             SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
                             SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
+                            SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                             list,
                             theme,
                         ));
@@ -5174,6 +5185,7 @@ impl Render for SettingsWindowView {
                                 self.ui_font_options.len(),
                                 SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
                                 0.0,
+                                SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                                 list,
                                 theme,
                             ));
@@ -5219,6 +5231,7 @@ impl Render for SettingsWindowView {
                                 self.editor_font_options.len(),
                                 SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
                                 0.0,
+                                SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                                 list,
                                 theme,
                             ));
@@ -5255,6 +5268,7 @@ impl Render for SettingsWindowView {
                             self.external_editor_options.len(),
                             SETTINGS_DROPDOWN_DETAIL_ROW_HEIGHT_PX,
                             SETTINGS_DROPDOWN_DETAIL_LIST_EXTRA_HEIGHT_PX,
+                            SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                             list,
                             theme,
                         ));
@@ -5374,6 +5388,7 @@ impl Render for SettingsWindowView {
                             source_count,
                             SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
                             SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
+                            SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                             list,
                             theme,
                         ));
@@ -5493,6 +5508,7 @@ impl Render for SettingsWindowView {
                                 provider_count,
                                 SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
                                 SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
+                                SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                                 list,
                                 theme,
                             ));
@@ -5593,6 +5609,7 @@ impl Render for SettingsWindowView {
                                             models.len(),
                                             SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
                                             SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
+                                            SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                                             list,
                                             theme,
                                         ));
@@ -5672,6 +5689,7 @@ impl Render for SettingsWindowView {
                             DateTimeFormat::all().len(),
                             SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
                             SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
+                            SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                             list,
                             theme,
                         ));
@@ -5700,6 +5718,7 @@ impl Render for SettingsWindowView {
                             Timezone::all().len(),
                             SETTINGS_DROPDOWN_DENSE_DETAIL_ROW_HEIGHT_PX,
                             0.0,
+                            SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                             list,
                             theme,
                         ));
@@ -5979,6 +5998,7 @@ impl Render for SettingsWindowView {
                                 CHANGE_TRACKING_OPTIONS.len(),
                                 SETTINGS_DROPDOWN_DETAIL_ROW_HEIGHT_PX,
                                 SETTINGS_DROPDOWN_DETAIL_LIST_EXTRA_HEIGHT_PX,
+                                SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                                 list,
                                 theme,
                             ));
@@ -6014,6 +6034,7 @@ impl Render for SettingsWindowView {
                             DIFF_CONTENT_MODE_OPTIONS.len(),
                             SETTINGS_DROPDOWN_DETAIL_ROW_HEIGHT_PX,
                             SETTINGS_DROPDOWN_DETAIL_LIST_EXTRA_HEIGHT_PX,
+                            SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                             list,
                             theme,
                         ));
@@ -6055,6 +6076,7 @@ impl Render for SettingsWindowView {
                             DIFF_VIEW_MODE_OPTIONS.len(),
                             SETTINGS_DROPDOWN_DETAIL_ROW_HEIGHT_PX,
                             SETTINGS_DROPDOWN_DETAIL_LIST_EXTRA_HEIGHT_PX,
+                            SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                             list,
                             theme,
                         ));
@@ -6090,6 +6112,7 @@ impl Render for SettingsWindowView {
                             DIFF_SCROLL_SYNC_OPTIONS.len(),
                             SETTINGS_DROPDOWN_DETAIL_ROW_HEIGHT_PX,
                             SETTINGS_DROPDOWN_DETAIL_LIST_EXTRA_HEIGHT_PX + 18.0,
+                            SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                             list,
                             theme,
                         ));
@@ -6724,6 +6747,7 @@ impl Render for SettingsWindowView {
                             option_count,
                             SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
                             SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
+                            SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                             list,
                             theme,
                         ));
