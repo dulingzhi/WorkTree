@@ -185,10 +185,10 @@ impl EnvAccess {
 /// otherwise resolve as anonymous and every private-repo request 404. A
 /// missing CLI, failing run, or empty output simply means "no token".
 fn run_gh_auth_token() -> Option<String> {
-    let output = std::process::Command::new("gh")
-        .args(["auth", "token"])
-        .output()
-        .ok()?;
+    // `background_command` sets CREATE_NO_WINDOW on Windows — a bare
+    // Command would flash a console window over the GUI on every resolve.
+    let mut command = worktree_core::process::background_command("gh");
+    let output = command.args(["auth", "token"]).output().ok()?;
     if !output.status.success() {
         return None;
     }
