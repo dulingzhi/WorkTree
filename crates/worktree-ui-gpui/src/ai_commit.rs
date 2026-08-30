@@ -663,6 +663,7 @@ pub(crate) async fn generate(
 ) -> Result<String, String> {
     generate_from_source(
         settings,
+        "commit message",
         build_cli_prompt(diff, recent_subjects),
         |resolved| build_request(resolved, diff, recent_subjects),
     )
@@ -679,6 +680,7 @@ pub(crate) async fn generate_explanation(
 ) -> Result<String, String> {
     generate_from_source(
         settings,
+        "hunk explanation",
         build_explanation_cli_prompt(patch, locale),
         |resolved| build_explanation_request(resolved, patch, locale),
     )
@@ -698,6 +700,7 @@ pub(crate) async fn generate_mr_description(
 ) -> Result<String, String> {
     generate_from_source(
         settings,
+        "merge request description",
         build_mr_description_cli_prompt(target, commits, diff_stat, locale),
         |resolved| build_mr_description_request(resolved, target, commits, diff_stat, locale),
     )
@@ -707,9 +710,35 @@ pub(crate) async fn generate_mr_description(
 /// The source dispatch shared by every prompt: `cli_prompt` is the single
 /// argv element a CLI generator receives (no shell, so no escaping);
 /// `http_request` builds the provider request from the resolved HTTP
-/// settings once credential resolution has succeeded.
+/// settings once credential resolution has succeeded. `kind` names the
+/// generating feature for the daily log.
 #[cfg(not(test))]
 async fn generate_from_source(
+    settings: &AiCommitSettings,
+    kind: &'static str,
+    cli_prompt: String,
+    http_request: impl FnOnce(&AiCommitSettings) -> AiCommitRequest,
+) -> Result<String, String> {
+    use crate::ai_commit_sources::{
+        AiSource, EnvAccess, build_cli_args, cli_spec, custom_cli_spec, resolve_http_settings,
+    };
+
+    let source = settings.source;
+    let result = generate_from_source_inner(settings, cli_prompt, http_request).await;
+    match &result {
+        Ok(reply) => worktree_core::applog_info!(
+            "ai generate: {kind} succeeded (source={source:?}, {} chars)",
+            reply.chars().count()
+        ),
+        Err(error) => {
+            worktree_core::applog_warn!("ai generate: {kind} failed (source={source:?}): {error}")
+        }
+    }
+    result
+}
+
+#[cfg(not(test))]
+async fn generate_from_source_inner(
     settings: &AiCommitSettings,
     cli_prompt: String,
     http_request: impl FnOnce(&AiCommitSettings) -> AiCommitRequest,

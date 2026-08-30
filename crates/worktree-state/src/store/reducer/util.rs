@@ -975,6 +975,9 @@ pub(super) fn handle_session_persist_result(
     let Err(error) = result else {
         return;
     };
+    // The untranslated action key keeps the daily log greppable regardless
+    // of the UI locale.
+    worktree_core::applog_warn!("session persist failed ({action}): {error}");
     // The action phrase arrives as the historical English `&'static str`
     // (gettext-style): look it up dynamically so zh-CN users see the
     // translated phrase, while the en fallback returns the input verbatim.

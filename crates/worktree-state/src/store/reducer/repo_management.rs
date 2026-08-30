@@ -356,6 +356,11 @@ pub(super) fn open_repo(id_alloc: &AtomicU64, state: &mut AppState, path: PathBu
 
     let previous_active = state.active_repo;
     let repo_id = RepoId(id_alloc.fetch_add(1, Ordering::Relaxed));
+    worktree_core::applog_info!(
+        "repository opening: {} (repo_id={})",
+        path.display(),
+        repo_id.0
+    );
     let spec = RepoSpec { workdir: path };
     let session_preferences = session::load_repo_session_preferences();
     let workdir_key = session::path_storage_key(&spec.workdir);
@@ -528,6 +533,15 @@ pub(super) fn restore_session(
         });
     }
 
+    worktree_core::applog_info!(
+        "session restored: {} repositories{}",
+        state.repos.len(),
+        state
+            .active_repo
+            .and_then(|id| state.repos.iter().find(|repo| repo.id == id))
+            .map(|repo| format!(", active {}", repo.spec.workdir.display()))
+            .unwrap_or_default()
+    );
     effects.push(persist_session_effect(
         state,
         state.active_repo,
@@ -559,6 +573,11 @@ pub(super) fn close_repo(
     // matter which of them (tab `x`, tab menu, picker row menu, close-others)
     // the user reached for.
     let closed_workdir = state.repos[removed_repo_ix].spec.workdir.clone();
+    worktree_core::applog_info!(
+        "repository closed: {} (repo_id={})",
+        closed_workdir.display(),
+        repo_id.0
+    );
     state.repos.remove(removed_repo_ix);
     repos.remove(&repo_id);
     // The worktree scan's cached handles are pruned only by that repo's own scan,
@@ -1068,6 +1087,12 @@ pub(super) fn clone_repo_finished(
     dest: PathBuf,
     result: std::result::Result<CommandOutput, Error>,
 ) -> Vec<Effect> {
+    match &result {
+        Ok(_) => worktree_core::applog_info!("clone finished: {url} -> {}", dest.display()),
+        Err(error) => {
+            worktree_core::applog_warn!("clone failed: {url} -> {}: {error}", dest.display())
+        }
+    }
     if let Some(op) = state.clone.as_mut()
         && op.dest.as_ref() == &dest
     {
@@ -1123,6 +1148,11 @@ pub(super) fn repo_opened_ok(
     let spec = RepoSpec {
         workdir: normalize_repo_path(spec.workdir),
     };
+    worktree_core::applog_info!(
+        "repository opened: {} (repo_id={})",
+        spec.workdir.display(),
+        repo_id.0
+    );
     let mut clear_banner = false;
     let should_refresh_worktrees = state.active_repo == Some(repo_id);
     if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
@@ -1231,6 +1261,11 @@ pub(super) fn repo_opened_err(
     let spec = RepoSpec {
         workdir: normalize_repo_path(spec.workdir),
     };
+    worktree_core::applog_warn!(
+        "repository open failed: {} (repo_id={}): {error}",
+        spec.workdir.display(),
+        repo_id.0
+    );
     if matches!(
         error.kind(),
         worktree_core::error::ErrorKind::NotARepository

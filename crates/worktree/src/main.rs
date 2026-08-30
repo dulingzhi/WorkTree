@@ -223,6 +223,24 @@ fn main() {
                 }
 
                 let startup_crash_report = crashlog::take_startup_report();
+                worktree_core::applog_info!(
+                    "app starting: WorkTree v{} on {} ({} build){}{}",
+                    env!("CARGO_PKG_VERSION"),
+                    std::env::consts::OS,
+                    if cfg!(debug_assertions) {
+                        "debug"
+                    } else {
+                        "release"
+                    },
+                    path.as_ref()
+                        .map(|path| format!(", launch path {}", path.display()))
+                        .unwrap_or_default(),
+                    if startup_crash_report.is_some() {
+                        ", previous run crashed"
+                    } else {
+                        ""
+                    }
+                );
                 if let Some(report) = startup_crash_report.as_ref() {
                     // Keep the recovery path visible even if WSLg cannot create
                     // a window for the in-app notification.
@@ -246,6 +264,7 @@ fn main() {
                         path.clone(),
                         startup_report,
                         Some(|| {
+                            worktree_core::applog_info!("app quit requested from the UI");
                             if let Err(err) = crashlog::finish_session() {
                                 eprintln!(
                                     "Failed to clear WorkTree crash-recovery marker during graceful shutdown: {err}"
@@ -254,10 +273,16 @@ fn main() {
                         }),
                     );
                 match run_result {
-                    Ok(
-                        worktree_ui_gpui::UiRunOutcome::CleanShutdown
-                        | worktree_ui_gpui::UiRunOutcome::UnexpectedEventLoopExit,
-                    ) => {
+                    Ok(worktree_ui_gpui::UiRunOutcome::CleanShutdown) => {
+                        worktree_core::applog_info!("app exited cleanly");
+                        if let Err(err) = crashlog::finish_session() {
+                            eprintln!(
+                                "Failed to clear WorkTree crash-recovery marker after clean shutdown: {err}"
+                            );
+                        }
+                    }
+                    Ok(worktree_ui_gpui::UiRunOutcome::UnexpectedEventLoopExit) => {
+                        worktree_core::applog_warn!("app exiting: event loop ended unexpectedly");
                         if let Err(err) = crashlog::finish_session() {
                             eprintln!(
                                 "Failed to clear WorkTree crash-recovery marker after clean shutdown: {err}"
@@ -265,6 +290,7 @@ fn main() {
                         }
                     }
                     Err(err) => {
+                        worktree_core::applog_error!("app exiting: UI launch failed: {err}");
                         if let Err(record_err) = crashlog::record_session_failure(
                             "main GPUI window launch",
                             &err.to_string(),

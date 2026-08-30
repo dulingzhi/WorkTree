@@ -2575,6 +2575,19 @@ fn reduce_inner(
             command,
             result,
         }) => {
+            // Logged before `repo_command_finished` consumes the result:
+            // every git write the app performs lands here exactly once, so
+            // the daily log can answer "what did the app do" end to end.
+            match &result {
+                Ok(_) => worktree_core::applog_info!(
+                    "git command finished: {command:?} (repo_id={})",
+                    repo_id.0
+                ),
+                Err(error) => worktree_core::applog_warn!(
+                    "git command failed: {command:?} (repo_id={}): {error}",
+                    repo_id.0
+                ),
+            }
             let auth_prompt = result
                 .as_ref()
                 .err()
