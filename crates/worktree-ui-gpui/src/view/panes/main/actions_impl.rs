@@ -481,37 +481,29 @@ impl MainPaneView {
     }
 
     pub(in crate::view) fn diff_jump_prev(&mut self) {
-        let entries = self.diff_nav_entries();
-        let focus_range = self.diff_focus_visible_range();
-        let current = focus_range.map(|(start, _end)| start).unwrap_or(0);
-        if entries.is_empty() {
-            return;
-        }
-
-        let Some(target) = diff_navigation::diff_nav_prev_target(&entries, current) else {
-            if focus_range.is_some() {
-                self.clear_diff_navigation_selection();
-                self.diff_selection_range = Some((current, current));
-            }
-            self.diff_selection_anchor = Some(current);
-            return;
-        };
-
-        self.scroll_diff_to_item_strict(target, gpui::ScrollStrategy::Center);
-        self.clear_diff_navigation_selection();
-        self.diff_selection_anchor = Some(target);
-        self.diff_selection_range = Some((target, target));
+        self.diff_jump_to_adjacent_change(false);
     }
 
     pub(in crate::view) fn diff_jump_next(&mut self) {
+        self.diff_jump_to_adjacent_change(true);
+    }
+
+    fn diff_jump_to_adjacent_change(&mut self, forward: bool) {
         let entries = self.diff_nav_entries();
         let focus_range = self.diff_focus_visible_range();
-        let current = focus_range.map(|(_start, end)| end).unwrap_or(0);
+        let current = focus_range
+            .map(|(start, end)| if forward { end } else { start })
+            .unwrap_or(0);
         if entries.is_empty() {
             return;
         }
 
-        let Some(target) = diff_navigation::diff_nav_next_target(&entries, current) else {
+        let target = if forward {
+            diff_navigation::diff_nav_next_target(&entries, current)
+        } else {
+            diff_navigation::diff_nav_prev_target(&entries, current)
+        };
+        let Some(target) = target else {
             if focus_range.is_some() {
                 self.clear_diff_navigation_selection();
                 self.diff_selection_range = Some((current, current));
