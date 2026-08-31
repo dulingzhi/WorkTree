@@ -500,11 +500,11 @@ pub(super) fn history_commit_row_canvas(
             let sm_line_height = base_style
                 .line_height
                 .to_pixels(sm_font.into(), window.rem_size());
-            let xs_font = sm_font * 0.86;
+            let xs_font = sm_font * 0.875;
             let xs_line_height = base_style
                 .line_height
                 .to_pixels(xs_font.into(), window.rem_size());
-            let xxs_font = sm_font * 0.78;
+            let xxs_font = sm_font * 0.75;
             let xxs_line_height = base_style
                 .line_height
                 .to_pixels(xxs_font.into(), window.rem_size());

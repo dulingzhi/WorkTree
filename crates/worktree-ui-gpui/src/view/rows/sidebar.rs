@@ -417,6 +417,22 @@ impl SidebarPaneView {
         const BRANCH_ROW_TRAILING_PAD_PX: f32 = 4.0;
         let ui_scale_percent = ui_scale::current(cx).percent;
         let scaled_px = |value: f32| ui_scale::design_px_from_percent(value, ui_scale_percent);
+        // Row heights follow the density tier; every other metric here is a
+        // design px that density leaves alone.
+        let density = crate::density::current(cx).density;
+        let section_header_h =
+            crate::view::components::section_header_height(density, ui_scale_percent);
+        let list_row_h = crate::view::components::list_row_height(density, ui_scale_percent);
+        // The gap between sidebar sections, drawn as padding above each section
+        // header's label. It has to live inside the header: `uniform_list` lays
+        // every row out at the height it measures for row zero, so a spacer
+        // row's own height never applies — it just claims a full slot.
+        let section_gap =
+            crate::view::components::sidebar_section_gap(density, ui_scale_percent);
+        // Padding above a section header's label: the section gap for every
+        // mid-list header, none for row zero so the first section keeps its
+        // flush top against the list's inset.
+        let header_lead = |ix: usize| if ix == 0 { px(0.0) } else { section_gap };
 
         let Some(repo_id) = this.active_repo_id() else {
             return Vec::new();
@@ -559,7 +575,8 @@ impl SidebarPaneView {
                         .id(("pinned_section", ix))
                         .debug_selector(move || format!("pinned_section_{selector_suffix}"))
                         .relative()
-                        .h(scaled_px(24.0))
+                        .h(section_header_h)
+                        .pt(header_lead(ix))
                         .w_full()
                         .pl(indent_px(0))
                         .pr(scaled_px(BRANCH_ROW_TRAILING_PAD_PX))
@@ -641,7 +658,8 @@ impl SidebarPaneView {
                     div()
                         .id(("branch_section", ix))
                         .relative()
-                        .h(scaled_px(24.0))
+                        .h(section_header_h)
+                        .pt(header_lead(ix))
                         .w_full()
                         .pl(indent_px(0))
                         .pr(scaled_px(BRANCH_ROW_TRAILING_PAD_PX))
@@ -708,7 +726,7 @@ impl SidebarPaneView {
                     div()
                         .id(("branch_filter_group", ix))
                         .debug_selector(move || format!("branch_filter_group_{selector_suffix}"))
-                        .h(scaled_px(24.0))
+                        .h(section_header_h)
                         .w_full()
                         .pl(indent_px(0))
                         .pr(scaled_px(BRANCH_ROW_TRAILING_PAD_PX))
@@ -730,9 +748,17 @@ impl SidebarPaneView {
                         )
                         .into_any_element()
                 }
+                // Spacer rows no longer separate the main sidebar's sections
+                // (see the note in `branch_sidebar_rows`); the two surfaces
+                // that still emit them — the collapsed popover's filter groups
+                // and the list's trailing bottom padding — stack rows in a
+                // plain div or accept the slot, so the authored height applies.
                 BranchSidebarRow::SectionSpacer => div()
                     .id(("branch_section_spacer", ix))
-                    .h(scaled_px(10.0))
+                    .h(crate::view::components::sidebar_section_gap(
+                        density,
+                        ui_scale_percent,
+                    ))
                     .w_full()
                     .into_any_element(),
                 BranchSidebarRow::StashHeader {
@@ -756,7 +782,8 @@ impl SidebarPaneView {
                         .id(("stash_section", ix))
                         .debug_selector(move || format!("stash_section_{ix}"))
                         .relative()
-                        .h(scaled_px(24.0))
+                        .h(section_header_h)
+                        .pt(header_lead(ix))
                         .w_full()
                         .pl(indent_px(0))
                         .pr(scaled_px(BRANCH_ROW_TRAILING_PAD_PX))
@@ -821,7 +848,7 @@ impl SidebarPaneView {
                 }
                 BranchSidebarRow::StashPlaceholder { message } => div()
                     .id(("stash_placeholder", ix))
-                    .h(scaled_px(22.0))
+                    .h(list_row_h)
                     .w_full()
                     .px_2()
                     .text_sm()
@@ -856,7 +883,7 @@ impl SidebarPaneView {
                         .gap(scaled_px(BRANCH_TREE_GAP_PX))
                         .pl(indent_px(0))
                         .pr(scaled_px(BRANCH_ROW_TRAILING_PAD_PX))
-                        .h(scaled_px(24.0))
+                        .h(list_row_h)
                         .w_full()
                         .interactive_row(row_style, row_state)
                         .child(tree_toggle_slot(None))
@@ -917,7 +944,8 @@ impl SidebarPaneView {
                         .id(("tags_section", ix))
                         .debug_selector(move || format!("tags_section_{ix}"))
                         .relative()
-                        .h(scaled_px(24.0))
+                        .h(section_header_h)
+                        .pt(header_lead(ix))
                         .w_full()
                         .pl(indent_px(0))
                         .pr(scaled_px(BRANCH_ROW_TRAILING_PAD_PX))
@@ -966,7 +994,7 @@ impl SidebarPaneView {
                 }
                 BranchSidebarRow::TagPlaceholder { message } => div()
                     .id(("tag_placeholder", ix))
-                    .h(scaled_px(22.0))
+                    .h(list_row_h)
                     .w_full()
                     .px_2()
                     .text_sm()
@@ -1009,7 +1037,7 @@ impl SidebarPaneView {
                         .gap(scaled_px(BRANCH_TREE_GAP_PX))
                         .pl(indent_px(0))
                         .pr(scaled_px(BRANCH_ROW_TRAILING_PAD_PX))
-                        .h(scaled_px(24.0))
+                        .h(list_row_h)
                         .w_full()
                         .interactive_row(row_style, row_state)
                         .child(tree_toggle_slot(None))
@@ -1085,7 +1113,8 @@ impl SidebarPaneView {
                         .id(("pull_requests_section", ix))
                         .debug_selector(move || format!("pull_requests_section_{ix}"))
                         .relative()
-                        .h(scaled_px(24.0))
+                        .h(section_header_h)
+                        .pt(header_lead(ix))
                         .w_full()
                         .pl(indent_px(0))
                         .pr(scaled_px(BRANCH_ROW_TRAILING_PAD_PX))
@@ -1139,7 +1168,7 @@ impl SidebarPaneView {
                 BranchSidebarRow::PullRequestPlaceholder { message, retryable } => {
                     let placeholder = div()
                         .id(("pr_placeholder", ix))
-                        .h(scaled_px(22.0))
+                        .h(list_row_h)
                         .w_full()
                         .px_2()
                         .text_sm()
@@ -1272,7 +1301,7 @@ impl SidebarPaneView {
                         .gap(scaled_px(BRANCH_TREE_GAP_PX))
                         .pl(indent_px(0))
                         .pr(scaled_px(BRANCH_ROW_TRAILING_PAD_PX))
-                        .h(scaled_px(24.0))
+                        .h(list_row_h)
                         .w_full()
                         .interactive_row(row_style, row_state)
                         .child(tree_toggle_slot(None))
@@ -1357,7 +1386,7 @@ impl SidebarPaneView {
                     message,
                 } => div()
                     .id(("branch_placeholder", ix))
-                    .h(scaled_px(22.0))
+                    .h(list_row_h)
                     .w_full()
                     .px_2()
                     .text_sm()
@@ -1386,7 +1415,8 @@ impl SidebarPaneView {
                         .id(("worktrees_section", ix))
                         .debug_selector(move || format!("worktrees_section_{ix}"))
                         .relative()
-                        .h(scaled_px(24.0))
+                        .h(section_header_h)
+                        .pt(header_lead(ix))
                         .w_full()
                         .pl(indent_px(0))
                         .pr(scaled_px(BRANCH_ROW_TRAILING_PAD_PX))
@@ -1403,6 +1433,7 @@ impl SidebarPaneView {
                             div()
                                 .flex_1()
                                 .min_w(px(0.0))
+                                .debug_selector(move || format!("worktrees_section_label_{ix}"))
                                 .text_sm()
                                 .line_clamp(1)
                                 .whitespace_nowrap()
@@ -1456,7 +1487,7 @@ impl SidebarPaneView {
                 }
                 BranchSidebarRow::WorktreePlaceholder { message } => div()
                     .id(("worktree_placeholder", ix))
-                    .h(scaled_px(22.0))
+                    .h(list_row_h)
                     .w_full()
                     .px_2()
                     .text_sm()
@@ -1503,7 +1534,7 @@ impl SidebarPaneView {
                         .id(("worktree_item", ix))
                         .debug_selector(move || row_debug_selector.clone())
                         .relative()
-                        .h(scaled_px(22.0))
+                        .h(list_row_h)
                         .w_full()
                         .flex()
                         .items_center()
@@ -1666,7 +1697,8 @@ impl SidebarPaneView {
                         .id(("submodules_section", ix))
                         .debug_selector(move || format!("submodules_section_{ix}"))
                         .relative()
-                        .h(scaled_px(24.0))
+                        .h(section_header_h)
+                        .pt(header_lead(ix))
                         .w_full()
                         .pl(indent_px(0))
                         .pr(scaled_px(BRANCH_ROW_TRAILING_PAD_PX))
@@ -1736,7 +1768,7 @@ impl SidebarPaneView {
                 }
                 BranchSidebarRow::SubmodulePlaceholder { message, can_load } => div()
                     .id(("submodule_placeholder", ix))
-                    .h(scaled_px(24.0))
+                    .h(list_row_h)
                     .w_full()
                     .pl_2()
                     .pr_1()
@@ -1857,7 +1889,7 @@ impl SidebarPaneView {
                     div()
                         .id(("submodule_item", ix))
                         .relative()
-                        .h(scaled_px(22.0))
+                        .h(list_row_h)
                         .w_full()
                         .flex()
                         .items_center()
@@ -1963,7 +1995,8 @@ impl SidebarPaneView {
                     div()
                         .id(("branch_remote", ix))
                         .relative()
-                        .h(scaled_px(24.0))
+                        .h(section_header_h)
+                        .pt(header_lead(ix))
                         .w_full()
                         .pl(indent_px(0))
                         .pr(scaled_px(BRANCH_ROW_TRAILING_PAD_PX))
@@ -2065,7 +2098,7 @@ impl SidebarPaneView {
                     div()
                         .id(("branch_group", ix))
                         .debug_selector(move || format!("branch_group_{ix}"))
-                        .h(scaled_px(22.0))
+                        .h(section_header_h)
                         .w_full()
                         .pl(indent_px(usize::from(depth)))
                         .pr(scaled_px(BRANCH_ROW_TRAILING_PAD_PX))
@@ -2265,11 +2298,10 @@ impl SidebarPaneView {
                         .id(("branch_item", ix))
                         .debug_selector(move || row_debug_selector.clone())
                         .relative()
-                        .h(if section == BranchSection::Local {
-                            scaled_px(24.0)
-                        } else {
-                            scaled_px(22.0)
-                        })
+                        // Local and remote branch rows share one height; the
+                        // remote rows' secondary look comes from their muted
+                        // colours, not from a tighter box.
+                        .h(list_row_h)
                         .w_full()
                         .group(row_group.clone())
                         .flex()
@@ -2612,6 +2644,10 @@ impl DetailsPaneView {
 
         let theme = this.theme;
         let ui_scale_percent = this.ui_scale_percent;
+        let file_row_h = crate::view::components::file_row_height(
+            crate::density::current(cx).density,
+            ui_scale_percent,
+        );
         let scaled_px =
             |value: f32| crate::ui_scale::design_px_from_percent(value, ui_scale_percent);
         let repo_id = repo.id;
@@ -2674,7 +2710,7 @@ impl DetailsPaneView {
                 let mut row = div()
                     .id(("commit_file", ix))
                     .debug_selector(move || format!("commit_file_{}_{}", repo_id.0, ix))
-                    .h(scaled_px(24.0))
+                    .h(file_row_h)
                     .flex()
                     .items_center()
                     .gap(scaled_px(8.0))
@@ -2818,6 +2854,10 @@ impl DetailsPaneView {
 
         let theme = this.theme;
         let ui_scale_percent = this.ui_scale_percent;
+        let file_row_h = crate::view::components::file_row_height(
+            crate::density::current(cx).density,
+            ui_scale_percent,
+        );
         let scaled_px =
             |value: f32| crate::ui_scale::design_px_from_percent(value, ui_scale_percent);
         let file_rows =
@@ -2862,7 +2902,7 @@ impl DetailsPaneView {
                 let mut row = div()
                     .id(("worktree_file", ix))
                     .debug_selector(move || format!("worktree_file_{}_{}", repo_id.0, ix))
-                    .h(scaled_px(24.0))
+                    .h(file_row_h)
                     .flex()
                     .items_center()
                     .gap(scaled_px(8.0))
@@ -2954,6 +2994,10 @@ impl DetailsPaneView {
 
         let theme = this.theme;
         let ui_scale_percent = this.ui_scale_percent;
+        let file_row_h = crate::view::components::file_row_height(
+            crate::density::current(cx).density,
+            ui_scale_percent,
+        );
         let scaled_px =
             |value: f32| crate::ui_scale::design_px_from_percent(value, ui_scale_percent);
         let selected_target = repo.diff_state.diff_target.clone();
@@ -2995,7 +3039,7 @@ impl DetailsPaneView {
                 let mut row = div()
                     .id(("working_tree_review_file", ix))
                     .debug_selector(move || format!("working_tree_review_file_{}_{ix}", repo_id.0))
-                    .h(scaled_px(24.0))
+                    .h(file_row_h)
                     .flex()
                     .items_center()
                     .gap(scaled_px(8.0))
@@ -3077,6 +3121,10 @@ impl DetailsPaneView {
 
         let theme = this.theme;
         let ui_scale_percent = this.ui_scale_percent;
+        let file_row_h = crate::view::components::file_row_height(
+            crate::density::current(cx).density,
+            ui_scale_percent,
+        );
         let scaled_px =
             |value: f32| crate::ui_scale::design_px_from_percent(value, ui_scale_percent);
         let repo_id = repo.id;
@@ -3116,7 +3164,7 @@ impl DetailsPaneView {
                 let mut row = div()
                     .id(("range_file", ix))
                     .debug_selector(move || format!("range_file_{}_{}", repo_id.0, ix))
-                    .h(scaled_px(24.0))
+                    .h(file_row_h)
                     .flex()
                     .items_center()
                     .gap(scaled_px(8.0))
@@ -4897,6 +4945,177 @@ mod tests {
             cx.debug_bounds(leak_selector("pr_checks_chip_9".to_string()))
                 .is_some(),
             "pull request #9 renders a checks chip"
+        );
+    }
+
+    #[gpui::test]
+    fn worktrees_header_follows_the_last_pull_request_row_without_a_spacer_slot(
+        cx: &mut gpui::TestAppContext,
+    ) {
+        let _visual_guard = crate::test_support::lock_visual_test();
+        let (store, events) = AppStore::new(Arc::new(BlockingBackend));
+        let store_for_assert = store.clone();
+        let (view, cx) =
+            cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
+
+        let repo_id = RepoId(1);
+        crate::view::test_support::redraw(cx);
+        store_for_assert.dispatch(Msg::OpenRepo(PathBuf::from("/tmp/repo")));
+        wait_until(cx, "opened repo placeholder", |_cx| {
+            let snapshot = store_for_assert.snapshot();
+            snapshot.active_repo == Some(repo_id)
+                && snapshot.repos.iter().any(|repo| repo.id == repo_id)
+        });
+        sync_view_for_tests(cx, &view);
+
+        store_for_assert.dispatch(Msg::Internal(InternalMsg::RemotesLoaded {
+            repo_id,
+            result: Ok(vec![Remote {
+                name: "origin".to_string(),
+                url: Some("https://github.com/acme/widgets.git".to_string()),
+            }]),
+        }));
+        store_for_assert.dispatch(Msg::Internal(InternalMsg::PullRequestsLoaded {
+            repo_id,
+            result: Ok(vec![PullRequest {
+                number: 13,
+                title: "Dropped idea".to_string(),
+                author: "mira".to_string(),
+                head_ref: "idea".to_string(),
+                head_sha: commit_id("dd4444444444444444444444444444444444444444"),
+                base_ref: "main".to_string(),
+                state: PullRequestState::Open,
+                draft: false,
+                checks: None,
+            }]),
+        }));
+        wait_until(cx, "pull requests loaded", |_cx| {
+            let snapshot = store_for_assert.snapshot();
+            snapshot
+                .repos
+                .iter()
+                .any(|repo| repo.id == repo_id && matches!(repo.pull_requests, Loadable::Ready(_)))
+        });
+
+        // Expand the pull-request section the way a header click would so its
+        // rows render next to the Worktrees header below them.
+        cx.update(|_window, app| {
+            let sidebar_pane = view.read(app).sidebar_pane.clone();
+            sidebar_pane.update(app, |pane, _cx| {
+                pane.set_collapsed_keys_for_test(&["expanded:section:pull-requests"]);
+            });
+        });
+        sync_view_for_tests(cx, &view);
+
+        let worktrees_header_ix = cx.update(|_window, app| {
+            let sidebar_pane = view.read(app).sidebar_pane.clone();
+            sidebar_pane.update(app, |pane, _cx| {
+                pane.branch_sidebar_presentation_cached()
+                    .expect("sidebar presentation")
+                    .rows
+                    .iter()
+                    .position(|row| matches!(row, BranchSidebarRow::WorktreesHeader { .. }))
+                    .expect("worktrees header row in the presentation")
+            })
+        });
+
+        let last_pr_row = cx
+            .debug_bounds(leak_selector("pr_sidebar_row_13".to_string()))
+            .expect("last pull-request row renders");
+        let worktrees_header = cx
+            .debug_bounds(leak_selector(format!(
+                "worktrees_section_{worktrees_header_ix}"
+            )))
+            .expect("worktrees header renders");
+        let worktrees_label = cx
+            .debug_bounds(leak_selector(format!(
+                "worktrees_section_label_{worktrees_header_ix}"
+            )))
+            .expect("worktrees header label renders");
+
+        // The sidebar renders through `uniform_list`, which lays every row out
+        // at the height it measures for row zero — a spacer row's own height
+        // never applies, it just claims a full slot. So the section gap has to
+        // live inside the header row itself (padding above its label), and the
+        // header's top must sit flush against the row above it: anything past
+        // a row's slot remainder is a leftover spacer slot.
+        let (section_header_h, section_gap) = cx.update(|_window, app| {
+            let density = crate::density::current(app).density;
+            let scale = ui_scale::current(app).percent;
+            (
+                crate::view::components::section_header_height(density, scale),
+                crate::view::components::sidebar_section_gap(density, scale),
+            )
+        });
+        let gap = worktrees_header.origin.y - last_pr_row.bottom();
+        assert!(
+            gap < px(3.0) && gap > px(-1.0),
+            "worktrees header should sit flush above the last pull-request row \
+             (gap {gap:?}); a larger gap means a spacer slot is still in between"
+        );
+        // The gap is padding inside the header, so the header itself keeps its
+        // token height — if padding inflated it, every uniform-list slot would
+        // grow with it.
+        assert!(
+            (worktrees_header.size.height - section_header_h).abs() < px(1.0),
+            "worktrees header should stay {section_header_h:?} tall, got {:?}",
+            worktrees_header.size.height
+        );
+        // And the label actually sits the gap below the header's top edge —
+        // the divider stays flush with the row above, the blank follows it.
+        // The label's line box (22.5px here) is taller than the content area
+        // left under the padding, so centered it may overshoot into the gap by
+        // its leading; without the padding it would sit ~3px from the top.
+        let label_offset = worktrees_label.origin.y - worktrees_header.origin.y;
+        assert!(
+            label_offset >= section_gap - px(3.0) && label_offset <= section_gap + px(3.0),
+            "worktrees label should sit ~{section_gap:?} below its header top, got {label_offset:?} \
+             (label height {:?}, header height {:?})",
+            worktrees_label.size.height,
+            worktrees_header.size.height
+        );
+
+        // The compact tier reads through the same path: a tighter gap above
+        // the header's label, everything else unchanged.
+        cx.update(|_window, app| {
+            crate::density::set_current(app, crate::density::Density::Compact);
+        });
+        sync_view_for_tests(cx, &view);
+
+        let (compact_header_h, compact_gap) = cx.update(|_window, app| {
+            let scale = ui_scale::current(app).percent;
+            (
+                crate::view::components::section_header_height(crate::density::Density::Compact, scale),
+                crate::view::components::sidebar_section_gap(crate::density::Density::Compact, scale),
+            )
+        });
+        let last_pr_row = cx
+            .debug_bounds(leak_selector("pr_sidebar_row_13".to_string()))
+            .expect("last pull-request row still renders");
+        let worktrees_header = cx
+            .debug_bounds(leak_selector(format!(
+                "worktrees_section_{worktrees_header_ix}"
+            )))
+            .expect("worktrees header still renders");
+        let worktrees_label = cx
+            .debug_bounds(leak_selector(format!(
+                "worktrees_section_label_{worktrees_header_ix}"
+            )))
+            .expect("worktrees header label still renders");
+        assert!(
+            worktrees_header.origin.y - last_pr_row.bottom() < px(3.0),
+            "compact keeps the worktrees header flush above the last pull-request row"
+        );
+        assert!(
+            (worktrees_header.size.height - compact_header_h).abs() < px(1.0),
+            "compact worktrees header should stay {compact_header_h:?} tall, got {:?}",
+            worktrees_header.size.height
+        );
+        let label_offset = worktrees_label.origin.y - worktrees_header.origin.y;
+        assert!(
+            label_offset >= compact_gap - px(3.0) && label_offset <= compact_gap + px(3.0),
+            "compact worktrees label should sit ~{compact_gap:?} below its header top, \
+             got {label_offset:?}"
         );
     }
 }

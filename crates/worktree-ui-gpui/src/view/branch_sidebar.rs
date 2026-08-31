@@ -965,6 +965,13 @@ pub(super) fn branch_sidebar_rows(
     pinned_branches: &BTreeSet<String>,
     branch_filter: &str,
 ) -> Vec<BranchSidebarRow> {
+    // No `SectionSpacer` rows separate the sections here: the sidebar renders
+    // through `uniform_list`, which lays every row out at the height it measures
+    // for row zero, so a spacer row's own height never applies — it just claims
+    // a full slot. The section gap is padding above each header's label at the
+    // render site instead, where it actually takes effect. The popover paths
+    // below still use spacer rows because they stack rows in a plain div, where
+    // per-row heights do apply.
     let head = match &repo.head_branch {
         Loadable::Ready(head) => Some(head.as_str()),
         _ => None,
@@ -1071,7 +1078,6 @@ pub(super) fn branch_sidebar_rows(
         if !pinned_collapsed {
             rows.extend(pinned_rows);
         }
-        rows.push(BranchSidebarRow::SectionSpacer);
         true
     };
 
@@ -1147,8 +1153,6 @@ pub(super) fn branch_sidebar_rows(
             }),
         }
     }
-
-    rows.push(BranchSidebarRow::SectionSpacer);
 
     // The Remote area's divider sits above the pinned remote section (when it
     // exists) so the pins live under it, grouped with Remote Branches; otherwise
@@ -1252,8 +1256,6 @@ pub(super) fn branch_sidebar_rows(
         }
     }
 
-    rows.push(BranchSidebarRow::SectionSpacer);
-
     // Pull requests sit next to the remote branches they arrive through. The
     // section is only emitted for github.com remotes — the API client behind
     // it knows no other host.
@@ -1296,8 +1298,6 @@ pub(super) fn branch_sidebar_rows(
                 }),
             }
         }
-
-        rows.push(BranchSidebarRow::SectionSpacer);
     }
 
     rows.push(BranchSidebarRow::WorktreesHeader {
@@ -1340,8 +1340,6 @@ pub(super) fn branch_sidebar_rows(
         }
     }
 
-    rows.push(BranchSidebarRow::SectionSpacer);
-
     rows.push(BranchSidebarRow::SubmodulesHeader {
         top_border: true,
         collapsed: submodules_collapsed,
@@ -1377,8 +1375,6 @@ pub(super) fn branch_sidebar_rows(
             }),
         }
     }
-
-    rows.push(BranchSidebarRow::SectionSpacer);
 
     rows.push(BranchSidebarRow::StashHeader {
         top_border: true,
@@ -1420,8 +1416,6 @@ pub(super) fn branch_sidebar_rows(
             }),
         }
     }
-
-    rows.push(BranchSidebarRow::SectionSpacer);
 
     rows.push(BranchSidebarRow::TagsHeader {
         top_border: true,
@@ -2438,9 +2432,19 @@ mod tests {
             "the Remote Branches header should not draw a second divider below the pins"
         );
 
+        // Sections are bounded by the next section header — no spacer rows
+        // separate them in the row list.
+        let ends_pinned_section = |row: &BranchSidebarRow| {
+            matches!(
+                row,
+                BranchSidebarRow::PinnedHeader { .. }
+                    | BranchSidebarRow::SectionHeader { .. }
+                    | BranchSidebarRow::SectionSpacer
+            )
+        };
         let local_pin_entries: Vec<(&str, BranchSection)> = rows[local_pin_pos + 1..]
             .iter()
-            .take_while(|row| !matches!(row, BranchSidebarRow::SectionSpacer))
+            .take_while(|row| !ends_pinned_section(row))
             .filter_map(|row| match row {
                 BranchSidebarRow::Branch { name, section, .. } => Some((name.as_ref(), *section)),
                 _ => None,
@@ -2453,7 +2457,7 @@ mod tests {
         );
         let remote_pin_entries: Vec<(&str, BranchSection)> = rows[remote_pin_pos + 1..]
             .iter()
-            .take_while(|row| !matches!(row, BranchSidebarRow::SectionSpacer))
+            .take_while(|row| !ends_pinned_section(row))
             .filter_map(|row| match row {
                 BranchSidebarRow::Branch { name, section, .. } => Some((name.as_ref(), *section)),
                 _ => None,

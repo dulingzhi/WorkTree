@@ -187,6 +187,7 @@ enum SettingsSection {
     Language,
     AvatarSource,
     UiScale,
+    UiDensity,
     UiFont,
     EditorFont,
     ExternalCodeEditor,
@@ -215,6 +216,7 @@ impl SettingsSection {
             | Self::Language
             | Self::AvatarSource
             | Self::UiScale
+            | Self::UiDensity
             | Self::UiFont
             | Self::EditorFont
             | Self::ExternalCodeEditor
@@ -230,6 +232,15 @@ impl SettingsSection {
             }
         }
     }
+}
+
+/// Display label for a density tier, shared by the summary row and the option
+/// rows so the two can never drift apart.
+fn ui_density_label(density: crate::density::Density) -> SharedString {
+    tr(match density {
+        crate::density::Density::Comfortable => "settings.density.comfortable",
+        crate::density::Density::Compact => "settings.density.compact",
+    })
 }
 
 /// The model list fetched from the provider's `/models` endpoint, for the AI
@@ -522,6 +533,8 @@ pub(crate) struct SettingsWindowView {
     language: crate::i18n::Language,
     avatar_source: crate::avatar_source::AvatarSource,
     ui_scale_percent: u32,
+    /// Row-rhythm tier shown in the Density row; mirrors the app-wide global.
+    ui_density: crate::density::Density,
     ui_font_family: String,
     editor_font_family: String,
     use_font_ligatures: bool,
@@ -650,6 +663,7 @@ pub(crate) fn open_settings_window(cx: &mut App) {
 
     let ui_session = session::load();
     let ui_scale = ui_scale::current_or_initialize_from_session(&ui_session, cx);
+    crate::density::current_or_initialize_from_session(&ui_session, cx);
     let bounds = Bounds::centered(
         None,
         settings_window_default_size_for_percent(ui_scale.percent),
@@ -980,6 +994,7 @@ impl SettingsWindowView {
     fn new(window: &mut Window, cx: &mut gpui::Context<Self>) -> Self {
         let ui_session = session::load();
         let ui_scale = ui_scale::current_or_initialize_from_session(&ui_session, cx);
+        crate::density::current_or_initialize_from_session(&ui_session, cx);
         let font_preferences =
             crate::font_preferences::current_or_initialize_from_session(&ui_session, cx);
         let theme_mode = ui_session
@@ -1489,6 +1504,7 @@ impl SettingsWindowView {
             language,
             avatar_source,
             ui_scale_percent: ui_scale.percent,
+            ui_density: crate::density::current(cx).density,
             ui_font_family: font_preferences.ui_font_family,
             editor_font_family: font_preferences.editor_font_family,
             use_font_ligatures: font_preferences.use_font_ligatures,
@@ -1747,6 +1763,7 @@ impl SettingsWindowView {
             ai_commit_model: Some(ai_commit.model),
             ai_commit_endpoint: Some(ai_commit.endpoint),
             ui_scale_percent: Some(self.ui_scale_percent),
+            ui_density: Some(self.ui_density.key().to_string()),
             ui_font_family: Some(self.ui_font_family.clone()),
             editor_font_family: Some(self.editor_font_family.clone()),
             use_font_ligatures: Some(self.use_font_ligatures),
@@ -2319,6 +2336,24 @@ impl SettingsWindowView {
         self.persist_preferences(cx);
         self.update_main_windows(cx, move |view, root_window, cx| {
             view.apply_ui_scale_percent(percent, root_window, cx);
+        });
+        cx.notify();
+    }
+
+    fn set_ui_density(
+        &mut self,
+        density: crate::density::Density,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self.ui_density == density {
+            return;
+        }
+
+        self.ui_density = density;
+        self.expanded_section = None;
+        self.persist_preferences(cx);
+        self.update_main_windows(cx, move |view, _root_window, cx| {
+            view.apply_ui_density(density, cx);
         });
         cx.notify();
     }
@@ -4682,6 +4717,18 @@ impl Render for SettingsWindowView {
                             this.toggle_section(SettingsSection::UiScale, cx);
                         }));
 
+                    let ui_density_row = self
+                        .summary_row(
+                            "settings_window_ui_density",
+                            tr_str("settings.row.ui_density"),
+                            ui_density_label(self.ui_density),
+                            self.expanded_section == Some(SettingsSection::UiDensity),
+                            theme,
+                        )
+                        .on_click(cx.listener(|this, _e: &ClickEvent, _window, cx| {
+                            this.toggle_section(SettingsSection::UiDensity, cx);
+                        }));
+
                     let ui_font_row = self
                         .summary_row(
                             "settings_window_ui_font",
@@ -5145,6 +5192,38 @@ impl Render for SettingsWindowView {
                                     .child(tr_str("settings.ui_scale.shortcut")),
                             ),
                         );
+                    }
+
+                    general_card = general_card.child(ui_density_row);
+                    if self.expanded_section == Some(SettingsSection::UiDensity) {
+                        let mut detail =
+                            self.detail_container("settings_window_ui_density_container", theme);
+                        for (density, detail_text) in [
+                            (
+                                crate::density::Density::Comfortable,
+                                tr("settings.density.detail_comfortable"),
+                            ),
+                            (
+                                crate::density::Density::Compact,
+                                tr("settings.density.detail_compact"),
+                            ),
+                        ] {
+                            detail = detail.child(
+                                self.option_row(
+                                    format!("settings_window_ui_density_{}", density.key()),
+                                    ui_density_label(density),
+                                    Some(detail_text),
+                                    self.ui_density == density,
+                                    theme,
+                                )
+                                .on_click(cx.listener(
+                                    move |this, _e: &ClickEvent, _window, cx| {
+                                        this.set_ui_density(density, cx);
+                                    },
+                                )),
+                            );
+                        }
+                        general_card = general_card.child(detail);
                     }
 
                     general_card = general_card.child(ui_font_row);
@@ -8170,6 +8249,111 @@ mod tests {
     }
 
     #[gpui::test]
+    fn density_setting_updates_preference_and_main_window(cx: &mut gpui::TestAppContext) {
+        let _visual_guard = lock_visual_test();
+        let (store, events) = AppStore::new(std::sync::Arc::new(TestBackend));
+        let (main_view, cx) =
+            cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
+
+        cx.update(|window, app| {
+            let _ = window.draw(app);
+            open_settings_window(app);
+        });
+        cx.run_until_parked();
+
+        let settings_window = cx.update(|_window, app| {
+            app.windows()
+                .into_iter()
+                .find_map(|window| window.downcast::<SettingsWindowView>())
+                .expect("settings window should be open")
+        });
+        let mut settings_cx = gpui::VisualTestContext::from_window(*settings_window.deref(), cx);
+        settings_cx.run_until_parked();
+        settings_cx.simulate_resize(size(px(SETTINGS_WINDOW_DEFAULT_WIDTH_PX), px(1200.0)));
+        settings_cx.run_until_parked();
+
+        let _ = settings_window.update(&mut settings_cx, |settings, _window, cx| {
+            settings.select_category(SettingsCategory::General, cx);
+        });
+        settings_cx.run_until_parked();
+        settings_cx.update(|window, app| {
+            let _ = window.draw(app);
+        });
+
+        assert!(
+            settings_cx.debug_bounds("settings_window_ui_density").is_some(),
+            "density row should render in the General card"
+        );
+
+        let row_bounds = settings_cx
+            .debug_bounds("settings_window_ui_density")
+            .expect("density summary row bounds");
+        settings_cx.simulate_click(row_bounds.center(), Modifiers::default());
+        settings_cx.run_until_parked();
+        settings_cx.update(|window, app| {
+            let _ = window.draw(app);
+        });
+
+        assert!(
+            settings_cx
+                .debug_bounds("settings_window_ui_density_container")
+                .is_some(),
+            "density options should render once expanded"
+        );
+
+        let compact_bounds = settings_cx
+            .debug_bounds("settings_window_ui_density_compact")
+            .expect("compact option row should be laid out");
+        settings_cx.simulate_click(compact_bounds.center(), Modifiers::default());
+        settings_cx.run_until_parked();
+
+        let _ = settings_window.update(&mut settings_cx, |settings, _window, cx| {
+            assert_eq!(settings.ui_density, crate::density::Density::Compact);
+            assert_eq!(
+                settings.preference_settings().ui_density,
+                Some("compact".to_string()),
+                "the density must ride along every settings persist"
+            );
+            assert_eq!(
+                crate::density::current(cx).density,
+                crate::density::Density::Compact
+            );
+        });
+        settings_cx.update(|_window, app| {
+            assert_eq!(
+                main_view.read(app).ui_density,
+                crate::density::Density::Compact,
+                "the main window should follow the density selection"
+            );
+        });
+
+        // Switching back has to re-expand the section first: selecting an
+        // option collapses it, exactly like every other settings dropdown.
+        let row_bounds = settings_cx
+            .debug_bounds("settings_window_ui_density")
+            .expect("density summary row bounds");
+        settings_cx.simulate_click(row_bounds.center(), Modifiers::default());
+        settings_cx.run_until_parked();
+        settings_cx.update(|window, app| {
+            let _ = window.draw(app);
+        });
+        let comfortable_bounds = settings_cx
+            .debug_bounds("settings_window_ui_density_comfortable")
+            .expect("comfortable option row should still be laid out");
+        settings_cx.simulate_click(comfortable_bounds.center(), Modifiers::default());
+        settings_cx.run_until_parked();
+        let _ = settings_window.update(&mut settings_cx, |settings, _window, _cx| {
+            assert_eq!(settings.ui_density, crate::density::Density::Comfortable);
+        });
+        settings_cx.update(|_window, app| {
+            assert_eq!(
+                main_view.read(app).ui_density,
+                crate::density::Density::Comfortable
+            );
+        });
+    }
+
+    #[gpui::test]
     fn custom_git_executable_mode_renders_detail_container(cx: &mut gpui::TestAppContext) {
         let _visual_guard = lock_visual_test();
         let (store, events) = AppStore::new(std::sync::Arc::new(TestBackend));
@@ -10783,11 +10967,11 @@ mod tests {
 
         let mut settings_cx = gpui::VisualTestContext::from_window(*settings_window.deref(), cx);
         settings_cx.run_until_parked();
-        // The General page grew by the Language and Avatar rows, which pushed
-        // the UI-font dropdown's hit area below the old 460px window; 560px
-        // keeps it in view while the page still overflows (outer scroll stays
-        // active).
-        settings_cx.simulate_resize(size(px(SETTINGS_WINDOW_DEFAULT_WIDTH_PX), px(560.0)));
+        // The General page grew by the Language, Avatar, and Density rows,
+        // which pushed the UI-font dropdown's hit area below the old 460px
+        // window (and then below 560px); 600px keeps it in view while the page
+        // still overflows (outer scroll stays active).
+        settings_cx.simulate_resize(size(px(SETTINGS_WINDOW_DEFAULT_WIDTH_PX), px(600.0)));
         settings_cx.run_until_parked();
         settings_cx.update(|window, app| {
             let _ = window.draw(app);

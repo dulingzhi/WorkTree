@@ -74,7 +74,6 @@ impl FileBrowserVisibleRow {
 /// the branch tree's sections use.
 const FILE_BROWSER_UNSAVED_SECTION_KEY: &str = "file_browser:unsaved_edits";
 
-const FILE_BROWSER_ROW_HEIGHT_PX: f32 = 22.0;
 /// How long a queued reveal may wait for the expanded rows it needs. Generous
 /// enough for the store round trip, short enough that a request the user has
 /// moved on from never fires.
@@ -2090,7 +2089,12 @@ impl SidebarPaneView {
         theme: AppTheme,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
-        const SIDEBAR_TOP_INSET_PX: f32 = 2.0;
+        // Blank space above the first row so it does not kiss the filter bar;
+        // follows the density tier like the rows below it.
+        let sidebar_top_inset = crate::view::components::sidebar_top_inset(
+            crate::density::current(cx).density,
+            ui_scale::current(cx).percent,
+        );
 
         let filter_bar = self.render_branch_filter_bar(theme, cx);
         let Some(presentation) = self.branch_sidebar_presentation_cached() else {
@@ -2123,7 +2127,7 @@ impl SidebarPaneView {
         let list = div()
             .flex_1()
             .min_h(px(0.0))
-            .pt(px(SIDEBAR_TOP_INSET_PX))
+            .pt(sidebar_top_inset)
             .pl(px(components::ROW_HIGHLIGHT_INSET_PX))
             .pr(px(components::ROW_HIGHLIGHT_INSET_PX))
             .child(list);
@@ -2577,6 +2581,12 @@ impl SidebarPaneView {
 
         let ui_scale_percent = ui_scale::current(cx).percent;
         let scaled_px = |value: f32| ui_scale::design_px_from_percent(value, ui_scale_percent);
+        // The browser's rows follow the density tier like every other sidebar
+        // list row.
+        let file_row_h = crate::view::components::list_row_height(
+            crate::density::current(cx).density,
+            ui_scale_percent,
+        );
 
         let Some(repo_id) = this.active_repo_id() else {
             return Vec::new();
@@ -2698,7 +2708,7 @@ impl SidebarPaneView {
                                 .flex()
                                 .flex_row()
                                 .items_center()
-                                .h(scaled_px(FILE_BROWSER_ROW_HEIGHT_PX))
+                                .h(file_row_h)
                                 .w_full()
                                 .pl(scaled_px(6.0))
                                 .pr_2()
@@ -2746,7 +2756,7 @@ impl SidebarPaneView {
                             },
                             Arc::clone(path),
                             scaled_px(6.0 + INDENT_STEP_PX),
-                            scaled_px(FILE_BROWSER_ROW_HEIGHT_PX),
+                            file_row_h,
                             scaled_px(ICON_SLOT_PX),
                             Arc::clone(&store),
                             cx,
@@ -2791,7 +2801,7 @@ impl SidebarPaneView {
                         .flex()
                         .flex_row()
                         .items_center()
-                        .h(scaled_px(FILE_BROWSER_ROW_HEIGHT_PX))
+                        .h(file_row_h)
                         .w_full()
                         .pl(left_pad)
                         .pr_2()

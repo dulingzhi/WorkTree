@@ -150,6 +150,7 @@ impl FocusedDiffView {
 
         let theme = AppTheme::default_for_window_appearance(window.appearance());
         let ui_scale = crate::ui_scale::current_or_initialize_from_session(&ui_session, cx);
+        crate::density::current_or_initialize_from_session(&ui_session, cx);
         let font_preferences =
             crate::font_preferences::current_or_initialize_from_session(&ui_session, cx);
 
@@ -509,6 +510,7 @@ pub fn run_focused_diff(config: FocusedDiffConfig) -> i32 {
                 }
                 let ui_session = session::load();
                 let ui_scale = crate::ui_scale::current_or_initialize_from_session(&ui_session, cx);
+                crate::density::current_or_initialize_from_session(&ui_session, cx);
                 cx.on_window_closed(|cx, _| {
                     if cx.windows().is_empty() {
                         cx.quit();

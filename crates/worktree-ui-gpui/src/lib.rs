@@ -5,6 +5,7 @@ mod assets;
 mod avatar_source;
 mod bundled_fonts;
 mod clipboard;
+mod density;
 mod external_editor;
 pub mod focused_diff;
 mod font_preferences;

@@ -29,6 +29,7 @@ settings:
     theme: Theme
     date_format: Date format
     ui_scale: UI scale
+    ui_density: Density
     ui_font: UI Font
     editor_font: Editor Font
     font_ligatures: Use font ligatures
@@ -105,6 +106,11 @@ settings:
     detail_fit_more: Fit more on screen
     detail_larger: Larger controls and text
     shortcut: "Shortcut: Ctrl/Cmd +, -, and 0."
+  density:
+    comfortable: Comfortable
+    compact: Compact
+    detail_comfortable: Roomier rows in the history list and sidebars
+    detail_compact: Tighter rows for scanning large repositories
   fonts:
     empty: No fonts available.
     system_detail: "Use WorkTree's best match for the operating system UI font stack"

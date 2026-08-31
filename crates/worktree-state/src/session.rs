@@ -54,6 +54,10 @@ pub struct UiSession {
     pub ai_commit_model: Option<String>,
     pub ai_commit_endpoint: Option<String>,
     pub ui_scale_percent: Option<u32>,
+    /// UI density key (`comfortable`/`compact`); `None` follows the
+    /// comfortable default. Stored as a string so future tiers load from old
+    /// session files without a migration.
+    pub ui_density: Option<String>,
     pub ui_font_family: Option<String>,
     pub editor_font_family: Option<String>,
     pub use_font_ligatures: Option<bool>,
@@ -207,6 +211,7 @@ struct UiSessionFile {
     ai_commit_model: Option<String>,
     ai_commit_endpoint: Option<String>,
     ui_scale_percent: Option<u32>,
+    ui_density: Option<String>,
     ui_font_family: Option<String>,
     editor_font_family: Option<String>,
     use_font_ligatures: Option<bool>,
@@ -340,6 +345,7 @@ pub fn load_from_path(path: &Path) -> UiSession {
         ai_commit_model: file.ai_commit_model,
         ai_commit_endpoint: file.ai_commit_endpoint,
         ui_scale_percent: file.ui_scale_percent,
+        ui_density: file.ui_density,
         ui_font_family: file.ui_font_family,
         editor_font_family: file.editor_font_family,
         use_font_ligatures: file.use_font_ligatures,
@@ -795,6 +801,7 @@ pub struct UiSettings {
     pub ai_commit_model: Option<String>,
     pub ai_commit_endpoint: Option<String>,
     pub ui_scale_percent: Option<u32>,
+    pub ui_density: Option<String>,
     pub ui_font_family: Option<String>,
     pub editor_font_family: Option<String>,
     pub use_font_ligatures: Option<bool>,
@@ -906,6 +913,9 @@ pub fn persist_ui_settings_to_path(settings: UiSettings, path: &Path) -> io::Res
         }
         if let Some(percent) = settings.ui_scale_percent {
             file.ui_scale_percent = Some(percent);
+        }
+        if let Some(density) = settings.ui_density {
+            file.ui_density = Some(density);
         }
         if let Some(font_family) = settings.ui_font_family {
             file.ui_font_family = Some(font_family);

@@ -201,6 +201,7 @@ impl WorkTreeView {
                             ai_commit_model: None,
                             ai_commit_endpoint: None,
                             ui_scale_percent: Some(this.ui_scale_percent),
+                            ui_density: Some(this.ui_density.key().to_string()),
                             ui_font_family: Some(font_preferences.ui_font_family),
                             editor_font_family: Some(font_preferences.editor_font_family),
                             use_font_ligatures: Some(font_preferences.use_font_ligatures),

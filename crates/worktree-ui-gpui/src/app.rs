@@ -555,6 +555,7 @@ fn open_worktree_window(
     clear_clean_shutdown_request(cx);
     let ui_session = session::load();
     let ui_scale = ui_scale::current_or_initialize_from_session(&ui_session, cx);
+    crate::density::current_or_initialize_from_session(&ui_session, cx);
     i18n::current_or_initialize_from_session(&ui_session, cx);
     avatar_source::init_from_session(&ui_session);
     ai_commit::init_from_session(&ui_session);

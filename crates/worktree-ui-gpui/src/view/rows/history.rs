@@ -3164,7 +3164,6 @@ impl HistoryView {
     }
 }
 
-const HISTORY_ROW_HEIGHT_PX: f32 = 28.0;
 /// Widest a worktree row's badge may grow before its branch label truncates.
 /// Matches the sidebar's branch-row worktree pill.
 const HISTORY_WORKTREE_BADGE_MAX_W_PX: f32 = 200.0;
@@ -3219,8 +3218,11 @@ fn history_message_border(ui_scale: ui_scale::UiScale, color: gpui::Rgba) -> imp
         .bg(color)
 }
 
-fn history_row_height(ui_scale: ui_scale::UiScale) -> Pixels {
-    ui_scale.px(HISTORY_ROW_HEIGHT_PX)
+fn history_row_height(
+    ui_scale: ui_scale::UiScale,
+    cx: &mut impl gpui::BorrowAppContext,
+) -> Pixels {
+    crate::view::components::history_row_height(crate::density::current(cx).density, ui_scale)
 }
 
 fn history_scope_shows_graph_color_marker(scope: worktree_core::domain::LogScope) -> bool {
@@ -3350,7 +3352,7 @@ fn history_table_row(
     );
 
     let commit_id = commit.id.clone();
-    let row_height = history_row_height(ui_scale);
+    let row_height = history_row_height(ui_scale, cx);
     let mut row = div()
         .id(ix)
         .debug_selector(move || format!("history_row_{ix}"))
@@ -3640,7 +3642,7 @@ fn worktree_uncommitted_history_row(
     let select_path = summary.path.clone();
     let mut row = div()
         .id(("history_worktree_uncommitted", list_ix))
-        .h(history_row_height(ui_scale))
+        .h(history_row_height(ui_scale, cx))
         .flex()
         .w_full()
         .items_center()
@@ -3848,7 +3850,7 @@ fn working_tree_summary_history_row(
 
     let mut row = div()
         .id(("history_worktree_summary", repo_id.0))
-        .h(history_row_height(ui_scale))
+        .h(history_row_height(ui_scale, cx))
         .flex()
         .w_full()
         .items_center()

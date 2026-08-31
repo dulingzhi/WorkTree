@@ -27,6 +27,7 @@ settings:
     theme: 主题
     date_format: 日期格式
     ui_scale: 界面缩放
+    ui_density: 界面密度
     ui_font: 界面字体
     editor_font: 编辑器字体
     font_ligatures: 使用字体连字
@@ -103,6 +104,11 @@ settings:
     detail_fit_more: 在屏幕上显示更多内容
     detail_larger: 更大的控件和文本
     shortcut: "快捷键：Ctrl/Cmd +、- 和 0。"
+  density:
+    comfortable: 舒适
+    compact: 紧凑
+    detail_comfortable: 历史列表与侧栏行距更宽松
+    detail_compact: 行高更紧凑，便于浏览大型仓库
   fonts:
     empty: 没有可用字体。
     system_detail: 使用 WorkTree 为操作系统界面字体栈挑选的最佳匹配

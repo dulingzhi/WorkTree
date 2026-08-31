@@ -4,8 +4,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use worktree_core::domain::SubmoduleStatus;
 
-const STATUS_ROW_HEIGHT_PX: f32 = 24.0;
-
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(in crate::view) struct StatusSelectionBenchSnapshot {
@@ -601,7 +599,10 @@ fn status_row(
         .items_center()
         .gap(scaled_px(8.0))
         .px(scaled_px(8.0))
-        .h(scaled_px(STATUS_ROW_HEIGHT_PX))
+        .h(crate::view::components::file_row_height(
+            crate::density::current(cx).density,
+            ui_scale,
+        ))
         .w_full()
         .rounded(px(theme.radii.row))
         .cursor(CursorStyle::PointingHand)

@@ -1690,6 +1690,7 @@ impl WorkTreeView {
 
         let mut ui_session = session::load();
         let ui_scale = ui_scale::current_or_initialize_from_session(&ui_session, cx);
+        let _ui_density = crate::density::current_or_initialize_from_session(&ui_session, cx);
         let _font_preferences =
             crate::font_preferences::current_or_initialize_from_session(&ui_session, cx);
         if should_seed_initial_repository_from_session(
@@ -2282,6 +2283,7 @@ impl WorkTreeView {
             diff_show_line_numbers,
             auto_save_file_edits,
             ui_scale_percent: ui_scale.percent,
+            ui_density: crate::density::current(cx).density,
             open_repo_panel: false,
             open_repo_input,
             hover_resize_edge: None,
@@ -2533,6 +2535,33 @@ impl WorkTreeView {
 
         self.clamp_pane_widths_to_window();
         self.notify_font_preferences_changed(cx);
+        self.schedule_ui_settings_persist(cx);
+    }
+
+    /// Density has no stored design-unit dimensions to migrate (unlike the
+    /// percentage scale), so applying it is just a field flip plus a repaint
+    /// of the panes that own density-aware rows.
+    pub(crate) fn apply_ui_density(
+        &mut self,
+        density: crate::density::Density,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self.ui_density == density {
+            return;
+        }
+
+        self.ui_density = density;
+        // Panes read the density global at render time (the same convention the
+        // main and sidebar panes use for the percentage scale), so applying it
+        // is a global write plus a repaint.
+        crate::density::set_current(cx, density);
+        self.main_pane.update(cx, |_pane, cx| cx.notify());
+        self.sidebar_pane.update(cx, |_pane, cx| cx.notify());
+        self.details_pane.update(cx, |_pane, cx| cx.notify());
+        self.popover_host.update(cx, |_host, cx| {
+            cx.notify();
+        });
+        cx.notify();
         self.schedule_ui_settings_persist(cx);
     }
 

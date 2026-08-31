@@ -5809,6 +5809,10 @@ pub struct WorkTreeView {
     pub(super) diff_show_line_numbers: bool,
     pub(super) auto_save_file_edits: bool,
     pub(super) ui_scale_percent: u32,
+    /// Row-rhythm tier for the main lists; mirrors `ui_scale_percent` but for
+    /// density. Density only adjusts row heights and list insets — never font
+    /// sizes — and composes with the percentage scale.
+    pub(super) ui_density: crate::density::Density,
 
     pub(super) open_repo_panel: bool,
     pub(super) open_repo_input: Entity<components::TextInput>,
