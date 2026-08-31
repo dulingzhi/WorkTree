@@ -198,9 +198,8 @@ pub enum AutosolveTraceMode {
     History,
 }
 
-#[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ConflictNavDirection {
+enum ConflictNavDirection {
     Prev,
     Next,
 }
@@ -358,19 +357,39 @@ fn conflict_nav_anchor_order(targets: &[ConflictNavTarget], anchor: ConflictNavA
         .unwrap_or(anchor.order_hint)
 }
 
-pub(in crate::view) fn previous_conflict_nav_target_index(
+fn conflict_nav_target_index_in_direction(
+    direction: ConflictNavDirection,
     targets: &[ConflictNavTarget],
     anchor: Option<ConflictNavAnchor>,
     filter: ConflictNavTargetFilter,
 ) -> Option<usize> {
     let anchor = anchor?;
     let current_order = conflict_nav_anchor_order(targets, anchor);
-    targets
-        .iter()
-        .enumerate()
-        .rev()
-        .find(|(_, target)| target.order < current_order && filter.matches(target))
-        .map(|(index, _)| index)
+    let hit = match direction {
+        ConflictNavDirection::Prev => targets
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(_, target)| target.order < current_order && filter.matches(target)),
+        ConflictNavDirection::Next => targets
+            .iter()
+            .enumerate()
+            .find(|(_, target)| target.order > current_order && filter.matches(target)),
+    };
+    hit.map(|(index, _)| index)
+}
+
+pub(in crate::view) fn previous_conflict_nav_target_index(
+    targets: &[ConflictNavTarget],
+    anchor: Option<ConflictNavAnchor>,
+    filter: ConflictNavTargetFilter,
+) -> Option<usize> {
+    conflict_nav_target_index_in_direction(
+        ConflictNavDirection::Prev,
+        targets,
+        anchor,
+        filter,
+    )
 }
 
 pub(in crate::view) fn next_conflict_nav_target_index(
@@ -378,13 +397,7 @@ pub(in crate::view) fn next_conflict_nav_target_index(
     anchor: Option<ConflictNavAnchor>,
     filter: ConflictNavTargetFilter,
 ) -> Option<usize> {
-    let anchor = anchor?;
-    let current_order = conflict_nav_anchor_order(targets, anchor);
-    targets
-        .iter()
-        .enumerate()
-        .find(|(_, target)| target.order > current_order && filter.matches(target))
-        .map(|(index, _)| index)
+    conflict_nav_target_index_in_direction(ConflictNavDirection::Next, targets, anchor, filter)
 }
 
 /// The anchored target itself, when it is the only one the filter matches.
@@ -411,14 +424,28 @@ fn sole_matching_anchor_index(
         .then_some(index)
 }
 
-pub(in crate::view) fn previous_conflict_nav_target_index_or_sole_anchor(
+fn conflict_nav_target_index_or_sole_anchor_in_direction(
+    direction: ConflictNavDirection,
     targets: &[ConflictNavTarget],
     anchor: Option<ConflictNavAnchor>,
     filter: ConflictNavTargetFilter,
 ) -> Option<usize> {
     let anchor = anchor?;
-    previous_conflict_nav_target_index(targets, Some(anchor), filter)
+    conflict_nav_target_index_in_direction(direction, targets, Some(anchor), filter)
         .or_else(|| sole_matching_anchor_index(targets, anchor, filter))
+}
+
+pub(in crate::view) fn previous_conflict_nav_target_index_or_sole_anchor(
+    targets: &[ConflictNavTarget],
+    anchor: Option<ConflictNavAnchor>,
+    filter: ConflictNavTargetFilter,
+) -> Option<usize> {
+    conflict_nav_target_index_or_sole_anchor_in_direction(
+        ConflictNavDirection::Prev,
+        targets,
+        anchor,
+        filter,
+    )
 }
 
 pub(in crate::view) fn next_conflict_nav_target_index_or_sole_anchor(
@@ -426,9 +453,12 @@ pub(in crate::view) fn next_conflict_nav_target_index_or_sole_anchor(
     anchor: Option<ConflictNavAnchor>,
     filter: ConflictNavTargetFilter,
 ) -> Option<usize> {
-    let anchor = anchor?;
-    next_conflict_nav_target_index(targets, Some(anchor), filter)
-        .or_else(|| sole_matching_anchor_index(targets, anchor, filter))
+    conflict_nav_target_index_or_sole_anchor_in_direction(
+        ConflictNavDirection::Next,
+        targets,
+        anchor,
+        filter,
+    )
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
