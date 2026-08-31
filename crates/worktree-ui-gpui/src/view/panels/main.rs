@@ -6,7 +6,6 @@ mod decision_conflict;
 mod diff;
 mod diff_view;
 mod diff_view_helpers;
-mod history;
 mod keep_delete_conflict;
 mod lfs_pointer;
 mod status_nav;
