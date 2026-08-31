@@ -355,6 +355,9 @@ fn resolve_mergetool_config(
     has_display: bool,
     preference: &ExternalMergeToolSelection,
 ) -> Result<MergetoolConfig> {
+    // Manual executable path from the app preference, if one is set. Filled
+    // by the `Builtin` arm below; empty strings count as unset.
+    let mut manual_path: Option<String> = None;
     let tool_name = match preference {
         ExternalMergeToolSelection::FromGitConfig => {
             let merge_tool = git_config_get(repo, "merge.tool")?;
@@ -364,15 +367,22 @@ fn resolve_mergetool_config(
             choose_mergetool_name(merge_tool, merge_guitool, gui_default, has_display)?
         }
         // The preference forces the tool id; the per-tool git config keys
-        // (`mergetool.<id>.path/.cmd/.trustExitCode`) still apply, so
-        // fine-tuning through git config keeps working.
-        ExternalMergeToolSelection::Builtin { id } => {
+        // (`mergetool.<id>.cmd/.trustExitCode`) still apply, so fine-tuning
+        // through git config keeps working. A manual `path` picked in the
+        // settings UI wins over `mergetool.<id>.path` — the user chose it
+        // precisely because the automatic PATH lookup missed.
+        ExternalMergeToolSelection::Builtin { id, path } => {
             let id = id.trim();
             if id.is_empty() {
                 return Err(Error::new(ErrorKind::Backend(
                     rust_i18n::t!("git.mergetool_preset_id_empty").to_string(),
                 )));
             }
+            manual_path = path
+                .as_deref()
+                .map(str::trim)
+                .filter(|path| !path.is_empty())
+                .map(str::to_string);
             id.to_string()
         }
         // The command is user-authored in the app's own settings — the same
@@ -401,7 +411,12 @@ fn resolve_mergetool_config(
         }
     };
     let tool_cmd = resolve_mergetool_command_with_trust_mode(repo, &tool_name)?;
-    let tool_path = git_config_get(repo, &format!("mergetool.{tool_name}.path"))?;
+    // The manual path from the preference beats `mergetool.<id>.path`; with
+    // neither set, the launch falls back to git's program translation.
+    let tool_path = manual_path.or(git_config_get(
+        repo,
+        &format!("mergetool.{tool_name}.path"),
+    )?);
     let trust_exit_code =
         match git_config_get_bool(repo, &format!("mergetool.{tool_name}.trustExitCode"))? {
             Some(value) => value,
@@ -1533,5 +1548,93 @@ mod tests {
                 .unwrap();
         assert!(!cfg.write_to_temp);
         assert!(cfg.keep_temporaries);
+    }
+
+    #[test]
+    fn test_resolve_mergetool_config_builtin_manual_path_wins_over_git_config() {
+        let tmp = tempfile::tempdir().unwrap();
+        let workdir = tmp.path();
+        Command::new("git")
+            .arg("-C")
+            .arg(workdir)
+            .arg("init")
+            .output()
+            .unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(workdir)
+            .args(["config", "mergetool.kdiff3.path", "/from/git/config"])
+            .output()
+            .unwrap();
+
+        let repo = open_repo(workdir);
+        let cfg = resolve_mergetool_config(
+            &repo,
+            false,
+            &ExternalMergeToolSelection::Builtin {
+                id: "kdiff3".to_string(),
+                path: Some("  C:\\Tools\\kdiff3.exe  ".to_string()),
+            },
+        )
+        .unwrap();
+        assert_eq!(cfg.tool_name, "kdiff3");
+        assert_eq!(cfg.tool_path.as_deref(), Some(r"C:\Tools\kdiff3.exe"));
+        assert_eq!(cfg.tool_cmd, None);
+    }
+
+    #[test]
+    fn test_resolve_mergetool_config_builtin_without_manual_path_uses_git_config() {
+        let tmp = tempfile::tempdir().unwrap();
+        let workdir = tmp.path();
+        Command::new("git")
+            .arg("-C")
+            .arg(workdir)
+            .arg("init")
+            .output()
+            .unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(workdir)
+            .args(["config", "mergetool.meld.path", "/from/git/config"])
+            .output()
+            .unwrap();
+
+        let repo = open_repo(workdir);
+        let cfg = resolve_mergetool_config(
+            &repo,
+            false,
+            &ExternalMergeToolSelection::Builtin {
+                id: "meld".to_string(),
+                path: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(cfg.tool_name, "meld");
+        assert_eq!(cfg.tool_path.as_deref(), Some("/from/git/config"));
+    }
+
+    #[test]
+    fn test_resolve_mergetool_config_builtin_blank_manual_path_counts_as_unset() {
+        let tmp = tempfile::tempdir().unwrap();
+        let workdir = tmp.path();
+        Command::new("git")
+            .arg("-C")
+            .arg(workdir)
+            .arg("init")
+            .output()
+            .unwrap();
+
+        let repo = open_repo(workdir);
+        let cfg = resolve_mergetool_config(
+            &repo,
+            false,
+            &ExternalMergeToolSelection::Builtin {
+                id: "vscode".to_string(),
+                path: Some("   ".to_string()),
+            },
+        )
+        .unwrap();
+        assert_eq!(cfg.tool_name, "vscode");
+        assert_eq!(cfg.tool_path, None);
     }
 }

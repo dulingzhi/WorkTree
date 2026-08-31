@@ -118,6 +118,16 @@ fn custom_external_editor_path_prompt_options() -> gpui::PathPromptOptions {
     }
 }
 
+/// The merge tool wants a single executable file, not a directory.
+fn merge_tool_executable_path_prompt_options() -> gpui::PathPromptOptions {
+    gpui::PathPromptOptions {
+        files: true,
+        directories: false,
+        multiple: false,
+        prompt: Some(tr("settings.merge_tool.executable_path_prompt")),
+    }
+}
+
 // The third tuple element is a translation key for the row's detail text.
 const CHANGE_TRACKING_OPTIONS: &[(&str, ChangeTrackingView, &str)] = &[
     (
@@ -255,12 +265,23 @@ enum AiCommitModels {
     Error(String),
 }
 
-/// What the merge tool page shows for the selected built-in preset: the first
-/// program found on `PATH`, or the candidates that were all missing. Computed
-/// in the background so a render never touches the filesystem.
+/// What the merge tool page shows for the selected built-in preset: the
+/// effective executable (manual path if one is set, otherwise the first
+/// program found on `PATH`), or why neither applies. Computed in the
+/// background so a render never touches the filesystem.
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum MergeToolAvailability {
-    Available(String),
+    /// The effective executable exists. `resolved` is the full path, echoed
+    /// into the executable-path input; `via_override` distinguishes a manual
+    /// path from a PATH hit for the status message.
+    Available {
+        resolved: String,
+        via_override: bool,
+    },
+    /// A manual path is configured but neither exists as a file nor resolves
+    /// on PATH.
+    OverrideMissing(String),
+    /// No manual path, and none of these candidate names were on PATH.
     Missing(Vec<String>),
 }
 
@@ -289,7 +310,7 @@ fn merge_tool_selection_summary(selection: &ExternalMergeToolSelection) -> Share
         }
         // A preset id the table no longer knows (hand-edited session, older
         // build) still deserves an honest label rather than a silent reset.
-        ExternalMergeToolSelection::Builtin { id } => {
+        ExternalMergeToolSelection::Builtin { id, .. } => {
             worktree_core::external_merge_tool::merge_tool_preset(id)
                 .map(|preset| SharedString::from(tr_str(preset.label_key)))
                 .unwrap_or_else(|| SharedString::from(id.clone()))
@@ -633,6 +654,15 @@ pub(crate) struct SettingsWindowView {
     /// `Custom`, so text typed before switching is not lost.
     merge_tool_custom_command_draft: String,
     merge_tool_custom_command_input: Entity<components::TextInput>,
+    /// Mirrors the executable-path input, like the custom-command draft. When
+    /// no manual path is set this holds the informational PATH echo, so a
+    /// programmatic `set_text` is never mistaken for user input.
+    merge_tool_executable_path_draft: String,
+    merge_tool_executable_path_input: Entity<components::TextInput>,
+    /// Bumped on every executable-path change; an availability result only
+    /// echoes into the input while its generation is still current, so a
+    /// background PATH hit can never clobber mid-typing text.
+    merge_tool_path_generation: u64,
     merge_tool_availability: Option<MergeToolAvailability>,
     expanded_section: Option<SettingsSection>,
     hover_resize_edge: Option<ResizeEdge>,
@@ -647,6 +677,7 @@ pub(crate) struct SettingsWindowView {
     _ai_commit_api_key_input_subscription: gpui::Subscription,
     _ai_commit_endpoint_input_subscription: gpui::Subscription,
     _merge_tool_custom_command_input_subscription: gpui::Subscription,
+    _merge_tool_executable_path_input_subscription: gpui::Subscription,
     _appearance_subscription: gpui::Subscription,
     _search_input_subscription: gpui::Subscription,
     #[cfg(test)]
@@ -1110,6 +1141,12 @@ impl SettingsWindowView {
         // process global so tests stay side-effect free; the setter and app
         // startup own installation.
         let merge_tool_selection = ui_session.external_merge_tool.clone().unwrap_or_default();
+        // The executable-path input starts from the persisted manual path; the
+        // informational PATH echo fills in when the availability check lands.
+        let merge_tool_executable_path_draft = match &merge_tool_selection {
+            ExternalMergeToolSelection::Builtin { path: Some(p), .. } => p.clone(),
+            _ => String::new(),
+        };
         let merge_tool_custom_command_draft = match &merge_tool_selection {
             ExternalMergeToolSelection::Custom { command, .. } => command.clone(),
             _ => String::new(),
@@ -1401,6 +1438,32 @@ impl SettingsWindowView {
                 cx.notify();
             });
 
+        let merge_tool_executable_path_input = cx.new(|cx| {
+            let mut input = components::TextInput::new(
+                components::TextInputOptions {
+                    placeholder: tr("settings.merge_tool.executable_path_placeholder"),
+                    ..Default::default()
+                },
+                window,
+                cx,
+            );
+            input.set_theme(theme, cx);
+            input.set_text(merge_tool_executable_path_draft.clone(), cx);
+            input
+        });
+        let merge_tool_executable_path_input_subscription =
+            cx.observe(&merge_tool_executable_path_input, |this, input, cx| {
+                let next = input.read(cx).text().to_string();
+                if this.merge_tool_executable_path_draft == next {
+                    return;
+                }
+                this.merge_tool_executable_path_draft = next.clone();
+                // The typed text is the manual executable path of the selected
+                // built-in tool; empty text clears it back to PATH resolution.
+                let trimmed = next.trim().to_string();
+                this.set_merge_tool_manual_path((!trimmed.is_empty()).then_some(trimmed), cx);
+            });
+
         let ai_commit_model_input = cx.new(|cx| {
             let mut input = components::TextInput::new(
                 components::TextInputOptions {
@@ -1601,6 +1664,9 @@ impl SettingsWindowView {
             merge_tool_scroll: UniformListScrollHandle::default(),
             merge_tool_custom_command_draft,
             merge_tool_custom_command_input,
+            merge_tool_executable_path_draft,
+            merge_tool_executable_path_input,
+            merge_tool_path_generation: 0,
             merge_tool_availability: None,
             expanded_section: None,
             hover_resize_edge: None,
@@ -1619,6 +1685,8 @@ impl SettingsWindowView {
             _ai_commit_endpoint_input_subscription: ai_commit_endpoint_input_subscription,
             _merge_tool_custom_command_input_subscription:
                 merge_tool_custom_command_input_subscription,
+            _merge_tool_executable_path_input_subscription:
+                merge_tool_executable_path_input_subscription,
             _appearance_subscription: appearance_subscription,
             _search_input_subscription: search_input_subscription,
             #[cfg(test)]
@@ -2351,11 +2419,7 @@ impl SettingsWindowView {
         cx.notify();
     }
 
-    fn set_ui_density(
-        &mut self,
-        density: crate::density::Density,
-        cx: &mut gpui::Context<Self>,
-    ) {
+    fn set_ui_density(&mut self, density: crate::density::Density, cx: &mut gpui::Context<Self>) {
         if self.ui_density == density {
             return;
         }
@@ -2489,9 +2553,119 @@ impl SettingsWindowView {
             return;
         }
         self.merge_tool_selection = selection;
+        self.reset_merge_tool_executable_path_input(cx);
         self.persist_merge_tool_preference(cx);
         self.refresh_merge_tool_availability(cx);
         cx.notify();
+    }
+
+    /// Point the executable-path input at the current selection's manual path
+    /// (empty for a fresh preset); the PATH echo fills in once the
+    /// availability check lands.
+    fn reset_merge_tool_executable_path_input(&mut self, cx: &mut gpui::Context<Self>) {
+        let text = match &self.merge_tool_selection {
+            ExternalMergeToolSelection::Builtin {
+                path: Some(path), ..
+            } => path.clone(),
+            _ => String::new(),
+        };
+        if self.merge_tool_executable_path_draft == text {
+            return;
+        }
+        self.merge_tool_executable_path_draft = text.clone();
+        self.merge_tool_executable_path_input
+            .update(cx, |input, cx| input.set_text(text, cx));
+    }
+
+    /// Set or clear the selected built-in tool's manual executable path. The
+    /// input's text is kept in sync by the caller (observer, browse or clear).
+    fn set_merge_tool_manual_path(&mut self, path: Option<String>, cx: &mut gpui::Context<Self>) {
+        let ExternalMergeToolSelection::Builtin { path: current, .. } =
+            &mut self.merge_tool_selection
+        else {
+            return;
+        };
+        if *current == path {
+            return;
+        }
+        *current = path;
+        self.merge_tool_path_generation += 1;
+        self.persist_merge_tool_preference(cx);
+        self.refresh_merge_tool_availability(cx);
+        cx.notify();
+    }
+
+    /// Adopt a file picked in the browse dialog as the manual executable path.
+    fn apply_browsed_merge_tool_path(&mut self, path: PathBuf, cx: &mut gpui::Context<Self>) {
+        let rendered = path.display().to_string();
+        self.merge_tool_executable_path_draft = rendered.clone();
+        self.merge_tool_executable_path_input
+            .update(cx, |input, cx| input.set_text(rendered.clone(), cx));
+        self.set_merge_tool_manual_path(Some(rendered), cx);
+    }
+
+    /// Drop the manual executable path; the field falls back to the PATH echo
+    /// once the availability check lands, empty when nothing was found.
+    fn clear_merge_tool_manual_path(&mut self, cx: &mut gpui::Context<Self>) {
+        self.merge_tool_executable_path_draft = String::new();
+        self.merge_tool_executable_path_input
+            .update(cx, |input, cx| input.set_text(String::new(), cx));
+        self.set_merge_tool_manual_path(None, cx);
+    }
+
+    fn browse_merge_tool_executable_path(
+        &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let rx = cx.prompt_for_paths(merge_tool_executable_path_prompt_options());
+        let view = cx.weak_entity();
+
+        window
+            .spawn(cx, async move |cx| {
+                let paths = match rx.await {
+                    Ok(Ok(Some(paths))) => paths,
+                    Ok(Ok(None)) => return,
+                    Ok(Err(_)) | Err(_) => return,
+                };
+                let Some(path) = paths.into_iter().next() else {
+                    return;
+                };
+                let _ = view.update(cx, |this, cx| {
+                    this.apply_browsed_merge_tool_path(path, cx);
+                });
+            })
+            .detach();
+    }
+
+    /// Echo the effective executable into the path input while the user has
+    /// not taken manual control: with no manual path the field shows the
+    /// PATH-resolved executable (informational — editing adopts it as the
+    /// manual path) and clears when nothing was found.
+    fn sync_merge_tool_path_echo(&mut self, generation: u64, cx: &mut gpui::Context<Self>) {
+        if generation != self.merge_tool_path_generation {
+            return;
+        }
+        if matches!(
+            &self.merge_tool_selection,
+            ExternalMergeToolSelection::Builtin { path: Some(path), .. }
+                if !path.trim().is_empty()
+        ) {
+            return;
+        }
+        let echo = match &self.merge_tool_availability {
+            Some(MergeToolAvailability::Available {
+                resolved,
+                via_override: false,
+            }) => resolved.clone(),
+            _ => String::new(),
+        };
+        if self.merge_tool_executable_path_draft == echo {
+            return;
+        }
+        self.merge_tool_executable_path_draft = echo.clone();
+        self.merge_tool_executable_path_input
+            .update(cx, |input, cx| input.set_text(echo, cx));
     }
 
     fn set_merge_tool_trust_exit_code(&mut self, value: bool, cx: &mut gpui::Context<Self>) {
@@ -2509,14 +2683,14 @@ impl SettingsWindowView {
         cx.notify();
     }
 
-    /// Check the selected built-in preset's program on `PATH` in the
+    /// Check the selected built-in preset's effective executable in the
     /// background — the lookup touches the filesystem and must not stall a
     /// render. `None` in `merge_tool_availability` means "in flight"; the row
     /// is only shown for built-in presets at all.
     fn refresh_merge_tool_availability(&mut self, cx: &mut gpui::Context<Self>) {
         use crate::ai_commit_sources::{EnvAccess, find_executable};
 
-        let ExternalMergeToolSelection::Builtin { id } = &self.merge_tool_selection else {
+        let ExternalMergeToolSelection::Builtin { id, path } = &self.merge_tool_selection else {
             self.merge_tool_availability = None;
             return;
         };
@@ -2525,28 +2699,75 @@ impl SettingsWindowView {
             return;
         };
         let candidates = preset.program_candidates.to_vec();
+        let manual_path = path
+            .as_deref()
+            .map(str::trim)
+            .filter(|path| !path.is_empty())
+            .map(str::to_string);
+        let queried_id = id.to_string();
+        let queried_manual_path = manual_path.clone();
+        let generation = self.merge_tool_path_generation;
         self.merge_tool_availability = None;
         cx.spawn(async move |this, cx| {
             let availability = cx
                 .background_spawn(async move {
                     let env = EnvAccess::real();
-                    match candidates
-                        .iter()
-                        .find_map(|name| find_executable(name, &env))
-                    {
-                        Some(path) => MergeToolAvailability::Available(
-                            path.file_name()
-                                .map(|name| name.to_string_lossy().into_owned())
-                                .unwrap_or_else(|| path.display().to_string()),
-                        ),
-                        None => MergeToolAvailability::Missing(
-                            candidates.iter().map(|name| name.to_string()).collect(),
-                        ),
+                    match manual_path {
+                        // The backend uses the manual path verbatim; a bare
+                        // name still resolves through PATH as a courtesy.
+                        Some(manual) => {
+                            let resolved = if std::path::Path::new(&manual).is_file() {
+                                Some(manual.clone())
+                            } else {
+                                find_executable(&manual, &env)
+                                    .map(|path| path.display().to_string())
+                            };
+                            match resolved {
+                                Some(resolved) => MergeToolAvailability::Available {
+                                    resolved,
+                                    via_override: true,
+                                },
+                                None => MergeToolAvailability::OverrideMissing(manual),
+                            }
+                        }
+                        None => {
+                            match candidates
+                                .iter()
+                                .find_map(|name| find_executable(name, &env))
+                            {
+                                Some(path) => MergeToolAvailability::Available {
+                                    resolved: path.display().to_string(),
+                                    via_override: false,
+                                },
+                                None => MergeToolAvailability::Missing(
+                                    candidates.iter().map(|name| name.to_string()).collect(),
+                                ),
+                            }
+                        }
                     }
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
+                // A newer edit or preset switch re-queried — drop the stale
+                // result rather than flash it (or echo it into the input).
+                let still_current = match &this.merge_tool_selection {
+                    ExternalMergeToolSelection::Builtin { id, path } => {
+                        *id == queried_id
+                            && path
+                                .as_deref()
+                                .map(str::trim)
+                                .filter(|path| !path.is_empty())
+                                .map(str::to_string)
+                                == queried_manual_path
+                            && generation == this.merge_tool_path_generation
+                    }
+                    _ => false,
+                };
+                if !still_current {
+                    return;
+                }
                 this.merge_tool_availability = Some(availability);
+                this.sync_merge_tool_path_echo(generation, cx);
                 cx.notify();
             });
         })
@@ -3965,17 +4186,29 @@ impl SettingsWindowView {
                         ),
                         ExternalMergeToolSelection::FromGitConfig,
                     ),
-                    MergeToolOption::Preset(preset) => (
-                        format!("settings_window_merge_tool_option_{}", preset.id),
-                        tr_str(preset.label_key),
-                        matches!(
-                            &this.merge_tool_selection,
-                            ExternalMergeToolSelection::Builtin { id } if id == preset.id
-                        ),
-                        ExternalMergeToolSelection::Builtin {
-                            id: preset.id.to_string(),
-                        },
-                    ),
+                    MergeToolOption::Preset(preset) => {
+                        // Re-clicking the selected preset must not wipe the
+                        // manual executable path; a different preset starts
+                        // fresh — its old path names the wrong executable.
+                        let preserved_path = match &this.merge_tool_selection {
+                            ExternalMergeToolSelection::Builtin { id, path } if id == preset.id => {
+                                path.clone()
+                            }
+                            _ => None,
+                        };
+                        (
+                            format!("settings_window_merge_tool_option_{}", preset.id),
+                            tr_str(preset.label_key),
+                            matches!(
+                                &this.merge_tool_selection,
+                                ExternalMergeToolSelection::Builtin { id, .. } if id == preset.id
+                            ),
+                            ExternalMergeToolSelection::Builtin {
+                                id: preset.id.to_string(),
+                                path: preserved_path,
+                            },
+                        )
+                    }
                     MergeToolOption::Custom => (
                         "settings_window_merge_tool_option_custom".to_string(),
                         tr_str("settings.merge_tool.custom"),
@@ -6842,11 +7075,26 @@ impl Render for SettingsWindowView {
                             theme,
                         ));
 
-                        if let ExternalMergeToolSelection::Builtin { id } =
+                        let merge_tool_manual_path = match &self.merge_tool_selection {
+                            ExternalMergeToolSelection::Builtin {
+                                path: Some(path), ..
+                            } => {
+                                let trimmed = path.trim();
+                                (!trimmed.is_empty()).then(|| trimmed.to_string())
+                            }
+                            _ => None,
+                        };
+                        if let ExternalMergeToolSelection::Builtin { id, .. } =
                             &self.merge_tool_selection
                         {
                             let preset_missing =
                                 worktree_core::external_merge_tool::merge_tool_preset(id).is_none();
+                            let resolved_program = |resolved: &str| {
+                                std::path::Path::new(resolved)
+                                    .file_name()
+                                    .map(|name| name.to_string_lossy().into_owned())
+                                    .unwrap_or_else(|| resolved.to_string())
+                            };
                             let (status_text, status_color) = match &self.merge_tool_availability {
                                 None if preset_missing => (
                                     tr("settings.merge_tool.unknown_preset"),
@@ -6856,14 +7104,38 @@ impl Render for SettingsWindowView {
                                     tr("settings.merge_tool.checking"),
                                     theme.colors.foreground.secondary,
                                 ),
-                                Some(MergeToolAvailability::Available(program)) => (
+                                Some(MergeToolAvailability::Available {
+                                    resolved,
+                                    via_override: false,
+                                }) => (
                                     crate::i18n::t!(
                                         "settings.merge_tool.available",
-                                        program = program
+                                        program = resolved_program(resolved)
                                     )
                                     .into_owned()
                                     .into(),
                                     theme.colors.status.success.foreground,
+                                ),
+                                Some(MergeToolAvailability::Available {
+                                    resolved,
+                                    via_override: true,
+                                }) => (
+                                    crate::i18n::t!(
+                                        "settings.merge_tool.available_override",
+                                        path = resolved
+                                    )
+                                    .into_owned()
+                                    .into(),
+                                    theme.colors.status.success.foreground,
+                                ),
+                                Some(MergeToolAvailability::OverrideMissing(path)) => (
+                                    crate::i18n::t!(
+                                        "settings.merge_tool.override_missing",
+                                        path = path
+                                    )
+                                    .into_owned()
+                                    .into(),
+                                    theme.colors.status.warning.foreground,
                                 ),
                                 Some(MergeToolAvailability::Missing(candidates)) => (
                                     crate::i18n::t!(
@@ -6886,6 +7158,83 @@ impl Render for SettingsWindowView {
                                     .text_xs()
                                     .text_color(status_color)
                                     .child(status_text),
+                            );
+
+                            // Manual executable path: empty means "resolve
+                            // from PATH", and the field echoes the PATH hit
+                            // so the effective executable is always visible.
+                            let browse_button = components::Button::new(
+                                "settings_window_merge_tool_executable_path_browse",
+                                tr("settings.action.browse"),
+                            )
+                            .style(components::ButtonStyle::Outlined)
+                            .on_click(
+                                theme,
+                                cx,
+                                |this, _e, window, cx| {
+                                    this.browse_merge_tool_executable_path(window, cx);
+                                },
+                            );
+                            let path_row = div()
+                                .px_2()
+                                .pb_1()
+                                .w_full()
+                                .min_w(px(0.0))
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .min_w(px(0.0))
+                                        .child(self.merge_tool_executable_path_input.clone()),
+                                )
+                                .child(browse_button);
+                            // Clearing hands the field back to the PATH echo.
+                            let path_row =
+                                if merge_tool_manual_path.is_some() {
+                                    let clear_button = components::Button::new(
+                                        "settings_window_merge_tool_executable_path_clear",
+                                        tr("settings.merge_tool.clear_path"),
+                                    )
+                                    .style(components::ButtonStyle::Outlined)
+                                    .on_click(theme, cx, |this, _e, _window, cx| {
+                                        this.clear_merge_tool_manual_path(cx);
+                                    });
+                                    path_row.child(
+                                        div()
+                                            .id("settings_window_merge_tool_executable_path_clear")
+                                            .debug_selector(|| {
+                                                "settings_window_merge_tool_executable_path_clear"
+                                                    .to_string()
+                                            })
+                                            .child(clear_button),
+                                    )
+                                } else {
+                                    path_row
+                                };
+                            merge_tool_card = merge_tool_card.child(
+                                self.detail_container(
+                                    "settings_window_merge_tool_executable_path_container",
+                                    theme,
+                                )
+                                .child(
+                                    div()
+                                        .px_2()
+                                        .pt_1()
+                                        .text_xs()
+                                        .text_color(theme.colors.foreground.secondary)
+                                        .child(tr_str("settings.merge_tool.executable_path")),
+                                )
+                                .child(path_row)
+                                .child(
+                                    div()
+                                        .px_2()
+                                        .pb_1()
+                                        .text_xs()
+                                        .text_color(theme.colors.foreground.secondary)
+                                        .child(tr_str("settings.merge_tool.executable_path_hint")),
+                                ),
                             );
                         }
 
@@ -8297,7 +8646,9 @@ mod tests {
         });
 
         assert!(
-            settings_cx.debug_bounds("settings_window_ui_density").is_some(),
+            settings_cx
+                .debug_bounds("settings_window_ui_density")
+                .is_some(),
             "density row should render in the General card"
         );
 
@@ -8689,6 +9040,7 @@ mod tests {
 
         let expected = ExternalMergeToolSelection::Builtin {
             id: "vscode".to_string(),
+            path: None,
         };
         let _ = settings_window.update(&mut settings_cx, |settings, _window, _cx| {
             assert_eq!(settings.merge_tool_selection, expected);
@@ -8880,6 +9232,7 @@ mod tests {
             settings.set_merge_tool_selection(
                 ExternalMergeToolSelection::Builtin {
                     id: "vscode".to_string(),
+                    path: None,
                 },
                 cx,
             );
@@ -8911,6 +9264,7 @@ mod tests {
             settings.set_merge_tool_selection(
                 ExternalMergeToolSelection::Builtin {
                     id: "not-a-real-tool".to_string(),
+                    path: None,
                 },
                 cx,
             );
@@ -8930,6 +9284,211 @@ mod tests {
                 .debug_bounds("settings_window_merge_tool_availability")
                 .is_some(),
             "the unknown-id warning row should render in place of the probe"
+        );
+    }
+
+    #[gpui::test]
+    fn merge_tool_manual_executable_path_browse_clear_and_persist(cx: &mut gpui::TestAppContext) {
+        let _visual_guard = lock_visual_test();
+        let _preference_lock = worktree_core::external_merge_tool::lock_external_merge_tool_test();
+        let _preference_guard =
+            worktree_core::external_merge_tool::ExternalMergeToolResetGuard::install(
+                ExternalMergeToolSelection::FromGitConfig,
+            );
+
+        let (store, events) = AppStore::new(std::sync::Arc::new(TestBackend));
+        let (_main_view, cx) =
+            cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
+
+        cx.update(|window, app| {
+            let _ = window.draw(app);
+            open_settings_window(app);
+        });
+        cx.run_until_parked();
+
+        let settings_window = cx.update(|_window, app| {
+            app.windows()
+                .into_iter()
+                .find_map(|window| window.downcast::<SettingsWindowView>())
+                .expect("settings window should be open")
+        });
+        let mut settings_cx = gpui::VisualTestContext::from_window(*settings_window.deref(), cx);
+        settings_cx.run_until_parked();
+
+        // A real file on disk so the availability probe resolves it.
+        let tool_dir = tempfile::tempdir().unwrap();
+        let tool_exe = tool_dir.path().join("kdiff3.exe");
+        std::fs::write(&tool_exe, b"").unwrap();
+        let rendered = tool_exe.display().to_string();
+
+        let _ = settings_window.update(&mut settings_cx, |settings, _window, cx| {
+            settings.select_category(SettingsCategory::MergeTool, cx);
+            settings.set_merge_tool_selection(
+                ExternalMergeToolSelection::Builtin {
+                    id: "vscode".to_string(),
+                    path: None,
+                },
+                cx,
+            );
+            settings.toggle_section(SettingsSection::MergeTool, cx);
+        });
+        settings_cx.run_until_parked();
+        settings_cx.update(|window, app| {
+            let _ = window.draw(app);
+        });
+
+        assert!(
+            settings_cx
+                .debug_bounds("settings_window_merge_tool_executable_path_container")
+                .is_some(),
+            "the executable path detail should render for a built-in preset"
+        );
+        assert!(
+            settings_cx
+                .debug_bounds("settings_window_merge_tool_executable_path_clear")
+                .is_none(),
+            "clear should be hidden while no manual path is set"
+        );
+
+        // Browse picks a file: the selection, input text and installed
+        // preference all adopt it, and the probe reports it as effective.
+        let _ = settings_window.update(&mut settings_cx, |settings, _window, cx| {
+            settings.apply_browsed_merge_tool_path(tool_exe.clone(), cx);
+        });
+        settings_cx.run_until_parked();
+        // The path detail sits below the fold of the page scroller; bring it
+        // into view before asserting, like the trust-row test does.
+        let _ = settings_window.update(&mut settings_cx, |settings, _window, cx| {
+            let max_offset = settings.settings_window_scroll.max_offset().y.max(px(0.0));
+            settings.settings_window_scroll.set_offset(point(
+                settings.settings_window_scroll.offset().x,
+                -max_offset,
+            ));
+            cx.notify();
+        });
+        settings_cx.run_until_parked();
+        settings_cx.update(|window, app| {
+            let _ = window.draw(app);
+        });
+        let _ = settings_window.update(&mut settings_cx, |settings, _window, _cx| {
+            assert_eq!(
+                settings.merge_tool_selection,
+                ExternalMergeToolSelection::Builtin {
+                    id: "vscode".to_string(),
+                    path: Some(rendered.clone()),
+                }
+            );
+            assert_eq!(settings.merge_tool_executable_path_draft, rendered);
+            assert_eq!(
+                settings.preference_settings().external_merge_tool,
+                Some(ExternalMergeToolSelection::Builtin {
+                    id: "vscode".to_string(),
+                    path: Some(rendered.clone()),
+                })
+            );
+            assert_eq!(
+                worktree_core::external_merge_tool::current_external_merge_tool(),
+                ExternalMergeToolSelection::Builtin {
+                    id: "vscode".to_string(),
+                    path: Some(rendered.clone()),
+                }
+            );
+            assert_eq!(
+                settings.merge_tool_availability,
+                Some(MergeToolAvailability::Available {
+                    resolved: rendered.clone(),
+                    via_override: true,
+                })
+            );
+        });
+        assert!(
+            settings_cx
+                .debug_bounds("settings_window_merge_tool_executable_path_clear")
+                .is_some(),
+            "clear should render once a manual path is set"
+        );
+
+        // Re-clicking the selected preset keeps the manual path; a different
+        // preset starts fresh because the old path names the wrong tool.
+        let vscode_bounds = settings_cx
+            .debug_bounds("settings_window_merge_tool_option_vscode")
+            .expect("vscode preset row should be laid out");
+        settings_cx.simulate_click(vscode_bounds.center(), Modifiers::default());
+        settings_cx.run_until_parked();
+        let _ = settings_window.update(&mut settings_cx, |settings, _window, _cx| {
+            assert_eq!(
+                settings.merge_tool_selection,
+                ExternalMergeToolSelection::Builtin {
+                    id: "vscode".to_string(),
+                    path: Some(rendered.clone()),
+                },
+                "re-clicking the selected preset must keep the manual path"
+            );
+        });
+        let kdiff3_bounds = settings_cx
+            .debug_bounds("settings_window_merge_tool_option_kdiff3")
+            .expect("kdiff3 preset row should be laid out");
+        settings_cx.simulate_click(kdiff3_bounds.center(), Modifiers::default());
+        settings_cx.run_until_parked();
+        let _ = settings_window.update(&mut settings_cx, |settings, _window, _cx| {
+            assert_eq!(
+                settings.merge_tool_selection,
+                ExternalMergeToolSelection::Builtin {
+                    id: "kdiff3".to_string(),
+                    path: None,
+                },
+                "switching presets must drop the previous manual path"
+            );
+        });
+
+        // Switch back and clear: the manual path is gone from selection,
+        // preference and field, handing resolution back to PATH.
+        let _ = settings_window.update(&mut settings_cx, |settings, _window, cx| {
+            settings.set_merge_tool_selection(
+                ExternalMergeToolSelection::Builtin {
+                    id: "vscode".to_string(),
+                    path: Some(rendered.clone()),
+                },
+                cx,
+            );
+            settings.clear_merge_tool_manual_path(cx);
+        });
+        settings_cx.run_until_parked();
+        let _ = settings_window.update(&mut settings_cx, |settings, _window, _cx| {
+            assert_eq!(
+                settings.merge_tool_selection,
+                ExternalMergeToolSelection::Builtin {
+                    id: "vscode".to_string(),
+                    path: None,
+                }
+            );
+            // Clearing hands the field back to the PATH echo: the draft shows
+            // the resolved executable when PATH has one, empty otherwise.
+            let expected_echo = match &settings.merge_tool_availability {
+                Some(MergeToolAvailability::Available {
+                    resolved,
+                    via_override: false,
+                }) => resolved.clone(),
+                _ => String::new(),
+            };
+            assert_eq!(settings.merge_tool_executable_path_draft, expected_echo);
+            assert_eq!(
+                settings.preference_settings().external_merge_tool,
+                Some(ExternalMergeToolSelection::Builtin {
+                    id: "vscode".to_string(),
+                    path: None,
+                })
+            );
+        });
+        settings_cx.run_until_parked();
+        settings_cx.update(|window, app| {
+            let _ = window.draw(app);
+        });
+        assert!(
+            settings_cx
+                .debug_bounds("settings_window_merge_tool_executable_path_clear")
+                .is_none(),
+            "clear hides again once the manual path is dropped"
         );
     }
 

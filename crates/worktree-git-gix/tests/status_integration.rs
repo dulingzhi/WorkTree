@@ -3651,6 +3651,7 @@ fn launch_mergetool_builtin_preference_overrides_merge_tool_config() {
             Path::new("a.txt"),
             &ExternalMergeToolSelection::Builtin {
                 id: "fake".to_string(),
+                path: None,
             },
         )
         .unwrap();
@@ -3792,6 +3793,7 @@ fn launch_mergetool_builtin_preference_still_gates_repo_local_cmd() {
             Path::new("a.txt"),
             &ExternalMergeToolSelection::Builtin {
                 id: "fake".to_string(),
+                path: None,
             },
         )
         .expect_err("repo-local cmd must stay gated under a Builtin preference");

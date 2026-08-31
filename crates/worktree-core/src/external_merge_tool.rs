@@ -24,9 +24,16 @@ pub enum ExternalMergeToolSelection {
     #[default]
     FromGitConfig,
     /// Force one of git's built-in tool ids (the `mergetools/<id>` table).
-    /// Per-tool git config keys (`mergetool.<id>.path/.cmd/.trustExitCode`)
-    /// still apply.
-    Builtin { id: String },
+    /// Per-tool git config keys (`mergetool.<id>.cmd/.trustExitCode`) still
+    /// apply; a manual `path` set here wins over `mergetool.<id>.path` and
+    /// the PATH lookup, for tools the settings UI could not find on PATH.
+    Builtin {
+        id: String,
+        /// Manually selected executable; `None` resolves from PATH (and git
+        /// config) as before this field existed.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        path: Option<String>,
+    },
     /// Run a user-authored shell command with `$BASE`/`$LOCAL`/`$REMOTE`/
     /// `$MERGED` pointing at the conflict files.
     Custom {
@@ -197,6 +204,7 @@ mod tests {
             ExternalMergeToolSelection::FromGitConfig,
             ExternalMergeToolSelection::Builtin {
                 id: "vscode".to_string(),
+                path: None,
             },
             ExternalMergeToolSelection::Custom {
                 command: "code --wait --merge $REMOTE $LOCAL $BASE $MERGED".to_string(),
@@ -241,7 +249,8 @@ mod tests {
         );
         assert_eq!(
             serde_json::to_string(&ExternalMergeToolSelection::Builtin {
-                id: "kdiff3".to_string()
+                id: "kdiff3".to_string(),
+                path: None,
             })
             .unwrap(),
             r#"{"kind":"builtin","id":"kdiff3"}"#
@@ -259,6 +268,11 @@ mod tests {
             ExternalMergeToolSelection::FromGitConfig,
             ExternalMergeToolSelection::Builtin {
                 id: "smerge".to_string(),
+                path: None,
+            },
+            ExternalMergeToolSelection::Builtin {
+                id: "vscode".to_string(),
+                path: Some(r"C:\Tools\Code\code.exe".to_string()),
             },
             ExternalMergeToolSelection::Custom {
                 command: "printf resolved > $MERGED".to_string(),
@@ -271,6 +285,28 @@ mod tests {
                 selection
             );
         }
+    }
+
+    #[test]
+    fn merge_tool_selection_deserializes_sessions_without_manual_path() {
+        // Sessions saved before the manual path field existed must keep
+        // loading: `path` defaults to None and the JSON shape is unchanged.
+        assert_eq!(
+            serde_json::from_str::<ExternalMergeToolSelection>(r#"{"kind":"builtin","id":"meld"}"#)
+                .unwrap(),
+            ExternalMergeToolSelection::Builtin {
+                id: "meld".to_string(),
+                path: None,
+            }
+        );
+        assert_eq!(
+            serde_json::to_string(&ExternalMergeToolSelection::Builtin {
+                id: "vscode".to_string(),
+                path: Some("/usr/local/bin/code".to_string()),
+            })
+            .unwrap(),
+            r#"{"kind":"builtin","id":"vscode","path":"/usr/local/bin/code"}"#
+        );
     }
 
     #[test]

@@ -2371,6 +2371,7 @@ mod tests {
             UiSettings {
                 external_merge_tool: Some(ExternalMergeToolSelection::Builtin {
                     id: "vscode".to_string(),
+                    path: Some(r"C:\Tools\code.cmd".to_string()),
                 }),
                 ..UiSettings::default()
             },
@@ -2380,7 +2381,8 @@ mod tests {
         assert_eq!(
             load_from_path(&session_file).external_merge_tool,
             Some(ExternalMergeToolSelection::Builtin {
-                id: "vscode".to_string()
+                id: "vscode".to_string(),
+                path: Some(r"C:\Tools\code.cmd".to_string()),
             })
         );
 
@@ -2396,7 +2398,8 @@ mod tests {
         assert_eq!(
             load_from_path(&session_file).external_merge_tool,
             Some(ExternalMergeToolSelection::Builtin {
-                id: "vscode".to_string()
+                id: "vscode".to_string(),
+                path: Some(r"C:\Tools\code.cmd".to_string()),
             })
         );
 

@@ -195,6 +195,13 @@ settings:
     available: "Found on PATH: %{program}"
     missing: "Not found on PATH: %{programs}"
     unknown_preset: Unknown tool id — falling back to git config behavior for it.
+    executable_path: Executable path
+    executable_path_placeholder: Empty resolves from PATH
+    executable_path_prompt: Select the merge tool executable
+    executable_path_hint: A manual path overrides the PATH lookup and git's mergetool.<tool>.path. Clear it to resolve from PATH again.
+    clear_path: Clear
+    available_override: "Using executable: %{path}"
+    override_missing: "Configured executable not found: %{path}"
     scope_note: Stored in WorkTree's own settings, never in git config. "From git config" keeps whatever merge.tool / mergetool.<tool>.* already say.
     tools:
       kdiff3: KDiff3

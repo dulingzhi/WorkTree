@@ -193,6 +193,13 @@ settings:
     available: "已在 PATH 中找到：%{program}"
     missing: "未在 PATH 中找到：%{programs}"
     unknown_preset: 未知工具 id —— 将按 git 配置行为解析该名字。
+    executable_path: 可执行文件路径
+    executable_path_placeholder: 留空则从 PATH 解析
+    executable_path_prompt: 选择合并工具的可执行文件
+    executable_path_hint: 手动路径优先于 PATH 查找与 git 配置的 mergetool.<tool>.path；清除后恢复从 PATH 解析。
+    clear_path: 清除
+    available_override: "使用指定程序：%{path}"
+    override_missing: "未找到指定的可执行文件：%{path}"
     scope_note: 保存在 WorkTree 自身设置中，不写入 git 配置。「跟随 git 配置」保持既有 merge.tool / mergetool.<tool>.* 的行为。
     tools:
       kdiff3: KDiff3
