@@ -1587,10 +1587,10 @@ fn render_markdown_preview_window(
         return Vec::new();
     }
 
-    super::history::render_markdown_preview_document_rows(
+    super::markdown_preview::render_markdown_preview_document_rows(
         document,
         start..end,
-        &super::history::MarkdownPreviewRenderContext {
+        &super::markdown_preview::MarkdownPreviewRenderContext {
             theme,
             min_width: px(0.0),
             editor_font_family: crate::font_preferences::EDITOR_MONOSPACE_FONT_FAMILY.into(),

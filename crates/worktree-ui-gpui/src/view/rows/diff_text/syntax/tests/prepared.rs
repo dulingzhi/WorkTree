@@ -947,24 +947,6 @@ fn prepared_html_document_highlights_style_attribute_via_css_injection() {
     );
 }
 
-/// A single-file component covering every Vue injection path at once.
-/// Line indices are asserted against by the tests below, so keep them stable.
-const VUE_SFC_FIXTURE: &[&str] = &[
-    /* 0 */ "<template>",
-    /* 1 */ r#"  <div :class="wrapperClass">"#,
-    /* 2 */ r#"    <button v-if="count > 10">{{ count + 1 }}</button>"#,
-    /* 3 */ "  </div>",
-    /* 4 */ "</template>",
-    /* 5 */ "",
-    /* 6 */ r#"<script setup lang="ts">"#,
-    /* 7 */ "const count = 42;",
-    /* 8 */ "</script>",
-    /* 9 */ "",
-    /* 10 */ r#"<style lang="scss">"#,
-    /* 11 */ ".wrapper { color: red; }",
-    /* 12 */ "</style>",
-];
-
 #[test]
 fn prepared_vue_document_highlights_template_natively() {
     // The Vue grammar inherits html, so <template> is parsed by the root
@@ -3580,31 +3562,7 @@ fn every_batch_language_produces_treesitter_tokens() {
     }
 }
 
-// ---- Nix ------------------------------------------------------------------
-
-const NIX_FIXTURE: &[&str] = &[
-    /*  0 */ "# Build a demo package.",
-    /*  1 */ "{ pkgs, lib ? pkgs.lib, ... }:",
-    /*  2 */ "let",
-    /*  3 */ "  inherit (pkgs) stdenv;",
-    /*  4 */ "  version = \"1.0\";",
-    /*  5 */ "  readme = builtins.readFile ./README.md;",
-    /*  6 */ "in",
-    /*  7 */ "stdenv.mkDerivation rec {",
-    /*  8 */ "  pname = \"demo\";",
-    /*  9 */ "  meta.description = \"demo v${version}\";",
-    /* 10 */ "  buildPhase = ''",
-    /* 11 */ "    export OUT=$out",
-    /* 12 */ "    if [ -d bin ]; then",
-    /* 13 */ "      cp -r bin \"$out/bin\"",
-    /* 14 */ "    fi",
-    /* 15 */ "  '';",
-    /* 16 */ "}",
-];
-
-fn prepare_nix_document(lines: &[&str]) -> PreparedSyntaxDocument {
-    prepare_test_document(DiffSyntaxLanguage::Nix, &lines.join("\n"))
-}
+/* NIX_FIXTURE and prepare_nix_document are provided by the parent mod. */
 
 #[test]
 fn prepared_nix_document_highlights_core_syntax() {
