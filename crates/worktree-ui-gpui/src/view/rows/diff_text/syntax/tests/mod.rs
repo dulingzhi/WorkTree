@@ -167,10 +167,6 @@ fn query_rule_lines(query: &str) -> Vec<&str> {
         .collect()
 }
 
-/// Treating `'` as a quote painted the rest of the line as a string from the
-/// tick in `foldl'` onward. HeuristicOnly is a production path for large diffs,
-/// not just a fallback.
-
 /// A single-file component covering every Vue injection path at once.
 /// Line indices are asserted against by the tests below, so keep them stable.
 const VUE_SFC_FIXTURE: &[&str] = &[

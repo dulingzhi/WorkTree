@@ -3434,10 +3434,6 @@ fn streamed_slices_resume_inside_haskell_and_ocaml_block_comments() {
 /// Token ranges are used to slice the line for rendering, so an out-of-bounds or
 /// mid-codepoint range panics rather than mis-colouring. The batch added eleven
 /// languages to a hand-written scanner; these are the inputs that break scanners.
-
-/// Token ranges are used to slice the line for rendering, so an out-of-bounds or
-/// mid-codepoint range panics rather than mis-colouring. The batch added eleven
-/// languages to a hand-written scanner; these are the inputs that break scanners.
 #[test]
 fn batch_languages_emit_well_formed_tokens_on_hostile_input() {
     let hostile = [
