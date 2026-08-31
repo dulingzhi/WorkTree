@@ -246,82 +246,85 @@ pub(in super::super) fn syntax_tokens_for_line(
 pub(super) fn tree_sitter_grammar(
     language: DiffSyntaxLanguage,
 ) -> Option<(tree_sitter::Language, TreesitterQueryAsset)> {
+    macro_rules! arm {
+        ($ts:expr, $hl:expr) => {
+            ($ts.into(), TreesitterQueryAsset::highlights($hl))
+        };
+        ($ts:expr, $hl:expr, $inj:expr) => {
+            ($ts.into(), TreesitterQueryAsset::with_injections($hl, $inj))
+        };
+    }
+
     match language {
-        DiffSyntaxLanguage::Markdown => Some((
-            tree_sitter_md::LANGUAGE.into(),
-            TreesitterQueryAsset::with_injections(
-                MARKDOWN_HIGHLIGHTS_QUERY,
-                MARKDOWN_INJECTIONS_QUERY,
-            ),
+        DiffSyntaxLanguage::Markdown => Some(arm!(
+            tree_sitter_md::LANGUAGE,
+            MARKDOWN_HIGHLIGHTS_QUERY,
+            MARKDOWN_INJECTIONS_QUERY
         )),
-        DiffSyntaxLanguage::MarkdownInline => Some((
-            tree_sitter_md::INLINE_LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(MARKDOWN_INLINE_HIGHLIGHTS_QUERY),
+        DiffSyntaxLanguage::MarkdownInline => Some(arm!(
+            tree_sitter_md::INLINE_LANGUAGE,
+            MARKDOWN_INLINE_HIGHLIGHTS_QUERY
         )),
-        DiffSyntaxLanguage::Html => Some((
-            tree_sitter_html::LANGUAGE.into(),
-            TreesitterQueryAsset::with_injections(HTML_HIGHLIGHTS_QUERY, HTML_INJECTIONS_QUERY),
+        DiffSyntaxLanguage::Html => Some(arm!(
+            tree_sitter_html::LANGUAGE,
+            HTML_HIGHLIGHTS_QUERY,
+            HTML_INJECTIONS_QUERY
         )),
-        DiffSyntaxLanguage::Jinja => Some((
-            tree_sitter_jinja_dialects::LANGUAGE.into(),
-            TreesitterQueryAsset::with_injections(JINJA_HIGHLIGHTS_QUERY, JINJA_INJECTIONS_QUERY),
+        DiffSyntaxLanguage::Jinja => Some(arm!(
+            tree_sitter_jinja_dialects::LANGUAGE,
+            JINJA_HIGHLIGHTS_QUERY,
+            JINJA_INJECTIONS_QUERY
         )),
-        DiffSyntaxLanguage::JinjaText => Some((
-            tree_sitter_jinja_dialects::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(JINJA_HIGHLIGHTS_QUERY),
+        DiffSyntaxLanguage::JinjaText => Some(arm!(
+            tree_sitter_jinja_dialects::LANGUAGE,
+            JINJA_HIGHLIGHTS_QUERY
         )),
-        DiffSyntaxLanguage::Vue => Some((
-            tree_sitter_vue::LANGUAGE.into(),
-            TreesitterQueryAsset::with_injections(VUE_HIGHLIGHTS_QUERY, VUE_INJECTIONS_QUERY),
+        DiffSyntaxLanguage::Vue => Some(arm!(
+            tree_sitter_vue::LANGUAGE,
+            VUE_HIGHLIGHTS_QUERY,
+            VUE_INJECTIONS_QUERY
         )),
-        DiffSyntaxLanguage::Svelte => Some((
-            tree_sitter_svelte_ng::LANGUAGE.into(),
-            TreesitterQueryAsset::with_injections(SVELTE_HIGHLIGHTS_QUERY, SVELTE_INJECTIONS_QUERY),
+        DiffSyntaxLanguage::Svelte => Some(arm!(
+            tree_sitter_svelte_ng::LANGUAGE,
+            SVELTE_HIGHLIGHTS_QUERY,
+            SVELTE_INJECTIONS_QUERY
         )),
-        DiffSyntaxLanguage::Css => Some((
-            tree_sitter_css::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(CSS_HIGHLIGHTS_QUERY),
+        DiffSyntaxLanguage::Css => Some(arm!(tree_sitter_css::LANGUAGE, CSS_HIGHLIGHTS_QUERY)),
+        DiffSyntaxLanguage::Bicep => Some(arm!(
+            tree_sitter_bicep::LANGUAGE,
+            tree_sitter_bicep::HIGHLIGHTS_QUERY,
+            tree_sitter_bicep::INJECTIONS_QUERY
         )),
-        DiffSyntaxLanguage::Bicep => Some((
-            tree_sitter_bicep::LANGUAGE.into(),
-            TreesitterQueryAsset::with_injections(
-                tree_sitter_bicep::HIGHLIGHTS_QUERY,
-                tree_sitter_bicep::INJECTIONS_QUERY,
-            ),
+        DiffSyntaxLanguage::Nix => Some(arm!(
+            tree_sitter_nix::LANGUAGE,
+            NIX_HIGHLIGHTS_QUERY,
+            NIX_INJECTIONS_QUERY
         )),
-        DiffSyntaxLanguage::Nix => Some((
-            tree_sitter_nix::LANGUAGE.into(),
-            TreesitterQueryAsset::with_injections(NIX_HIGHLIGHTS_QUERY, NIX_INJECTIONS_QUERY),
+        DiffSyntaxLanguage::Lua => Some(arm!(
+            tree_sitter_lua::LANGUAGE,
+            tree_sitter_lua::HIGHLIGHTS_QUERY,
+            tree_sitter_lua::INJECTIONS_QUERY
         )),
-        DiffSyntaxLanguage::Lua => Some((
-            tree_sitter_lua::LANGUAGE.into(),
-            TreesitterQueryAsset::with_injections(
-                tree_sitter_lua::HIGHLIGHTS_QUERY,
-                tree_sitter_lua::INJECTIONS_QUERY,
-            ),
+        DiffSyntaxLanguage::Makefile => Some(arm!(
+            tree_sitter_make::LANGUAGE,
+            tree_sitter_make::HIGHLIGHTS_QUERY
         )),
-        DiffSyntaxLanguage::Makefile => Some((
-            tree_sitter_make::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(tree_sitter_make::HIGHLIGHTS_QUERY),
+        DiffSyntaxLanguage::Kotlin => Some(arm!(
+            tree_sitter_kotlin_sg::LANGUAGE,
+            tree_sitter_kotlin_sg::HIGHLIGHTS_QUERY
         )),
-        DiffSyntaxLanguage::Kotlin => Some((
-            tree_sitter_kotlin_sg::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(tree_sitter_kotlin_sg::HIGHLIGHTS_QUERY),
+        DiffSyntaxLanguage::Zig => Some(arm!(
+            tree_sitter_zig::LANGUAGE,
+            tree_sitter_zig::HIGHLIGHTS_QUERY,
+            tree_sitter_zig::INJECTIONS_QUERY
         )),
-        DiffSyntaxLanguage::Zig => Some((
-            tree_sitter_zig::LANGUAGE.into(),
-            TreesitterQueryAsset::with_injections(
-                tree_sitter_zig::HIGHLIGHTS_QUERY,
-                tree_sitter_zig::INJECTIONS_QUERY,
-            ),
+        DiffSyntaxLanguage::Groovy => Some(arm!(
+            dekobon_tree_sitter_groovy::LANGUAGE,
+            dekobon_tree_sitter_groovy::HIGHLIGHTS_QUERY
         )),
-        DiffSyntaxLanguage::Groovy => Some((
-            dekobon_tree_sitter_groovy::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(dekobon_tree_sitter_groovy::HIGHLIGHTS_QUERY),
-        )),
-        DiffSyntaxLanguage::Clojure => Some((
-            tree_sitter_clojure_orchard::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(CLOJURE_HIGHLIGHTS_QUERY),
+        DiffSyntaxLanguage::Clojure => Some(arm!(
+            tree_sitter_clojure_orchard::LANGUAGE,
+            CLOJURE_HIGHLIGHTS_QUERY
         )),
         // Highlights only. `tree_sitter_elixir::INJECTIONS_QUERY` sets
         // `injection.combined` on every one of its seven sigil patterns, and a
@@ -329,183 +332,159 @@ pub(super) fn tree_sitter_grammar(
         // `combined_injection_declarations_are_exactly_the_known_set`. Wiring it up
         // is a deliberate decision about clipping and cache behaviour, not a
         // drop-in, and `~H` sigils need a HEEx grammar we do not have anyway.
-        DiffSyntaxLanguage::Elixir => Some((
-            tree_sitter_elixir::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(tree_sitter_elixir::HIGHLIGHTS_QUERY),
+        DiffSyntaxLanguage::Elixir => Some(arm!(
+            tree_sitter_elixir::LANGUAGE,
+            tree_sitter_elixir::HIGHLIGHTS_QUERY
         )),
-        DiffSyntaxLanguage::Erlang => Some((
-            tree_sitter_erlang::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(tree_sitter_erlang::HIGHLIGHTS_QUERY),
+        DiffSyntaxLanguage::Erlang => Some(arm!(
+            tree_sitter_erlang::LANGUAGE,
+            tree_sitter_erlang::HIGHLIGHTS_QUERY
         )),
-        DiffSyntaxLanguage::Haskell => Some((
-            tree_sitter_haskell::LANGUAGE.into(),
-            TreesitterQueryAsset::with_injections(
-                tree_sitter_haskell::HIGHLIGHTS_QUERY,
-                tree_sitter_haskell::INJECTIONS_QUERY,
-            ),
+        DiffSyntaxLanguage::Haskell => Some(arm!(
+            tree_sitter_haskell::LANGUAGE,
+            tree_sitter_haskell::HIGHLIGHTS_QUERY,
+            tree_sitter_haskell::INJECTIONS_QUERY
         )),
-        DiffSyntaxLanguage::Julia => Some((
-            tree_sitter_julia::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(JULIA_HIGHLIGHTS_QUERY),
+        DiffSyntaxLanguage::Julia => {
+            Some(arm!(tree_sitter_julia::LANGUAGE, JULIA_HIGHLIGHTS_QUERY))
+        }
+        DiffSyntaxLanguage::OCaml => Some(arm!(
+            tree_sitter_ocaml::LANGUAGE_OCAML,
+            OCAML_HIGHLIGHTS_QUERY
         )),
-        DiffSyntaxLanguage::OCaml => Some((
-            tree_sitter_ocaml::LANGUAGE_OCAML.into(),
-            TreesitterQueryAsset::highlights(OCAML_HIGHLIGHTS_QUERY),
+        DiffSyntaxLanguage::OCamlInterface => Some(arm!(
+            tree_sitter_ocaml::LANGUAGE_OCAML_INTERFACE,
+            OCAML_HIGHLIGHTS_QUERY
         )),
-        DiffSyntaxLanguage::OCamlInterface => Some((
-            tree_sitter_ocaml::LANGUAGE_OCAML_INTERFACE.into(),
-            TreesitterQueryAsset::highlights(OCAML_HIGHLIGHTS_QUERY),
+        DiffSyntaxLanguage::Solidity => Some(arm!(
+            tree_sitter_solidity::LANGUAGE,
+            SOLIDITY_HIGHLIGHTS_QUERY
         )),
-        DiffSyntaxLanguage::Solidity => Some((
-            tree_sitter_solidity::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(SOLIDITY_HIGHLIGHTS_QUERY),
+        DiffSyntaxLanguage::Assembly => Some(arm!(
+            tree_sitter_asm::LANGUAGE,
+            tree_sitter_asm::HIGHLIGHTS_QUERY
         )),
-        DiffSyntaxLanguage::Assembly => Some((
-            tree_sitter_asm::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(tree_sitter_asm::HIGHLIGHTS_QUERY),
+        DiffSyntaxLanguage::Rust => Some(arm!(
+            tree_sitter_rust::LANGUAGE,
+            RUST_HIGHLIGHTS_QUERY,
+            RUST_INJECTIONS_QUERY
         )),
-        DiffSyntaxLanguage::Rust => Some((
-            tree_sitter_rust::LANGUAGE.into(),
-            TreesitterQueryAsset::with_injections(RUST_HIGHLIGHTS_QUERY, RUST_INJECTIONS_QUERY),
+        DiffSyntaxLanguage::Python => {
+            Some(arm!(tree_sitter_python::LANGUAGE, PYTHON_HIGHLIGHTS_QUERY))
+        }
+        DiffSyntaxLanguage::Go => Some(arm!(
+            tree_sitter_go::LANGUAGE,
+            GO_HIGHLIGHTS_QUERY,
+            GO_INJECTIONS_QUERY
         )),
-        DiffSyntaxLanguage::Python => Some((
-            tree_sitter_python::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(PYTHON_HIGHLIGHTS_QUERY),
+        DiffSyntaxLanguage::GoMod => {
+            Some(arm!(tree_sitter_gomod::LANGUAGE, GOMOD_HIGHLIGHTS_QUERY))
+        }
+        DiffSyntaxLanguage::GoWork => {
+            Some(arm!(tree_sitter_gowork::LANGUAGE, GOWORK_HIGHLIGHTS_QUERY))
+        }
+        DiffSyntaxLanguage::C => Some(arm!(
+            tree_sitter_c::LANGUAGE,
+            C_HIGHLIGHTS_QUERY,
+            C_INJECTIONS_QUERY
         )),
-        DiffSyntaxLanguage::Go => Some((
-            tree_sitter_go::LANGUAGE.into(),
-            TreesitterQueryAsset::with_injections(GO_HIGHLIGHTS_QUERY, GO_INJECTIONS_QUERY),
+        DiffSyntaxLanguage::Cpp => Some(arm!(
+            tree_sitter_cpp::LANGUAGE,
+            CPP_HIGHLIGHTS_QUERY,
+            CPP_INJECTIONS_QUERY
         )),
-        DiffSyntaxLanguage::GoMod => Some((
-            tree_sitter_gomod::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(GOMOD_HIGHLIGHTS_QUERY),
+        DiffSyntaxLanguage::ObjectiveC => Some(arm!(
+            tree_sitter_objc::LANGUAGE,
+            tree_sitter_objc::HIGHLIGHTS_QUERY,
+            tree_sitter_objc::INJECTIONS_QUERY
         )),
-        DiffSyntaxLanguage::GoWork => Some((
-            tree_sitter_gowork::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(GOWORK_HIGHLIGHTS_QUERY),
+        DiffSyntaxLanguage::CSharp => {
+            Some(arm!(tree_sitter_c_sharp::LANGUAGE, CSHARP_HIGHLIGHTS_QUERY))
+        }
+        DiffSyntaxLanguage::FSharp => Some(arm!(
+            tree_sitter_fsharp::LANGUAGE_FSHARP,
+            tree_sitter_fsharp::HIGHLIGHTS_QUERY,
+            tree_sitter_fsharp::INJECTIONS_QUERY
         )),
-        DiffSyntaxLanguage::C => Some((
-            tree_sitter_c::LANGUAGE.into(),
-            TreesitterQueryAsset::with_injections(C_HIGHLIGHTS_QUERY, C_INJECTIONS_QUERY),
+        DiffSyntaxLanguage::Java => Some(arm!(
+            tree_sitter_java::LANGUAGE,
+            tree_sitter_java::HIGHLIGHTS_QUERY
         )),
-        DiffSyntaxLanguage::Cpp => Some((
-            tree_sitter_cpp::LANGUAGE.into(),
-            TreesitterQueryAsset::with_injections(CPP_HIGHLIGHTS_QUERY, CPP_INJECTIONS_QUERY),
+        DiffSyntaxLanguage::Php => Some(arm!(
+            tree_sitter_php::LANGUAGE_PHP,
+            tree_sitter_php::HIGHLIGHTS_QUERY,
+            tree_sitter_php::INJECTIONS_QUERY
         )),
-        DiffSyntaxLanguage::ObjectiveC => Some((
-            tree_sitter_objc::LANGUAGE.into(),
-            TreesitterQueryAsset::with_injections(
-                tree_sitter_objc::HIGHLIGHTS_QUERY,
-                tree_sitter_objc::INJECTIONS_QUERY,
-            ),
+        DiffSyntaxLanguage::Ruby => Some(arm!(
+            tree_sitter_ruby::LANGUAGE,
+            tree_sitter_ruby::HIGHLIGHTS_QUERY
         )),
-        DiffSyntaxLanguage::CSharp => Some((
-            tree_sitter_c_sharp::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(CSHARP_HIGHLIGHTS_QUERY),
+        DiffSyntaxLanguage::PowerShell => Some(arm!(
+            tree_sitter_powershell::LANGUAGE,
+            POWERSHELL_HIGHLIGHTS_QUERY
         )),
-        DiffSyntaxLanguage::FSharp => Some((
-            tree_sitter_fsharp::LANGUAGE_FSHARP.into(),
-            TreesitterQueryAsset::with_injections(
-                tree_sitter_fsharp::HIGHLIGHTS_QUERY,
-                tree_sitter_fsharp::INJECTIONS_QUERY,
-            ),
+        DiffSyntaxLanguage::Swift => Some(arm!(
+            tree_sitter_swift::LANGUAGE,
+            tree_sitter_swift::HIGHLIGHTS_QUERY,
+            tree_sitter_swift::INJECTIONS_QUERY
         )),
-        DiffSyntaxLanguage::Java => Some((
-            tree_sitter_java::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(tree_sitter_java::HIGHLIGHTS_QUERY),
+        DiffSyntaxLanguage::R => Some(arm!(
+            tree_sitter_r::LANGUAGE,
+            tree_sitter_r::HIGHLIGHTS_QUERY
         )),
-        DiffSyntaxLanguage::Php => Some((
-            tree_sitter_php::LANGUAGE_PHP.into(),
-            TreesitterQueryAsset::with_injections(
-                tree_sitter_php::HIGHLIGHTS_QUERY,
-                tree_sitter_php::INJECTIONS_QUERY,
-            ),
+        DiffSyntaxLanguage::Dart => Some(arm!(
+            tree_sitter_dart::LANGUAGE,
+            tree_sitter_dart::HIGHLIGHTS_QUERY
         )),
-        DiffSyntaxLanguage::Ruby => Some((
-            tree_sitter_ruby::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(tree_sitter_ruby::HIGHLIGHTS_QUERY),
+        DiffSyntaxLanguage::Scala => Some(arm!(
+            tree_sitter_scala::LANGUAGE,
+            tree_sitter_scala::HIGHLIGHTS_QUERY
         )),
-        DiffSyntaxLanguage::PowerShell => Some((
-            tree_sitter_powershell::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(POWERSHELL_HIGHLIGHTS_QUERY),
+        DiffSyntaxLanguage::Json => Some(arm!(tree_sitter_json::LANGUAGE, JSON_HIGHLIGHTS_QUERY)),
+        DiffSyntaxLanguage::Toml => Some(arm!(
+            tree_sitter_toml_ng::LANGUAGE,
+            tree_sitter_toml_ng::HIGHLIGHTS_QUERY
         )),
-        DiffSyntaxLanguage::Swift => Some((
-            tree_sitter_swift::LANGUAGE.into(),
-            TreesitterQueryAsset::with_injections(
-                tree_sitter_swift::HIGHLIGHTS_QUERY,
-                tree_sitter_swift::INJECTIONS_QUERY,
-            ),
+        DiffSyntaxLanguage::Yaml => Some(arm!(
+            tree_sitter_yaml::LANGUAGE,
+            YAML_HIGHLIGHTS_QUERY,
+            YAML_INJECTIONS_QUERY
         )),
-        DiffSyntaxLanguage::R => Some((
-            tree_sitter_r::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(tree_sitter_r::HIGHLIGHTS_QUERY),
+        DiffSyntaxLanguage::Sql => Some(arm!(
+            tree_sitter_sequel::LANGUAGE,
+            tree_sitter_sequel::HIGHLIGHTS_QUERY
         )),
-        DiffSyntaxLanguage::Dart => Some((
-            tree_sitter_dart::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(tree_sitter_dart::HIGHLIGHTS_QUERY),
+        DiffSyntaxLanguage::Diff => Some(arm!(
+            tree_sitter_diff::LANGUAGE,
+            tree_sitter_diff::HIGHLIGHTS_QUERY
         )),
-        DiffSyntaxLanguage::Scala => Some((
-            tree_sitter_scala::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(tree_sitter_scala::HIGHLIGHTS_QUERY),
+        DiffSyntaxLanguage::GitCommit => Some(arm!(
+            tree_sitter_gitcommit::LANGUAGE,
+            GITCOMMIT_HIGHLIGHTS_QUERY
         )),
-        DiffSyntaxLanguage::Json => Some((
-            tree_sitter_json::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(JSON_HIGHLIGHTS_QUERY),
+        DiffSyntaxLanguage::TypeScript => Some(arm!(
+            tree_sitter_typescript::LANGUAGE_TYPESCRIPT,
+            TYPESCRIPT_HIGHLIGHTS_QUERY,
+            TYPESCRIPT_INJECTIONS_QUERY
         )),
-        DiffSyntaxLanguage::Toml => Some((
-            tree_sitter_toml_ng::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(tree_sitter_toml_ng::HIGHLIGHTS_QUERY),
+        DiffSyntaxLanguage::Tsx => Some(arm!(
+            tree_sitter_typescript::LANGUAGE_TSX,
+            TSX_HIGHLIGHTS_QUERY,
+            TSX_INJECTIONS_QUERY
         )),
-        DiffSyntaxLanguage::Yaml => Some((
-            tree_sitter_yaml::LANGUAGE.into(),
-            TreesitterQueryAsset::with_injections(YAML_HIGHLIGHTS_QUERY, YAML_INJECTIONS_QUERY),
+        DiffSyntaxLanguage::JavaScript => Some(arm!(
+            tree_sitter_javascript::LANGUAGE,
+            JAVASCRIPT_HIGHLIGHTS_QUERY,
+            JAVASCRIPT_INJECTIONS_QUERY
         )),
-        DiffSyntaxLanguage::Sql => Some((
-            tree_sitter_sequel::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(tree_sitter_sequel::HIGHLIGHTS_QUERY),
-        )),
-        DiffSyntaxLanguage::Diff => Some((
-            tree_sitter_diff::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(tree_sitter_diff::HIGHLIGHTS_QUERY),
-        )),
-        DiffSyntaxLanguage::GitCommit => Some((
-            tree_sitter_gitcommit::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(GITCOMMIT_HIGHLIGHTS_QUERY),
-        )),
-        DiffSyntaxLanguage::TypeScript => Some((
-            tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
-            TreesitterQueryAsset::with_injections(
-                TYPESCRIPT_HIGHLIGHTS_QUERY,
-                TYPESCRIPT_INJECTIONS_QUERY,
-            ),
-        )),
-        DiffSyntaxLanguage::Tsx => Some((
-            tree_sitter_typescript::LANGUAGE_TSX.into(),
-            TreesitterQueryAsset::with_injections(TSX_HIGHLIGHTS_QUERY, TSX_INJECTIONS_QUERY),
-        )),
-        DiffSyntaxLanguage::JavaScript => Some((
-            tree_sitter_javascript::LANGUAGE.into(),
-            TreesitterQueryAsset::with_injections(
-                JAVASCRIPT_HIGHLIGHTS_QUERY,
-                JAVASCRIPT_INJECTIONS_QUERY,
-            ),
-        )),
-        DiffSyntaxLanguage::Jsdoc => Some((
-            tree_sitter_jsdoc::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(JSDOC_HIGHLIGHTS_QUERY),
-        )),
-        DiffSyntaxLanguage::Regex => Some((
-            tree_sitter_regex::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(REGEX_HIGHLIGHTS_QUERY),
-        )),
-        DiffSyntaxLanguage::Bash => Some((
-            tree_sitter_bash::LANGUAGE.into(),
-            TreesitterQueryAsset::highlights(BASH_HIGHLIGHTS_QUERY),
-        )),
-        DiffSyntaxLanguage::Xml => Some((
-            tree_sitter_xml::LANGUAGE_XML.into(),
-            TreesitterQueryAsset::highlights(XML_HIGHLIGHTS_QUERY),
-        )),
+        DiffSyntaxLanguage::Jsdoc => {
+            Some(arm!(tree_sitter_jsdoc::LANGUAGE, JSDOC_HIGHLIGHTS_QUERY))
+        }
+        DiffSyntaxLanguage::Regex => {
+            Some(arm!(tree_sitter_regex::LANGUAGE, REGEX_HIGHLIGHTS_QUERY))
+        }
+        DiffSyntaxLanguage::Bash => Some(arm!(tree_sitter_bash::LANGUAGE, BASH_HIGHLIGHTS_QUERY)),
+        DiffSyntaxLanguage::Xml => Some(arm!(tree_sitter_xml::LANGUAGE_XML, XML_HIGHLIGHTS_QUERY)),
         // Languages without a wired tree-sitter grammar, or grammars gated off
         // by the current feature set, fall back to heuristic-only highlighting.
         _ => None,
