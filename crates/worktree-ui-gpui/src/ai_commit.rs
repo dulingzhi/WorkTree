@@ -121,12 +121,17 @@ impl AiCommitSettings {
         }
     }
 
+    /// The model id a request carries: the configured model, or the provider
+    /// default when it is blank. A trailing context-window tag — `sonnet[1m]`,
+    /// `gemini-2.5-pro[1M]` — is stripped: the bracket form is a client-side
+    /// convention (Claude Code aliases, relay model lists) and the chat APIs
+    /// answer it with 400 model-not-found. The stored setting is untouched.
     pub(crate) fn effective_model(&self) -> &str {
         let model = self.model.trim();
         if model.is_empty() {
             self.provider.default_model()
         } else {
-            model
+            strip_context_window_tag(model)
         }
     }
 
@@ -194,6 +199,38 @@ impl AiCommitSettings {
         urls.push(format!("{base}/models"));
         urls
     }
+}
+
+/// Strip trailing context-window tags off a model name: `sonnet[1m]`,
+/// `gemini-2.5-pro[1M]`, `gpt-4o[128k]` → the bare id. Only bracket groups
+/// that name a context size count; anything else in brackets is treated as
+/// part of the name.
+fn strip_context_window_tag(model: &str) -> &str {
+    let mut model = model;
+    while let Some(open) = model.rfind('[') {
+        // Only a final, non-empty bracket group is tag-shaped, and a model
+        // that is *nothing but* the tag has nothing left to send.
+        let Some(tag) = model[open + 1..].strip_suffix(']') else {
+            break;
+        };
+        if open == 0 || !is_context_window_size(tag) {
+            break;
+        }
+        model = model[..open].trim_end();
+    }
+    model
+}
+
+/// A context-window tag body: digits plus an optional unit — `1m`, `128k`,
+/// `500K`.
+fn is_context_window_size(tag: &str) -> bool {
+    let tag = tag.trim();
+    let digits_end = tag.find(|c: char| !c.is_ascii_digit()).unwrap_or(tag.len());
+    digits_end > 0
+        && matches!(
+            tag[digits_end..].to_ascii_lowercase().as_str(),
+            "" | "k" | "m" | "g"
+        )
 }
 
 static CURRENT: LazyLock<RwLock<AiCommitSettings>> =
@@ -367,6 +404,12 @@ pub(crate) fn build_explanation_request(
 #[cfg_attr(test, allow(dead_code))]
 const CLI_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
+/// How often the CLI runner's wait loop checks on the child. Generations run
+/// for seconds, so a fixed short poll is plenty.
+// Only the `cfg(not(test))` CLI runner reads this; test builds stub it out.
+#[cfg_attr(test, allow(dead_code))]
+const CLI_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(10);
+
 /// The system prompt for the MR push prompt's "generate description"
 /// action — the same providers as the commit ✨, a third job. The commits
 /// and diffstat say what changed; the description is for the reviewer
@@ -458,51 +501,93 @@ pub(crate) fn build_mr_description_request(
 /// and sanitize stdout as the reply. The prompt arrives as a single argv
 /// element — no shell is involved, so its contents need no escaping.
 ///
-/// `Command::output` owns the child for the whole run; `kill_on_drop` is what
-/// stops it on timeout, because the timeout arm drops that future (borrowing
-/// the child for an explicit `kill` does not convince the borrow checker).
+/// The waiting runs on `smol::unblock`'s thread pool around a
+/// `std::process::Command`: `configure_background_command` sets
+/// CREATE_NO_WINDOW on Windows, which `smol::process::Command` has no way to
+/// express — and the AI CLIs are console programs (`.cmd` shims included)
+/// whose bare spawn flashes a console window over the GUI on every
+/// generation.
 #[cfg(not(test))]
 pub(crate) async fn generate_via_cli(executable: &str, args: &[String]) -> Result<String, String> {
-    let mut command = smol::process::Command::new(executable);
+    let mut command = std::process::Command::new(executable);
+    worktree_core::process::configure_background_command(&mut command);
     command
         .args(args)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .kill_on_drop(true);
-    let run = command.output();
+        .stderr(std::process::Stdio::piped());
+    let label = executable.to_string();
+    smol::unblock(move || run_cli_generation(command, &label)).await
+}
 
-    let outcome =
-        futures::future::select(Box::pin(run), Box::pin(smol::Timer::after(CLI_TIMEOUT))).await;
-    let output = match outcome {
-        futures::future::Either::Left((output, _timer)) => {
-            output.map_err(|err| format!("could not run `{executable}`: {err}"))?
-        }
-        futures::future::Either::Right((_expired, run)) => {
-            // Dropping the run future kills the child (kill_on_drop).
-            drop(run);
-            return Err(format!(
-                "`{executable}` timed out after {}s and was stopped",
-                CLI_TIMEOUT.as_secs()
-            ));
+/// The blocking half of [`generate_via_cli`]: wait on the child in a poll
+/// loop — killing it at [`CLI_TIMEOUT`] — while reader threads drain both
+/// pipes, so a chatty CLI cannot deadlock a full pipe against the wait.
+#[cfg(not(test))]
+fn run_cli_generation(mut command: std::process::Command, label: &str) -> Result<String, String> {
+    let mut child = command
+        .spawn()
+        .map_err(|err| format!("could not run `{label}`: {err}"))?;
+    let stdout = spawn_pipe_reader(child.stdout.take());
+    let stderr = spawn_pipe_reader(child.stderr.take());
+
+    let mut timed_out = false;
+    let deadline = std::time::Instant::now() + CLI_TIMEOUT;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if std::time::Instant::now() >= deadline => {
+                timed_out = true;
+                let _ = child.kill();
+                match child.wait() {
+                    Ok(status) => break status,
+                    Err(err) => return Err(format!("`{label}` could not be waited on: {err}")),
+                }
+            }
+            Ok(None) => std::thread::sleep(CLI_POLL_INTERVAL),
+            Err(err) => return Err(format!("`{label}` could not be waited on: {err}")),
         }
     };
 
-    if !output.status.success() {
-        let detail = String::from_utf8_lossy(&output.stderr);
+    let stdout_bytes = stdout.join().unwrap_or_default();
+    let stderr_bytes = stderr.join().unwrap_or_default();
+
+    if timed_out {
+        return Err(format!(
+            "`{label}` timed out after {}s and was stopped",
+            CLI_TIMEOUT.as_secs()
+        ));
+    }
+    if !status.success() {
+        let detail = String::from_utf8_lossy(&stderr_bytes);
         let detail = detail.trim();
         let detail = if detail.is_empty() {
-            format!("exit code {}", output.status.code().unwrap_or(-1))
+            format!("exit code {}", status.code().unwrap_or(-1))
         } else {
             detail.to_string()
         };
-        return Err(format!("`{executable}` failed: {detail}"));
+        return Err(format!("`{label}` failed: {detail}"));
     }
-    let cleaned = sanitize(&String::from_utf8_lossy(&output.stdout));
+    let cleaned = sanitize(&String::from_utf8_lossy(&stdout_bytes));
     if cleaned.is_empty() {
-        return Err(format!("`{executable}` returned an empty message"));
+        return Err(format!("`{label}` returned an empty message"));
     }
     Ok(cleaned)
+}
+
+/// Drain one child pipe on its own thread — a pipe the parent never reads
+/// fills up and blocks the child forever.
+#[cfg(not(test))]
+fn spawn_pipe_reader(
+    pipe: Option<impl std::io::Read + Send + 'static>,
+) -> std::thread::JoinHandle<Vec<u8>> {
+    std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        if let Some(mut pipe) = pipe {
+            let _ = pipe.read_to_end(&mut buf);
+        }
+        buf
+    })
 }
 
 /// Strip the wrapping an LLM tends to add: markdown code fences and paired
@@ -900,6 +985,32 @@ mod tests {
             openai.endpoint_url(),
             "https://api.openai.com/v1/chat/completions"
         );
+    }
+
+    #[test]
+    fn effective_model_strips_the_context_window_tag() {
+        // Claude Code's 1M-context aliases (`sonnet[1m]`) and relay model
+        // lists (`gemini-2.5-pro[1M]`) carry the bracket tag; the request
+        // must send the bare id either way.
+        let mut openai = settings(AiProvider::OpenAiCompatible);
+        openai.model = "gemini-2.5-pro[1M]".to_string();
+        assert_eq!(openai.effective_model(), "gemini-2.5-pro");
+        openai.model = "sonnet[1m]".to_string();
+        assert_eq!(openai.effective_model(), "sonnet");
+        openai.model = "gpt-4o[128k]".to_string();
+        assert_eq!(openai.effective_model(), "gpt-4o");
+        // A bracketed tail that is not a context size is part of the name.
+        openai.model = "model[preview]".to_string();
+        assert_eq!(openai.effective_model(), "model[preview]");
+    }
+
+    #[test]
+    fn requests_send_the_untagged_model_id() {
+        let mut anthropic = settings(AiProvider::Anthropic);
+        anthropic.model = "claude-sonnet-4-6[1m]".to_string();
+        let request = build_request(&anthropic, "the diff", &[]);
+        let body: serde_json::Value = serde_json::from_str(&request.body).unwrap();
+        assert_eq!(body["model"], "claude-sonnet-4-6");
     }
 
     #[test]
