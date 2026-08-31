@@ -804,10 +804,6 @@ async fn generate_from_source(
     cli_prompt: String,
     http_request: impl FnOnce(&AiCommitSettings) -> AiCommitRequest,
 ) -> Result<String, String> {
-    use crate::ai_commit_sources::{
-        AiSource, EnvAccess, build_cli_args, cli_spec, custom_cli_spec, resolve_http_settings,
-    };
-
     let source = settings.source;
     let result = generate_from_source_inner(settings, cli_prompt, http_request).await;
     match &result {

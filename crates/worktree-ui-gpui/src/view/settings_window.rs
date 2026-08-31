@@ -1126,10 +1126,11 @@ impl SettingsWindowView {
                 ),
                 _ => (String::new(), String::new()),
             };
-        // Like the avatar source, the AI settings are a process global the ✨
-        // button reads; the window seeds itself from the session-loaded
-        // current value.
-        crate::ai_commit::init_from_session(&ui_session);
+        // The AI settings are a process global the ✨ button reads; the window
+        // drafts from that current value. Construction never installs the
+        // global — app startup and the settings save own installation — so
+        // every test that opens this window stays side-effect free instead of
+        // clobbering a parallel generation test's arranged settings.
         let ai_commit_current = crate::ai_commit::current();
         let ai_commit_source = ai_commit_current.source;
         let ai_commit_provider = ai_commit_current.provider;
@@ -11075,16 +11076,22 @@ mod tests {
         let _visual_guard = lock_visual_test();
         // `ai_commit::current()` is a process global; serialize against the
         // panels' ✨ generation tests and restore the default on exit.
-        struct RestoreAiSettings;
+        struct RestoreAiSettings {
+            _lock: std::sync::MutexGuard<'static, ()>,
+        }
         impl Drop for RestoreAiSettings {
             fn drop(&mut self) {
+                // Still holding `_lock` (fields drop after `drop` returns), so
+                // the restore stays ordered against every other test's setup —
+                // an unlocked restore here could clobber a parallel
+                // generation test's configured settings mid-flight.
                 crate::ai_commit::set_current(crate::ai_commit::AiCommitSettings::default());
             }
         }
         let _restore = {
-            let _lock = crate::ai_commit::lock_test_settings();
+            let lock = crate::ai_commit::lock_test_settings();
             crate::ai_commit::set_current(crate::ai_commit::AiCommitSettings::default());
-            RestoreAiSettings
+            RestoreAiSettings { _lock: lock }
         };
 
         let (store, events) = AppStore::new(std::sync::Arc::new(TestBackend));
@@ -11167,16 +11174,22 @@ mod tests {
     fn ai_commit_model_list_fetch_and_pick(cx: &mut gpui::TestAppContext) {
         let _visual_guard = lock_visual_test();
         // Serialize against the other tests that touch the process global.
-        struct RestoreAiSettings;
+        struct RestoreAiSettings {
+            _lock: std::sync::MutexGuard<'static, ()>,
+        }
         impl Drop for RestoreAiSettings {
             fn drop(&mut self) {
+                // Still holding `_lock` (fields drop after `drop` returns), so
+                // the restore stays ordered against every other test's setup —
+                // an unlocked restore here could clobber a parallel
+                // generation test's configured settings mid-flight.
                 crate::ai_commit::set_current(crate::ai_commit::AiCommitSettings::default());
             }
         }
         let _restore = {
-            let _lock = crate::ai_commit::lock_test_settings();
+            let lock = crate::ai_commit::lock_test_settings();
             crate::ai_commit::set_current(crate::ai_commit::AiCommitSettings::default());
-            RestoreAiSettings
+            RestoreAiSettings { _lock: lock }
         };
 
         let (store, events) = AppStore::new(std::sync::Arc::new(TestBackend));
@@ -11269,16 +11282,22 @@ mod tests {
         let _visual_guard = lock_visual_test();
         // `ai_commit::current()` is a process global; serialize against the
         // other AI settings tests and restore the default on exit.
-        struct RestoreAiSettings;
+        struct RestoreAiSettings {
+            _lock: std::sync::MutexGuard<'static, ()>,
+        }
         impl Drop for RestoreAiSettings {
             fn drop(&mut self) {
+                // Still holding `_lock` (fields drop after `drop` returns), so
+                // the restore stays ordered against every other test's setup —
+                // an unlocked restore here could clobber a parallel
+                // generation test's configured settings mid-flight.
                 crate::ai_commit::set_current(crate::ai_commit::AiCommitSettings::default());
             }
         }
         let _restore = {
-            let _lock = crate::ai_commit::lock_test_settings();
+            let lock = crate::ai_commit::lock_test_settings();
             crate::ai_commit::set_current(crate::ai_commit::AiCommitSettings::default());
-            RestoreAiSettings
+            RestoreAiSettings { _lock: lock }
         };
 
         let (store, events) = AppStore::new(std::sync::Arc::new(TestBackend));
