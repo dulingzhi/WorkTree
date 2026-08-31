@@ -1058,6 +1058,19 @@ impl PickerPromptItem {
         self
     }
 
+    /// Appends text the filter should match but the row never shows — the full
+    /// hash behind a short-sha row, so a pasted prefix longer than the short
+    /// sha still finds the commit. Hits inside the hidden text own no part, so
+    /// they highlight nothing; visible parts keep highlighting their own hits.
+    /// Stays out of `display_text` on purpose, keeping the sort key what the
+    /// eye reads.
+    pub fn hidden_search_text(mut self, text: impl Into<SharedString>) -> Self {
+        let mut match_text = self.match_text.to_string();
+        match_text.push_str(text.into().as_ref());
+        self.match_text = match_text.into();
+        self
+    }
+
     pub fn icon(mut self, icon: &'static str) -> Self {
         self.icon = Some(icon);
         self
@@ -1933,6 +1946,49 @@ mod tests {
         assert_eq!(
             item.parts()[2].local_match_range(Some(&range)),
             Some(14..18)
+        );
+    }
+
+    #[test]
+    fn hidden_search_text_matches_queries_the_row_never_shows() {
+        // A commit row shows only a 7-character short sha; the full hash
+        // rides along as hidden match text so a pasted longer prefix still
+        // finds the row.
+        let item = PickerPromptItem::from_parts([PickerPromptItemPart::new(
+            "fix: the widget",
+        )
+        .profile(TextTruncationProfile::End)])
+        .secondary_parts([
+            PickerPromptItemPart::new("Test User"),
+            PickerPromptItemPart::separator("  •  "),
+            PickerPromptItemPart::new("abc1234").flexible(false).tooltip(false),
+        ])
+        .hidden_search_text("abc1234def567890abcdef1234567890abcdef12");
+
+        // The visible short sha still matches and highlights, as before.
+        let short = match_items(std::slice::from_ref(&item), &[0], "abc1234");
+        assert_eq!(short.len(), 1);
+        let short_range = short[0].range.clone().expect("visible hit highlights");
+        assert_eq!(
+            item.secondary()[2].local_match_range(Some(&short_range)),
+            Some(0..7)
+        );
+
+        // The full hash matches too — the hit owns no part, so no visible
+        // range highlights, and the hidden text stays out of the sort key.
+        let full = match_items(std::slice::from_ref(&item), &[0], "abc1234def56789");
+        assert_eq!(full.len(), 1, "a pasted prefix past the short sha finds the row");
+        let full_range = full[0].range.clone().expect("hidden hit records its range");
+        assert!(
+            item.parts()
+                .iter()
+                .chain(item.secondary())
+                .all(|part| part.local_match_range(Some(&full_range)).is_none()),
+            "the hidden hit highlights nothing"
+        );
+        assert!(
+            !item.display_text().contains("abc1234"),
+            "hidden text stays out of display_text, the sort key"
         );
     }
 

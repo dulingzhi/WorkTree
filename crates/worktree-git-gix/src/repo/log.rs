@@ -2074,12 +2074,18 @@ impl GixRepo {
         Ok(messages)
     }
 
+    /// The `--pretty` record shape every search pass formats its hits with.
+    const SEARCH_PRETTY_FORMAT: &str = "%H%x1f%P%x1f%an%x1f%ct%x1f%s%x1e";
+
     /// Cross-history commit search, mirroring the C# CommitSearchService's
     /// remote tier: two `git log --all` passes — message (`--grep`) first, then
     /// author — both case-insensitive, merged newest-first per pass with
     /// message matches ranked ahead of author-only ones, capped at `limit`.
-    /// The needle stays a git regex (`--regexp-ignore-case` only lowers case),
-    /// same as the C# service it replaces.
+    /// A hex-shaped query (git's minimum abbreviation length or more) adds a
+    /// hash pass ahead of both, resolving the query as an object-id prefix so
+    /// a pasted hash finds its commit. The needle stays a git regex
+    /// (`--regexp-ignore-case` only lowers case), same as the C# service it
+    /// replaces.
     pub(super) fn search_commits_impl(&self, query: &str, limit: usize) -> Result<Vec<Commit>> {
         let query = query.trim();
         if query.is_empty() || limit == 0 {
@@ -2088,6 +2094,29 @@ impl GixRepo {
 
         let mut seen = FxHashSet::default();
         let mut commits = Vec::new();
+
+        // Hash pass: a hex-shaped query names an object, and `git log`
+        // resolves it directly — full hashes and unambiguous prefixes alike,
+        // even when no ref reaches the commit. Failures stay quiet
+        // ("deadbeef" is a word too): an unknown or ambiguous prefix has
+        // nothing to add, and the grep passes below still run.
+        if query.len() >= 4 && query.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            let mut cmd = self.git_workdir_cmd();
+            cmd.arg("log")
+                .arg("-n1")
+                .arg(format!("--pretty=format:{}", Self::SEARCH_PRETTY_FORMAT))
+                .arg(query);
+            if let Ok(page) = run_git_parsed_stdout(cmd, "git log hash lookup", false, |stdout| {
+                parse_git_log_pretty_records_from_reader(stdout)
+            }) {
+                for commit in page.commits {
+                    if seen.insert(commit.id.clone()) {
+                        commits.push(commit);
+                    }
+                }
+            }
+        }
+
         for filter in ["--grep", "--author"] {
             if commits.len() >= limit {
                 break;
@@ -2098,7 +2127,7 @@ impl GixRepo {
                 .arg(format!("-n{limit}"))
                 .arg("--regexp-ignore-case")
                 .arg(format!("{filter}={query}"))
-                .arg("--pretty=format:%H%x1f%P%x1f%an%x1f%ct%x1f%s%x1e");
+                .arg(format!("--pretty=format:{}", Self::SEARCH_PRETTY_FORMAT));
 
             let page = run_git_parsed_stdout(cmd, "git log search", false, |stdout| {
                 parse_git_log_pretty_records_from_reader(stdout)
@@ -2602,6 +2631,57 @@ mod tests {
                 .expect("blank query")
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn search_commits_resolves_hex_queries_as_object_id_prefixes() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let workdir = tmp.path();
+        init_test_repo(workdir);
+
+        commit_file(workdir, "a.txt", "one\n", "fix: the widget");
+        commit_file(workdir, "b.txt", "two\n", "add feature");
+        let feature_hash = git_stdout(workdir, &["rev-parse", "HEAD"]);
+        let feature_hash = feature_hash.trim();
+        // A third commit whose *message* quotes the second commit's
+        // 8-character prefix: the hash pass's hit must rank ahead of this
+        // message match.
+        commit_file(
+            workdir,
+            "c.txt",
+            "three\n",
+            &format!("discuss {}", &feature_hash[..8]),
+        );
+
+        let repo = open_repo(workdir);
+
+        // A pasted 8-character prefix resolves the commit it names, ranked
+        // ahead of the message that merely quotes it.
+        let hits = repo
+            .search_commits_impl(&feature_hash[..8], 10)
+            .expect("search by hash prefix");
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].id.as_ref(), feature_hash);
+        assert_eq!(hits[0].summary.as_ref(), "add feature");
+        assert_eq!(
+            hits[1].summary.as_ref(),
+            format!("discuss {}", &feature_hash[..8])
+        );
+
+        // The full hash resolves the same commit, unambiguously.
+        let hits = repo
+            .search_commits_impl(feature_hash, 10)
+            .expect("search by full hash");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].id.as_ref(), feature_hash);
+
+        // A hex-shaped query that names no object falls through to the
+        // message and author passes instead of failing — hex-shaped words
+        // are common.
+        let hits = repo
+            .search_commits_impl("00000000", 10)
+            .expect("hex query naming no object");
+        assert!(hits.is_empty());
     }
 
     #[test]

@@ -32,7 +32,9 @@ fn repo_for(this: &PopoverHost, repo_id: RepoId) -> Option<&RepoState> {
 /// One commit row, shared by both tiers. The summary leads; author, relative
 /// time and short sha sit on the detail line. Author and sha stay searchable
 /// so typing a name or a prefix finds the row — the local tier's whole match
-/// semantics.
+/// semantics. The full hash rides along as hidden match text: a prefix pasted
+/// from elsewhere (GitHub abbreviates to 8+) runs longer than the short sha's
+/// 7 characters, and only the full hash keeps those rows findable.
 fn commit_row(commit: &Commit, now: std::time::SystemTime) -> components::PickerPromptItem {
     let id = commit.id.as_ref();
     let short = &id[..id.len().min(7)];
@@ -59,6 +61,7 @@ fn commit_row(commit: &Commit, now: std::time::SystemTime) -> components::Picker
             .flexible(false)
             .tooltip(false),
     ])
+    .hidden_search_text(id.to_string())
 }
 
 /// The trailing action row: prefix plus the query, like the checkout picker's
@@ -281,4 +284,37 @@ pub(super) fn panel(
         );
 
     components::context_menu(theme, menu).w(width.preferred_px(ui_scale))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn synthetic_commit(hash: &str) -> Commit {
+        Commit {
+            id: CommitId(hash.into()),
+            parent_ids: Vec::new().into(),
+            summary: "fix: the widget".into(),
+            author: "Test User".into(),
+            time: std::time::UNIX_EPOCH,
+            signed: false,
+        }
+    }
+
+    #[test]
+    fn commit_row_matches_a_hash_prefix_longer_than_the_short_sha() {
+        // The row shows only the short sha's 7 characters; a hash pasted from
+        // elsewhere (GitHub abbreviates to 8+) runs longer, so the row has to
+        // carry the full hash as hidden match text to stay findable.
+        let commit = synthetic_commit("0123456789abcdef0123456789abcdef01234567");
+        let row = commit_row(&commit, std::time::UNIX_EPOCH);
+
+        let layout =
+            components::picker_prompt_layout(std::slice::from_ref(&row), "0123456789");
+        assert_eq!(
+            layout.item_indices.len(),
+            1,
+            "a 10-character prefix of the full hash still finds the row"
+        );
+    }
 }
