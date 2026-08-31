@@ -12,9 +12,6 @@ fn combined_test_ranges(text: &str) -> Vec<Range<usize>> {
 
 // ---- Combined-injection scoping -------------------------------------------
 
-/// A template dense enough to exercise the per-window ceilings, `rows` lines of
-/// `cells` cells each wrapped in a block so the body is one big text run.
-
 #[test]
 fn fenced_code_info_aliases_are_supported() {
     assert_eq!(
@@ -383,24 +380,6 @@ fn combined_injection_tokens_do_not_bleed_into_the_gaps() {
         !tokens[1].is_empty(),
         "clipping should not have removed the genuine <li> tokens as well"
     );
-}
-
-// ---- Combined-injection scoping -------------------------------------------
-
-/// A template dense enough to exercise the per-window ceilings, `rows` lines of
-/// `cells` cells each wrapped in a block so the body is one big text run.
-fn dense_jinja_table(rows: usize, cells: usize) -> String {
-    let mut lines = vec!["{% block body %}".to_string()];
-    for row in 0..rows {
-        let mut line = String::from("<tr>");
-        for cell in 0..cells {
-            line.push_str(&format!("<td>{{{{ r{row}.c{cell} }}}}</td>"));
-        }
-        line.push_str("</tr>");
-        lines.push(line);
-    }
-    lines.push("{% endblock %}".to_string());
-    lines.join("\n")
 }
 
 /// An 8-column table row used to produce 513 ranges in one 64-line chunk, one

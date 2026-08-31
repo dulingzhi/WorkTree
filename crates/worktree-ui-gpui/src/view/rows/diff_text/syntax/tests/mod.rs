@@ -107,10 +107,6 @@ fn prepare_vue_document(lines: &[&str]) -> PreparedSyntaxDocument {
 /// Kinds of every token overlapping `fragment` within `line_ix`. Token ranges
 /// on a prepared document are line-relative, including tokens remapped back
 /// from an injection, so this works across the injection boundary.
-
-/// Kinds of every token overlapping `fragment` within `line_ix`. Token ranges
-/// on a prepared document are line-relative, including tokens remapped back
-/// from an injection, so this works across the injection boundary.
 fn token_kinds_for_line_fragment(
     doc: PreparedSyntaxDocument,
     line_ix: usize,
@@ -145,11 +141,6 @@ fn heuristic_string_spans(text: &str, language: DiffSyntaxLanguage) -> Vec<&str>
 ///
 /// Shared rather than redefined per test: the three copies this replaced drifted
 /// apart on whether `KeywordControl` counted.
-
-/// The keyword and keyword-control spans a line yields on the heuristic path.
-///
-/// Shared rather than redefined per test: the three copies this replaced drifted
-/// apart on whether `KeywordControl` counted.
 fn heuristic_keywords(text: &str, language: DiffSyntaxLanguage) -> Vec<&str> {
     syntax_tokens_for_line(text, language, DiffSyntaxMode::HeuristicOnly)
         .iter()
@@ -162,12 +153,6 @@ fn heuristic_keywords(text: &str, language: DiffSyntaxLanguage) -> Vec<&str> {
         .map(|token| &text[token.range.clone()])
         .collect()
 }
-
-/// A query's rule lines, with blanks and `;` comments dropped.
-///
-/// Used by the three `..._embeds_the_..._base_verbatim` tripwires. They compare
-/// vendored copies against their upstream, so all three have to strip comments
-/// the same way or the comparison means different things in each.
 
 /// A query's rule lines, with blanks and `;` comments dropped.
 ///

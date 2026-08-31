@@ -536,48 +536,6 @@ fn single_line_syntax_cache_isolated_by_mode_for_xml_markup() {
 
 // ---- Heuristic fallback: Nix and Jinja ------------------------------------
 
-fn heuristic_tokens(text: &str, language: DiffSyntaxLanguage) -> Vec<SyntaxToken> {
-    syntax_tokens_for_line(text, language, DiffSyntaxMode::HeuristicOnly).to_vec()
-}
-
-fn heuristic_string_spans(text: &str, language: DiffSyntaxLanguage) -> Vec<&str> {
-    heuristic_tokens(text, language)
-        .into_iter()
-        .filter(|token| token.kind == SyntaxTokenKind::String)
-        .map(|token| &text[token.range])
-        .collect()
-}
-
-/// The keyword and keyword-control spans a line yields on the heuristic path.
-///
-/// Shared rather than redefined per test: the three copies this replaced drifted
-/// apart on whether `KeywordControl` counted.
-fn heuristic_keywords(text: &str, language: DiffSyntaxLanguage) -> Vec<&str> {
-    syntax_tokens_for_line(text, language, DiffSyntaxMode::HeuristicOnly)
-        .iter()
-        .filter(|token| {
-            matches!(
-                token.kind,
-                SyntaxTokenKind::Keyword | SyntaxTokenKind::KeywordControl
-            )
-        })
-        .map(|token| &text[token.range.clone()])
-        .collect()
-}
-
-/// A query's rule lines, with blanks and `;` comments dropped.
-///
-/// Used by the three `..._embeds_the_..._base_verbatim` tripwires. They compare
-/// vendored copies against their upstream, so all three have to strip comments
-/// the same way or the comparison means different things in each.
-fn query_rule_lines(query: &str) -> Vec<&str> {
-    query
-        .lines()
-        .map(str::trim_end)
-        .filter(|line| !line.is_empty() && !line.trim_start().starts_with(';'))
-        .collect()
-}
-
 /// Treating `'` as a quote painted the rest of the line as a string from the
 /// tick in `foldl'` onward. HeuristicOnly is a production path for large diffs,
 /// not just a fallback.
