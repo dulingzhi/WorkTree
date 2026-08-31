@@ -433,6 +433,12 @@ impl SidebarPaneView {
         // mid-list header, none for row zero so the first section keeps its
         // flush top against the list's inset.
         let header_lead = |ix: usize| if ix == 0 { px(0.0) } else { section_gap };
+        // The band a header's title has to fit in: the row is a fixed height
+        // (the uniform list measures row zero for every slot) and the gap is
+        // padding inside it, so the label's line box must stay within what is
+        // left — text_sm's default box (~22.5px) is taller and bleeds the
+        // title's descenders into the row below.
+        let header_label_h = section_header_h - section_gap;
 
         let Some(repo_id) = this.active_repo_id() else {
             return Vec::new();
@@ -597,6 +603,7 @@ impl SidebarPaneView {
                                 .flex_1()
                                 .min_w(px(0.0))
                                 .text_sm()
+                                .line_height(header_label_h)
                                 .line_clamp(1)
                                 .whitespace_nowrap()
                                 .font_weight(FontWeight::BOLD)
@@ -677,6 +684,7 @@ impl SidebarPaneView {
                                 .flex_1()
                                 .min_w(px(0.0))
                                 .text_sm()
+                                .line_height(header_label_h)
                                 .line_clamp(1)
                                 .whitespace_nowrap()
                                 .font_weight(FontWeight::BOLD)
@@ -740,6 +748,7 @@ impl SidebarPaneView {
                                 .flex_1()
                                 .min_w(px(0.0))
                                 .text_sm()
+                                .line_height(header_label_h)
                                 .line_clamp(1)
                                 .whitespace_nowrap()
                                 .font_weight(FontWeight::BOLD)
@@ -801,6 +810,7 @@ impl SidebarPaneView {
                                 .flex_1()
                                 .min_w(px(0.0))
                                 .text_sm()
+                                .line_height(header_label_h)
                                 .line_clamp(1)
                                 .whitespace_nowrap()
                                 .font_weight(FontWeight::BOLD)
@@ -965,6 +975,7 @@ impl SidebarPaneView {
                                 .text_sm()
                                 .line_clamp(1)
                                 .whitespace_nowrap()
+                                .line_height(header_label_h)
                                 .font_weight(FontWeight::BOLD)
                                 .text_color(theme.colors.foreground.primary)
                                 .child(crate::i18n::tr_en("Tags")),
@@ -1134,6 +1145,7 @@ impl SidebarPaneView {
                                 .text_sm()
                                 .line_clamp(1)
                                 .whitespace_nowrap()
+                                .line_height(header_label_h)
                                 .font_weight(FontWeight::BOLD)
                                 .text_color(theme.colors.foreground.primary)
                                 .child(crate::i18n::tr_en("Pull Requests")),
@@ -1437,6 +1449,7 @@ impl SidebarPaneView {
                                 .text_sm()
                                 .line_clamp(1)
                                 .whitespace_nowrap()
+                                .line_height(header_label_h)
                                 .font_weight(FontWeight::BOLD)
                                 .text_color(theme.colors.foreground.primary)
                                 .child(crate::i18n::tr_en("Worktrees")),
@@ -1718,6 +1731,7 @@ impl SidebarPaneView {
                                 .text_sm()
                                 .line_clamp(1)
                                 .whitespace_nowrap()
+                                .line_height(header_label_h)
                                 .font_weight(FontWeight::BOLD)
                                 .text_color(theme.colors.foreground.primary)
                                 .child(crate::i18n::tr_en("Submodules")),
@@ -2006,6 +2020,7 @@ impl SidebarPaneView {
                         .gap(scaled_px(BRANCH_TREE_GAP_PX))
                         .interactive_row(row_style, row_state)
                         .text_sm()
+                        .line_height(header_label_h)
                         .font_weight(FontWeight::BOLD)
                         .text_color(remote_color)
                         .child(tree_toggle_slot(Some(collapsed)))
@@ -4927,9 +4942,7 @@ mod tests {
         );
         // And the label actually sits the gap below the header's top edge —
         // the divider stays flush with the row above, the blank follows it.
-        // The label's line box (22.5px here) is taller than the content area
-        // left under the padding, so centered it may overshoot into the gap by
-        // its leading; without the padding it would sit ~3px from the top.
+        // Without the padding the label would sit ~3px from the top.
         let label_offset = worktrees_label.origin.y - worktrees_header.origin.y;
         assert!(
             label_offset >= section_gap - px(3.0) && label_offset <= section_gap + px(3.0),
@@ -4937,6 +4950,19 @@ mod tests {
              (label height {:?}, header height {:?})",
             worktrees_label.size.height,
             worktrees_header.size.height
+        );
+        // The label also fits its header row entirely: the section gap is
+        // padding inside the fixed-height row (the uniform list's slot), so a
+        // default text_sm line box (~22.5px) taller than the band the gap
+        // leaves (~18px) bleeds the title's descenders into the row below.
+        assert!(
+            worktrees_label.origin.y >= worktrees_header.origin.y
+                && worktrees_label.bottom() <= worktrees_header.bottom() + px(0.5),
+            "worktrees label should fit inside its header row: label y {:?}..{:?} vs header y {:?}..{:?}",
+            worktrees_label.origin.y,
+            worktrees_label.bottom(),
+            worktrees_header.origin.y,
+            worktrees_header.bottom()
         );
 
         // The compact tier reads through the same path: a tighter gap above
@@ -4980,6 +5006,15 @@ mod tests {
             label_offset >= compact_gap - px(3.0) && label_offset <= compact_gap + px(3.0),
             "compact worktrees label should sit ~{compact_gap:?} below its header top, \
              got {label_offset:?}"
+        );
+        assert!(
+            worktrees_label.origin.y >= worktrees_header.origin.y
+                && worktrees_label.bottom() <= worktrees_header.bottom() + px(0.5),
+            "compact worktrees label should fit inside its header row: label y {:?}..{:?} vs header y {:?}..{:?}",
+            worktrees_label.origin.y,
+            worktrees_label.bottom(),
+            worktrees_header.origin.y,
+            worktrees_header.bottom()
         );
     }
 }

@@ -245,8 +245,100 @@ pub(super) fn format_datetime(
     buf
 }
 
+/// Calendar math shared by the datetime and date-only formatters.
+
+fn unix_seconds(t: std::time::SystemTime) -> i64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    match t.duration_since(UNIX_EPOCH) {
+        Ok(d) => d.as_secs() as i64,
+        Err(e) => -(e.duration().as_secs() as i64),
+    }
+}
+
+fn floor_div(a: i64, b: i64) -> i64 {
+    let mut q = a / b;
+    let r = a % b;
+    if (r != 0) && ((r < 0) != (b < 0)) {
+        q -= 1;
+    }
+    q
+}
+
+/// Howard Hinnant's `civil_from_days` algorithm.
+fn civil_from_days(days_since_epoch: i64) -> (i32, u32, u32) {
+    let z = days_since_epoch.saturating_add(719_468);
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097; // [0, 146096]
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365; // [0, 399]
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
+    let mp = (5 * doy + 2) / 153; // [0, 11]
+    let d = doy - (153 * mp + 2) / 5 + 1; // [1, 31]
+    let m = mp + if mp < 10 { 3 } else { -9 }; // [1, 12]
+    let y = y + i64::from(m <= 2);
+    (y as i32, m as u32, d as u32)
+}
+
+/// Two-digit ASCII lookup table: DEC_PAIR[n] = "00".."99" for n in 0..100.
+static DEC_PAIR: [[u8; 2]; 100] = {
+    let mut table = [[0u8; 2]; 100];
+    let mut i = 0usize;
+    while i < 100 {
+        table[i][0] = b'0' + (i / 10) as u8;
+        table[i][1] = b'0' + (i % 10) as u8;
+        i += 1;
+    }
+    table
+};
+
+#[inline(always)]
+fn write2(arr: &mut [u8], pos: usize, val: u32) {
+    let pair = DEC_PAIR[(val % 100) as usize];
+    arr[pos] = pair[0];
+    arr[pos + 1] = pair[1];
+}
+
+#[inline(always)]
+fn write4_year(arr: &mut [u8], pos: usize, y: i32) {
+    // The fixed 4-digit field can only represent years 0..=9999; clamp so a
+    // corrupt or extreme timestamp shows a boundary value rather than
+    // silently dropping the sign or high digits (e.g. 12025 -> "2025",
+    // -44 -> "0044").
+    let y = y.clamp(0, 9999) as u32;
+    let hi = y / 100;
+    let lo = y % 100;
+    let p1 = DEC_PAIR[hi as usize];
+    let p2 = DEC_PAIR[lo as usize];
+    arr[pos] = p1[0];
+    arr[pos + 1] = p1[1];
+    arr[pos + 2] = p2[0];
+    arr[pos + 3] = p2[1];
+}
+
+/// Date-only format for text that names a commit ("2024-06-30"). Applies the
+/// timezone before taking the date, so the day matches what [`format_datetime`]
+/// shows for the same instant — a UTC-midnight commit reads as the previous
+/// day anywhere west of UTC.
+pub(super) fn format_date_ymd(time: std::time::SystemTime, timezone: Timezone) -> String {
+    let unix = unix_seconds(time);
+    let offset = timezone.offset_seconds_at(unix);
+    let days = floor_div(unix.saturating_add(offset), 86_400);
+    let (y, m, d) = civil_from_days(days);
+
+    // Same fixed-buffer trick as `format_datetime_into`, 10 bytes wide.
+    let mut arr = [0u8; 10]; // "YYYY-MM-DD"
+    write4_year(&mut arr, 0, y);
+    arr[4] = b'-';
+    write2(&mut arr, 5, m);
+    arr[7] = b'-';
+    write2(&mut arr, 8, d);
+    // SAFETY: all bytes are ASCII digits or '-'.
+    String::from(std::str::from_utf8(&arr).unwrap())
+}
+
 /// Like `format_datetime` but writes into a caller-owned buffer,
-/// allowing the allocation to be reused across many calls.
+/// allowing the allocation to be reused across many calls. Shares the
+/// calendar math below with [`format_date_ymd`].
 pub(super) fn format_datetime_into(
     buf: &mut String,
     time: std::time::SystemTime,
@@ -254,75 +346,6 @@ pub(super) fn format_datetime_into(
     timezone: Timezone,
     show_timezone: bool,
 ) {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn unix_seconds(t: SystemTime) -> i64 {
-        match t.duration_since(UNIX_EPOCH) {
-            Ok(d) => d.as_secs() as i64,
-            Err(e) => -(e.duration().as_secs() as i64),
-        }
-    }
-
-    fn floor_div(a: i64, b: i64) -> i64 {
-        let mut q = a / b;
-        let r = a % b;
-        if (r != 0) && ((r < 0) != (b < 0)) {
-            q -= 1;
-        }
-        q
-    }
-
-    // Howard Hinnant's `civil_from_days` algorithm.
-    fn civil_from_days(days_since_epoch: i64) -> (i32, u32, u32) {
-        let z = days_since_epoch.saturating_add(719_468);
-        let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-        let doe = z - era * 146_097; // [0, 146096]
-        let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365; // [0, 399]
-        let y = yoe + era * 400;
-        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
-        let mp = (5 * doy + 2) / 153; // [0, 11]
-        let d = doy - (153 * mp + 2) / 5 + 1; // [1, 31]
-        let m = mp + if mp < 10 { 3 } else { -9 }; // [1, 12]
-        let y = y + i64::from(m <= 2);
-        (y as i32, m as u32, d as u32)
-    }
-
-    /// Two-digit ASCII lookup table: DEC_PAIR[n] = "00".."99" for n in 0..100.
-    static DEC_PAIR: [[u8; 2]; 100] = {
-        let mut table = [[0u8; 2]; 100];
-        let mut i = 0usize;
-        while i < 100 {
-            table[i][0] = b'0' + (i / 10) as u8;
-            table[i][1] = b'0' + (i % 10) as u8;
-            i += 1;
-        }
-        table
-    };
-
-    #[inline(always)]
-    fn write2(arr: &mut [u8; 19], pos: usize, val: u32) {
-        let pair = DEC_PAIR[(val % 100) as usize];
-        arr[pos] = pair[0];
-        arr[pos + 1] = pair[1];
-    }
-
-    #[inline(always)]
-    fn write4_year(arr: &mut [u8; 19], pos: usize, y: i32) {
-        // The fixed 4-digit field can only represent years 0..=9999; clamp so a
-        // corrupt or extreme timestamp shows a boundary value rather than
-        // silently dropping the sign or high digits (e.g. 12025 -> "2025",
-        // -44 -> "0044").
-        let y = y.clamp(0, 9999) as u32;
-        let hi = y / 100;
-        let lo = y % 100;
-        let p1 = DEC_PAIR[hi as usize];
-        let p2 = DEC_PAIR[lo as usize];
-        arr[pos] = p1[0];
-        arr[pos + 1] = p1[1];
-        arr[pos + 2] = p2[0];
-        arr[pos + 3] = p2[1];
-    }
-
     buf.clear();
 
     let unix = unix_seconds(time);
@@ -543,6 +566,45 @@ mod tests {
         }
 
         assert_eq!(Timezone::from_key("fixed_not_a_number"), None);
+    }
+
+    #[test]
+    fn format_date_ymd_applies_the_timezone_before_taking_the_date() {
+        let before_epoch = UNIX_EPOCH - Duration::from_secs(1);
+
+        assert_eq!(format_date_ymd(UNIX_EPOCH, Timezone::Utc), "1970-01-01");
+        assert_eq!(
+            format_date_ymd(before_epoch, Timezone::Utc),
+            "1969-12-31",
+            "the second before the epoch is still the previous day in UTC"
+        );
+        assert_eq!(
+            format_date_ymd(before_epoch, Timezone::Fixed(2 * 3600)),
+            "1970-01-01",
+            "two hours east, that same second is already the next day"
+        );
+    }
+
+    #[test]
+    fn format_date_ymd_matches_the_date_half_of_the_datetime_formats() {
+        for &timezone in Timezone::all() {
+            for &(secs, label) in &[
+                (0i64, "the epoch"),
+                (1_700_000_000, "mid-november 2023"),
+                (-86_400 * 365 - 1, "before the epoch"),
+            ] {
+                let time = if secs >= 0 {
+                    UNIX_EPOCH + Duration::from_secs(secs as u64)
+                } else {
+                    UNIX_EPOCH - Duration::from_secs(secs.unsigned_abs())
+                };
+                assert_eq!(
+                    format_date_ymd(time, timezone),
+                    format_datetime(time, DateTimeFormat::YmdHms, timezone, false)[..10],
+                    "{label} in {timezone:?}"
+                );
+            }
+        }
     }
 
     #[test]

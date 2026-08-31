@@ -131,21 +131,35 @@ fn repo_commit_is_ancestor_of_head(repo: &RepoState, commit_id: &CommitId) -> bo
     false
 }
 
+/// The clipboard line behind "Copy commit info": date, author, summary —
+/// single-space separated, a plain line that reads the same pasted into a
+/// chat, a changelog, or a ticket.
+fn copy_commit_info_text(commit: &Commit, timezone: Timezone) -> String {
+    format!(
+        "{} {} {}",
+        crate::view::date_time::format_date_ymd(commit.time, timezone),
+        commit.author,
+        commit.summary
+    )
+}
+
 pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -> ContextMenuModel {
     let sha = commit_id.as_ref().to_string();
     let short: SharedString = sha.get(0..8).unwrap_or(&sha).to_string().into();
 
-    let commit_summary = this
+    // One lookup serves both the summary label and the copy-info entry: the
+    // right-clicked commit sits in the loaded log page, which carries the
+    // author and time both need.
+    let found_commit = this
         .active_repo()
         .and_then(|r| match &r.log {
-            Loadable::Ready(page) => page
-                .commits
-                .iter()
-                .find(|c| c.id == *commit_id)
-                .map(|c| format!("{} — {}", c.author, c.summary)),
+            Loadable::Ready(page) => page.commits.iter().find(|c| c.id == *commit_id),
             _ => None,
-        })
+        });
+    let commit_summary = found_commit
+        .map(|c| format!("{} — {}", c.author, c.summary))
         .unwrap_or_default();
+    let commit_info_text = found_commit.map(|c| copy_commit_info_text(c, this.timezone));
 
     let branch_names: Vec<String> = this
         .active_repo()
@@ -320,6 +334,17 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
             commit_id: commit_id.clone(),
         }),
     });
+    // "Copy commit info" needs the log page's author and time, so it appears
+    // alongside the permalink only when the commit was found above.
+    if let Some(text) = commit_info_text {
+        items.push(ContextMenuItem::Entry {
+            label: "Copy commit info".into(),
+            icon: Some("icons/copy.svg".into()),
+            shortcut: None,
+            disabled: false,
+            action: Box::new(ContextMenuAction::CopyText { text }),
+        });
+    }
     if let Some(permalink) = this
         .state
         .repos
@@ -736,5 +761,20 @@ mod tests {
             &repo,
             &CommitId("missing".into())
         ));
+    }
+
+    #[test]
+    fn copy_commit_info_text_formats_date_author_summary() {
+        // The clipboard line the "Copy commit info" entry produces: date,
+        // author, summary — single-space separated, so it reads the same
+        // pasted into a chat, a changelog, or a ticket. The date follows the
+        // app's timezone setting, so UTC midnight still lands on 1970-01-01
+        // even on a machine running behind UTC.
+        let c = commit("a", &[]);
+
+        assert_eq!(
+            copy_commit_info_text(&c, Timezone::Utc),
+            "1970-01-01 author summary"
+        );
     }
 }
