@@ -459,6 +459,29 @@ fn tree_id_for_commit(repo: &gix::Repository, commit_id: &gix::ObjectId) -> Resu
         .map_err(|e| Error::new(ErrorKind::Backend(format!("gix commit tree id: {e}"))))
 }
 
+/// A pathspec matching every path from the worktree root.
+///
+/// `tree_index_status()` builds its own pathspec when handed `None`, and that
+/// one silently limits the diff to the repository prefix — the process CWD
+/// relative to the worktree root at open time. An explicit `:(top)` pattern
+/// matches everything from the root regardless of that prefix, so staged
+/// reads stay whole no matter which directory the process was started in.
+fn tree_root_pathspec(repo: &gix::Repository) -> Result<gix::Pathspec<'_>> {
+    gix::Pathspec::new(
+        repo,
+        false,
+        [gix::bstr::BString::from(":(top)")],
+        true,
+        || -> std::result::Result<
+            gix::worktree::Stack,
+            Box<dyn std::error::Error + Send + Sync + 'static>,
+        > {
+            unreachable!("the root-level pattern never requires pathspec attributes")
+        },
+    )
+    .map_err(|e| Error::new(ErrorKind::Backend(format!("gix tree/index pathspec: {e}"))))
+}
+
 fn collect_staged_status_from_tree_index(
     repo: &gix::Repository,
     head_oid: &gix::ObjectId,
@@ -466,11 +489,12 @@ fn collect_staged_status_from_tree_index(
     let index = repo
         .index_or_empty()
         .map_err(|e| Error::new(ErrorKind::Backend(format!("gix index: {e}"))))?;
+    let mut pathspec = tree_root_pathspec(repo)?;
     let mut staged = Vec::new();
     repo.tree_index_status(
         head_oid,
         &index,
-        None,
+        Some(&mut pathspec),
         gix::status::tree_index::TrackRenames::AsConfigured,
         |change, _, _| {
             collect_tree_index_change(change, &mut staged)?;
@@ -488,11 +512,12 @@ fn collect_staged_index_paths_from_tree_index(
     let index = repo
         .index_or_empty()
         .map_err(|e| Error::new(ErrorKind::Backend(format!("gix index: {e}"))))?;
+    let mut pathspec = tree_root_pathspec(repo)?;
     let mut paths = Vec::new();
     repo.tree_index_status(
         head_tree_id,
         &index,
-        None,
+        Some(&mut pathspec),
         gix::status::tree_index::TrackRenames::AsConfigured,
         |change, _, _| {
             collect_tree_index_change_paths(change, &mut paths)?;
@@ -2616,5 +2641,156 @@ mod tests {
             vec![file_status("b.txt", FileStatusKind::Modified)],
             "the freshly unstaged path must answer as unstaged"
         );
+    }
+
+    /// Diagnostic harness against a REAL repository, opted into with
+    /// `WORKTREE_GIX_PROBE_REPO=<workdir>`: prints what gix itself sees on
+    /// both sides of the tree/index diff so a truncated staged read can be
+    /// attributed to the index side, the tree side, or the change walk.
+    #[test]
+    fn real_repo_tree_index_probe() {
+        let Some(workdir) = std::env::var_os("WORKTREE_GIX_PROBE_REPO").map(PathBuf::from) else {
+            eprintln!("skipping: WORKTREE_GIX_PROBE_REPO not set");
+            return;
+        };
+        let repo = crate::open::open_worktree_repo(&workdir).expect("open probe repo");
+        use gix::bstr::ByteSlice;
+        eprintln!("PROBE git_dir={}", repo.git_dir().display());
+        eprintln!(
+            "PROBE index_path={} (exists={})",
+            repo.index_path().display(),
+            repo.index_path().exists()
+        );
+        let head_oid = crate::repo::history::gix_head_id_or_none(&repo)
+            .expect("head lookup")
+            .expect("probe repo has a head");
+        eprintln!("PROBE gix head={head_oid}");
+        let head_tree = tree_id_for_commit(&repo, &head_oid).expect("head tree");
+        eprintln!("PROBE head_tree={head_tree}");
+
+        let index = repo.index_or_empty().expect("index_or_empty");
+        eprintln!("PROBE index entries={}", index.entries().len());
+        let probe_paths = [
+            "crates/worktree-git-gix/src/repo/status.rs",
+            "crates/worktree-ui-gpui/src/ai_commit.rs",
+            "crates/worktree-ui-gpui/src/view/settings_window.rs",
+            "crates/worktree-state/src/store/mod.rs",
+        ];
+        for path in probe_paths {
+            match index
+                .entries()
+                .iter()
+                .find(|entry| entry.path(&index).as_bytes() == path.as_bytes())
+            {
+                Some(entry) => eprintln!(
+                    "PROBE index[{path}] id={} stage={:?} flags={:?}",
+                    entry.id.to_hex(),
+                    entry.stage(),
+                    entry.flags
+                ),
+                None => eprintln!("PROBE index[{path}] MISSING"),
+            }
+        }
+
+        let run = |label: &str, track: gix::status::tree_index::TrackRenames| {
+            let mut emitted: Vec<String> = Vec::new();
+            let outcome = repo
+                .tree_index_status(&head_tree, &index, None, track, |change, _, _| {
+                    use gix::diff::index::ChangeRef;
+                    let line = match &change {
+                        ChangeRef::Addition { location, id, .. } => {
+                            format!(
+                                "Addition {} {}",
+                                String::from_utf8_lossy(location),
+                                id.to_hex()
+                            )
+                        }
+                        ChangeRef::Deletion { location, id, .. } => {
+                            format!(
+                                "Deletion {} {}",
+                                String::from_utf8_lossy(location),
+                                id.to_hex()
+                            )
+                        }
+                        ChangeRef::Modification {
+                            location,
+                            previous_id,
+                            id,
+                            ..
+                        } => format!(
+                            "Modification {} {} -> {}",
+                            String::from_utf8_lossy(location),
+                            previous_id.to_hex(),
+                            id.to_hex()
+                        ),
+                        ChangeRef::Rewrite {
+                            location,
+                            source_location,
+                            copy,
+                            ..
+                        } => format!(
+                            "Rewrite{} {} <- {}",
+                            if *copy { "(copy)" } else { "" },
+                            String::from_utf8_lossy(location),
+                            String::from_utf8_lossy(source_location)
+                        ),
+                    };
+                    emitted.push(line);
+                    Ok::<_, std::convert::Infallible>(std::ops::ControlFlow::Continue(()))
+                })
+                .expect("tree_index_status");
+            emitted.sort();
+            eprintln!("PROBE {label} emitted={}", emitted.len());
+            for line in &emitted {
+                eprintln!("PROBE {label} {line}");
+            }
+            let tree_index = &outcome.tree_index;
+            eprintln!(
+                "PROBE {label} tree_index entries={}",
+                tree_index.entries().len()
+            );
+            for path in probe_paths {
+                match tree_index
+                    .entries()
+                    .iter()
+                    .find(|entry| entry.path(tree_index).as_bytes() == path.as_bytes())
+                {
+                    Some(entry) => {
+                        eprintln!("PROBE {label} tree[{path}] id={}", entry.id.to_hex())
+                    }
+                    None => eprintln!("PROBE {label} tree[{path}] MISSING"),
+                }
+            }
+            if let Some(rewrite) = &outcome.rewrite {
+                eprintln!(
+                    "PROBE {label} rewrite checks={} skipped_rename={} skipped_copy={}",
+                    rewrite.num_similarity_checks,
+                    rewrite.num_similarity_checks_skipped_for_rename_tracking_due_to_limit,
+                    rewrite.num_similarity_checks_skipped_for_copy_tracking_due_to_limit
+                );
+            } else {
+                eprintln!("PROBE {label} rewrite=None");
+            }
+        };
+        run("disabled", gix::status::tree_index::TrackRenames::Disabled);
+        run(
+            "as-configured",
+            gix::status::tree_index::TrackRenames::AsConfigured,
+        );
+
+        // What the production staged read returns with the explicit root-level
+        // pathspec: unlike the raw calls above it must not be limited to the
+        // subdirectory this test binary runs from.
+        let fixed = super::collect_staged_status_from_tree_index(&repo, &head_tree)
+            .expect("collect_staged_status_from_tree_index");
+        let mut fixed_paths: Vec<String> = fixed
+            .iter()
+            .map(|entry| entry.path.to_string_lossy().replace('\\', "/"))
+            .collect();
+        fixed_paths.sort();
+        eprintln!("PROBE fixed-helper staged={}", fixed_paths.len());
+        for path in &fixed_paths {
+            eprintln!("PROBE fixed-helper {path}");
+        }
     }
 }
