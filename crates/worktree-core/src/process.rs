@@ -96,6 +96,44 @@ pub fn git_config_global_get(key: &str) -> Option<String> {
     git_config_get_with(git_command(), key)
 }
 
+/// Read the last value set for `key` out of `pairs`, matching what
+/// `git config --get` would have returned for that key.
+pub fn git_config_pair_last<'a>(pairs: &'a [(String, String)], key: &str) -> Option<&'a str> {
+    pairs
+        .iter()
+        .rev()
+        .find(|(candidate, _)| candidate == key)
+        .map(|(_, value)| value.as_str())
+}
+
+/// Every key/value pair in the user's *global* git config, in one subprocess.
+///
+/// Each [`git_config_global_get`] is a `git` process spawn, and a settings
+/// surface that reads several keys pays that spawn cost per key — on Windows,
+/// with antivirus scanning each fresh `git.exe`, enough to stall the UI
+/// thread for a visible moment. Reading the whole file once and picking keys
+/// in memory costs one spawn regardless of how many keys are wanted. A key
+/// set more than once keeps only its **last** value, matching `--get`.
+pub fn git_config_global_pairs() -> Vec<(String, String)> {
+    git_config_pairs_with(git_command())
+}
+
+/// The batch half, split out so tests can point it at a scratch config file
+/// via the command's environment instead of mutating process-wide state.
+fn git_config_pairs_with(mut cmd: std::process::Command) -> Vec<(String, String)> {
+    let Ok(output) = cmd.args(["config", "--global", "--list"]).output() else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    text.lines()
+        .filter_map(|line| line.split_once('='))
+        .map(|(key, value)| (key.trim().to_string(), value.trim().to_string()))
+        .collect()
+}
+
 /// The reader half, split out so tests can point it at a scratch config file
 /// via the command's environment instead of mutating process-wide state.
 fn git_config_get_with(mut cmd: std::process::Command, key: &str) -> Option<String> {
@@ -828,6 +866,45 @@ mod tests {
 
         // Unsetting an absent key is still a success.
         git_config_set_with(command(), "user.signingkey", None).unwrap();
+    }
+
+    #[test]
+    fn git_config_global_pairs_reads_keys_in_one_pass() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("gitconfig");
+        fs::write(&config_path, b"").unwrap();
+
+        let command = || {
+            let mut cmd = git_command();
+            cmd.env("GIT_CONFIG_GLOBAL", &config_path);
+            cmd
+        };
+
+        assert!(
+            git_config_pairs_with(command()).is_empty(),
+            "an empty global config should read as no pairs"
+        );
+
+        git_config_set_with(command(), "commit.gpgsign", Some("true")).unwrap();
+        git_config_set_with(command(), "user.signingkey", Some("ABC1234DEF")).unwrap();
+        git_config_set_with(command(), "gpg.program", Some("C:/tools/gpg.exe")).unwrap();
+
+        let pairs = git_config_pairs_with(command());
+        let last_value = |key: &str| {
+            pairs
+                .iter()
+                .rev()
+                .find(|(candidate, _)| candidate == key)
+                .map(|(_, value)| value.clone())
+        };
+
+        assert_eq!(last_value("commit.gpgsign"), Some("true".to_string()));
+        assert_eq!(last_value("user.signingkey"), Some("ABC1234DEF".to_string()));
+        assert_eq!(
+            last_value("gpg.program"),
+            Some("C:/tools/gpg.exe".to_string())
+        );
+        assert_eq!(last_value("unset.key"), None);
     }
 
     #[test]

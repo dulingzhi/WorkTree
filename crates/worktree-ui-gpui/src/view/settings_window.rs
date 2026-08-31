@@ -13,7 +13,7 @@ use worktree_core::external_merge_tool::{
     ExternalMergeToolSelection, MERGE_TOOL_PRESETS as MERGE_TOOL_PRESET_TABLE,
 };
 use worktree_core::process::{
-    GitExecutablePreference, GitRuntimeState, install_git_executable_path, refresh_git_runtime,
+    GitExecutablePreference, GitRuntimeState, current_git_runtime, install_git_executable_path,
 };
 use worktree_state::model::{DefaultTagType, GitLogTagFetchMode};
 use worktree_state::session::ExternalCodeEditorSetting;
@@ -515,14 +515,25 @@ impl GpgConfig {
 
     #[cfg(not(test))]
     fn read_from_git() -> Self {
+        // One `git config --global --list` spawn covers all three keys; a
+        // per-key `--get` made opening this window cost three process spawns
+        // on the UI thread, which antivirus scanning turns into a visible
+        // stall on Windows.
+        let pairs = worktree_core::process::git_config_global_pairs();
         GpgConfig {
-            commit_signing_enabled: worktree_core::process::git_config_global_get("commit.gpgsign")
-                .as_deref()
-                == Some("true"),
-            user_signing_key: worktree_core::process::git_config_global_get("user.signingkey")
-                .unwrap_or_default(),
-            gpg_program: worktree_core::process::git_config_global_get("gpg.program")
-                .unwrap_or_default(),
+            commit_signing_enabled: worktree_core::process::git_config_pair_last(
+                &pairs,
+                "commit.gpgsign",
+            ) == Some("true"),
+            user_signing_key: worktree_core::process::git_config_pair_last(
+                &pairs,
+                "user.signingkey",
+            )
+            .unwrap_or_default()
+            .to_string(),
+            gpg_program: worktree_core::process::git_config_pair_last(&pairs, "gpg.program")
+                .unwrap_or_default()
+                .to_string(),
         }
     }
 }
@@ -7370,7 +7381,12 @@ impl Render for SettingsWindowView {
 
 impl SettingsRuntimeInfo {
     fn detect() -> Self {
-        Self::from_runtime(refresh_git_runtime())
+        // The cached runtime, not a fresh probe: probing runs `git --version`
+        // as a subprocess on the UI thread every time this window opens, the
+        // slot is already populated at launch, and every path that can change
+        // the preference (applying a custom executable in this window)
+        // re-probes and reports back through `sync_git_runtime_state`.
+        Self::from_runtime(current_git_runtime())
     }
 
     fn from_runtime(runtime: GitRuntimeState) -> Self {
