@@ -1383,112 +1383,6 @@ impl DetailsPaneView {
             .into_any_element()
     }
 
-    /// The details-pane view for the uncommitted-changes row: this checkout's
-    /// own working tree as a review — every staged and unstaged file, one click
-    /// away from its own diff. The mirror of [`Self::worktree_uncommitted_view`]
-    /// for the main checkout, whose file list is the always-loaded status state
-    /// rather than a scan.
-    fn working_tree_review_view(
-        &mut self,
-        repo_id: RepoId,
-        cx: &mut gpui::Context<Self>,
-    ) -> AnyElement {
-        let theme = self.theme;
-        let ui_scale = self.ui_scale();
-
-        let Some(inputs) = self
-            .active_repo()
-            .map(|repo| self.cached_working_tree_review_inputs(repo))
-        else {
-            return div().into_any_element();
-        };
-        let file_count = inputs.files.len();
-
-        let header = div()
-            .flex()
-            .items_center()
-            .gap_2()
-            .h(components::control_height_md(ui_scale))
-            .px_2()
-            .bg(theme.colors.surface.raised)
-            .border_b_1()
-            .border_color(theme.colors.stroke.default)
-            .child(
-                div()
-                    .flex_none()
-                    .text_sm()
-                    .font_weight(FontWeight::BOLD)
-                    // This row *is* the current repo's own changes, so unlike
-                    // the worktree view's header this is exactly what it says.
-                    .child(tr("tail.history.uncommitted_changes")),
-            )
-            .child(div().flex_1().min_w(px(0.0)))
-            .child(
-                components::Button::new("working_tree_review_close", "")
-                    .start_slot(svg_icon(
-                        "icons/generic_close.svg",
-                        theme.colors.foreground.secondary,
-                        px(12.0),
-                    ))
-                    .style(components::ButtonStyle::Transparent)
-                    .on_click(theme, cx, move |this, _e, _w, cx| {
-                        this.store.dispatch(Msg::ClearCommitSelection { repo_id });
-                        cx.notify();
-                    })
-                    .worktree_tooltip(theme, tr("layout.working_tree_review.close")),
-            );
-
-        // Unlike a worktree's list, this one can legitimately run empty while
-        // selected: the tree went clean between the row's last repaint and this
-        // one, and the row is about to disappear with it.
-        let files_body: AnyElement = if file_count == 0 {
-            div()
-                .debug_selector(|| "working_tree_review_empty".to_string())
-                .text_sm()
-                .text_color(theme.colors.foreground.secondary)
-                .child(tr_str("layout.working_tree_review.empty"))
-                .into_any_element()
-        } else {
-            Self::vertical_scroll_frame(
-                theme,
-                ("working_tree_review_files_container", repo_id.0),
-                ("working_tree_review_files_scrollbar", repo_id.0),
-                &self.working_tree_scroll,
-                uniform_list(
-                    ("working_tree_review_files", repo_id.0),
-                    file_count,
-                    cx.processor(Self::render_working_tree_review_rows),
-                ),
-            )
-            .into_any_element()
-        };
-
-        div()
-            .id("working_tree_review_container")
-            .relative()
-            .flex()
-            .flex_col()
-            .flex_1()
-            .h_full()
-            .min_h(px(0.0))
-            .child(header)
-            .child(
-                div()
-                    .id("working_tree_review_body")
-                    .debug_selector(|| "working_tree_review_body".to_string())
-                    .relative()
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .flex_1()
-                    .h_full()
-                    .min_h(px(0.0))
-                    .p_2()
-                    .child(files_body),
-            )
-            .into_any_element()
-    }
-
     /// The details-pane view shown while two points are being compared: the
     /// selected commit cards, a "viewing diff between" subheader, and the list
     /// of files that differ between them. The diff pane starts empty; clicking a
@@ -1735,9 +1629,16 @@ impl DetailsPaneView {
         let commit_files_min_viewport_height = ui_scale.px(24.0);
         let commit_files_section_min_height = ui_scale.px(44.0);
         let active_repo_id = self.active_repo_id();
+        // The uncommitted-changes row parks the not-committed-yet sentinel in
+        // `selected_commit`, but what it selects is the working tree, not a
+        // commit -- and the pane's default view, the staging sections below,
+        // already reviews exactly those files. Reading the sentinel as "no
+        // commit selected" keeps the pane on that view instead of swapping in
+        // a detail view of its own.
         let selected_id = self
             .active_repo()
-            .and_then(|repo| repo.history_state.selected_commit.clone());
+            .and_then(|repo| repo.history_state.selected_commit.clone())
+            .filter(|commit_id| !commit_id.is_uncommitted());
 
         // A selected worktree row owns the pane outright: its files belong to a
         // different checkout, so none of the commit-detail views below apply.
@@ -1749,14 +1650,6 @@ impl DetailsPaneView {
         let has_worktree_selection = self.selected_worktree_summary().is_some();
         if let (Some(repo_id), true) = (active_repo_id, has_worktree_selection) {
             return self.worktree_uncommitted_view(repo_id, cx);
-        }
-
-        // The uncommitted-changes row's selection is the not-committed-yet
-        // sentinel; what it "details" is the working tree itself, not a commit.
-        if let (Some(repo_id), Some(selected_id)) = (active_repo_id, selected_id.as_ref())
-            && selected_id.is_uncommitted()
-        {
-            return self.working_tree_review_view(repo_id, cx);
         }
 
         // An active two-point comparison takes precedence over both the single
