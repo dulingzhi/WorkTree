@@ -230,6 +230,7 @@ fn send_repo_action_unavailable(
         repo_id,
         action,
         result: Err(git_unavailable_error(runtime)),
+        paths: None,
     }))
 }
 

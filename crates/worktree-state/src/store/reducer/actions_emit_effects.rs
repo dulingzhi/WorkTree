@@ -1,8 +1,9 @@
+use super::repo_management::append_cancel_repo_loads_effect_for_repo;
 use super::util::{
-    DiffReloadMode, SelectedConflictTarget, apply_selected_diff_load_plan_state,
-    apply_selected_diff_load_plan_state_with_reload_mode, clear_banner_error_for_repo,
-    diff_reload_effects, format_failure_summary, push_action_log, push_command_log,
-    push_failure_needs_pull_retry, refresh_full_effects, refresh_primary_effects,
+    DiffReloadMode, SelectedConflictTarget, append_targeted_status_refresh,
+    apply_selected_diff_load_plan_state, apply_selected_diff_load_plan_state_with_reload_mode,
+    clear_banner_error_for_repo, diff_reload_effects, format_failure_summary, push_action_log,
+    push_command_log, push_failure_needs_pull_retry, refresh_full_effects, refresh_primary_effects,
     selected_conflict_target, selected_diff_load_plan, start_conflict_target_reload,
     start_current_conflict_target_reload,
 };
@@ -1042,6 +1043,12 @@ pub(super) fn commit_finished(
     let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
         return Vec::new();
     };
+    // Collected before any state below changes: the (pre-commit) staged
+    // entries are exactly the paths the commit clears from the staged lane.
+    let committed_paths: Vec<PathBuf> = repo_state
+        .staged_status_entries()
+        .map(|entries| entries.iter().map(|entry| entry.path.clone()).collect())
+        .unwrap_or_default();
     repo_state.local_actions_in_flight = repo_state.local_actions_in_flight.saturating_sub(1);
     repo_state.commit_in_flight = repo_state.commit_in_flight.saturating_sub(1);
     repo_state.bump_ops_rev();
@@ -1080,18 +1087,26 @@ pub(super) fn commit_finished(
             );
         }
     }
-    if clear_banner {
+    if !clear_banner {
         let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
             return Vec::new();
         };
-        let effects = refresh_primary_effects(repo_state);
-        clear_banner_error_for_repo(state, repo_id);
-        return effects;
+        return refresh_primary_effects(repo_state);
     }
+    // A finished commit mutated the repo like any other action, so the loads
+    // issued before it are stale (the file watcher usually has a full status
+    // scan in flight over the index it just rewrote): cancel them, then let
+    // the committed paths answer through the targeted scan so the staged
+    // panel empties after one pathspec `git status` rather than that walk.
+    let mut effects: Vec<Effect> = Vec::new();
+    append_cancel_repo_loads_effect_for_repo(state, Some(repo_id), &mut effects);
     let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
-        return Vec::new();
+        return effects;
     };
-    refresh_primary_effects(repo_state)
+    append_targeted_status_refresh(repo_state, &mut effects, &committed_paths);
+    effects.extend(refresh_primary_effects(repo_state));
+    clear_banner_error_for_repo(state, repo_id);
+    effects
 }
 
 pub(super) fn commit_amend_finished(
@@ -1103,6 +1118,12 @@ pub(super) fn commit_amend_finished(
     let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
         return Vec::new();
     };
+    // The pre-amend staged entries, collected before anything below mutates:
+    // an amend commits the index just like a plain commit.
+    let committed_paths: Vec<PathBuf> = repo_state
+        .staged_status_entries()
+        .map(|entries| entries.iter().map(|entry| entry.path.clone()).collect())
+        .unwrap_or_default();
     repo_state.local_actions_in_flight = repo_state.local_actions_in_flight.saturating_sub(1);
     repo_state.commit_in_flight = repo_state.commit_in_flight.saturating_sub(1);
     repo_state.bump_ops_rev();
@@ -1141,18 +1162,24 @@ pub(super) fn commit_amend_finished(
             );
         }
     }
-    if clear_banner {
+    if !clear_banner {
         let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
             return Vec::new();
         };
-        let effects = refresh_primary_effects(repo_state);
-        clear_banner_error_for_repo(state, repo_id);
-        return effects;
+        return refresh_primary_effects(repo_state);
     }
+    // Same shape as a plain commit: cancel the now-stale loads, answer the
+    // committed paths through the targeted scan, and let the primary refresh
+    // cover the head-anchored panes.
+    let mut effects: Vec<Effect> = Vec::new();
+    append_cancel_repo_loads_effect_for_repo(state, Some(repo_id), &mut effects);
     let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
-        return Vec::new();
+        return effects;
     };
-    refresh_primary_effects(repo_state)
+    append_targeted_status_refresh(repo_state, &mut effects, &committed_paths);
+    effects.extend(refresh_primary_effects(repo_state));
+    clear_banner_error_for_repo(state, repo_id);
+    effects
 }
 
 pub(super) fn safe_push_after_commit_finished(

@@ -430,3 +430,4 @@ mod reducer_diagnostics;
 mod repo_management;
 mod repo_monitor;
 mod send_failures;
+mod status_refresh_e2e;

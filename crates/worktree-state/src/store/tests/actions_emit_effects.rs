@@ -2025,6 +2025,75 @@ fn commit_finished_clears_commit_state_and_requests_primary_refreshes() {
     )));
 }
 
+/// A commit clears exactly the paths that were staged, so its completion
+/// refresh answers through the path-targeted status scan over those paths
+/// instead of waiting for the full worktree walk: the staged panel empties
+/// after one pathspec `git status`, not after a whole-tree rescan the index
+/// rewrite just invalidated the staged cache for.
+#[test]
+fn commit_finished_refreshes_the_status_lanes_through_the_targeted_scan() {
+    use worktree_core::domain::{FileStatus, FileStatusKind};
+    let entry = |path: &str, kind| FileStatus {
+        path: PathBuf::from(path),
+        kind,
+        conflict: None,
+    };
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+    let repo_id = RepoId(1);
+    state.repos.push(RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    ));
+    state.repos[0].local_actions_in_flight = 1;
+    state.repos[0].commit_in_flight = 1;
+    // The pre-commit snapshot: two staged files the commit is about to clear.
+    state.repos[0].set_status(Loadable::Ready(std::sync::Arc::new(RepoStatus {
+        unstaged: vec![entry("notes.txt", FileStatusKind::Modified)],
+        staged: vec![
+            entry("src/lib.rs", FileStatusKind::Modified),
+            entry("src/main.rs", FileStatusKind::Added),
+        ],
+    })));
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::CommitFinished {
+            repo_id,
+            result: Ok(worktree_core::services::CommitOperationOutcome::default()),
+        }),
+    );
+
+    let expected: std::sync::Arc<[PathBuf]> =
+        vec![PathBuf::from("src/lib.rs"), PathBuf::from("src/main.rs")].into();
+    assert!(
+        effects.iter().any(|effect| matches!(
+            effect,
+            Effect::LoadStatusForPaths { repo_id: candidate, paths: p }
+                if *candidate == repo_id && **p == *expected
+        )),
+        "the committed paths answer through the targeted scan, got {effects:?}"
+    );
+    assert!(
+        !effects
+            .iter()
+            .any(|effect| matches!(effect, Effect::LoadStatus { .. })),
+        "the full worktree scan is coalesced away, not stacked on top"
+    );
+    assert!(
+        effects.iter().any(|e| matches!(
+            e,
+            Effect::LoadHeadBranch { repo_id: id } if *id == repo_id
+        )),
+        "the primary refresh still covers the head-anchored panes"
+    );
+}
+
 #[test]
 fn repo_command_finished_stage_hunk_triggers_diff_reload_effects() {
     let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
@@ -4318,6 +4387,7 @@ fn head_changing_repo_action_finish_invalidates_data_loaded_while_in_flight() {
             repo_id,
             action: RepoActionKind::CherryPickCommit,
             result: Ok(()),
+            paths: None,
         }),
     );
 

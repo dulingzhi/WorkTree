@@ -2472,7 +2472,8 @@ fn reduce_inner(
             repo_id,
             action,
             result,
-        }) => external_and_history::repo_action_finished(state, repo_id, action, result),
+            paths,
+        }) => external_and_history::repo_action_finished(state, repo_id, action, result, paths),
         Msg::Internal(crate::msg::InternalMsg::CommitFinished { repo_id, result }) => {
             let pending_commit = state
                 .repos

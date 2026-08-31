@@ -4101,6 +4101,7 @@ fn repo_action_finished_clears_error_and_refreshes() {
             repo_id: RepoId(1),
             action: RepoActionKind::CheckoutBranch,
             result: Ok(()),
+            paths: None,
         }),
     );
 
@@ -4131,6 +4132,7 @@ fn repo_action_finished_err_records_diagnostic() {
             repo_id: RepoId(1),
             action: RepoActionKind::CheckoutBranch,
             result: Err(error),
+            paths: None,
         }),
     );
 
@@ -4172,6 +4174,7 @@ fn cherry_pick_error_completion_refreshes_status_log_and_sequencer_state() {
             repo_id,
             action: RepoActionKind::CherryPickCommit,
             result: Err(Error::new(ErrorKind::Backend("conflict".to_string()))),
+            paths: None,
         }),
     );
 
@@ -4231,6 +4234,7 @@ fn repo_action_finished_bumps_load_epoch_and_forces_fresh_status_load_when_stale
             repo_id,
             action: RepoActionKind::StagePaths,
             result: Ok(()),
+            paths: None,
         }),
     );
 
@@ -4287,6 +4291,7 @@ fn repo_action_finished_reissues_inflight_non_status_loads() {
             repo_id,
             action: RepoActionKind::StagePaths,
             result: Ok(()),
+            paths: None,
         }),
     );
 
@@ -4352,6 +4357,7 @@ fn repo_action_finished_reissues_inflight_sidebar_data_loads() {
             repo_id,
             action: RepoActionKind::StagePaths,
             result: Ok(()),
+            paths: None,
         }),
     );
 
@@ -4400,6 +4406,7 @@ fn repo_action_finished_reissues_inflight_blame_and_commit_details() {
             repo_id,
             action: RepoActionKind::StagePaths,
             result: Ok(()),
+            paths: None,
         }),
     );
 
@@ -4455,6 +4462,7 @@ fn repo_action_finished_reissues_selected_commit_diff() {
             repo_id,
             action: RepoActionKind::StagePaths,
             result: Ok(()),
+            paths: None,
         }),
     );
 
@@ -4511,6 +4519,7 @@ fn repo_action_finished_invalidates_but_does_not_reissue_views_for_non_active_re
             repo_id: background,
             action: RepoActionKind::StagePaths,
             result: Ok(()),
+            paths: None,
         }),
     );
 
@@ -4568,6 +4577,7 @@ fn stale_status_result_after_repo_action_finished_is_dropped() {
             repo_id,
             action: RepoActionKind::StagePaths,
             result: Ok(()),
+            paths: None,
         }),
     );
 

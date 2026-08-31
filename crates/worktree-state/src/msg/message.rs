@@ -1430,6 +1430,11 @@ pub enum InternalMsg {
         repo_id: RepoId,
         action: RepoActionKind,
         result: Result<(), Error>,
+        /// The paths the action touched, when it knows them exactly (stage,
+        /// unstage). The completion refresh answers through the path-targeted
+        /// status lane for these instead of waiting on a full worktree scan;
+        /// `None` for actions without a meaningful path set.
+        paths: Option<RepoPathList>,
     },
     CommitFinished {
         repo_id: RepoId,
@@ -1471,6 +1476,7 @@ mod tests {
             repo_id: RepoId(7),
             action: RepoActionKind::CheckoutBranch,
             result: Ok(()),
+            paths: None,
         }
         .into();
 
@@ -1479,7 +1485,8 @@ mod tests {
             Msg::Internal(InternalMsg::RepoActionFinished {
                 repo_id: RepoId(7),
                 action: RepoActionKind::CheckoutBranch,
-                result: Ok(())
+                result: Ok(()),
+                ..
             })
         ));
     }

@@ -8,6 +8,7 @@ use crate::model::{
     RepoState, SidebarDataRequest, SidebarMode,
 };
 use crate::msg::{CommitSelectMode, ConflictAutosolveMode, Effect};
+use crate::store::repo_load_trace;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -2363,6 +2364,22 @@ pub(super) fn remote_branches_loaded(
     effects
 }
 
+/// Condensed status-lane payload for the repo-load trace: enough of the path
+/// list to recognize a wrongful staged-list clear in one reproduction without
+/// flooding the log.
+fn trace_status_paths(entries: &[FileStatus]) -> String {
+    const MAX_PATHS: usize = 4;
+    let mut names: Vec<String> = entries
+        .iter()
+        .take(MAX_PATHS)
+        .map(|entry| entry.path.display().to_string())
+        .collect();
+    if entries.len() > MAX_PATHS {
+        names.push(format!("+{}", entries.len() - MAX_PATHS));
+    }
+    format!("[{}]", names.join(", "))
+}
+
 pub(super) fn status_for_paths_loaded(
     state: &mut AppState,
     repo_id: RepoId,
@@ -2374,6 +2391,11 @@ pub(super) fn status_for_paths_loaded(
     let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
         return effects;
     };
+    let fallback_error = result
+        .as_ref()
+        .err()
+        .map(|error| error.to_string())
+        .unwrap_or_else(|| "<unmergeable payload>".to_string());
     match result {
         // The targeted lane only ever merges onto a settled full snapshot;
         // anything else (or an unmergeable shape) falls back to a full scan,
@@ -2381,7 +2403,21 @@ pub(super) fn status_for_paths_loaded(
         Ok(StatusForPaths::Lists { unstaged, staged })
             if matches!(repo_state.status, Loadable::Ready(_)) =>
         {
+            repo_load_trace::trace!(
+                "status_for_paths_merge repo_id={:?} covered={:?} staged_scan={} unstaged_scan={}",
+                repo_id,
+                paths.iter().collect::<Vec<_>>(),
+                trace_status_paths(&staged),
+                trace_status_paths(&unstaged)
+            );
             repo_state.patch_status_for_paths(&paths, unstaged, staged);
+            repo_load_trace::trace!(
+                "status_for_paths_merged repo_id={:?} staged_now={}",
+                repo_id,
+                repo_state
+                    .staged_status_entries()
+                    .map_or(0, |entries| entries.len())
+            );
             resync_working_tree_details_if_selected(repo_state);
             // A change folded while the targeted scan was in flight re-runs
             // the lane coarsely: the folded burst's paths are unknown here.
@@ -2391,8 +2427,27 @@ pub(super) fn status_for_paths_loaded(
                 Effect::LoadWorktreeStatus { repo_id },
                 &mut effects,
             );
+            // The merge replaces a covered path's staged half too, so it also
+            // finishes the staged lane. Dispatches that hold only the
+            // worktree flag (the external watcher's) finish a lane they never
+            // took — a no-op — while the action-completion refresh, which
+            // holds both, would strand its staged flag here otherwise.
+            finish_status_lane_replay(
+                repo_state,
+                RepoLoadsInFlight::STAGED_STATUS,
+                Effect::LoadStagedStatus { repo_id },
+                &mut effects,
+            );
         }
-        Ok(_) | Err(_) => effects.push(Effect::LoadStatus { repo_id }),
+        Ok(_) | Err(_) => {
+            repo_load_trace::trace!(
+                "status_for_paths_fallback_full_scan repo_id={:?} covered={:?} reason={}",
+                repo_id,
+                paths.iter().collect::<Vec<_>>(),
+                fallback_error
+            );
+            effects.push(Effect::LoadStatus { repo_id });
+        }
     }
     effects
 }
@@ -2410,12 +2465,20 @@ pub(super) fn status_loaded(
                     &repo_state.status,
                     Loadable::Ready(prev) if prev.as_ref() == &next
                 );
+                repo_load_trace::trace!(
+                    "status_loaded repo_id={:?} staged={} unstaged={} unchanged={}",
+                    repo_id,
+                    trace_status_paths(&next.staged),
+                    trace_status_paths(&next.unstaged),
+                    status_unchanged
+                );
                 if !status_unchanged {
                     repo_state.set_status(Loadable::Ready(Arc::new(next)));
                 }
                 clear_resolved_conflict_context(repo_state);
             }
             Err(e) => {
+                repo_load_trace::trace!("status_loaded_error repo_id={:?} error={}", repo_id, e);
                 push_diagnostic(repo_state, DiagnosticKind::Error, e.to_string());
                 repo_state.set_status(Loadable::Error(e.to_string()));
             }
@@ -2447,12 +2510,23 @@ pub(super) fn worktree_status_loaded(
         match result {
             Ok(next) => {
                 let status_unchanged = matches!(&repo_state.worktree_status, Loadable::Ready(prev) if prev.as_slice() == next.as_slice());
+                repo_load_trace::trace!(
+                    "worktree_status_loaded repo_id={:?} unstaged={} unchanged={}",
+                    repo_id,
+                    trace_status_paths(&next),
+                    status_unchanged
+                );
                 if !status_unchanged {
                     repo_state.set_worktree_status(Loadable::Ready(next));
                 }
                 clear_resolved_conflict_context(repo_state);
             }
             Err(e) => {
+                repo_load_trace::trace!(
+                    "worktree_status_loaded_error repo_id={:?} error={}",
+                    repo_id,
+                    e
+                );
                 push_diagnostic(repo_state, DiagnosticKind::Error, e.to_string());
                 repo_state.set_worktree_status(Loadable::Error(e.to_string()));
             }
@@ -2478,11 +2552,22 @@ pub(super) fn staged_status_loaded(
         match result {
             Ok(next) => {
                 let status_unchanged = matches!(&repo_state.staged_status, Loadable::Ready(prev) if prev.as_slice() == next.as_slice());
+                repo_load_trace::trace!(
+                    "staged_status_loaded repo_id={:?} staged={} unchanged={}",
+                    repo_id,
+                    trace_status_paths(&next),
+                    status_unchanged
+                );
                 if !status_unchanged {
                     repo_state.set_staged_status(Loadable::Ready(next));
                 }
             }
             Err(e) => {
+                repo_load_trace::trace!(
+                    "staged_status_loaded_error repo_id={:?} error={}",
+                    repo_id,
+                    e
+                );
                 push_diagnostic(repo_state, DiagnosticKind::Error, e.to_string());
                 repo_state.set_staged_status(Loadable::Error(e.to_string()));
             }

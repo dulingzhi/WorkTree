@@ -3289,6 +3289,7 @@ fn cancelling_repo_loads_clears_the_scan_progress() {
             repo_id: RepoId(1),
             action: RepoActionKind::CheckoutBranch,
             result: Ok(()),
+            paths: None,
         }),
     );
 
@@ -3301,6 +3302,152 @@ fn cancelling_repo_loads_clears_the_scan_progress() {
     assert_eq!(
         state.repos[0].history_state.log_scan_progress, None,
         "the banner must not outlive the walk it was counting for"
+    );
+}
+
+/// Staging knows exactly which paths moved between the lanes, so its
+/// completion refresh answers through the path-targeted status scan: one
+/// pathspec `git status` merges in milliseconds, where the primary refresh's
+/// full walk — which the gix staged cache can no longer serve, the action
+/// having just rewritten the index — re-scans the whole worktree before the
+/// staged panel moves.
+#[test]
+fn stage_finish_refreshes_the_status_lanes_through_the_targeted_scan() {
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+    let repo_id = RepoId(1);
+    repos.insert(repo_id, Arc::new(DummyRepo::new("/tmp/repo")));
+    state.repos.push(RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    ));
+    state.active_repo = Some(repo_id);
+    // The targeted lane merges onto a settled snapshot.
+    state.repos[0].set_status(Loadable::Ready(std::sync::Arc::new(RepoStatus::default())));
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::RepoActionFinished {
+            repo_id,
+            action: RepoActionKind::StagePaths,
+            result: Ok(()),
+            paths: Some(crate::msg::RepoPathList::new(vec![PathBuf::from(
+                "src/lib.rs",
+            )])),
+        }),
+    );
+
+    let expected: std::sync::Arc<[PathBuf]> = vec![PathBuf::from("src/lib.rs")].into();
+    assert!(
+        effects.iter().any(|effect| matches!(
+            effect,
+            Effect::LoadStatusForPaths { repo_id: candidate, paths: p }
+                if *candidate == repo_id && **p == *expected
+        )),
+        "the staged paths answer through the targeted scan, got {effects:?}"
+    );
+    assert!(
+        !effects
+            .iter()
+            .any(|effect| matches!(effect, Effect::LoadStatus { .. })),
+        "the full worktree scan is coalesced away, not stacked on top"
+    );
+    assert!(
+        !effects.iter().any(|effect| matches!(
+            effect,
+            Effect::LoadWorktreeStatus { .. } | Effect::LoadStagedStatus { .. }
+        )),
+        "the coarse per-lane scans are coalesced away too"
+    );
+    assert!(
+        effects.iter().any(|effect| matches!(
+            effect,
+            Effect::LoadHeadBranch { repo_id: candidate } if *candidate == repo_id
+        )),
+        "the primary refresh still covers the head-anchored panes"
+    );
+}
+
+/// The targeted lane is an accelerator for a settled snapshot, not a
+/// replacement for the first load: with nothing to merge onto (and after a
+/// failed action, whose paths may not have moved at all) the full scan
+/// answers as before.
+#[test]
+fn stage_finish_keeps_the_full_scan_without_a_settled_snapshot_or_on_failure() {
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+    let repo_id = RepoId(1);
+    repos.insert(repo_id, Arc::new(DummyRepo::new("/tmp/repo")));
+    state.repos.push(RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    ));
+    state.active_repo = Some(repo_id);
+    let paths = || {
+        Some(crate::msg::RepoPathList::new(vec![PathBuf::from(
+            "src/lib.rs",
+        )]))
+    };
+
+    // No snapshot has settled yet: the merge has nothing to merge onto.
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::RepoActionFinished {
+            repo_id,
+            action: RepoActionKind::StagePaths,
+            result: Ok(()),
+            paths: paths(),
+        }),
+    );
+    assert!(
+        effects
+            .iter()
+            .any(|effect| matches!(effect, Effect::LoadStatus { repo_id: candidate } if *candidate == repo_id)),
+        "nothing settled to merge onto — the full scan answers"
+    );
+    assert!(
+        !effects
+            .iter()
+            .any(|effect| matches!(effect, Effect::LoadStatusForPaths { .. })),
+        "no targeted scan without a settled snapshot"
+    );
+
+    // A settled snapshot but a failed action: the paths may not have moved.
+    state.repos[0].set_status(Loadable::Ready(std::sync::Arc::new(RepoStatus::default())));
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::RepoActionFinished {
+            repo_id,
+            action: RepoActionKind::StagePaths,
+            result: Err(worktree_core::error::Error::new(
+                worktree_core::error::ErrorKind::Backend("boom".to_string()),
+            )),
+            paths: paths(),
+        }),
+    );
+    assert!(
+        effects
+            .iter()
+            .any(|effect| matches!(effect, Effect::LoadStatus { repo_id: candidate } if *candidate == repo_id)),
+        "a failed action refreshes through the full scan as before"
+    );
+    assert!(
+        !effects
+            .iter()
+            .any(|effect| matches!(effect, Effect::LoadStatusForPaths { .. })),
+        "a failed action claims no targeted scan"
     );
 }
 
@@ -3331,6 +3478,7 @@ fn assume_unchanged_list_loads_and_reloads_after_toggle() {
             repo_id: RepoId(1),
             action: RepoActionKind::SetAssumeUnchanged,
             result: Ok(()),
+            paths: None,
         }),
     );
     assert!(
@@ -3365,6 +3513,7 @@ fn assume_unchanged_list_loads_and_reloads_after_toggle() {
             repo_id: RepoId(1),
             action: RepoActionKind::SetAssumeUnchanged,
             result: Ok(()),
+            paths: None,
         }),
     );
     assert!(

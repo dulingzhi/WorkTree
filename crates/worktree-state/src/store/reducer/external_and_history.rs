@@ -6,9 +6,10 @@ use super::repo_management::{
 };
 use super::util::{
     SelectedConflictTarget, append_auto_background_metadata_effects,
-    append_requested_status_refresh_effects, clear_banner_error_for_repo, diff_reload_effects,
-    push_diagnostic, refresh_full_effects, refresh_primary_effects, selected_conflict_target,
-    start_conflict_target_reload, start_current_conflict_target_reload,
+    append_requested_status_refresh_effects, append_targeted_status_refresh,
+    clear_banner_error_for_repo, diff_reload_effects, push_diagnostic, refresh_full_effects,
+    refresh_primary_effects, selected_conflict_target, start_conflict_target_reload,
+    start_current_conflict_target_reload,
 };
 use crate::model::{
     AppState, DiagnosticKind, InteractiveRebaseSetup, Loadable, RepoLoadsInFlight, SidebarMode,
@@ -197,18 +198,29 @@ pub(super) fn repo_externally_changed(
                 .is_some_and(|paths| !paths.is_empty())
                 && matches!(repo_state.status, Loadable::Ready(_));
             if incremental
-                && repo_state
+                && !repo_state
                     .loads_in_flight
-                    .request(RepoLoadsInFlight::WORKTREE_STATUS)
+                    .is_in_flight(RepoLoadsInFlight::WORKTREE_STATUS)
+                && !repo_state
+                    .loads_in_flight
+                    .is_in_flight(RepoLoadsInFlight::STAGED_STATUS)
             {
+                // The merge replaces a covered path's staged half too, so it
+                // holds both lane flags; a coarse scan still running on either
+                // lane would otherwise land after it and bury the merged half.
+                repo_state
+                    .loads_in_flight
+                    .request(RepoLoadsInFlight::WORKTREE_STATUS);
+                repo_state
+                    .loads_in_flight
+                    .request(RepoLoadsInFlight::STAGED_STATUS);
                 effects.push(Effect::LoadStatusForPaths {
                     repo_id,
                     paths: worktree_paths.clone().unwrap_or_default(),
                 });
-            } else if !incremental
-                && repo_state
-                    .loads_in_flight
-                    .request(RepoLoadsInFlight::WORKTREE_STATUS)
+            } else if repo_state
+                .loads_in_flight
+                .request(RepoLoadsInFlight::WORKTREE_STATUS)
             {
                 effects.push(Effect::LoadWorktreeStatus { repo_id });
             }
@@ -804,7 +816,9 @@ pub(super) fn repo_action_finished(
     repo_id: crate::model::RepoId,
     action: RepoActionKind,
     result: std::result::Result<(), Error>,
+    paths: Option<crate::msg::RepoPathList>,
 ) -> Vec<Effect> {
+    let succeeded = result.is_ok();
     let mut clear_banner = false;
     if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
         repo_state.local_actions_in_flight = repo_state.local_actions_in_flight.saturating_sub(1);
@@ -839,6 +853,15 @@ pub(super) fn repo_action_finished(
     let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
         return effects;
     };
+
+    // A path-scoped action that succeeded (stage/unstage) knows exactly which
+    // files moved between the lanes. Take both status flags for the targeted
+    // scan before the primary refresh below runs, so its status leg coalesces
+    // away instead of racing the merge with a full worktree walk the index
+    // rewrite just made unavoidable.
+    if succeeded && let Some(paths) = paths.as_ref() {
+        append_targeted_status_refresh(repo_state, &mut effects, paths.as_slice());
+    }
 
     // Re-issue the primary panes (head branch, ahead/behind, rebase/merge, status, log). The flags
     // were just cleared, so request_* dispatches fresh loads under the new epoch.

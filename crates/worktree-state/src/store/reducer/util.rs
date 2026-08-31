@@ -646,6 +646,48 @@ pub(super) fn append_requested_status_refresh_effects(
     }
 }
 
+/// Answer a status refresh whose affected paths are known — a finished
+/// stage/unstage/commit — through the targeted lane instead of the full
+/// worktree walk: one pathspec `git status` whose merge lands in
+/// milliseconds, where the walk re-scans the whole tree (the action's index
+/// rewrite means the gix staged cache cannot serve it) and holds the staged
+/// panel back by that much longer.
+///
+/// Takes both lane flags, because the merge patches both lanes and finishes
+/// both; a caller that runs `refresh_primary_effects` afterwards gets its
+/// status leg coalesced away by them, while the head/log legs still run.
+/// Does nothing unless the flags are free and a settled snapshot exists to
+/// merge onto — the merge requires one, and a stranded flag would coalesce
+/// every later refresh of that lane.
+pub(in crate::store::reducer) fn append_targeted_status_refresh(
+    repo_state: &mut RepoState,
+    effects: &mut impl EffectAccumulator,
+    paths: &[std::path::PathBuf],
+) {
+    if paths.is_empty()
+        || !matches!(repo_state.status, Loadable::Ready(_))
+        || repo_state
+            .loads_in_flight
+            .is_in_flight(RepoLoadsInFlight::WORKTREE_STATUS)
+        || repo_state
+            .loads_in_flight
+            .is_in_flight(RepoLoadsInFlight::STAGED_STATUS)
+    {
+        return;
+    }
+    repo_state
+        .loads_in_flight
+        .request(RepoLoadsInFlight::WORKTREE_STATUS);
+    repo_state
+        .loads_in_flight
+        .request(RepoLoadsInFlight::STAGED_STATUS);
+    let repo_id = repo_state.id;
+    effects.push_effect(Effect::LoadStatusForPaths {
+        repo_id,
+        paths: paths.to_vec().into(),
+    });
+}
+
 fn push_rebase_and_merge_refresh_effect(effects: &mut impl EffectAccumulator, repo_id: RepoId) {
     effects.push_effect(Effect::LoadRebaseAndMergeState { repo_id });
 }

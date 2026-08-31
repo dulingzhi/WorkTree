@@ -2758,6 +2758,7 @@ fn stash_effect_requests_stash_reload_on_success() {
                 repo_id: RepoId(1),
                 action: RepoActionKind::Stash,
                 result: Ok(()),
+                paths: None,
             }) => saw_finished = true,
             _ => {}
         }
@@ -2932,6 +2933,7 @@ fn pop_stash_effect_applies_and_drops_then_requests_stash_reload() {
                 repo_id: RepoId(1),
                 action: RepoActionKind::PopStash,
                 result: Ok(()),
+                paths: None,
             }) => saw_finished = true,
             _ => {}
         }
@@ -3106,6 +3108,7 @@ fn pop_stash_effect_propagates_apply_error_without_drop_or_reload() {
                 repo_id: RepoId(1),
                 action: RepoActionKind::PopStash,
                 result: Err(_),
+                paths: None,
             }) => {
                 saw_finished_err = true;
                 break;
@@ -3278,6 +3281,7 @@ fn drop_stash_effect_requests_stash_reload_on_success() {
                 repo_id: RepoId(1),
                 action: RepoActionKind::DropStash,
                 result: Ok(()),
+                paths: None,
             }) => saw_finished = true,
             _ => {}
         }
@@ -3448,6 +3452,7 @@ fn drop_stash_effect_requests_stash_reload_on_error() {
                 repo_id: RepoId(1),
                 action: RepoActionKind::DropStash,
                 result: Err(_),
+                paths: None,
             }) => {
                 saw_finished_err = true;
                 break;
@@ -4147,6 +4152,7 @@ fn wait_for_checkout_refresh_messages(
                 repo_id: rid,
                 action: _,
                 result: Ok(()),
+                paths: None,
             }) if rid == repo_id => {
                 saw_finished = true;
             }
@@ -5901,6 +5907,70 @@ fn status_for_paths_patch_replaces_and_appends_covered_entries() {
     assert_eq!(
         state.repos[0].status_rev, rev_after_change,
         "re-applying the same patch leaves the snapshot untouched"
+    );
+}
+
+/// The merge patches both lanes (a staged path's unstaged half is replaced
+/// too), so it must finish both lanes' in-flight bits: a dispatch that holds
+/// the staged flag — the stage/unstage/commit completion refresh — would
+/// otherwise leave it stranded and coalesce every later staged refresh.
+#[test]
+fn status_for_paths_merge_finishes_both_status_lanes() {
+    use crate::model::RepoLoadsInFlight;
+    use crate::msg::InternalMsg;
+    use worktree_core::services::StatusForPaths;
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+
+    let repo_id = RepoId(1);
+    repos.insert(repo_id, Arc::new(DummyRepo::new("/tmp/repo")));
+    state.repos.push(RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    ));
+    state.repos[0].set_status(Loadable::Ready(std::sync::Arc::new(RepoStatus::default())));
+
+    // A dispatch that holds both lanes, as the action-completion refresh does.
+    assert!(
+        state.repos[0]
+            .loads_in_flight
+            .request(RepoLoadsInFlight::WORKTREE_STATUS)
+    );
+    assert!(
+        state.repos[0]
+            .loads_in_flight
+            .request(RepoLoadsInFlight::STAGED_STATUS)
+    );
+
+    let paths: std::sync::Arc<[PathBuf]> = vec![PathBuf::from("a.txt")].into();
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(InternalMsg::StatusForPathsLoaded {
+            repo_id,
+            paths,
+            result: Ok(StatusForPaths::Lists {
+                unstaged: vec![],
+                staged: vec![],
+            }),
+        }),
+    );
+    assert!(
+        effects.is_empty(),
+        "no coalesced refresh to replay, no fallback to run"
+    );
+    assert!(
+        !state.repos[0]
+            .loads_in_flight
+            .is_in_flight(RepoLoadsInFlight::WORKTREE_STATUS)
+            && !state.repos[0]
+                .loads_in_flight
+                .is_in_flight(RepoLoadsInFlight::STAGED_STATUS),
+        "the merge finishes both lanes it patched"
     );
 }
 

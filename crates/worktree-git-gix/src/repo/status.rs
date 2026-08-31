@@ -2545,4 +2545,76 @@ mod tests {
             status.unstaged
         );
     }
+
+    #[test]
+    fn status_for_paths_reports_the_freshly_staged_path_in_the_staged_lane() {
+        use worktree_core::services::StatusForPaths;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let workdir = dir.path();
+        init_test_repo(workdir);
+        write_file(workdir, "a.txt", "base\n");
+        write_file(workdir, "b.txt", "base\n");
+        git_success(workdir, &["add", "a.txt", "b.txt"]);
+        git_success(workdir, &["commit", "-m", "base"]);
+
+        // Stage one of two modified files, exactly the app's stage action.
+        write_file(workdir, "a.txt", "staged change\n");
+        write_file(workdir, "b.txt", "worktree change\n");
+        git_success(workdir, &["add", "a.txt"]);
+
+        let repo = open_repo(workdir);
+        let StatusForPaths::Lists { unstaged, staged } = repo
+            .status_for_paths_impl(&[PathBuf::from("a.txt")])
+            .expect("status for the staged path")
+        else {
+            panic!("expected a mergeable list answer");
+        };
+        assert_eq!(
+            staged,
+            vec![file_status("a.txt", FileStatusKind::Modified)],
+            "the freshly staged path must answer as staged"
+        );
+        assert!(
+            unstaged.is_empty(),
+            "a clean-in-worktree staged path has no unstaged half: {unstaged:?}"
+        );
+    }
+
+    #[test]
+    fn status_for_paths_reports_the_freshly_unstaged_path_in_the_unstaged_lane() {
+        use worktree_core::services::StatusForPaths;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let workdir = dir.path();
+        init_test_repo(workdir);
+        write_file(workdir, "a.txt", "base\n");
+        write_file(workdir, "b.txt", "base\n");
+        git_success(workdir, &["add", "a.txt", "b.txt"]);
+        git_success(workdir, &["commit", "-m", "base"]);
+
+        // Stage both modifications, then unstage one, exactly the app's
+        // unstage action.
+        write_file(workdir, "a.txt", "change\n");
+        write_file(workdir, "b.txt", "change\n");
+        git_success(workdir, &["add", "a.txt", "b.txt"]);
+        git_success(workdir, &["reset", "HEAD", "--", "b.txt"]);
+
+        let repo = open_repo(workdir);
+        let StatusForPaths::Lists { unstaged, staged } = repo
+            .status_for_paths_impl(&[PathBuf::from("b.txt")])
+            .expect("status for the unstaged path")
+        else {
+            panic!("expected a mergeable list answer");
+        };
+        assert!(
+            staged.is_empty(),
+            "the freshly unstaged path must leave the staged lane: {staged:?}"
+        );
+        assert_eq!(
+            unstaged,
+            vec![file_status("b.txt", FileStatusKind::Modified)],
+            "the freshly unstaged path must answer as unstaged"
+        );
+    }
 }

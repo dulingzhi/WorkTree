@@ -28,3 +28,4 @@ tempfile = { workspace = true }
 
 [dev-dependencies]
 worktree-core = { workspace = true, features = ["test-support"] }
+worktree-git-gix = { workspace = true }

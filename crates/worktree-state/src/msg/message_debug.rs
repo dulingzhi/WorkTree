@@ -518,11 +518,13 @@ impl std::fmt::Debug for InternalMsg {
                 repo_id,
                 action,
                 result,
+                paths,
             } => f
                 .debug_struct("RepoActionFinished")
                 .field("repo_id", repo_id)
                 .field("action", action)
                 .field("result", result)
+                .field("paths", &paths.as_ref().map(|p| p.len()))
                 .finish(),
             InternalMsg::CommitFinished { repo_id, result } => f
                 .debug_struct("CommitFinished")

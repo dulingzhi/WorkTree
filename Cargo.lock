@@ -8912,6 +8912,7 @@ dependencies = [
  "smol",
  "tempfile",
  "worktree-core",
+ "worktree-git-gix",
 ]
 
 [[package]]

@@ -51,11 +51,19 @@ fn schedule_repo_action_with_result<T, F, M>(
 fn repo_action_finished(
     action: RepoActionKind,
 ) -> impl FnOnce(RepoId, Result<(), Error>) -> Msg + Send + 'static {
+    repo_action_finished_for_paths(action, None)
+}
+
+fn repo_action_finished_for_paths(
+    action: RepoActionKind,
+    paths: Option<RepoPathList>,
+) -> impl FnOnce(RepoId, Result<(), Error>) -> Msg + Send + 'static {
     move |repo_id, result| {
         Msg::Internal(crate::msg::InternalMsg::RepoActionFinished {
             repo_id,
             action,
             result,
+            paths,
         })
     }
 }
@@ -271,6 +279,7 @@ pub(super) fn schedule_create_branch_and_checkout(
                 repo_id,
                 action: RepoActionKind::CreateBranchAndCheckout,
                 result,
+                paths: None,
             }),
         );
     });
@@ -433,16 +442,21 @@ pub(super) fn schedule_stage_path(
     repo_id: RepoId,
     path: PathBuf,
 ) {
-    schedule_repo_action(
+    let finished_path = path.clone();
+    schedule_repo_action_with_hook(
         executor,
         repos,
         msg_tx,
         repo_id,
-        RepoActionKind::StagePath,
         move |repo| {
             let path_ref: &Path = &path;
             repo.stage(&[path_ref])
         },
+        |_msg_tx, _repo_id, _result| {},
+        repo_action_finished_for_paths(
+            RepoActionKind::StagePath,
+            Some(RepoPathList::new(vec![finished_path])),
+        ),
     );
 }
 
@@ -453,17 +467,19 @@ pub(super) fn schedule_stage_paths(
     repo_id: RepoId,
     paths: RepoPathList,
 ) {
-    schedule_repo_action(
+    let finished_paths = paths.clone();
+    schedule_repo_action_with_hook(
         executor,
         repos,
         msg_tx,
         repo_id,
-        RepoActionKind::StagePaths,
         move |repo| {
             let unique = dedup_paths(paths.as_slice().to_vec());
             let refs = unique.iter().map(|p| p.as_path()).collect::<Vec<_>>();
             repo.stage(&refs)
         },
+        |_msg_tx, _repo_id, _result| {},
+        repo_action_finished_for_paths(RepoActionKind::StagePaths, Some(finished_paths)),
     );
 }
 
@@ -474,16 +490,21 @@ pub(super) fn schedule_unstage_path(
     repo_id: RepoId,
     path: PathBuf,
 ) {
-    schedule_repo_action(
+    let finished_path = path.clone();
+    schedule_repo_action_with_hook(
         executor,
         repos,
         msg_tx,
         repo_id,
-        RepoActionKind::UnstagePath,
         move |repo| {
             let path_ref: &Path = &path;
             repo.unstage(&[path_ref])
         },
+        |_msg_tx, _repo_id, _result| {},
+        repo_action_finished_for_paths(
+            RepoActionKind::UnstagePath,
+            Some(RepoPathList::new(vec![finished_path])),
+        ),
     );
 }
 
@@ -494,17 +515,19 @@ pub(super) fn schedule_unstage_paths(
     repo_id: RepoId,
     paths: RepoPathList,
 ) {
-    schedule_repo_action(
+    let finished_paths = paths.clone();
+    schedule_repo_action_with_hook(
         executor,
         repos,
         msg_tx,
         repo_id,
-        RepoActionKind::UnstagePaths,
         move |repo| {
             let unique = dedup_paths(paths.as_slice().to_vec());
             let refs = unique.iter().map(|p| p.as_path()).collect::<Vec<_>>();
             repo.unstage(&refs)
         },
+        |_msg_tx, _repo_id, _result| {},
+        repo_action_finished_for_paths(RepoActionKind::UnstagePaths, Some(finished_paths)),
     );
 }
 
@@ -654,6 +677,7 @@ pub(super) fn schedule_pop_stash(
                         repo_id,
                         action: RepoActionKind::PopStash,
                         result,
+                        paths: None,
                     }),
                 );
             }
@@ -664,6 +688,7 @@ pub(super) fn schedule_pop_stash(
                         repo_id,
                         action: RepoActionKind::PopStash,
                         result: Err(err),
+                        paths: None,
                     }),
                 );
             }
