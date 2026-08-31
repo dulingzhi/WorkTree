@@ -337,12 +337,14 @@ git commit -m "Collapse conflict nav direction pairs onto shared cores"
 - Consumes: `DiffSyntaxLanguage`（`syntax.rs:208`，已 derive `PartialEq` ✓）、`TreesitterQueryAsset::{highlights, with_injections}`、各语言 crate 的 `LANGUAGE*` 常量与查询常量（均已在文件内使用）。
 - Produces: `tree_sitter_grammar` 签名与语义不变（`pub(super) fn(DiffSyntaxLanguage) -> Option<(tree_sitter::Language, TreesitterQueryAsset)>`）；惰性加载保持（`.into()` 仅在命中臂执行，宏不改变这一点）。
 
+> **设计修正（执行期裁决）**：宏不能展开成 match 臂（rustc 直接拒绝，报 "macros cannot expand to match arms"，已用独立最小用例编译验证）。因此臂的 `DiffSyntaxLanguage::X =>` 模式保持显式，宏只展开为臂体里的**元组表达式**——`arm!` 调用出现在 `Some(...)` 的实参位置（表达式位置，最普通的宏用法）。
+
 转换规则（对现有 match 的每个臂 1:1 适用，臂的完整清单即 language.rs:249-511 现存内容，顺序保持、注释原位保留）：
 
 - `DiffSyntaxLanguage::X => Some(($ts.into(), TreesitterQueryAsset::highlights($HL)))`
-  → `arm!(X, $ts => highlights($HL)),`
+  → `DiffSyntaxLanguage::X => Some(arm!($ts, $HL)),`
 - `DiffSyntaxLanguage::X => Some(($ts.into(), TreesitterQueryAsset::with_injections($HL, $INJ)))`
-  → `arm!(X, $ts => highlights($HL), injections($INJ)),`
+  → `DiffSyntaxLanguage::X => Some(arm!($ts, $HL, $INJ)),`
 - 尾臂 `_ => None` 保持原样（连同 509-510 的注释）。
 
 - [ ] **Step 1: 捕获基线**
@@ -352,31 +354,25 @@ Expected: 全绿（约 297 个测试），记录通过数 S。
 
 - [ ] **Step 2: 在函数体内定义臂宏并逐臂转换**
 
-`language.rs` 中 `tree_sitter_grammar` 函数体替换为如下骨架，然后按上述规则把 249-511 的每个现存臂转成一行 `arm!(...)`（示例给出了前 4 个臂的转换结果；其余依规则类推，Elixir 臂上方的注释块原位保留）：
+`language.rs` 中 `tree_sitter_grammar` 函数体替换为如下骨架，然后按上述规则把 249-511 的每个现存臂转成单行臂（示例给出了前 4 个臂的转换结果；其余依规则类推，Elixir 臂上方的注释块原位保留）：
 ```rust
 pub(super) fn tree_sitter_grammar(
     language: DiffSyntaxLanguage,
 ) -> Option<(tree_sitter::Language, TreesitterQueryAsset)> {
     macro_rules! arm {
-        ($variant:ident, $ts:expr => highlights($hl:expr)) => {
-            DiffSyntaxLanguage::$variant => Some((
-                $ts.into(),
-                TreesitterQueryAsset::highlights($hl),
-            ))
+        ($ts:expr, $hl:expr) => {
+            ($ts.into(), TreesitterQueryAsset::highlights($hl))
         };
-        ($variant:ident, $ts:expr => highlights($hl:expr), injections($inj:expr)) => {
-            DiffSyntaxLanguage::$variant => Some((
-                $ts.into(),
-                TreesitterQueryAsset::with_injections($hl, $inj),
-            ))
+        ($ts:expr, $hl:expr, $inj:expr) => {
+            ($ts.into(), TreesitterQueryAsset::with_injections($hl, $inj))
         };
     }
 
     match language {
-        arm!(Markdown, tree_sitter_md::LANGUAGE => highlights(MARKDOWN_HIGHLIGHTS_QUERY), injections(MARKDOWN_INJECTIONS_QUERY)),
-        arm!(MarkdownInline, tree_sitter_md::INLINE_LANGUAGE => highlights(MARKDOWN_INLINE_HIGHLIGHTS_QUERY)),
-        arm!(Html, tree_sitter_html::LANGUAGE => highlights(HTML_HIGHLIGHTS_QUERY), injections(HTML_INJECTIONS_QUERY)),
-        arm!(Jinja, tree_sitter_jinja_dialects::LANGUAGE => highlights(JINJA_HIGHLIGHTS_QUERY), injections(JINJA_INJECTIONS_QUERY)),
+        DiffSyntaxLanguage::Markdown => Some(arm!(tree_sitter_md::LANGUAGE, MARKDOWN_HIGHLIGHTS_QUERY, MARKDOWN_INJECTIONS_QUERY)),
+        DiffSyntaxLanguage::MarkdownInline => Some(arm!(tree_sitter_md::INLINE_LANGUAGE, MARKDOWN_INLINE_HIGHLIGHTS_QUERY)),
+        DiffSyntaxLanguage::Html => Some(arm!(tree_sitter_html::LANGUAGE, HTML_HIGHLIGHTS_QUERY, HTML_INJECTIONS_QUERY)),
+        DiffSyntaxLanguage::Jinja => Some(arm!(tree_sitter_jinja_dialects::LANGUAGE, JINJA_HIGHLIGHTS_QUERY, JINJA_INJECTIONS_QUERY)),
         // … 按同一规则转换其余每个现存臂 …
         // Languages without a wired tree-sitter grammar, or grammars gated off
         // by the current feature set, fall back to heuristic-only highlighting.
