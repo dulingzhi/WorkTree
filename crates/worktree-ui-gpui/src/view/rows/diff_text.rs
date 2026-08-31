@@ -427,7 +427,7 @@ fn expanded_highlights_to_raw_text(
     remapped
 }
 
-fn whitespace_visible_text_and_highlights_impl(
+pub(super) fn whitespace_visible_text_and_highlights_impl(
     text: &str,
     highlights: &[(Range<usize>, gpui::HighlightStyle)],
     append_eol_marker: bool,
