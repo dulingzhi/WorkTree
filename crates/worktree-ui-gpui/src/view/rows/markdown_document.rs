@@ -14,13 +14,13 @@
 //! handing the flowing renderer the same indices the row grid used keeps every
 //! one of them working without a second code path.
 
-use super::history::{
+use super::markdown_flow_text::MarkdownFlowText;
+use super::markdown_preview::{
     MARKDOWN_PREVIEW_BASE_FONT_PX, MARKDOWN_PREVIEW_BLOCKQUOTE_BAR_WIDTH_PX,
     MARKDOWN_PREVIEW_CONTENT_PAD_X_PX, MARKDOWN_PREVIEW_INDENT_STEP_PX,
     MARKDOWN_PREVIEW_INLINE_IMAGE_GAP_PX, MARKDOWN_PREVIEW_LIST_MARKER_GAP_PX,
     MARKDOWN_PREVIEW_LIST_MARKER_MIN_WIDTH_PX, MARKDOWN_PREVIEW_SHELL_PAD_X_PX,
 };
-use super::markdown_flow_text::MarkdownFlowText;
 use super::*;
 use crate::view::markdown_preview::{
     MAX_FLOWING_PREVIEW_ROWS, MarkdownBlock, MarkdownInlineImage, MarkdownInlineStyle,

@@ -405,6 +405,7 @@ mod history_canvas;
 pub(in crate::view) mod history_graph_paint;
 mod markdown_document;
 mod markdown_flow_text;
+mod markdown_preview;
 pub(in crate::view) mod sidebar;
 mod status;
 
@@ -416,14 +417,6 @@ pub(in crate::view) use self::conflict_resolver::{
 };
 pub(in crate::view) use self::diff::{BlameRenderCtx, build_row_blame_paint};
 pub(in crate::view) use self::diff_canvas::blame_gutter_row_canvas;
-pub(in crate::view) use self::history::{
-    MarkdownPreviewImageSource, MarkdownPreviewPictureSizes, MarkdownPreviewQuery,
-    MarkdownPreviewRevealRequest, markdown_preview_alert_bar_color, markdown_preview_alert_label,
-    markdown_preview_flow_image, markdown_preview_highlighted_text, markdown_preview_image_source,
-    markdown_preview_inline_image, markdown_preview_marker_label, markdown_preview_reveal_offset_y,
-    markdown_preview_row_background, markdown_preview_row_extent,
-    markdown_preview_styled_row_with_query, worktree_markdown_preview_bar_color,
-};
 pub(in crate::view) use self::markdown_document::{
     MarkdownDocumentBlockCache, MarkdownDocumentBlockScrolls, MarkdownDocumentContext,
     render_markdown_document,
@@ -434,6 +427,14 @@ pub(in crate::view) use self::markdown_flow_text::{
 };
 pub(in crate::view) use self::markdown_flow_text::{
     markdown_flow_painted_offset, markdown_flow_row_offset,
+};
+pub(in crate::view) use self::markdown_preview::{
+    MarkdownPreviewImageSource, MarkdownPreviewPictureSizes, MarkdownPreviewQuery,
+    MarkdownPreviewRevealRequest, markdown_preview_alert_bar_color, markdown_preview_alert_label,
+    markdown_preview_flow_image, markdown_preview_highlighted_text, markdown_preview_image_source,
+    markdown_preview_inline_image, markdown_preview_marker_label, markdown_preview_reveal_offset_y,
+    markdown_preview_row_background, markdown_preview_row_extent,
+    markdown_preview_styled_row_with_query, worktree_markdown_preview_bar_color,
 };
 pub(in crate::view) use self::sidebar::active_workspace_paths_by_branch;
 pub(in crate::view) use self::sidebar::listed_workspace_paths_by_branch;

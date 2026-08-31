@@ -341,10 +341,10 @@ fn render_conflict_markdown_preview_rows(
         window,
         cx,
     );
-    super::history::render_markdown_preview_document_rows(
+    super::markdown_preview::render_markdown_preview_document_rows(
         document.as_ref(),
         range,
-        &super::history::MarkdownPreviewRenderContext {
+        &super::markdown_preview::MarkdownPreviewRenderContext {
             theme,
             min_width: this.diff_horizontal_content_width().max(viewport_width),
             editor_font_family: editor_font_family.into(),
