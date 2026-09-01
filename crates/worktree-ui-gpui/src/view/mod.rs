@@ -194,6 +194,7 @@ mod sidebar_presentation;
 mod splash;
 mod state_apply;
 mod statistics;
+mod status_section;
 mod terminal_alacritty;
 mod terminal_panel;
 mod terminal_preferences;
@@ -287,6 +288,12 @@ pub(in crate::view) use resize_state::{
 };
 pub(in crate::view) use rows::{ConflictTextHitbox, DiffTextHitbox, DiffTextPos, DiffTextRegion};
 pub(crate) use settings_window::{SettingsWindowView, open_settings_window};
+#[cfg(test)]
+use status_section::reconcile_status_multi_selection;
+use status_section::{
+    StatusMultiSelection, StatusSection, StatusSectionEntries,
+    reconcile_status_multi_selection_with_repo, status_section_is_loading, status_section_rev,
+};
 use toast_host::ToastHost;
 use tooltip::WorkTreeTooltipExt;
 #[cfg(test)]
