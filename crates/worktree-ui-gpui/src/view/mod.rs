@@ -210,13 +210,17 @@ mod word_diff;
 use app_model::AppUiModel;
 use branch_sidebar::{BranchSection, BranchSidebarRow};
 use caches::{
-    HistoryBaseCache, HistoryBaseCacheRequest, HistoryBaseRowVm, HistoryCache,
-    HistoryCacheBuildRequest, HistoryDecorationCache, HistoryDecorationCacheRequest,
-    HistoryDecorationRowVm, HistoryDisplayKey, HistoryRefListItem, HistoryRefListItemKind,
-    HistoryStashIdsCache, HistoryTextVm, HistoryWorktreeSummaryCache,
+    DeferredLineStarts, DiffTextLayoutCacheEntry, HistoryBaseCache, HistoryBaseCacheRequest,
+    HistoryBaseRowVm, HistoryCache, HistoryCacheBuildRequest, HistoryDecorationCache,
+    HistoryDecorationCacheRequest, HistoryDecorationRowVm, HistoryDisplayKey, HistoryRefListItem,
+    HistoryRefListItemKind, HistoryStashIdsCache, HistoryTextVm, HistoryWorktreeSummaryCache,
+    LoadableImagePreview, LoadableMarkdownDiff, LoadableMarkdownDoc, MarkdownPreviewList,
+    MarkdownPreviewWrapCache, MarkdownPreviewWrapKey, MarkdownSearchSurface,
 };
 use chrome::{TitleBarView, cursor_style_for_resize_edge, resize_edge};
-use conflict_resolver::{ConflictPickSide, ConflictResolverViewMode};
+use conflict_resolver::{
+    ConflictPickSide, ConflictResolverViewMode, ThreeWayColumn, ThreeWaySides,
+};
 #[cfg(test)]
 use date_time::format_datetime;
 #[cfg(test)]

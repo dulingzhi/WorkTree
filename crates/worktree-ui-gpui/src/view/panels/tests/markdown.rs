@@ -1,5 +1,5 @@
 use super::*;
-use crate::view::mod_helpers::MarkdownSearchSurface;
+use crate::view::caches::MarkdownSearchSurface;
 use crate::view::panes::main::DiffWrapVisualRow;
 
 #[gpui::test]

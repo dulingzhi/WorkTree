@@ -1,5 +1,8 @@
 mod split_row_index;
+mod three_way;
 mod word_highlight;
+
+pub(in crate::view) use three_way::{ThreeWayColumn, ThreeWaySides};
 
 use super::CachedDiffStyledText;
 use rustc_hash::{FxHashMap, FxHashSet, FxHasher};
@@ -384,12 +387,7 @@ pub(in crate::view) fn previous_conflict_nav_target_index(
     anchor: Option<ConflictNavAnchor>,
     filter: ConflictNavTargetFilter,
 ) -> Option<usize> {
-    conflict_nav_target_index_in_direction(
-        ConflictNavDirection::Prev,
-        targets,
-        anchor,
-        filter,
-    )
+    conflict_nav_target_index_in_direction(ConflictNavDirection::Prev, targets, anchor, filter)
 }
 
 pub(in crate::view) fn next_conflict_nav_target_index(
