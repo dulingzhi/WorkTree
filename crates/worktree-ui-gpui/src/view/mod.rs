@@ -182,6 +182,7 @@ mod perf;
 mod permalink;
 pub(super) mod platform_open;
 mod poller;
+mod preview_kind;
 mod reflog_panel;
 mod repo_open;
 mod resize_state;
@@ -266,6 +267,12 @@ use panes::{
     CollapsedSidebarSection, DetailsPaneInit, DetailsPaneView, HistoryView, ReflogPaneInit,
     ReflogPaneView, SidebarPaneView,
 };
+pub(in crate::view) use preview_kind::{
+    ConflictResolverPreviewMode, DiffViewMode, RenderableConflictFile, RenderedPreviewKind,
+    RenderedPreviewMode, RenderedPreviewModes, conflict_file_is_binary,
+    diff_target_rendered_preview_kind, main_diff_rendered_preview_toggle_kind,
+    preview_path_rendered_kind, renderable_conflict_file, should_bypass_text_file_preview_for_path,
+};
 pub(in crate::view) use resize_state::{
     AnnotateResizeDragGhost, AnnotateResizeHandle, AnnotateResizeState,
     ConflictDiffSplitResizeDragGhost, ConflictDiffSplitResizeHandle, ConflictDiffSplitResizeState,
@@ -273,8 +280,8 @@ pub(in crate::view) use resize_state::{
     ConflictVSplitResizeDragGhost, ConflictVSplitResizeHandle, ConflictVSplitResizeState,
     DiffSplitResizeDragGhost, DiffSplitResizeHandle, DiffSplitResizeState,
     HistoryColResizeDragGhost, HistoryColResizeHandle, HistoryColResizeState, PaneResizeDragGhost,
-    PaneResizeHandle, PaneResizeState, ResizeDragGhost,
-    StatusSectionResizeHandle, StatusSectionResizeState,
+    PaneResizeHandle, PaneResizeState, ResizeDragGhost, StatusSectionResizeHandle,
+    StatusSectionResizeState,
 };
 pub(crate) use settings_window::{SettingsWindowView, open_settings_window};
 use toast_host::ToastHost;
