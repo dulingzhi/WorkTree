@@ -13,9 +13,7 @@ use crate::kit::{
 };
 use crate::theme::AppTheme;
 use crate::view::history_graph;
-use crate::view::mod_helpers::{
-    PaneResizeHandle, PaneResizeState, StatusMultiSelection, StatusSection,
-};
+use crate::view::mod_helpers::{StatusMultiSelection, StatusSection};
 use crate::view::next_pane_resize_drag_width;
 use crate::view::panes::main::{
     AsciiCaseInsensitiveNeedle, DiffSearchQueryReuse,
@@ -25,6 +23,7 @@ use crate::view::panes::main::{
     diff_search_query_reuse,
 };
 use crate::view::path_display;
+use crate::view::resize_state::{PaneResizeHandle, PaneResizeState};
 use rustc_hash::FxHasher;
 use std::cell::{Cell, RefCell};
 use std::fmt::Write as _;

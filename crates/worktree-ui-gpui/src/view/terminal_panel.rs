@@ -3302,7 +3302,7 @@ impl WorkTreeView {
                 Some(theme.colors.stroke.subtle),
             ))
             .on_drag(TerminalPanelResizeDrag, |_payload, _offset, _window, cx| {
-                cx.new(|_cx| super::mod_helpers::ResizeDragGhost)
+                cx.new(|_cx| ResizeDragGhost)
             })
             .on_mouse_down(
                 MouseButton::Left,

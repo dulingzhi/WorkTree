@@ -184,6 +184,7 @@ pub(super) mod platform_open;
 mod poller;
 mod reflog_panel;
 mod repo_open;
+mod resize_state;
 pub(crate) mod rows;
 mod scroll_geometry;
 mod settings_window;
@@ -264,6 +265,16 @@ pub(crate) use panes::MainPaneView;
 use panes::{
     CollapsedSidebarSection, DetailsPaneInit, DetailsPaneView, HistoryView, ReflogPaneInit,
     ReflogPaneView, SidebarPaneView,
+};
+pub(in crate::view) use resize_state::{
+    AnnotateResizeDragGhost, AnnotateResizeHandle, AnnotateResizeState,
+    ConflictDiffSplitResizeDragGhost, ConflictDiffSplitResizeHandle, ConflictDiffSplitResizeState,
+    ConflictHSplitResizeDragGhost, ConflictHSplitResizeHandle, ConflictHSplitResizeState,
+    ConflictVSplitResizeDragGhost, ConflictVSplitResizeHandle, ConflictVSplitResizeState,
+    DiffSplitResizeDragGhost, DiffSplitResizeHandle, DiffSplitResizeState,
+    HistoryColResizeDragGhost, HistoryColResizeHandle, HistoryColResizeState, PaneResizeDragGhost,
+    PaneResizeHandle, PaneResizeState, ResizeDragGhost,
+    StatusSectionResizeHandle, StatusSectionResizeState,
 };
 pub(crate) use settings_window::{SettingsWindowView, open_settings_window};
 use toast_host::ToastHost;
