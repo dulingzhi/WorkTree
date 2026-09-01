@@ -1,3 +1,5 @@
+#[cfg(test)]
+use super::scroll_geometry::absolute_scroll_y;
 use super::*;
 use crate::i18n::{t, tr, tr_str};
 use crate::ui_scale;

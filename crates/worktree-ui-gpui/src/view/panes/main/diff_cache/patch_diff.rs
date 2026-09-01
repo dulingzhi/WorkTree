@@ -880,6 +880,7 @@ pub(super) fn scrollbar_markers_from_visible_flags(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::view::rows::should_hide_unified_diff_header_line;
     use std::path::PathBuf;
     use worktree_core::domain::{Diff, DiffArea, DiffTarget};
 

@@ -260,7 +260,6 @@ use panes::{
     CollapsedSidebarSection, DetailsPaneInit, DetailsPaneView, HistoryView, ReflogPaneInit,
     ReflogPaneView, SidebarPaneView,
 };
-use scroll_geometry::*;
 pub(crate) use settings_window::{SettingsWindowView, open_settings_window};
 use toast_host::ToastHost;
 use tooltip::WorkTreeTooltipExt;

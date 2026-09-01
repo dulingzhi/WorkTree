@@ -9,7 +9,7 @@ fn toast_fade_out_duration() -> Duration {
     Duration::from_millis(TOAST_FADE_OUT_MS)
 }
 
-fn toast_total_lifetime(ttl: Duration) -> Duration {
+pub(super) fn toast_total_lifetime(ttl: Duration) -> Duration {
     toast_fade_in_duration() + ttl + toast_fade_out_duration()
 }
 

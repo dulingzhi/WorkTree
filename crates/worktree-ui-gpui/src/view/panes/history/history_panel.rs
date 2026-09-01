@@ -4,6 +4,7 @@ use std::rc::Rc;
 
 use super::HistoryView;
 use crate::view::caches::HistoryListRow;
+use crate::view::scroll_geometry::scroll_is_near_bottom;
 
 impl Render for HistoryView {
     fn render(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
