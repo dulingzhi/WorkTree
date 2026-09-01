@@ -8,15 +8,11 @@ use super::markdown_preview::{
 };
 use super::*;
 use crate::view::caches::HistoryListRow;
-use palette::IntoColor;
 
-use crate::view::markdown_preview::{
-    MarkdownAlertKind, MarkdownChangeHint, MarkdownInlineStyle, MarkdownPreviewDocument,
-    MarkdownPreviewRow, MarkdownPreviewRowKind,
-};
+use crate::view::markdown_preview::MarkdownPreviewDocument;
+#[cfg(test)]
+use crate::view::markdown_preview::{MarkdownAlertKind, MarkdownChangeHint, MarkdownInlineStyle};
 use crate::view::panes::main::diff_search::DiffSearchMatcher;
-use crate::view::perf::{self, ViewPerfRenderLane, ViewPerfSpan};
-use rustc_hash::FxHasher;
 use worktree_core::services::BisectVerdict;
 use worktree_state::msg::CommitSelectMode;
 

@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - **验收四件套 + benchmarks 腿，每个任务全跑**（feature-gate 教训来自 P0 Task 9；`rows/benchmarks.rs` 本身显式导入 `crate::view::mod_helpers::{PaneResizeHandle, PaneResizeState, StatusMultiSelection, StatusSection}`，任务 3/6/8 移动这些符号时该 use 必须改指）：
-  1. `cargo clippy --workspace --no-default-features --features gix -- -D warnings`
+  1. `cargo clippy --workspace --no-default-features --features gix -- -D warnings` — **基线豁免制**：dev 既有 31 处 worktree-ui-gpui 欠账冻结于 `.superpowers/sdd/2026-09-01-p1-dissolve-mod-helpers/clippy-baseline.txt`（file:line 清单）。门禁 = 错误集 ⊆ 基线集（按位置比对；基线内条目随 P1 任务搬移同文件时可等位更新，不得新增）。非 ui-gpui crate 必须零错误（已由前置修复达成）。
   2. `cargo test --workspace --no-default-features --features gix`
   3. `cargo build -p worktree --features ui-gpui,gix`
   4. `cargo test --workspace --features benchmarks --no-run`

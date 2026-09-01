@@ -776,13 +776,12 @@ impl AppStore {
                                 let mut app_state =
                                     thread_state.write().unwrap_or_else(|e| e.into_inner());
                                 let app_state = make_mut_state_with_diagnostics(&mut app_state);
-                                let effects = reduce(
+                                reduce(
                                     &mut repos,
                                     &id_alloc,
                                     app_state,
                                     Msg::AutoFetchAll { repo_id },
-                                );
-                                effects
+                                )
                             };
                             handle_reducer_effects(
                                 effects,

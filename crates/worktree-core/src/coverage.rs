@@ -81,12 +81,11 @@ impl CoverageReport {
                 // signal the overlay has is zero-vs-nonzero.
                 file.record(line_no, hits.max(0) as u64);
                 let _ = path;
-            } else if line == "end_of_record" {
-                if let Some((path, file)) = current.take() {
-                    if !file.lines.is_empty() {
-                        report.files.insert(path, file);
-                    }
-                }
+            } else if line == "end_of_record"
+                && let Some((path, file)) = current.take()
+                && !file.lines.is_empty()
+            {
+                report.files.insert(path, file);
             }
         }
         if let Some((path, file)) = current {
@@ -113,8 +112,10 @@ impl CoverageReport {
 
     /// What the import toast reports back: how much data landed.
     pub fn summarize(&self) -> CoverageSummary {
-        let mut summary = CoverageSummary::default();
-        summary.files = self.files.len();
+        let mut summary = CoverageSummary {
+            files: self.files.len(),
+            ..Default::default()
+        };
         for file in self.files.values() {
             for &hits in file.lines.values() {
                 summary.lines += 1;

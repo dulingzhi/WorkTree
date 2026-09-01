@@ -1343,18 +1343,16 @@ fn parse_porcelain_v2_for_paths(output: &[u8]) -> worktree_core::services::Statu
                 if let (Some(path), Some(x)) = (
                     path_buf_from_git_bytes(path.as_bytes(), "porcelain v2 path").ok(),
                     x,
-                ) {
-                    if let Some(kind) = map_porcelain_v2_status_char(x) {
-                        push_status_entry(&mut staged, path.clone(), kind);
-                    }
+                ) && let Some(kind) = map_porcelain_v2_status_char(x)
+                {
+                    push_status_entry(&mut staged, path.clone(), kind);
                 }
                 if let (Some(y), Some(path)) = (
                     y,
                     path_buf_from_git_bytes(path.as_bytes(), "porcelain v2 path").ok(),
-                ) {
-                    if let Some(kind) = map_porcelain_v2_status_char(y) {
-                        push_status_entry(&mut unstaged, path, kind);
-                    }
+                ) && let Some(kind) = map_porcelain_v2_status_char(y)
+                {
+                    push_status_entry(&mut unstaged, path, kind);
                 }
             }
             b'2' => return StatusForPaths::NeedsFullScan,
@@ -1378,14 +1376,13 @@ fn parse_porcelain_v2_for_paths(output: &[u8]) -> worktree_core::services::Statu
                     fields.next(),
                 );
                 let path = fields.next();
-                if let (Some(xy), Some(path)) = (xy, path) {
-                    if let Some(kind) = porcelain_v2_unmerged_kind(xy) {
-                        if let Ok(path) =
-                            path_buf_from_git_bytes(path.as_bytes(), "porcelain v2 path")
-                        {
-                            push_status_entry(&mut unstaged, path, FileStatusKind::Conflicted);
-                            unstaged.last_mut().map(|entry| entry.conflict = Some(kind));
-                        }
+                if let (Some(xy), Some(path)) = (xy, path)
+                    && let Some(kind) = porcelain_v2_unmerged_kind(xy)
+                    && let Ok(path) = path_buf_from_git_bytes(path.as_bytes(), "porcelain v2 path")
+                {
+                    push_status_entry(&mut unstaged, path, FileStatusKind::Conflicted);
+                    if let Some(entry) = unstaged.last_mut() {
+                        entry.conflict = Some(kind);
                     }
                 }
             }

@@ -103,10 +103,7 @@ fn check_attr_output_has_lfs_filter(stdout: &[u8]) -> bool {
         // core.quotepath; the attribute name and value are never quoted.
         String::from_utf8_lossy(part)
     });
-    loop {
-        let Some(_path) = parts.next() else { break };
-        let Some(attr) = parts.next() else { break };
-        let Some(value) = parts.next() else { break };
+    while let (Some(_path), Some(attr), Some(value)) = (parts.next(), parts.next(), parts.next()) {
         if attr == "filter" && value == "lfs" {
             return true;
         }

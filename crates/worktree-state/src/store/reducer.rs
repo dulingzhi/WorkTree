@@ -1349,12 +1349,11 @@ fn reduce_inner(
         Msg::LoadLfsImagePreview { repo_id, target } => {
             if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id)
                 && repo_state.diff_state.diff_target.as_ref() == Some(&target)
+                && !matches!(repo_state.diff_state.lfs_image_preview, Loadable::Loading)
             {
-                if !matches!(repo_state.diff_state.lfs_image_preview, Loadable::Loading) {
-                    repo_state.diff_state.lfs_image_preview = Loadable::Loading;
-                    repo_state.bump_diff_state_rev();
-                    return vec![Effect::LoadLfsImagePreview { repo_id, target }];
-                }
+                repo_state.diff_state.lfs_image_preview = Loadable::Loading;
+                repo_state.bump_diff_state_rev();
+                return vec![Effect::LoadLfsImagePreview { repo_id, target }];
             }
             Vec::new()
         }

@@ -938,9 +938,11 @@ fn repo_monitor_thread(
                 relative.retain(|p| !p.as_os_str().is_empty());
                 relative.sort();
                 relative.dedup();
-                (!relative.is_empty())
-                    .then_some(relative)
-                    .unwrap_or_default()
+                if !relative.is_empty() {
+                    relative
+                } else {
+                    Default::default()
+                }
             })
         })
     };
