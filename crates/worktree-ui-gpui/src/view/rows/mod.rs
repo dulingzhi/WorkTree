@@ -408,6 +408,7 @@ mod markdown_flow_text;
 mod markdown_preview;
 pub(in crate::view) mod sidebar;
 mod status;
+mod text_geometry;
 
 #[cfg(feature = "benchmarks")]
 pub(crate) mod benchmarks;
@@ -440,6 +441,10 @@ pub(in crate::view) use self::markdown_preview::{
 };
 pub(in crate::view) use self::sidebar::active_workspace_paths_by_branch;
 pub(in crate::view) use self::sidebar::listed_workspace_paths_by_branch;
+pub(in crate::view) use self::text_geometry::{
+    ConflictTextHitbox, DiffTextHitbox, DiffTextOffsetMap, DiffTextPos, DiffTextRegion,
+    DiffTextWrappedHit,
+};
 
 #[cfg(any(test, feature = "benchmarks"))]
 pub(in crate::view) use diff_text::has_pending_prepared_diff_syntax_chunk_builds_for_document;

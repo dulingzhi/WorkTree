@@ -3141,7 +3141,7 @@ pub(crate) struct MainPaneView {
     /// sideways half of a search reveal. Rebuilt every frame like
     /// [`Self::diff_text_hitboxes`].
     pub(in crate::view) conflict_text_hitboxes:
-        FxHashMap<(usize, ThreeWayColumn), crate::view::mod_helpers::ConflictTextHitbox>,
+        FxHashMap<(usize, ThreeWayColumn), ConflictTextHitbox>,
     pub(in crate::view) diff_text_layout_cache_epoch: u64,
     pub(in crate::view) diff_text_layout_cache: FxHashMap<u64, DiffTextLayoutCacheEntry>,
     pub(in crate::view) diff_search_active: bool,

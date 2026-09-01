@@ -345,7 +345,7 @@ impl MainPaneView {
         &mut self,
         visible_ix: usize,
         column: ThreeWayColumn,
-        hitbox: crate::view::mod_helpers::ConflictTextHitbox,
+        hitbox: ConflictTextHitbox,
     ) {
         self.conflict_text_hitboxes
             .insert((visible_ix, column), hitbox);

@@ -267,6 +267,8 @@ use panes::{
     CollapsedSidebarSection, DetailsPaneInit, DetailsPaneView, HistoryView, ReflogPaneInit,
     ReflogPaneView, SidebarPaneView,
 };
+#[cfg(test)]
+pub(in crate::view) use preview_kind::is_markdown_path;
 pub(in crate::view) use preview_kind::{
     ConflictResolverPreviewMode, DiffViewMode, RenderableConflictFile, RenderedPreviewKind,
     RenderedPreviewMode, RenderedPreviewModes, conflict_file_is_binary,
@@ -283,6 +285,7 @@ pub(in crate::view) use resize_state::{
     PaneResizeHandle, PaneResizeState, ResizeDragGhost, StatusSectionResizeHandle,
     StatusSectionResizeState,
 };
+pub(in crate::view) use rows::{ConflictTextHitbox, DiffTextHitbox, DiffTextPos, DiffTextRegion};
 pub(crate) use settings_window::{SettingsWindowView, open_settings_window};
 use toast_host::ToastHost;
 use tooltip::WorkTreeTooltipExt;

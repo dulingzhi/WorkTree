@@ -440,7 +440,7 @@ pub(super) fn single_column_conflict_canvas(
                             this.set_conflict_text_hitbox(
                                 visible_row_ix,
                                 column,
-                                crate::view::mod_helpers::ConflictTextHitbox {
+                                ConflictTextHitbox {
                                     bounds: text_bounds,
                                     layout,
                                 },
