@@ -415,7 +415,9 @@ pub(crate) mod benchmarks;
 pub(in crate::view) use self::conflict_resolver::{
     resolved_output_gutter_width, resolved_output_line_no_width,
 };
-pub(in crate::view) use self::diff::{BlameRenderCtx, build_row_blame_paint};
+pub(in crate::view) use self::diff::{
+    BlameRenderCtx, build_row_blame_paint, should_hide_unified_diff_header_line,
+};
 pub(in crate::view) use self::diff_canvas::blame_gutter_row_canvas;
 pub(in crate::view) use self::markdown_document::{
     MarkdownDocumentBlockCache, MarkdownDocumentBlockScrolls, MarkdownDocumentContext,

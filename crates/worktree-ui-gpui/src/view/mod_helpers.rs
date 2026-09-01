@@ -6,18 +6,6 @@ use worktree_core::services::InteractiveRebaseAction;
 
 type AlacrittyTermLock = super::terminal_alacritty::AlacrittyTermLock;
 
-pub(super) fn toast_fade_in_duration() -> Duration {
-    Duration::from_millis(TOAST_FADE_IN_MS)
-}
-
-pub(super) fn toast_fade_out_duration() -> Duration {
-    Duration::from_millis(TOAST_FADE_OUT_MS)
-}
-
-pub(super) fn toast_total_lifetime(ttl: Duration) -> Duration {
-    toast_fade_in_duration() + ttl + toast_fade_out_duration()
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(in crate::view) struct SelectedBranch {
     pub(in crate::view) repo_id: RepoId,
@@ -99,28 +87,6 @@ impl Render for ResizeDragGhost {
 }
 
 pub(super) use ResizeDragGhost as HistoryColResizeDragGhost;
-
-pub(super) fn should_hide_unified_diff_header_line(line: &AnnotatedDiffLine) -> bool {
-    matches!(line.kind, worktree_core::domain::DiffLineKind::Header)
-        && (line.text.starts_with("index ")
-            || line.text.starts_with("--- ")
-            || line.text.starts_with("+++ "))
-}
-
-pub(super) fn absolute_scroll_y(handle: &ScrollHandle) -> Pixels {
-    let raw = handle.offset().y;
-    if raw < px(0.0) { -raw } else { raw }
-}
-
-pub(super) fn scroll_is_near_bottom(handle: &ScrollHandle, threshold: Pixels) -> bool {
-    let max_offset = handle.max_offset().y.max(px(0.0));
-    if max_offset <= px(0.0) {
-        return true;
-    }
-
-    let scroll_y = absolute_scroll_y(handle).max(px(0.0)).min(max_offset);
-    (max_offset - scroll_y) <= threshold
-}
 
 pub(super) fn is_svg_path(path: &std::path::Path) -> bool {
     path.extension()
@@ -680,55 +646,6 @@ impl DiffTextOffsetMap {
             .copied()
             .unwrap_or_else(|| self.display_len())
     }
-}
-
-#[derive(Clone)]
-pub(super) struct ToastState {
-    pub(super) id: u64,
-    pub(super) kind: components::ToastKind,
-    pub(super) input: Entity<components::TextInput>,
-    pub(super) is_code_message: bool,
-    pub(super) actions: Vec<ToastAction>,
-    pub(super) dismiss_behavior: ToastDismissBehavior,
-    pub(super) ttl: Option<Duration>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) enum ToastAction {
-    OpenUrl {
-        url: String,
-        label: String,
-    },
-    OpenSurvey {
-        survey_id: String,
-        survey_name: String,
-        url: String,
-        label: String,
-    },
-    PostponeSurvey {
-        survey_id: String,
-        survey_name: String,
-        postpone_seconds: u64,
-        label: String,
-    },
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub(super) enum ToastDismissBehavior {
-    #[default]
-    Remove,
-    PostponeSurvey {
-        survey_id: String,
-        survey_name: String,
-        postpone_seconds: u64,
-    },
-}
-
-#[derive(Clone, Debug)]
-pub(super) struct CommitDetailsDelayState {
-    pub(super) repo_id: RepoId,
-    pub(super) commit_id: CommitId,
-    pub(super) show_loading: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

@@ -12,6 +12,13 @@ use crate::view::panes::main::{
 use worktree_core::domain::DiffLineKind;
 use worktree_core::file_diff::FileDiffRowKind;
 
+pub(in crate::view) fn should_hide_unified_diff_header_line(line: &AnnotatedDiffLine) -> bool {
+    matches!(line.kind, DiffLineKind::Header)
+        && (line.text.starts_with("index ")
+            || line.text.starts_with("--- ")
+            || line.text.starts_with("+++ "))
+}
+
 const COLLAPSED_DIFF_INLINE_HUNK_SHELL_DEBUG_SELECTOR: &str = "collapsed_diff_inline_hunk_shell";
 const COLLAPSED_DIFF_INLINE_HUNK_GUTTER_DEBUG_SELECTOR: &str = "collapsed_diff_inline_hunk_gutter";
 const COLLAPSED_DIFF_INLINE_HUNK_UP_DEBUG_SELECTOR: &str = "collapsed_diff_inline_hunk_up";

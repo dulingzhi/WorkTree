@@ -3,6 +3,7 @@ use crate::view::diff_utils::compute_diff_yaml_block_scalar_for_src_ix;
 use crate::view::markdown_preview;
 use crate::view::perf::{self, ViewPerfSpan};
 use crate::view::rows;
+use crate::view::rows::should_hide_unified_diff_header_line;
 use rustc_hash::FxHasher;
 use worktree_core::domain::DiffRowProvider;
 

@@ -1,6 +1,60 @@
 use super::*;
 use worktree_state::model::SubmoduleAddProgressState;
 
+fn toast_fade_in_duration() -> Duration {
+    Duration::from_millis(TOAST_FADE_IN_MS)
+}
+
+fn toast_fade_out_duration() -> Duration {
+    Duration::from_millis(TOAST_FADE_OUT_MS)
+}
+
+fn toast_total_lifetime(ttl: Duration) -> Duration {
+    toast_fade_in_duration() + ttl + toast_fade_out_duration()
+}
+
+#[derive(Clone)]
+struct ToastState {
+    id: u64,
+    kind: components::ToastKind,
+    input: Entity<components::TextInput>,
+    is_code_message: bool,
+    actions: Vec<ToastAction>,
+    dismiss_behavior: ToastDismissBehavior,
+    ttl: Option<Duration>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum ToastAction {
+    OpenUrl {
+        url: String,
+        label: String,
+    },
+    OpenSurvey {
+        survey_id: String,
+        survey_name: String,
+        url: String,
+        label: String,
+    },
+    PostponeSurvey {
+        survey_id: String,
+        survey_name: String,
+        postpone_seconds: u64,
+        label: String,
+    },
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+enum ToastDismissBehavior {
+    #[default]
+    Remove,
+    PostponeSurvey {
+        survey_id: String,
+        survey_name: String,
+        postpone_seconds: u64,
+    },
+}
+
 pub(super) struct ToastHost {
     theme: AppTheme,
     root_view: WeakEntity<WorkTreeView>,

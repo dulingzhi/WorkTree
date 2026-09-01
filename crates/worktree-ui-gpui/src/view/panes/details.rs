@@ -11,6 +11,13 @@ struct PendingCommitAmend {
     last_command_log_entry: Option<CommandLogEntry>,
 }
 
+#[derive(Clone, Debug)]
+pub(in super::super) struct CommitDetailsDelayState {
+    pub(in super::super) repo_id: RepoId,
+    pub(in super::super) commit_id: CommitId,
+    pub(in super::super) show_loading: bool,
+}
+
 /// Where one ✨ AI commit-message generation stands. The button starts a
 /// context fetch (`LoadAiCommitContext`); once the staged diff lands the
 /// provider request runs asynchronously, then its reply replaces the message

@@ -184,6 +184,7 @@ mod poller;
 mod reflog_panel;
 mod repo_open;
 pub(crate) mod rows;
+mod scroll_geometry;
 mod settings_window;
 pub(crate) mod shortcut_labels;
 mod sidebar_presentation;
@@ -259,6 +260,7 @@ use panes::{
     CollapsedSidebarSection, DetailsPaneInit, DetailsPaneView, HistoryView, ReflogPaneInit,
     ReflogPaneView, SidebarPaneView,
 };
+use scroll_geometry::*;
 pub(crate) use settings_window::{SettingsWindowView, open_settings_window};
 use toast_host::ToastHost;
 use tooltip::WorkTreeTooltipExt;
