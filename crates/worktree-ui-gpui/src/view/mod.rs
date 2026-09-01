@@ -142,6 +142,7 @@ fn repo_activation_msg(
 
 mod agent_workbench;
 mod app_model;
+mod branch_selection;
 mod branch_sidebar;
 mod caches;
 mod chrome;
@@ -228,6 +229,10 @@ pub(in crate::view) use terminal_preferences::{
 };
 use word_diff::{capped_word_diff_ranges, capped_word_diff_ranges_for_file_diff_texts};
 
+pub(in crate::view) use branch_selection::{
+    SelectedBranch, SelectedHistoryBranch, selected_branch_for_history_row,
+    selected_branch_label_color, selected_branch_row_bg,
+};
 use commit_message_hover::{CommitMessageHoverHost, CommitMessageHoverState};
 #[cfg(test)]
 use diff_text_model::CachedDiffTextSegment;
