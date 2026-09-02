@@ -59,7 +59,7 @@ pub(in crate::view) enum PopoverKind {
         purpose: BranchPickerPurpose,
     },
     /// Pick (or clear) the remote-tracking branch a local branch follows.
-    /// Opened from the local branch menu's "Change tracking upstream\u{2026}".
+    /// Opened from the local branch menu's "Change tracking upstream…".
     UpstreamPicker {
         repo_id: RepoId,
         branch: String,
