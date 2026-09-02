@@ -156,6 +156,7 @@ mod conflict_markers;
 pub(crate) mod conflict_resolver;
 mod date_time;
 mod diff_navigation;
+mod diff_prefs;
 mod diff_preview;
 mod diff_text_model;
 mod diff_text_selection;
@@ -205,6 +206,7 @@ mod tooltip;
 mod tooltip_host;
 mod update_check;
 mod user_survey;
+mod view_mode;
 mod word_diff;
 
 use app_model::AppUiModel;
@@ -241,6 +243,7 @@ pub(in crate::view) use branch_selection::{
     selected_branch_label_color, selected_branch_row_bg,
 };
 use commit_message_hover::{CommitMessageHoverHost, CommitMessageHoverState};
+use diff_prefs::{ChangeTrackingView, DiffContentMode, DiffScrollSync, DiffWhitespaceMode};
 #[cfg(test)]
 use diff_text_model::CachedDiffTextSegment;
 use diff_text_model::{CachedDiffStyledText, SyntaxTokenKind};
@@ -262,11 +265,8 @@ use file_diff_display::{
 };
 use history_refs_hover::{HISTORY_REFS_HOVER_MENU_INVOKER_PREFIX, HistoryRefsHoverHost};
 pub(crate) use mod_helpers::TerminalPanelResizeState;
+pub use mod_helpers::WorkTreeView;
 use mod_helpers::*;
-pub use mod_helpers::{
-    FocusedMergetoolLabels, FocusedMergetoolViewConfig, InitialRepositoryLaunchMode,
-    StartupCrashReport, WorkTreeView, WorkTreeViewConfig, WorkTreeViewMode,
-};
 #[cfg(test)]
 use panels::RemoteRow;
 use panels::{ActionBarView, BottomStatusBarView, PopoverHost, RepoTabsBarView, action_bar_height};
@@ -311,6 +311,23 @@ use tooltip::WorkTreeTooltipExt;
 #[cfg(test)]
 use tooltip::clear_visible_tooltip_text_for_test;
 use tooltip_host::TooltipHost;
+use view_mode::{
+    DeferredRepoBootstrap, FocusedMergetoolBootstrap, FocusedMergetoolBootstrapAction,
+    SubmoduleDiffBootstrap, SubmoduleDiffBootstrapAction, ThemeMode, command_palette_available,
+    focused_mergetool_bootstrap_action, renders_full_chrome,
+    should_seed_initial_repository_from_session, should_show_splash_screen,
+    should_show_startup_repository_loading_screen, show_diff_file_navigation,
+    show_titlebar_repo_tabs, submodule_diff_bootstrap_action, titlebar_workspace_actions_enabled,
+};
+pub use view_mode::{
+    FocusedMergetoolLabels, FocusedMergetoolViewConfig, InitialRepositoryLaunchMode,
+    StartupCrashReport, WorkTreeViewConfig, WorkTreeViewMode,
+};
+#[cfg(test)]
+use view_mode::{
+    focused_mergetool_target_path, normalize_bootstrap_repo_path,
+    repository_entry_interstitial_active,
+};
 
 #[cfg(test)]
 pub(crate) use chrome::window_frame;
