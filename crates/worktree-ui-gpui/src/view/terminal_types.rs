@@ -196,3 +196,22 @@ impl TerminalGridPoint {
         Self { row, col }
     }
 }
+
+/// What the window was about to do when unsaved edits were found.
+///
+/// Only the two irreversible ones: switching files keeps the buffer, so it
+/// needs no prompt.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub(in crate::view) enum UnsavedFileEditsAction {
+    /// Carries the window that asked: the retry can run seconds later, after a
+    /// slow write drains, by which time "the active window" may be another one.
+    CloseWindow(gpui::WindowId),
+    QuitApp,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::view) struct UnsavedFileEditsPrompt {
+    pub(in crate::view) action: UnsavedFileEditsAction,
+    /// Display labels, repo-qualified when the list spans more than one repo.
+    pub(in crate::view) files: Vec<SharedString>,
+}

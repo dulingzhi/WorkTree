@@ -173,7 +173,6 @@ mod icons;
 #[cfg(any(test, target_os = "linux", target_os = "freebsd"))]
 mod linux_desktop_integration;
 mod markdown_preview;
-mod mod_helpers;
 mod open_source_licenses_data;
 mod panels;
 mod panes;
@@ -209,6 +208,7 @@ mod update_check;
 mod user_survey;
 mod view_mode;
 mod word_diff;
+mod worktree_view;
 
 use app_model::AppUiModel;
 use branch_sidebar::{BranchSection, BranchSidebarRow};
@@ -269,8 +269,6 @@ use file_diff_display::{
     file_diff_display_len, file_diff_display_text, should_truncate_file_diff_display,
 };
 use history_refs_hover::{HISTORY_REFS_HOVER_MENU_INVOKER_PREFIX, HistoryRefsHoverHost};
-pub use mod_helpers::WorkTreeView;
-use mod_helpers::*;
 #[cfg(test)]
 use panels::RemoteRow;
 use panels::{ActionBarView, BottomStatusBarView, PopoverHost, RepoTabsBarView, action_bar_height};
@@ -314,7 +312,7 @@ pub(crate) use terminal_types::TerminalPanelResizeState;
 use terminal_types::{
     BottomPanelTab, RepoTerminalSession, TerminalGridPoint, TerminalInstance, TerminalMenuContext,
     TerminalRenderCache, TerminalShutdownAction, TerminalShutdownPrompt, TerminalShutdownSummary,
-    TerminalViewportCacheKey, TerminalViewportView,
+    TerminalViewportCacheKey, TerminalViewportView, UnsavedFileEditsAction, UnsavedFileEditsPrompt,
 };
 use toast_host::ToastHost;
 use tooltip::WorkTreeTooltipExt;
@@ -338,6 +336,7 @@ use view_mode::{
     focused_mergetool_target_path, normalize_bootstrap_repo_path,
     repository_entry_interstitial_active,
 };
+pub use worktree_view::WorkTreeView;
 
 #[cfg(test)]
 pub(crate) use chrome::window_frame;
