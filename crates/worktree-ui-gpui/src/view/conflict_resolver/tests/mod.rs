@@ -26,6 +26,7 @@ mod navigation;
 mod parsing;
 mod resolution;
 mod split_row_index;
+mod ui_state;
 mod visibility;
 
 #[test]

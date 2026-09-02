@@ -1,8 +1,14 @@
 mod split_row_index;
 mod three_way;
+mod ui_state;
 mod word_highlight;
 
 pub(in crate::view) use three_way::{ThreeWayColumn, ThreeWaySides};
+pub(in crate::view) use ui_state::{
+    ConflictModeState, ConflictResolverImagePreviewState, ConflictResolverJoinTarget,
+    ConflictResolverMarkdownPreviewState, ConflictResolverUiState, ConflictRowSelection,
+    ResolvedOutlineData, ResolvedOutputConflictMarker, ResolverPickTarget, StreamedConflictState,
+};
 
 use super::CachedDiffStyledText;
 use rustc_hash::{FxHashMap, FxHashSet, FxHasher};

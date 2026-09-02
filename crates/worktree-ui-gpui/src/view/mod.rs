@@ -222,7 +222,11 @@ use caches::{
 };
 use chrome::{TitleBarView, cursor_style_for_resize_edge, resize_edge};
 use conflict_resolver::{
-    ConflictPickSide, ConflictResolverViewMode, ThreeWayColumn, ThreeWaySides,
+    ConflictModeState, ConflictPickSide, ConflictResolverImagePreviewState,
+    ConflictResolverJoinTarget, ConflictResolverMarkdownPreviewState, ConflictResolverUiState,
+    ConflictResolverViewMode, ConflictRowSelection, ResolvedOutlineData,
+    ResolvedOutputConflictMarker, ResolverPickTarget, StreamedConflictState, ThreeWayColumn,
+    ThreeWaySides,
 };
 #[cfg(test)]
 use date_time::format_datetime;
