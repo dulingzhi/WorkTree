@@ -878,6 +878,13 @@ pub(super) fn context_menu_selection_range_from_diff_text(
     Some((start.source_visible_ix, end.source_visible_ix))
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::view) enum DiffClickKind {
+    Line,
+    HunkHeader,
+    FileHeader,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

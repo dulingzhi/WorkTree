@@ -247,6 +247,7 @@ use diff_text_model::{CachedDiffStyledText, SyntaxTokenKind};
 use diff_text_selection::{
     ConflictRowSelectionTracker, DiffTextSelectionOverlay, DiffTextSelectionTracker,
 };
+use diff_utils::DiffClickKind;
 use diff_utils::{
     build_unified_patch_for_hunks, build_unified_patch_for_selected_lines_across_hunks,
     build_unified_patch_for_selected_lines_across_hunks_for_reverse_apply,
@@ -266,12 +267,19 @@ pub use mod_helpers::{
     FocusedMergetoolLabels, FocusedMergetoolViewConfig, InitialRepositoryLaunchMode,
     StartupCrashReport, WorkTreeView, WorkTreeViewConfig, WorkTreeViewMode,
 };
+#[cfg(test)]
+use panels::RemoteRow;
 use panels::{ActionBarView, BottomStatusBarView, PopoverHost, RepoTabsBarView, action_bar_height};
+use panels::{
+    AutosquashMode, BranchPickerPurpose, PopoverKind, RemotePickerPurpose, RemotePopoverKind,
+    RepoPopoverKind, StashPickerPurpose, SubmodulePopoverKind, WorktreePopoverKind,
+};
 pub(crate) use panes::MainPaneView;
 use panes::{
     CollapsedSidebarSection, DetailsPaneInit, DetailsPaneView, HistoryView, ReflogPaneInit,
     ReflogPaneView, SidebarPaneView,
 };
+use patch_split::PatchSplitRow;
 #[cfg(test)]
 pub(in crate::view) use preview_kind::is_markdown_path;
 pub(in crate::view) use preview_kind::{

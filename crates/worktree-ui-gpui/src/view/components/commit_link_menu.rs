@@ -1,5 +1,5 @@
+use crate::view::PopoverKind;
 use crate::view::WorkTreeView;
-use crate::view::mod_helpers::PopoverKind;
 use gpui::prelude::*;
 use gpui::{
     ElementId, Entity, MouseButton, MouseUpEvent, Pixels, Point, SharedString, WeakEntity, Window,

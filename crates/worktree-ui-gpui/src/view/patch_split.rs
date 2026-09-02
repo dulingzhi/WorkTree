@@ -1,6 +1,19 @@
 use super::*;
 use crate::view::diff_utils::diff_content_line_text;
 
+#[derive(Clone, Debug)]
+pub(in crate::view) enum PatchSplitRow {
+    Raw {
+        src_ix: usize,
+        click_kind: DiffClickKind,
+    },
+    Aligned {
+        row: FileDiffRow,
+        old_src_ix: Option<usize>,
+        new_src_ix: Option<usize>,
+    },
+}
+
 pub(super) fn build_patch_split_rows(diff: &[AnnotatedDiffLine]) -> Vec<PatchSplitRow> {
     use worktree_core::domain::DiffLineKind as DK;
     use worktree_core::file_diff::FileDiffRowKind as K;
