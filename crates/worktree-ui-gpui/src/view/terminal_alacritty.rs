@@ -1,3 +1,8 @@
+use super::terminal_types::TerminalLayoutCache;
+#[cfg(test)]
+use super::terminal_types::TerminalLayoutKey;
+#[cfg(test)]
+use super::terminal_types::TerminalTextMetrics;
 use super::*;
 use alacritty_terminal::event::{Event as AlacEvent, EventListener};
 use alacritty_terminal::event_loop::{EventLoop, Msg};

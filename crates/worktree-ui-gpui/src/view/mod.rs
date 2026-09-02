@@ -199,6 +199,7 @@ mod status_section;
 mod terminal_alacritty;
 mod terminal_panel;
 mod terminal_preferences;
+mod terminal_types;
 #[cfg(test)]
 pub(crate) mod test_support;
 mod toast_host;
@@ -264,7 +265,6 @@ use file_diff_display::{
     file_diff_display_len, file_diff_display_text, should_truncate_file_diff_display,
 };
 use history_refs_hover::{HISTORY_REFS_HOVER_MENU_INVOKER_PREFIX, HistoryRefsHoverHost};
-pub(crate) use mod_helpers::TerminalPanelResizeState;
 pub use mod_helpers::WorkTreeView;
 use mod_helpers::*;
 #[cfg(test)]
@@ -305,6 +305,12 @@ use status_section::reconcile_status_multi_selection;
 use status_section::{
     StatusMultiSelection, StatusSection, StatusSectionEntries,
     reconcile_status_multi_selection_with_repo, status_section_is_loading, status_section_rev,
+};
+pub(crate) use terminal_types::TerminalPanelResizeState;
+use terminal_types::{
+    BottomPanelTab, RepoTerminalSession, TerminalGridPoint, TerminalInstance, TerminalMenuContext,
+    TerminalRenderCache, TerminalShutdownAction, TerminalShutdownPrompt, TerminalShutdownSummary,
+    TerminalViewportCacheKey, TerminalViewportView,
 };
 use toast_host::ToastHost;
 use tooltip::WorkTreeTooltipExt;

@@ -1,4 +1,9 @@
 use super::terminal_alacritty::*;
+use super::terminal_types::TerminalCachedRow;
+use super::terminal_types::TerminalGridSize;
+use super::terminal_types::TerminalLayoutCache;
+use super::terminal_types::TerminalLayoutKey;
+use super::terminal_types::TerminalTextMetrics;
 use super::*;
 use crate::kit::ScrollbarDriver;
 use alacritty_terminal::grid::Dimensions;
