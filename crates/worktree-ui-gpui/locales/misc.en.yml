@@ -4,7 +4,7 @@
 # replaces in the sources (tests assert these exact texts).
 #
 # Final catch-all catalog of the i18n sweep: the keep/delete conflict panel
-# (view/panels/main/keep_delete_conflict.rs — the spec table itself stays
+# (view/panes/main/keep_delete_conflict.rs — the spec table itself stays
 # English so its unit tests keep asserting raw fields; the panel localizes it
 # at render through `tr_en`, with the gettext-style entries at the top of
 # misc.zh-CN.yml), diff-canvas blame tooltips, conflict-resolver fold

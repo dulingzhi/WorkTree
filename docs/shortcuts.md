@@ -6,7 +6,7 @@ Source of truth:
 - `crates/worktree-ui-gpui/src/app.rs`
 - `crates/worktree-ui-gpui/src/focused_diff.rs`
 - `crates/worktree-ui-gpui/src/view/terminal_panel.rs`
-- `crates/worktree-ui-gpui/src/view/panels/main/diff_view.rs`
+- `crates/worktree-ui-gpui/src/view/panes/main/diff_view.rs`
 - `crates/worktree-ui-gpui/src/view/conflict_resolver.rs`
 
 Notes:

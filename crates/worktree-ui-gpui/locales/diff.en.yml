@@ -1,6 +1,6 @@
 # Diff-view surfaces (toolbar, search overlay, submodule summary, split
-# column headers, empty states) in `view/panels/main/diff_view.rs` and
-# `view/panels/main/diff.rs`. Keyed by filename (`diff.en.yml` -> locale
+# column headers, empty states) in `view/panes/main/diff_view.rs` and
+# `view/panes/main/diff.rs`. Keyed by filename (`diff.en.yml` -> locale
 # "en"); the content below is the key tree directly — no `en:` root. English
 # is the fallback locale, so every value must stay byte-identical to the
 # string it replaces in the sources (tests assert these exact texts).
