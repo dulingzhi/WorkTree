@@ -544,6 +544,7 @@ mod bars;
 mod bottom_status_bar;
 pub(in crate::view) mod layout;
 mod popover;
+mod reflog_host;
 mod repo_tabs_bar;
 
 pub(super) use action_bar::{ActionBarView, action_bar_height};

@@ -183,7 +183,6 @@ mod permalink;
 pub(super) mod platform_open;
 mod poller;
 mod preview_kind;
-mod reflog_panel;
 mod repo_open;
 mod resize_state;
 pub(crate) mod rows;

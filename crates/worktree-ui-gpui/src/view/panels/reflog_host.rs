@@ -64,7 +64,11 @@ impl WorkTreeView {
     }
 
     /// The panel closed itself: fall the bottom panel back to the terminal.
-    pub(super) fn on_reflog_panel_closed(&mut self, repo_id: RepoId, cx: &mut gpui::Context<Self>) {
+    pub(in crate::view) fn on_reflog_panel_closed(
+        &mut self,
+        repo_id: RepoId,
+        cx: &mut gpui::Context<Self>,
+    ) {
         if self.active_bottom_panel.get(&repo_id) == Some(&BottomPanelTab::Reflog) {
             self.active_bottom_panel
                 .insert(repo_id, BottomPanelTab::Terminal);
@@ -76,7 +80,7 @@ impl WorkTreeView {
     /// longer open, mirroring `sync_terminal_sessions_with_state`'s cleanup of
     /// terminal sessions. The reflog panel's own per-repo state is pruned by
     /// the panel itself, on the same state snapshot.
-    pub(super) fn sync_reflog_panels_with_state(&mut self) {
+    pub(in crate::view) fn sync_reflog_panels_with_state(&mut self) {
         if self.active_bottom_panel.is_empty() {
             return;
         }
@@ -94,7 +98,7 @@ impl WorkTreeView {
     /// When the reflog panel isn't open this returns exactly what
     /// `render_terminal_panel` would have returned on its own: the terminal's
     /// behavior and shape are unchanged from before this panel existed.
-    pub(super) fn render_bottom_panel(
+    pub(in crate::view) fn render_bottom_panel(
         &mut self,
         theme: AppTheme,
         window: &mut Window,
