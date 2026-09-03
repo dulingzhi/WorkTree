@@ -49,7 +49,7 @@ pub(in crate::view) use helpers::{
 };
 
 // Test-only consumers reach these helpers through this re-export: this tree's
-// own `tests` module plus the out-of-tree conflict-resolver and panel tests.
+// own `tests` module and the in-tree lib modules' `#[cfg(test)]` code.
 #[cfg(test)]
 pub(in crate::view) use helpers::{
     ClearDiffSelectionAction, FocusedMergetoolOutput, ResolvedOutputSourceRevision,
