@@ -1,12 +1,12 @@
 #![allow(clippy::type_complexity)]
 
-pub(super) use super::main::{
-    conflict_side_output_bytes, next_conflict_diff_split_ratio, show_conflict_save_stage_action,
-    show_external_mergetool_actions,
-};
 pub(super) use super::*;
 pub(super) use crate::test_support::{lock_clipboard_test, lock_visual_test};
 pub(super) use crate::view::panes::main::PreparedSyntaxViewMode;
+pub(super) use crate::view::panes::main::conflict_chrome::{
+    conflict_side_output_bytes, next_conflict_diff_split_ratio, show_conflict_save_stage_action,
+    show_external_mergetool_actions,
+};
 pub(super) use crate::view::show_diff_file_navigation;
 pub(super) use gpui::{Modifiers, MouseButton, MouseDownEvent, MouseUpEvent, Pixels, point, px};
 pub(super) use std::path::Path;

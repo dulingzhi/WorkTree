@@ -2,7 +2,7 @@ use super::*;
 use worktree_core::services::InteractiveRebaseAction;
 
 const COMMIT_DETAILS_MESSAGE_MAX_HEIGHT_PX: f32 = 240.0;
-const COMMIT_MESSAGE_INPUT_MAX_HEIGHT_PX: f32 = 200.0;
+pub(in crate::view) const COMMIT_MESSAGE_INPUT_MAX_HEIGHT_PX: f32 = 200.0;
 
 #[derive(Clone)]
 pub(in crate::view) enum AppMenuAction {
@@ -736,7 +736,6 @@ mod action_bar;
 mod bars;
 mod bottom_status_bar;
 mod layout;
-mod main;
 mod popover;
 mod repo_tabs_bar;
 

@@ -2498,7 +2498,7 @@ impl MainPaneView {
         }
 
         // Unreachable: this list is only mounted when the output is streamed
-        // (`conflict_resolver_view.rs`, inside `if streamed`), and `streamed` is
+        // (`conflict_resolver_render.rs`, inside `if streamed`), and `streamed` is
         // exactly `conflict_resolved_output_projection.is_some()` — the branch
         // above. The editable output is drawn by the `TextInput` instead, with
         // `render_conflict_resolved_preview_rows` supplying only its gutter.

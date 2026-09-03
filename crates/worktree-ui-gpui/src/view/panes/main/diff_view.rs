@@ -1,4 +1,5 @@
 use super::*;
+use crate::view::panels::COMMIT_MESSAGE_INPUT_MAX_HEIGHT_PX;
 use crate::view::panes::main::DiffHorizontalScrollColumn;
 use crate::view::panes::main::diff_search::DiffSearchOptions;
 use gpui::Focusable;
@@ -1594,7 +1595,7 @@ impl MainPaneView {
         let compact_control_height = px(26.0);
         let compact_icon_button_width = px(22.0);
         let compact_option_button_width = px(24.0);
-        let max_search_input_height = px(super::super::COMMIT_MESSAGE_INPUT_MAX_HEIGHT_PX);
+        let max_search_input_height = px(COMMIT_MESSAGE_INPUT_MAX_HEIGHT_PX);
 
         let panel = div()
             .flex()
@@ -1999,7 +2000,7 @@ impl MainPaneView {
                                 .flex()
                                 .items_center()
                                 .gap_2()
-                                .child(super::super::icons::svg_icon(
+                                .child(crate::view::icons::svg_icon(
                                     icon,
                                     icon_color,
                                     px(12.0),
@@ -2262,7 +2263,7 @@ impl MainPaneView {
                                     .flex()
                                     .items_center()
                                     .gap_2()
-                                    .child(super::super::icons::svg_icon(
+                                    .child(crate::view::icons::svg_icon(
                                         "icons/box.svg",
                                         match summary_status.unwrap_or(SubmoduleStatus::UpToDate) {
                                             SubmoduleStatus::NotInitialized => with_alpha(
@@ -2530,9 +2531,8 @@ impl MainPaneView {
         let is_conflict_compare = conflict_target_path.is_some() && conflict_strategy.is_none();
         let conflict_rendered_preview_active = self.is_conflict_rendered_preview_active();
 
-        let rendered_preview_kind =
-            super::super::diff_target_rendered_preview_kind(self.rendered_diff_target());
-        let rendered_view_toggle_kind = super::super::main_diff_rendered_preview_toggle_kind(
+        let rendered_preview_kind = diff_target_rendered_preview_kind(self.rendered_diff_target());
+        let rendered_view_toggle_kind = main_diff_rendered_preview_toggle_kind(
             wants_file_diff,
             wants_collapsed_diff,
             is_file_preview,

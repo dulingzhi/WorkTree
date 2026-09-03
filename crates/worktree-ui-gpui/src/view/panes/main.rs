@@ -4,17 +4,27 @@ use super::super::*;
 use std::sync::atomic::{AtomicI32, Ordering};
 
 mod actions_impl;
+mod binary_conflict;
 mod conflict_actions;
+pub(in crate::view) mod conflict_chrome;
+mod conflict_resolver_render;
 mod core_impl;
+mod decision_conflict;
+mod diff;
 pub(in crate::view) mod diff_cache;
 pub(in crate::view) mod diff_search;
 mod diff_stage;
 mod diff_text;
+mod diff_view;
+mod diff_view_helpers;
 mod file_editor;
 mod helpers;
 mod interactive_rebase;
+mod keep_delete_conflict;
+mod lfs_pointer;
 mod preview;
 mod state;
+mod status_nav;
 
 #[cfg(feature = "benchmarks")]
 #[allow(unused_imports)]

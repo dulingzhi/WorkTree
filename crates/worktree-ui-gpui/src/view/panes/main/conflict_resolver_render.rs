@@ -4,6 +4,7 @@
 //! its toolbar control clusters, and the rendered (SVG/Markdown) conflict
 //! previews. See UI_DESIGN.md section 30 for the design spec.
 
+use super::conflict_chrome::{next_conflict_diff_split_ratio, show_conflict_save_stage_action};
 use super::*;
 
 pub(super) use conflict_resolver::CONFLICT_BOTTOM_OVERSCROLL_ROWS;
@@ -800,7 +801,7 @@ impl MainPaneView {
                                 })
                                 ;
 
-                            let preview_kind = super::super::preview_path_rendered_kind(&path);
+                            let preview_kind = preview_path_rendered_kind(&path);
                             let show_preview_toggle = preview_kind.is_some();
                             let preview_mode = self.conflict_resolver.resolver_preview_mode;
                             let is_rendered_preview_active =

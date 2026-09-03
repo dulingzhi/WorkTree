@@ -1,3 +1,4 @@
+use super::conflict_chrome::{conflict_side_output_bytes, show_external_mergetool_actions};
 use super::*;
 use worktree_core::services::ConflictSide;
 

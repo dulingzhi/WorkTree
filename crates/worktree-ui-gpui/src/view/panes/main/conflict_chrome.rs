@@ -1,24 +1,14 @@
 use super::*;
 
-mod binary_conflict;
-mod conflict_resolver_view;
-mod decision_conflict;
-mod diff;
-mod diff_view;
-mod diff_view_helpers;
-mod keep_delete_conflict;
-mod lfs_pointer;
-mod status_nav;
-
-pub(super) fn show_external_mergetool_actions(view_mode: WorkTreeViewMode) -> bool {
+pub(in crate::view) fn show_external_mergetool_actions(view_mode: WorkTreeViewMode) -> bool {
     matches!(view_mode, WorkTreeViewMode::Normal)
 }
 
-pub(super) fn show_conflict_save_stage_action(view_mode: WorkTreeViewMode) -> bool {
+pub(in crate::view) fn show_conflict_save_stage_action(view_mode: WorkTreeViewMode) -> bool {
     matches!(view_mode, WorkTreeViewMode::Normal)
 }
 
-pub(super) fn conflict_side_output_bytes(
+pub(in crate::view) fn conflict_side_output_bytes(
     file: &worktree_state::model::ConflictFile,
     side: ThreeWayColumn,
 ) -> Option<Arc<[u8]>> {
@@ -32,7 +22,7 @@ pub(super) fn conflict_side_output_bytes(
         .or_else(|| text.as_ref().map(|text| Arc::<[u8]>::from(text.as_bytes())))
 }
 
-pub(super) fn next_conflict_diff_split_ratio(
+pub(in crate::view) fn next_conflict_diff_split_ratio(
     state: ConflictDiffSplitResizeState,
     current_x: Pixels,
     column_widths: [Pixels; 2],
