@@ -1,7 +1,7 @@
 use super::*;
 use worktree_core::services::InteractiveRebaseAction;
 
-const COMMIT_DETAILS_MESSAGE_MAX_HEIGHT_PX: f32 = 240.0;
+pub(in crate::view) const COMMIT_DETAILS_MESSAGE_MAX_HEIGHT_PX: f32 = 240.0;
 pub(in crate::view) const COMMIT_MESSAGE_INPUT_MAX_HEIGHT_PX: f32 = 200.0;
 
 #[derive(Clone)]
@@ -735,7 +735,7 @@ impl ContextMenuRows {
 mod action_bar;
 mod bars;
 mod bottom_status_bar;
-mod layout;
+pub(in crate::view) mod layout;
 mod popover;
 mod repo_tabs_bar;
 

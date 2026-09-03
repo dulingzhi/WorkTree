@@ -16,7 +16,7 @@ this function has too many arguments (35/9) | crates\worktree-ui-gpui\src\view\r
 this let-binding has unit value | crates\worktree-ui-gpui\src\app.rs:501:17
 this let-binding has unit value | crates\worktree-ui-gpui\src\avatar_source.rs:228:13
 this let-binding has unit value | crates\worktree-ui-gpui\src\view\panes\sidebar.rs:1690:13
-unnecessary closure used with `bool::then` | crates\worktree-ui-gpui\src\view\panels\layout.rs:38:24
+unnecessary closure used with `bool::then` | crates\worktree-ui-gpui\src\view\panels\layout.rs:37:24
 unnecessary closure used with `bool::then` | crates\worktree-ui-gpui\src\view\settings_window.rs:2266:21
 unnecessary closure used with `bool::then` | crates\worktree-ui-gpui\src\view\settings_window.rs:2274:21
 unused import: `SystemTime` | crates\worktree-ui-gpui\src\view\date_time.rs:251:21

@@ -7,6 +7,8 @@ mod sidebar;
 #[cfg(test)]
 pub(in crate::view) use details::AiCommitGeneration;
 pub(super) use details::{DetailsPaneInit, DetailsPaneView};
+#[cfg(test)]
+pub(in crate::view) use details::{StatusSectionActionSelection, status_section_action_selection};
 pub(super) use history::HistoryView;
 #[allow(unused_imports)]
 pub(in crate::view) use history::{

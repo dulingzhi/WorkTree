@@ -1,9 +1,16 @@
+mod render_impl;
+
 use super::super::path_display;
 use super::super::*;
 use crate::kit::text_truncation::path_alignment_visible_signature;
 use rustc_hash::FxHasher;
 use std::hash::{Hash, Hasher};
 use worktree_state::model::{AuthRetryOperation, CommandLogEntry};
+
+#[cfg(test)]
+pub(in crate::view) use render_impl::{
+    StatusSectionActionSelection, status_section_action_selection,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct PendingCommitAmend {
