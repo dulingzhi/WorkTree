@@ -10,7 +10,7 @@ this `if` statement can be collapsed | crates\worktree-ui-gpui\src\ai_commit_sou
 this `if` statement can be collapsed | crates\worktree-ui-gpui\src\ai_commit_sources.rs:345:9
 this `if` statement can be collapsed | crates\worktree-ui-gpui\src\view\panels\popover\commit_search_picker.rs:150:9
 this `let...else` may be rewritten with the `?` operator | crates\worktree-ui-gpui\src\view\panels\popover\search_inputs.rs:556:25
-this `match` expression can be replaced with `?` | crates\worktree-ui-gpui\src\view\panels\main\lfs_pointer.rs:174:17
+this `match` expression can be replaced with `?` | crates\worktree-ui-gpui\src\view\panes\main\lfs_pointer.rs:174:17
 this function has too many arguments (10/9) | crates\worktree-ui-gpui\src\view\settings_window.rs:3442:5
 this function has too many arguments (35/9) | crates\worktree-ui-gpui\src\view\rows\history_canvas.rs:389:1
 this let-binding has unit value | crates\worktree-ui-gpui\src\app.rs:501:17
