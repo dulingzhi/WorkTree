@@ -1,3 +1,4 @@
+use super::helpers::DiffTextAutoscrollTarget;
 use super::*;
 
 #[derive(Clone, Copy)]

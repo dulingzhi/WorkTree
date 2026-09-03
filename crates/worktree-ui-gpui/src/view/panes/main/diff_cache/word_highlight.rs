@@ -1,3 +1,4 @@
+use super::super::helpers::FileDiffSplitWordHighlights;
 use super::*;
 
 impl MainPaneView {

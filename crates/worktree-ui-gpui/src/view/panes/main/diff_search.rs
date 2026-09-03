@@ -1,3 +1,4 @@
+use super::helpers::centered_reveal_scroll_y;
 use super::*;
 use crate::kit::text_model::TextModelSnapshot;
 use memchr::{memchr_iter, memchr2_iter};

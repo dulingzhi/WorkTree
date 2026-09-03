@@ -1,3 +1,7 @@
+use super::helpers::{
+    indexed_line_byte_range, preview_line_flags_from_bools, preview_line_has_tabs_without_loading,
+    preview_line_is_ascii_without_loading,
+};
 use super::*;
 use crate::view::markdown_preview::{
     MarkdownPreviewDocument, MarkdownPreviewRow, MarkdownPreviewVisualRow,

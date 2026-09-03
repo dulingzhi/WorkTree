@@ -1,5 +1,3 @@
-#[cfg(test)]
-use super::helpers::*;
 use super::*;
 
 impl MainPaneView {

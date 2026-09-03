@@ -1,3 +1,9 @@
+#[cfg(test)]
+use super::helpers::FileDiffStyleCacheEpochs;
+use super::helpers::{
+    CollapsedDiffReveal, FILE_DIFF_WORD_HIGHLIGHT_CACHE_MAX_ENTRIES, PreparedSyntaxDocumentKey,
+    indexed_line_count_from_len, preview_line_flags_from_source,
+};
 use super::*;
 use crate::view::diff_utils::compute_diff_yaml_block_scalar_for_src_ix;
 use crate::view::markdown_preview;

@@ -1,3 +1,7 @@
+use super::super::helpers::{
+    build_line_starts, preview_line_flags_for_text, preview_line_flags_from_bools,
+    preview_line_has_tabs_without_loading, preview_line_is_ascii_without_loading,
+};
 use super::*;
 use std::io::Read;
 

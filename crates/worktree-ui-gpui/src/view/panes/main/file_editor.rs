@@ -13,6 +13,9 @@
 //! still there when the user comes back. Only the text and caret are stashed —
 //! `TextInput`'s undo stack does not leave the widget.
 
+use super::helpers::{
+    coalesce_resolved_output_edit_deltas, resolved_output_heuristic_highlights_for_range,
+};
 use super::*;
 use crate::kit::rope::Rope;
 use crate::kit::text_model::TextModelSnapshot;

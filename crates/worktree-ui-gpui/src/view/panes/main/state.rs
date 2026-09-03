@@ -1,3 +1,9 @@
+use super::helpers::{
+    BlameTimeRangeCache, CachedUnresolvedRows, CollapsedDiffProjectionIdentity,
+    CollapsedDiffReveal, DiffHorizontalScrollState, DiffTextAutoscrollTarget,
+    FileDiffSplitWordHighlights, FileDiffStyleCacheEpochs, IRebaseViewState,
+    PreparedSyntaxDocumentKey, ResolvedOutputSourceRevision, StashedResolvedOutlineState,
+};
 use super::*;
 use crate::kit::text_model::TextModelSnapshot;
 

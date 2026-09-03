@@ -1,27 +1,30 @@
-use super::{
-    ClearDiffSelectionAction, FocusedMergetoolOutput, RenderableConflictFile,
-    ResolvedOutputConflictMarker, ResolvedOutputSourceRevision, ResolvedOutputUnresolvedSpans,
-    VersionedCachedDiffStyledText, apply_conflict_choice_provenance_hints,
-    apply_focused_mergetool_output, apply_resolved_output_unresolved_highlights,
-    apply_three_way_empty_base_provenance_hints, build_focused_mergetool_save_payload,
-    build_line_starts, build_resolved_output_conflict_markers,
+use super::helpers::{
+    build_resolved_output_conflict_markers,
     build_resolved_output_conflict_markers_from_block_ranges, clear_diff_selection_action,
-    coalesce_resolved_output_edit_deltas, conflict_file_is_binary,
     conflict_marker_nav_entries_from_markers, conflict_resolver_output_context_line,
     conflict_strategy_needs_full_side_payloads, dirty_byte_range_to_line_range,
     first_output_marker_line_for_conflict, focused_mergetool_save_exit_code,
     historical_browse_content, output_line_range_for_conflict_block_in_text,
-    pane_content_width_for_layout, parse_conflict_canvas_rows_env,
-    remap_resolved_output_conflict_block_ranges_for_delta, renderable_conflict_file,
+    parse_conflict_canvas_rows_env, remap_resolved_output_conflict_block_ranges_for_delta,
     resolved_outline_delta_between_texts, resolved_outline_delta_for_snapshot_transition,
-    resolved_output_active_conflict_background, resolved_output_active_unresolved_highlight_style,
+    resolved_output_active_unresolved_highlight_style,
     resolved_output_conflict_block_ranges_in_text, resolved_output_live_highlight_provider,
     resolved_output_live_provider_binding_key, resolved_output_live_syntax_mask,
     resolved_output_marker_for_line, resolved_output_markers_for_text,
     resolved_output_placeholder_protected_ranges, resolved_output_snapshot_is_modified,
     resolved_output_unresolved_byte_ranges, resolved_output_unresolved_highlight_style,
     split_target_conflict_block_into_subchunks, versioned_cached_diff_styled_text_is_current,
-    versioned_query_cached_diff_styled_text_is_current, worktree_output_requires_protection,
+    worktree_output_requires_protection,
+};
+use super::{
+    ClearDiffSelectionAction, FocusedMergetoolOutput, RenderableConflictFile,
+    ResolvedOutputConflictMarker, ResolvedOutputSourceRevision, ResolvedOutputUnresolvedSpans,
+    VersionedCachedDiffStyledText, apply_conflict_choice_provenance_hints,
+    apply_focused_mergetool_output, apply_resolved_output_unresolved_highlights,
+    apply_three_way_empty_base_provenance_hints, build_focused_mergetool_save_payload,
+    build_line_starts, coalesce_resolved_output_edit_deltas, conflict_file_is_binary,
+    pane_content_width_for_layout, renderable_conflict_file,
+    resolved_output_active_conflict_background, versioned_query_cached_diff_styled_text_is_current,
 };
 use crate::kit::text_model::TextModel;
 use crate::theme::AppTheme;
