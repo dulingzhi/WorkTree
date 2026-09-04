@@ -1,6 +1,8 @@
+pub(crate) mod diff_text_metrics;
 mod minimap;
 pub(crate) mod rope;
 mod scrollbar;
+pub(crate) mod text_expand;
 mod text_input;
 pub(crate) mod text_model;
 pub(crate) mod text_truncation;

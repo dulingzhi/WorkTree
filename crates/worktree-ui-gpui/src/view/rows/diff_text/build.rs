@@ -1,21 +1,8 @@
 use super::*;
+use crate::kit::text_expand::maybe_expand_tabs;
+use crate::kit::text_truncation::hash_highlights;
 use crate::view::panes::main::diff_search::{DiffSearchMatcher, normalize_diff_search_query};
 use palette::IntoColor;
-
-fn maybe_expand_tabs(s: &str) -> SharedString {
-    if !s.contains('\t') {
-        return SharedString::new(s);
-    }
-
-    let mut out = String::with_capacity(s.len());
-    for ch in s.chars() {
-        match ch {
-            '\t' => out.push_str("    "),
-            _ => out.push(ch),
-        }
-    }
-    out.into()
-}
 
 #[inline]
 pub(super) fn segment_overlaps_sorted_ranges(
@@ -1010,15 +997,6 @@ fn push_or_extend_highlight(
     }
 
     merged.push((range, style));
-}
-
-fn hash_highlights(highlights: &[(Range<usize>, gpui::HighlightStyle)]) -> u64 {
-    let mut hasher = FxHasher::default();
-    for (range, style) in highlights {
-        range.hash(&mut hasher);
-        crate::text_runs::hash_highlight_style(style, &mut hasher);
-    }
-    hasher.finish()
 }
 
 fn hash_query_overlay_highlights(

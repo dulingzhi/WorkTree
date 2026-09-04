@@ -8,6 +8,10 @@ use super::diff_text::{
     whitespace_visible_styled_text,
 };
 use super::*;
+use crate::kit::diff_text_metrics::{
+    DIFF_FONT_SCALE, LineMetrics, center_text_y, diff_text_style, line_metrics,
+    line_metrics_annot_when, px_2,
+};
 use crate::view::panes::main::DiffHorizontalScrollColumn;
 use crate::view::panes::main::diff_search::{DiffSearchMatcher, DiffSearchOptions};
 use gpui::{
@@ -23,8 +27,6 @@ use std::ops::Range;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use worktree_core::domain::{DiffArea, DiffLineKind};
-
-const DIFF_FONT_SCALE: f32 = 0.80;
 
 const GUTTER_TEXT_LAYOUT_CACHE_MAX_ENTRIES: usize = 16_384;
 const STREAMED_DIFF_TEXT_MIN_BYTES: usize = LARGE_DIFF_TEXT_MIN_BYTES;
@@ -3318,41 +3320,6 @@ fn install_diff_row_mouse_handlers(
     });
 }
 
-#[derive(Clone, Copy, Debug)]
-struct LineMetrics {
-    font_size: Pixels,
-    line_height: Pixels,
-}
-
-fn diff_text_style(window: &Window) -> TextStyle {
-    let mut style = window.text_style();
-    style.font_weight = FontWeight::NORMAL;
-    style
-}
-
-fn line_metrics(window: &Window) -> LineMetrics {
-    line_metrics_scaled(window, 1.0)
-}
-
-/// Diff-text metrics at `extra_scale` times the base diff font size (1.0 = the
-/// regular row text; the annotation "when" column uses a slightly smaller scale).
-fn line_metrics_scaled(window: &Window, extra_scale: f32) -> LineMetrics {
-    let style = diff_text_style(window);
-    let font_size = style.font_size.to_pixels(window.rem_size()) * DIFF_FONT_SCALE * extra_scale;
-    let line_height = style
-        .line_height
-        .to_pixels(font_size.into(), window.rem_size());
-    LineMetrics {
-        font_size,
-        line_height,
-    }
-}
-
-/// Smaller font metrics for the "X ago" sub-column in the annotation panel.
-fn line_metrics_annot_when(window: &Window) -> LineMetrics {
-    line_metrics_scaled(window, 0.85)
-}
-
 /// Width of one wrapped diff-text column, measured in `editor_font_family`.
 ///
 /// The family must be passed in rather than taken from the ambient text style:
@@ -3382,15 +3349,6 @@ pub(in crate::view) fn diff_text_wrap_char_width(
     } else {
         (layout.width / DIFF_TEXT_WRAP_WIDTH_SAMPLE.len() as f32).max(px(1.0))
     }
-}
-
-fn center_text_y(bounds: Bounds<Pixels>, line_height: Pixels) -> Pixels {
-    let extra = (bounds.size.height - line_height).max(px(0.0));
-    bounds.top() + extra * 0.5
-}
-
-fn px_2(window: &Window) -> Pixels {
-    crate::ui_scale::design_px_from_window(DIFF_ROW_HORIZONTAL_PADDING_PX, window)
 }
 
 pub(in crate::view) fn diff_scaled_px(value: f32, ui_scale_percent: u32) -> Pixels {

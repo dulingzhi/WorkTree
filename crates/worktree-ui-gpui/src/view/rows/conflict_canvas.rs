@@ -2,6 +2,9 @@ use super::super::conflict_resolver;
 use super::canvas::keyed_canvas;
 use super::diff_text::{whitespace_visible_line_styled_text_for_raw, whitespace_visible_line_text};
 use super::*;
+use crate::kit::diff_text_metrics::{
+    LineMetrics, center_text_y, diff_text_style, line_metrics, px_2,
+};
 use gpui::{
     App, Bounds, ContentMask, DispatchPhase, HighlightStyle, Pixels, Styled, TextRun, TextStyle,
     Window, fill, point, px, size,
@@ -14,7 +17,6 @@ use std::ops::Range;
 use std::sync::Arc;
 use std::sync::OnceLock;
 
-const DIFF_FONT_SCALE: f32 = 0.80;
 const GUTTER_TEXT_LAYOUT_CACHE_MAX_ENTRIES: usize = 16_384;
 const CONFLICT_TEXT_LAYOUT_CACHE_MAX_ENTRIES: usize = 32_768;
 
@@ -710,39 +712,6 @@ fn whitespace_visible_text_and_highlights(
     }
 
     (out.into(), remapped)
-}
-
-#[derive(Clone, Copy, Debug)]
-struct LineMetrics {
-    font_size: Pixels,
-    line_height: Pixels,
-}
-
-fn diff_text_style(window: &Window) -> TextStyle {
-    let mut style = window.text_style();
-    style.font_weight = FontWeight::NORMAL;
-    style
-}
-
-fn line_metrics(window: &Window) -> LineMetrics {
-    let style = diff_text_style(window);
-    let font_size = style.font_size.to_pixels(window.rem_size()) * DIFF_FONT_SCALE;
-    let line_height = style
-        .line_height
-        .to_pixels(font_size.into(), window.rem_size());
-    LineMetrics {
-        font_size,
-        line_height,
-    }
-}
-
-fn center_text_y(bounds: Bounds<Pixels>, line_height: Pixels) -> Pixels {
-    let extra = (bounds.size.height - line_height).max(px(0.0));
-    bounds.top() + extra * 0.5
-}
-
-fn px_2(window: &Window) -> Pixels {
-    window.rem_size() * 0.5
 }
 
 fn split_columns_with_widths(

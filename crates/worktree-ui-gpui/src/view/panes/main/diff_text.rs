@@ -1,5 +1,6 @@
 use super::helpers::DiffTextAutoscrollTarget;
 use super::*;
+use crate::kit::text_expand::maybe_expand_tabs;
 
 #[derive(Clone, Copy)]
 enum DiffTextOffsetBias {
@@ -965,19 +966,6 @@ impl MainPaneView {
         region: DiffTextRegion,
     ) -> SharedString {
         let fallback = SharedString::default();
-        let expand_tabs = |s: &str| -> SharedString {
-            if !s.contains('\t') {
-                return SharedString::new(s);
-            }
-            let mut out = String::with_capacity(crate::view::diff_utils::diff_text_display_len(s));
-            for ch in s.chars() {
-                match ch {
-                    '\t' => out.push_str("    "),
-                    _ => out.push(ch),
-                }
-            }
-            out.into()
-        };
 
         // When markdown rendered preview is active, rows come from the
         // markdown preview document rather than from source text lines or
@@ -1083,7 +1071,7 @@ impl MainPaneView {
                     {
                         return styled.text.clone();
                     }
-                    return expand_tabs(diff_content_text(&line));
+                    return maybe_expand_tabs(diff_content_text(&line));
                 }
                 return fallback;
             }
@@ -1106,7 +1094,7 @@ impl MainPaneView {
             {
                 return display.clone();
             }
-            return expand_tabs(line.text.as_ref());
+            return maybe_expand_tabs(line.text.as_ref());
         }
 
         match region {
@@ -1147,7 +1135,7 @@ impl MainPaneView {
                 {
                     return display.clone();
                 }
-                expand_tabs(line.text.as_ref())
+                maybe_expand_tabs(line.text.as_ref())
             }
             PatchSplitRow::Aligned { row, .. } => {
                 let text = match region {
@@ -1155,7 +1143,7 @@ impl MainPaneView {
                     DiffTextRegion::SplitRight => row.new.as_deref().unwrap_or(""),
                     DiffTextRegion::Inline => unreachable!(),
                 };
-                expand_tabs(text)
+                maybe_expand_tabs(text)
             }
         }
     }

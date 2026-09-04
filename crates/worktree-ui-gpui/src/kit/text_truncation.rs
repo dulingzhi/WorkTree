@@ -376,7 +376,7 @@ fn hash_color(color: Hsla) -> u64 {
     hasher.finish()
 }
 
-fn hash_highlights(highlights: &[(Range<usize>, HighlightStyle)]) -> u64 {
+pub(crate) fn hash_highlights(highlights: &[(Range<usize>, HighlightStyle)]) -> u64 {
     hash_with(|hasher| {
         for (range, style) in highlights {
             range.hash(hasher);

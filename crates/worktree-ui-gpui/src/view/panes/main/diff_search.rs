@@ -1,5 +1,6 @@
 use super::helpers::centered_reveal_scroll_y;
 use super::*;
+use crate::kit::text_expand::maybe_expand_tabs;
 use crate::kit::text_model::TextModelSnapshot;
 use memchr::{memchr_iter, memchr2_iter};
 use regex::{Regex, RegexBuilder};
@@ -429,21 +430,6 @@ fn diff_search_displayed_text_matches_query(
         }
     }
     query.is_match(expanded_tabs.as_str())
-}
-
-fn expand_tabs_to_string(text: &str) -> String {
-    if !text.contains('\t') {
-        return text.to_string();
-    }
-
-    let mut expanded = String::with_capacity(text.len());
-    for ch in text.chars() {
-        match ch {
-            '\t' => expanded.push_str("    "),
-            _ => expanded.push(ch),
-        }
-    }
-    expanded
 }
 
 pub(in crate::view) fn diff_search_split_row_texts_match_query(
@@ -2030,8 +2016,9 @@ impl MainPaneView {
                     let (left, right) = provider.split_row_texts(mapped_ix)?;
                     Some((
                         visible_ix,
-                        left.map(|left| Cow::Owned(expand_tabs_to_string(left.as_ref()))),
-                        right.map(|right| Cow::Owned(expand_tabs_to_string(right.as_ref()))),
+                        left.map(|left| Cow::Owned(maybe_expand_tabs(left.as_ref()).to_string())),
+                        right
+                            .map(|right| Cow::Owned(maybe_expand_tabs(right.as_ref()).to_string())),
                     ))
                 })
                 .collect();
