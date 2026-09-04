@@ -12,8 +12,8 @@ use crate::kit::diff_text_metrics::{
     DIFF_FONT_SCALE, LineMetrics, center_text_y, diff_text_style, line_metrics,
     line_metrics_annot_when, px_2,
 };
+use crate::kit::text_search::{DiffSearchMatcher, DiffSearchOptions};
 use crate::view::panes::main::DiffHorizontalScrollColumn;
-use crate::view::panes::main::diff_search::{DiffSearchMatcher, DiffSearchOptions};
 use gpui::{
     App, Bounds, CursorStyle, DispatchPhase, HighlightStyle, Hitbox, HitboxBehavior, Pixels,
     Styled, TextRun, TextStyle, TransformationMatrix, TruncateFrom, Window, fill, point, px, size,

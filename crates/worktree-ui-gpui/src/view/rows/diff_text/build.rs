@@ -1,7 +1,7 @@
 use super::*;
 use crate::kit::text_expand::maybe_expand_tabs;
+use crate::kit::text_search::{DiffSearchMatcher, normalize_diff_search_query};
 use crate::kit::text_truncation::hash_highlights;
-use crate::view::panes::main::diff_search::{DiffSearchMatcher, normalize_diff_search_query};
 use palette::IntoColor;
 
 #[inline]

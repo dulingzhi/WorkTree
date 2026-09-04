@@ -1991,7 +1991,7 @@ pub struct PatchDiffSearchQueryUpdateFixture {
     stable_cache: Vec<Option<CachedDiffStyledText>>,
     query_cache: Vec<Option<PatchDiffSearchQueryCacheEntry>>,
     query_cache_query: SharedString,
-    query_cache_matcher: Option<crate::view::panes::main::diff_search::DiffSearchMatcher>,
+    query_cache_matcher: Option<crate::kit::text_search::DiffSearchMatcher>,
     query_cache_generation: u64,
 }
 
@@ -2117,10 +2117,7 @@ impl PatchDiffSearchQueryUpdateFixture {
         if self.query_cache_query.as_ref() != query {
             self.query_cache_query = query.to_string().into();
             self.query_cache_matcher = (!query.is_empty()).then(|| {
-                crate::view::panes::main::diff_search::DiffSearchMatcher::new(
-                    query,
-                    Default::default(),
-                )
+                crate::kit::text_search::DiffSearchMatcher::new(query, Default::default())
             });
             self.query_cache_generation = self.query_cache_generation.wrapping_add(1);
         }

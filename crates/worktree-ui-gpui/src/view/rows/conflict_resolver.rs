@@ -3,7 +3,7 @@ use super::super::perf::{self, ViewPerfRenderLane, ViewPerfSpan};
 use super::conflict_canvas::{self, ConflictChunkContext};
 use super::diff_text::*;
 use super::*;
-use crate::view::panes::main::diff_search::{DiffSearchMatcher, DiffSearchOptions};
+use crate::kit::text_search::{DiffSearchMatcher, DiffSearchOptions};
 
 const CONFLICT_ROW_FONT_SCALE: f32 = 0.80;
 const CONFLICT_ROW_TEXT_TRAILING_PADDING_PX: f32 = 16.0;

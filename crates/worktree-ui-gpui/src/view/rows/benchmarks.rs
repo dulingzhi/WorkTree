@@ -5,6 +5,9 @@ use super::diff_text::{
 };
 use super::*;
 use crate::kit::text_model::TextModel;
+use crate::kit::text_search::{
+    AsciiCaseInsensitiveNeedle, DiffSearchQueryReuse, diff_search_query_reuse,
+};
 use crate::kit::{
     benchmark_text_input_runs_legacy_visible_window,
     benchmark_text_input_runs_streamed_visible_window,
@@ -14,12 +17,8 @@ use crate::kit::{
 use crate::theme::AppTheme;
 use crate::view::history_graph;
 use crate::view::next_pane_resize_drag_width;
-use crate::view::panes::main::{
-    AsciiCaseInsensitiveNeedle, DiffSearchQueryReuse,
-    diff_cache::{
-        PagedFileDiffRows, PagedPatchDiffRows, PagedPatchSplitRows, PatchInlineVisibleMap,
-    },
-    diff_search_query_reuse,
+use crate::view::panes::main::diff_cache::{
+    PagedFileDiffRows, PagedPatchDiffRows, PagedPatchSplitRows, PatchInlineVisibleMap,
 };
 use crate::view::path_display;
 use crate::view::resize_state::{PaneResizeHandle, PaneResizeState};

@@ -5,6 +5,7 @@ mod scrollbar;
 pub(crate) mod text_expand;
 mod text_input;
 pub(crate) mod text_model;
+pub(crate) mod text_search;
 pub(crate) mod text_truncation;
 
 pub use minimap::{MINIMAP_COLUMN_WIDTH_PX, MinimapColumn};

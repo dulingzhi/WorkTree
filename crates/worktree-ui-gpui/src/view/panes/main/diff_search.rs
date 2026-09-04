@@ -2,8 +2,10 @@ use super::helpers::centered_reveal_scroll_y;
 use super::*;
 use crate::kit::text_expand::maybe_expand_tabs;
 use crate::kit::text_model::TextModelSnapshot;
-use memchr::{memchr_iter, memchr2_iter};
-use regex::{Regex, RegexBuilder};
+use crate::kit::text_search::{
+    AsciiCaseInsensitiveNeedle, DiffSearchQueryReuse, diff_search_query_reuse, is_word_char,
+    next_char_boundary_after,
+};
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 use std::borrow::Cow;
@@ -11,6 +13,11 @@ use std::collections::VecDeque;
 use std::ops::Range;
 use std::time::Duration;
 use worktree_core::domain::Diff;
+
+// The search kernel lives in `crate::kit::text_search` so `view::rows` no
+// longer imports the pane layer; these named re-exports keep the existing
+// `super::diff_search::{...}` consumers inside `panes/` unchanged.
+pub(in crate::view) use crate::kit::text_search::{DiffSearchMatcher, DiffSearchOptions};
 
 const FILE_PREVIEW_SEARCH_SCAN_CHUNK_BYTES: usize = 32 * 1024;
 const FILE_PREVIEW_REGEX_SEARCH_WINDOW_BYTES: usize = 256 * 1024;
@@ -22,309 +29,6 @@ const DIFF_SEARCH_TRIGRAM_MIN_QUERY_BYTES: usize = 3;
 /// count; this one stores a range per *occurrence*, so a query like the regex `.`
 /// would otherwise grow one per byte.
 const FILE_EDITOR_SEARCH_MAX_MATCHES: usize = 20_000;
-
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
-pub(in crate::view) struct DiffSearchOptions {
-    pub(in crate::view) match_case: bool,
-    pub(in crate::view) whole_word: bool,
-    pub(in crate::view) regex: bool,
-}
-
-pub(in crate::view) fn normalize_diff_search_query(query: &str) -> Cow<'_, str> {
-    if !query.contains('\r') {
-        return Cow::Borrowed(query);
-    }
-    Cow::Owned(query.replace("\r\n", "\n").replace('\r', "\n"))
-}
-
-pub(in crate::view) struct DiffSearchMatcher {
-    query: String,
-    options: DiffSearchOptions,
-    regex: Option<Regex>,
-    regex_error: Option<String>,
-}
-
-impl DiffSearchMatcher {
-    pub(in crate::view) fn new(query: &str, options: DiffSearchOptions) -> Self {
-        let query = normalize_diff_search_query(query).into_owned();
-        let (regex, regex_error) = if options.regex && !query.is_empty() {
-            match RegexBuilder::new(&query)
-                .case_insensitive(!options.match_case)
-                .multi_line(true)
-                .build()
-            {
-                Ok(regex) => (Some(regex), None),
-                Err(err) => (None, Some(err.to_string())),
-            }
-        } else {
-            (None, None)
-        };
-
-        Self {
-            query,
-            options,
-            regex,
-            regex_error,
-        }
-    }
-
-    pub(in crate::view) fn query(&self) -> &str {
-        self.query.as_str()
-    }
-
-    pub(in crate::view) fn regex_error(&self) -> Option<&str> {
-        self.regex_error.as_deref()
-    }
-
-    pub(in crate::view) fn is_empty(&self) -> bool {
-        self.query.is_empty()
-    }
-
-    pub(in crate::view) fn can_use_ascii_case_insensitive_fast_path(&self) -> bool {
-        !self.options.match_case
-            && !self.options.whole_word
-            && !self.options.regex
-            && !self.query.contains('\n')
-    }
-
-    fn can_use_single_row_literal_path(&self) -> bool {
-        !self.options.regex && !self.query.contains('\n')
-    }
-
-    pub(in crate::view) fn is_match(&self, haystack: &str) -> bool {
-        self.find_range_at_or_after(haystack, 0).is_some()
-    }
-
-    pub(in crate::view) fn find_ranges_into(
-        &self,
-        haystack: &str,
-        out: &mut Vec<Range<usize>>,
-        max_matches: usize,
-    ) {
-        out.clear();
-        if max_matches == 0 || self.is_empty() || self.regex_error.is_some() {
-            return;
-        }
-
-        let mut search_start = 0usize;
-        while out.len() < max_matches {
-            let Some(range) = self.find_range_at_or_after(haystack, search_start) else {
-                break;
-            };
-            search_start = range.end;
-            out.push(range);
-        }
-    }
-
-    fn find_literal_case_sensitive_from(
-        &self,
-        haystack: &str,
-        start_at: usize,
-    ) -> Option<Range<usize>> {
-        let needle = self.query.as_bytes();
-        let haystack_bytes = haystack.as_bytes();
-        let (&first, _) = needle.first().zip(needle.last())?;
-        let last_start = haystack_bytes.len().checked_sub(needle.len())?;
-        let start_at = start_at.min(haystack_bytes.len());
-        if start_at > last_start {
-            return None;
-        }
-
-        for offset in memchr_iter(first, &haystack_bytes[start_at..=last_start]) {
-            let start = start_at + offset;
-            let range = start..(start + needle.len());
-            if haystack_bytes.get(range.clone()) == Some(needle)
-                && self.range_has_requested_boundaries(haystack, range.clone())
-            {
-                return Some(range);
-            }
-        }
-        None
-    }
-
-    fn find_literal_ascii_case_insensitive_from(
-        &self,
-        haystack: &str,
-        start_at: usize,
-    ) -> Option<Range<usize>> {
-        let needle = self.query.as_bytes();
-        let haystack_bytes = haystack.as_bytes();
-        let (&first, &last) = needle.first().zip(needle.last())?;
-        let last_start = haystack_bytes.len().checked_sub(needle.len())?;
-        let start_at = start_at.min(haystack_bytes.len());
-        if start_at > last_start {
-            return None;
-        }
-        let first_lower = first.to_ascii_lowercase();
-        let first_upper = first.to_ascii_uppercase();
-
-        if needle.len() == 1 {
-            for offset in memchr2_iter(first_lower, first_upper, &haystack_bytes[start_at..]) {
-                let start = start_at + offset;
-                let range = start..(start + 1);
-                if self.range_has_requested_boundaries(haystack, range.clone()) {
-                    return Some(range);
-                }
-            }
-            return None;
-        }
-
-        let middle = &needle[1..needle.len() - 1];
-        let last_lower = last.to_ascii_lowercase();
-        let last_upper = last.to_ascii_uppercase();
-        for offset in memchr2_iter(
-            first_lower,
-            first_upper,
-            &haystack_bytes[start_at..=last_start],
-        ) {
-            let start = start_at + offset;
-            let haystack_last = haystack_bytes[start + needle.len() - 1];
-            if haystack_last != last_lower && haystack_last != last_upper {
-                continue;
-            }
-            if !haystack_bytes[start + 1..start + needle.len() - 1].eq_ignore_ascii_case(middle) {
-                continue;
-            }
-            let range = start..(start + needle.len());
-            if self.range_has_requested_boundaries(haystack, range.clone()) {
-                return Some(range);
-            }
-        }
-        None
-    }
-
-    pub(in crate::view) fn find_row_overlay_ranges_into(
-        &self,
-        haystack: &str,
-        out: &mut Vec<Range<usize>>,
-        max_matches: usize,
-    ) {
-        self.find_ranges_into(haystack, out, max_matches);
-    }
-
-    fn find_range_at_or_after(&self, haystack: &str, start_at: usize) -> Option<Range<usize>> {
-        if self.is_empty() || self.regex_error.is_some() {
-            return None;
-        }
-
-        if let Some(regex) = self.regex.as_ref() {
-            let mut search_start = start_at.min(haystack.len());
-            loop {
-                let m = regex.find_at(haystack, search_start)?;
-                let range = m.start()..m.end();
-                if !range.is_empty() && self.range_has_requested_boundaries(haystack, range.clone())
-                {
-                    return Some(range);
-                }
-                search_start = next_char_boundary_after(haystack, m.start())?;
-            }
-        }
-
-        if self.options.match_case {
-            self.find_literal_case_sensitive_from(haystack, start_at)
-        } else {
-            self.find_literal_ascii_case_insensitive_from(haystack, start_at)
-        }
-    }
-
-    fn range_has_requested_boundaries(&self, haystack: &str, range: Range<usize>) -> bool {
-        if !self.options.whole_word {
-            return true;
-        }
-
-        !haystack[..range.start]
-            .chars()
-            .next_back()
-            .is_some_and(is_word_char)
-            && !haystack[range.end..]
-                .chars()
-                .next()
-                .is_some_and(is_word_char)
-    }
-}
-
-#[inline]
-fn is_word_char(ch: char) -> bool {
-    ch.is_alphanumeric() || ch == '_'
-}
-
-fn next_char_boundary_after(s: &str, ix: usize) -> Option<usize> {
-    if ix >= s.len() {
-        return None;
-    }
-
-    Some(ix + s[ix..].chars().next()?.len_utf8())
-}
-
-#[derive(Clone, Copy)]
-pub(in crate::view) struct AsciiCaseInsensitiveNeedle<'a> {
-    bytes: &'a [u8],
-    first_lower: u8,
-    first_upper: u8,
-    last_lower: u8,
-    last_upper: u8,
-}
-
-impl<'a> AsciiCaseInsensitiveNeedle<'a> {
-    #[inline]
-    pub(in crate::view) fn new(needle: &'a str) -> Option<Self> {
-        let bytes = needle.as_bytes();
-        let (&first, &last) = bytes.first().zip(bytes.last())?;
-
-        Some(Self {
-            bytes,
-            first_lower: first.to_ascii_lowercase(),
-            first_upper: first.to_ascii_uppercase(),
-            last_lower: last.to_ascii_lowercase(),
-            last_upper: last.to_ascii_uppercase(),
-        })
-    }
-
-    #[inline]
-    pub(in crate::view) fn as_bytes(self) -> &'a [u8] {
-        self.bytes
-    }
-
-    #[inline]
-    pub(in crate::view) fn is_match(self, haystack: &str) -> bool {
-        let haystack_bytes = haystack.as_bytes();
-        let needle_len = self.bytes.len();
-        let Some(last_start) = haystack_bytes.len().checked_sub(needle_len) else {
-            return false;
-        };
-
-        if needle_len == 1 {
-            return memchr2_iter(self.first_lower, self.first_upper, haystack_bytes)
-                .next()
-                .is_some();
-        }
-
-        let middle = &self.bytes[1..needle_len - 1];
-        for start in memchr2_iter(
-            self.first_lower,
-            self.first_upper,
-            &haystack_bytes[..=last_start],
-        ) {
-            let last = haystack_bytes[start + needle_len - 1];
-            if last != self.last_lower && last != self.last_upper {
-                continue;
-            }
-
-            if haystack_bytes[start + 1..start + needle_len - 1].eq_ignore_ascii_case(middle) {
-                return true;
-            }
-        }
-
-        false
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(in crate::view) enum DiffSearchQueryReuse {
-    None,
-    SameSemantics,
-    Refinement,
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DiffSearchFinalizeMode {
@@ -445,33 +149,6 @@ pub(in crate::view) fn diff_search_split_row_texts_match_query(
     }
 
     right.is_some_and(|text| diff_search_displayed_text_matches_query(query, text, expanded_tabs))
-}
-
-#[inline]
-pub(in crate::view) fn diff_search_query_reuse(
-    previous_query: &str,
-    next_query: &str,
-) -> DiffSearchQueryReuse {
-    let previous_query = normalize_diff_search_query(previous_query);
-    let next_query = normalize_diff_search_query(next_query);
-    if next_query
-        .as_bytes()
-        .eq_ignore_ascii_case(previous_query.as_bytes())
-    {
-        return DiffSearchQueryReuse::SameSemantics;
-    }
-
-    if !previous_query.is_empty()
-        && next_query.len() > previous_query.len()
-        && next_query
-            .as_bytes()
-            .get(..previous_query.len())
-            .is_some_and(|prefix| prefix.eq_ignore_ascii_case(previous_query.as_bytes()))
-    {
-        return DiffSearchQueryReuse::Refinement;
-    }
-
-    DiffSearchQueryReuse::None
 }
 
 fn collect_unique_ascii_folded_byte_trigrams(bytes: &[u8], trigrams: &mut SmallVec<[u32; 64]>) {
@@ -762,28 +439,28 @@ struct LiteralFileDiffLineTextStreamSearch {
 
 impl LiteralFileDiffLineTextStreamSearch {
     fn new(matcher: &DiffSearchMatcher) -> Option<Self> {
-        if matcher.options.regex || matcher.query.is_empty() {
+        if matcher.options().regex || matcher.query().is_empty() {
             return None;
         }
 
         let needle = matcher
-            .query
+            .query()
             .as_bytes()
             .iter()
             .copied()
-            .map(|byte| folded_search_byte(byte, matcher.options.match_case))
+            .map(|byte| folded_search_byte(byte, matcher.options().match_case))
             .collect::<Vec<_>>();
         let prefix = build_literal_search_prefix_table(needle.as_slice());
 
         Some(Self {
             needle,
             prefix,
-            match_case: matcher.options.match_case,
-            whole_word: matcher.options.whole_word,
+            match_case: matcher.options().match_case,
+            whole_word: matcher.options().whole_word,
             matched: 0,
             stream_abs: 0,
             recent_bytes: VecDeque::with_capacity(
-                matcher.query.len().saturating_add(MAX_UTF8_CHAR_BYTES),
+                matcher.query().len().saturating_add(MAX_UTF8_CHAR_BYTES),
             ),
             pending_whole_word_start: None,
             pending_whole_word_after: Vec::with_capacity(MAX_UTF8_CHAR_BYTES),
@@ -1160,7 +837,7 @@ fn collect_file_diff_line_text_stream_match_visible_rows(
     matcher: &DiffSearchMatcher,
     out: &mut Vec<usize>,
 ) {
-    if matcher.options.regex {
+    if matcher.options().regex {
         collect_file_diff_line_text_regex_stream_match_visible_rows(rows, matcher, out);
     } else {
         collect_file_diff_line_text_literal_stream_match_visible_rows(rows, matcher, out);
@@ -2133,7 +1810,7 @@ impl MainPaneView {
             .as_ref()
             .expect("inline patch diff trigram index initialized");
 
-        match index.candidates(query.bytes) {
+        match index.candidates(query.as_bytes()) {
             DiffSearchVisibleCandidates::None => {}
             DiffSearchVisibleCandidates::All => {
                 collect_inline_patch_diff_visible_matches_with_needle(
@@ -2777,7 +2454,7 @@ fn conflict_resolver_visible_match_indices_with_needle(
                 two_way_split_projection,
             } = ctx.two_way_rows;
             let matching_rows = split_row_index
-                .search_ascii_case_insensitive_matching_rows(ctx.marker_segments, query.bytes);
+                .search_ascii_case_insensitive_matching_rows(ctx.marker_segments, query.as_bytes());
             for source_row in matching_rows {
                 if let Some(vis) = two_way_split_projection.source_to_visible(source_row) {
                     out.push(vis);

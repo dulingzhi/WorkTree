@@ -2,7 +2,7 @@
 
 use super::diff_text::*;
 use super::*;
-use crate::view::panes::main::diff_search::DiffSearchMatcher;
+use crate::kit::text_search::DiffSearchMatcher;
 use crate::view::perf::{self, ViewPerfRenderLane, ViewPerfSpan};
 use palette::IntoColor;
 

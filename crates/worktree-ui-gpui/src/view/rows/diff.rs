@@ -1,7 +1,7 @@
 use super::diff_canvas;
 use super::diff_text::*;
 use super::*;
-use crate::view::panes::main::diff_search::{DiffSearchMatcher, DiffSearchOptions};
+use crate::kit::text_search::{DiffSearchMatcher, DiffSearchOptions};
 use crate::view::panes::main::{
     CollapsedDiffExpansionKind, CollapsedDiffHunk, CollapsedDiffVisibleRow,
     DiffHorizontalScrollColumn,

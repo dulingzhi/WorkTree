@@ -9,10 +9,10 @@ use super::markdown_preview::{
 use super::*;
 use crate::view::caches::HistoryListRow;
 
+use crate::kit::text_search::DiffSearchMatcher;
 use crate::view::markdown_preview::MarkdownPreviewDocument;
 #[cfg(test)]
 use crate::view::markdown_preview::{MarkdownAlertKind, MarkdownChangeHint, MarkdownInlineStyle};
-use crate::view::panes::main::diff_search::DiffSearchMatcher;
 use worktree_core::services::BisectVerdict;
 use worktree_state::msg::CommitSelectMode;
 
@@ -40,7 +40,7 @@ fn worktree_preview_streamed_spec(
     raw_text: worktree_core::file_diff::FileDiffLineText,
     line_ix: usize,
     query: &SharedString,
-    query_options: super::super::panes::main::diff_search::DiffSearchOptions,
+    query_options: crate::kit::text_search::DiffSearchOptions,
     query_matcher: Option<Arc<DiffSearchMatcher>>,
     query_emphasis: DiffSearchMatchEmphasis,
     language: Option<rows::DiffSyntaxLanguage>,
@@ -1734,10 +1734,10 @@ mod tests {
         worktree_preview_apply_query_overlay,
     };
     use crate::font_preferences::EDITOR_MONOSPACE_FONT_FAMILY;
+    use crate::kit::text_search::{DiffSearchMatcher, DiffSearchOptions};
     use crate::view::markdown_preview::{
         MarkdownInlineSpan, MarkdownPreviewRow, MarkdownPreviewRowKind,
     };
-    use crate::view::panes::main::diff_search::{DiffSearchMatcher, DiffSearchOptions};
     use crate::view::rows::diff_text::DIFF_WRAP_TAB_EXPANDED_COLUMNS;
     use crate::view::{AppTheme, DateTimeFormat, Timezone, format_datetime, format_datetime_utc};
     use crate::view::{
@@ -2777,12 +2777,12 @@ mod markdown_preview_search_tests {
         MarkdownPreviewQuery, markdown_preview_reveal_offset_y, markdown_preview_row_extent,
         markdown_preview_styled_row_with_query,
     };
+    use crate::kit::text_search::{DiffSearchMatcher, DiffSearchOptions};
     use crate::view::AppTheme;
     use crate::view::markdown_preview::{
         MarkdownChangeHint, MarkdownInlineSpan, MarkdownInlineStyle, MarkdownPreviewRow,
         MarkdownPreviewRowKind,
     };
-    use crate::view::panes::main::diff_search::{DiffSearchMatcher, DiffSearchOptions};
     use gpui::{Bounds, point, px, size};
     use std::sync::Arc;
 

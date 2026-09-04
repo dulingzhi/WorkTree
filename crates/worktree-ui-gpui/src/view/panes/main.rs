@@ -26,11 +26,6 @@ mod preview;
 mod state;
 mod status_nav;
 
-#[cfg(feature = "benchmarks")]
-#[allow(unused_imports)]
-pub(in crate::view) use diff_search::{
-    AsciiCaseInsensitiveNeedle, DiffSearchQueryReuse, diff_search_query_reuse,
-};
 // The editor's free functions are exercised directly by the panel tests; the
 // pane itself reaches them through `impl MainPaneView`.
 #[cfg(test)]

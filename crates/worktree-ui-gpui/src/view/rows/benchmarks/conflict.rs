@@ -958,7 +958,7 @@ pub struct ConflictSearchQueryUpdateFixture {
     stable_cache: ConflictSplitStyledTextCache,
     query_cache: ConflictSplitStyledTextCache,
     query_cache_query: SharedString,
-    query_cache_matcher: Option<crate::view::panes::main::diff_search::DiffSearchMatcher>,
+    query_cache_matcher: Option<crate::kit::text_search::DiffSearchMatcher>,
 }
 
 impl ConflictSearchQueryUpdateFixture {
@@ -1036,10 +1036,7 @@ impl ConflictSearchQueryUpdateFixture {
         if self.query_cache_query.as_ref() != query {
             self.query_cache_query = query.to_string().into();
             self.query_cache_matcher = (!query.is_empty()).then(|| {
-                crate::view::panes::main::diff_search::DiffSearchMatcher::new(
-                    query,
-                    Default::default(),
-                )
+                crate::kit::text_search::DiffSearchMatcher::new(query, Default::default())
             });
             self.query_cache.clear();
         }
@@ -1055,7 +1052,7 @@ impl ConflictSearchQueryUpdateFixture {
         text: Option<&worktree_core::file_diff::FileDiffLineText>,
         word_ranges: &[Range<usize>],
         query: &str,
-        query_matcher: Option<&crate::view::panes::main::diff_search::DiffSearchMatcher>,
+        query_matcher: Option<&crate::kit::text_search::DiffSearchMatcher>,
         syntax_lang: Option<DiffSyntaxLanguage>,
         syntax_mode: DiffSyntaxMode,
     ) -> Option<ConflictSearchQueryStyledSource> {
