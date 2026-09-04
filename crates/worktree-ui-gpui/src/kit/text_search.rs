@@ -138,50 +138,17 @@ impl DiffSearchMatcher {
         haystack: &str,
         start_at: usize,
     ) -> Option<Range<usize>> {
-        let needle = self.query.as_bytes();
-        let haystack_bytes = haystack.as_bytes();
-        let (&first, &last) = needle.first().zip(needle.last())?;
-        let last_start = haystack_bytes.len().checked_sub(needle.len())?;
-        let start_at = start_at.min(haystack_bytes.len());
-        if start_at > last_start {
-            return None;
-        }
-        let first_lower = first.to_ascii_lowercase();
-        let first_upper = first.to_ascii_uppercase();
-
-        if needle.len() == 1 {
-            for offset in memchr2_iter(first_lower, first_upper, &haystack_bytes[start_at..]) {
-                let start = start_at + offset;
-                let range = start..(start + 1);
-                if self.range_has_requested_boundaries(haystack, range.clone()) {
-                    return Some(range);
-                }
-            }
-            return None;
-        }
-
-        let middle = &needle[1..needle.len() - 1];
-        let last_lower = last.to_ascii_lowercase();
-        let last_upper = last.to_ascii_uppercase();
-        for offset in memchr2_iter(
-            first_lower,
-            first_upper,
-            &haystack_bytes[start_at..=last_start],
-        ) {
-            let start = start_at + offset;
-            let haystack_last = haystack_bytes[start + needle.len() - 1];
-            if haystack_last != last_lower && haystack_last != last_upper {
-                continue;
-            }
-            if !haystack_bytes[start + 1..start + needle.len() - 1].eq_ignore_ascii_case(middle) {
-                continue;
-            }
-            let range = start..(start + needle.len());
+        let needle = AsciiCaseInsensitiveNeedle::new(&self.query)?;
+        let mut search_start = start_at;
+        loop {
+            let range = needle.find_range_from(haystack, search_start)?;
             if self.range_has_requested_boundaries(haystack, range.clone()) {
                 return Some(range);
             }
+            // A boundary-rejected candidate does not consume the match: the
+            // next candidate may overlap it, so resume one byte past its start.
+            search_start = range.start + 1;
         }
-        None
     }
 
     pub(crate) fn find_row_overlay_ranges_into(
@@ -280,37 +247,53 @@ impl<'a> AsciiCaseInsensitiveNeedle<'a> {
         self.bytes
     }
 
-    #[inline]
-    pub(crate) fn is_match(self, haystack: &str) -> bool {
+    /// First match at or after `start_at`. This is the single copy of the
+    /// memchr2 scan: `is_match` answers with it from 0, and
+    /// `DiffSearchMatcher`'s case-insensitive literal path loops over it while
+    /// rejecting candidates that fail the whole-word boundary check.
+    pub(crate) fn find_range_from(self, haystack: &str, start_at: usize) -> Option<Range<usize>> {
         let haystack_bytes = haystack.as_bytes();
         let needle_len = self.bytes.len();
-        let Some(last_start) = haystack_bytes.len().checked_sub(needle_len) else {
-            return false;
-        };
+        let last_start = haystack_bytes.len().checked_sub(needle_len)?;
+        let start_at = start_at.min(haystack_bytes.len());
+        if start_at > last_start {
+            return None;
+        }
 
         if needle_len == 1 {
-            return memchr2_iter(self.first_lower, self.first_upper, haystack_bytes)
-                .next()
-                .is_some();
+            let offset = memchr2_iter(
+                self.first_lower,
+                self.first_upper,
+                &haystack_bytes[start_at..],
+            )
+            .next()?;
+            let start = start_at + offset;
+            return Some(start..start + 1);
         }
 
         let middle = &self.bytes[1..needle_len - 1];
-        for start in memchr2_iter(
+        for offset in memchr2_iter(
             self.first_lower,
             self.first_upper,
-            &haystack_bytes[..=last_start],
+            &haystack_bytes[start_at..=last_start],
         ) {
+            let start = start_at + offset;
             let last = haystack_bytes[start + needle_len - 1];
             if last != self.last_lower && last != self.last_upper {
                 continue;
             }
 
             if haystack_bytes[start + 1..start + needle_len - 1].eq_ignore_ascii_case(middle) {
-                return true;
+                return Some(start..start + needle_len);
             }
         }
 
-        false
+        None
+    }
+
+    #[inline]
+    pub(crate) fn is_match(self, haystack: &str) -> bool {
+        self.find_range_from(haystack, 0).is_some()
     }
 }
 
