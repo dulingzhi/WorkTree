@@ -2,6 +2,7 @@ use super::super::super::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use super::super::PaneChromeExt as _;
 use super::HistoryView;
 use crate::view::caches::HistoryListRow;
 use crate::view::scroll_geometry::scroll_is_near_bottom;

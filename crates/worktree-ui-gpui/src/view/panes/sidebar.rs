@@ -5,6 +5,7 @@ use super::super::sidebar_presentation::{
     SidebarPresentation, SidebarPresentationCache, SidebarRequestFingerprint,
 };
 use super::super::*;
+use super::PaneChromeExt;
 use worktree_core::domain::{FileEntry, FileEntryKind, LogScope};
 use worktree_state::model::{Loadable, SidebarDataRequest, SidebarMode};
 use worktree_state::msg::Msg;
@@ -373,6 +374,16 @@ impl SidebarNotifyFingerprint {
     }
 }
 
+impl PaneChromeExt for SidebarPaneView {
+    fn root_view(&self) -> &WeakEntity<WorkTreeView> {
+        &self.root_view
+    }
+
+    fn theme_slot(&mut self) -> &mut AppTheme {
+        &mut self.theme
+    }
+}
+
 impl SidebarPaneView {
     pub(in super::super) fn new(
         store: Arc<AppStore>,
@@ -528,11 +539,6 @@ impl SidebarPaneView {
         // Reflect any already-active repo's stored search query on first mount.
         this.sync_search_input_with_state(cx);
         this
-    }
-
-    pub(in super::super) fn set_theme(&mut self, theme: AppTheme, cx: &mut gpui::Context<Self>) {
-        self.theme = theme;
-        cx.notify();
     }
 
     /// Sync the section this pane should render as collapsed-rail popover content.
@@ -2917,28 +2923,6 @@ impl SidebarPaneView {
                 Some(element)
             })
             .collect()
-    }
-
-    pub(in super::super) fn open_popover_at(
-        &mut self,
-        kind: PopoverKind,
-        anchor: Point<Pixels>,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let _ = self.root_view.update(cx, |root, cx| {
-            root.open_popover_at(kind, anchor, window, cx);
-        });
-    }
-
-    pub(in super::super) fn activate_context_menu_invoker(
-        &mut self,
-        invoker: SharedString,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let _ = self.root_view.update(cx, move |root, cx| {
-            root.set_active_context_menu_invoker(Some(invoker), cx);
-        });
     }
 
     pub(in super::super) fn rebuild_diff_cache(&mut self, cx: &mut gpui::Context<Self>) {

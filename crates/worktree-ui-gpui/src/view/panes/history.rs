@@ -1,4 +1,5 @@
 use super::super::*;
+use super::PaneChromeExt;
 use crate::view::caches::{
     HistoryListPlan, HistoryListPlanCache, HistoryShortShaVm, HistoryVisibleIndices, HistoryWhenVm,
     HistoryWorktreeRowAnchor, analyze_history_stashes, build_history_branch_containment_bits,
@@ -1150,6 +1151,16 @@ pub(in super::super) struct HistoryView {
     relative_time_tick: Option<gpui::Task<()>>,
 }
 
+impl PaneChromeExt for HistoryView {
+    fn root_view(&self) -> &WeakEntity<WorkTreeView> {
+        &self.root_view
+    }
+
+    fn theme_slot(&mut self) -> &mut AppTheme {
+        &mut self.theme
+    }
+}
+
 impl HistoryView {
     fn notify_fingerprint_for(state: &AppState, show_history_tags: bool) -> u64 {
         let mut hasher = FxHasher::default();
@@ -1686,11 +1697,6 @@ impl HistoryView {
         }
     }
 
-    pub(in super::super) fn set_theme(&mut self, theme: AppTheme, cx: &mut gpui::Context<Self>) {
-        self.theme = theme;
-        cx.notify();
-    }
-
     pub(in super::super) fn set_active_context_menu_invoker(
         &mut self,
         next: Option<SharedString>,
@@ -1837,52 +1843,6 @@ impl HistoryView {
 
     pub(in super::super) fn set_history_content_width(&mut self, width: Pixels) {
         self.history_content_width = history_columns_available_width(width);
-    }
-
-    pub(in super::super) fn open_popover_at(
-        &mut self,
-        kind: PopoverKind,
-        anchor: Point<Pixels>,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let root_view = self.root_view.clone();
-        let window_handle = window.window_handle();
-        cx.defer(move |cx| {
-            let _ = window_handle.update(cx, |_, window, cx| {
-                let _ = root_view.update(cx, |root, cx| {
-                    root.open_popover_at(kind, anchor, window, cx);
-                });
-            });
-        });
-    }
-
-    pub(in super::super) fn open_popover_for_bounds(
-        &mut self,
-        kind: PopoverKind,
-        anchor_bounds: Bounds<Pixels>,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let root_view = self.root_view.clone();
-        let window_handle = window.window_handle();
-        cx.defer(move |cx| {
-            let _ = window_handle.update(cx, |_, window, cx| {
-                let _ = root_view.update(cx, |root, cx| {
-                    root.open_popover_for_bounds(kind, anchor_bounds, window, cx);
-                });
-            });
-        });
-    }
-
-    pub(in super::super) fn activate_context_menu_invoker(
-        &mut self,
-        invoker: SharedString,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let _ = self.root_view.update(cx, move |root, cx| {
-            root.set_active_context_menu_invoker(Some(invoker), cx);
-        });
     }
 
     pub(in crate::view) fn drive_pending_history_reveal(&mut self, cx: &mut gpui::Context<Self>) {

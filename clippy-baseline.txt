@@ -5,24 +5,24 @@ empty line after doc comment | crates\worktree-ui-gpui\src\view\date_time.rs:248
 match expression looks like `matches!` macro | crates\worktree-ui-gpui\src\view\panels\popover\context_menu.rs:2159:63
 method `maybe_show_user_survey_on_startup` is never used | crates\worktree-ui-gpui\src\view\user_survey.rs:8:28
 method `push_survey_toast` is never used | crates\worktree-ui-gpui\src\view\toast_host.rs:315:19
-redundant redefinition of a binding `hover_author_email` | crates\worktree-ui-gpui\src\view\rows\history_canvas.rs:1226:17
+redundant redefinition of a binding `hover_author_email` | crates\worktree-ui-gpui\src\view\rows\history_canvas.rs:1227:17
 this `if` statement can be collapsed | crates\worktree-ui-gpui\src\ai_commit_sources.rs:324:5
 this `if` statement can be collapsed | crates\worktree-ui-gpui\src\ai_commit_sources.rs:345:9
 this `if` statement can be collapsed | crates\worktree-ui-gpui\src\view\panels\popover\commit_search_picker.rs:150:9
 this `let...else` may be rewritten with the `?` operator | crates\worktree-ui-gpui\src\view\panels\popover\search_inputs.rs:556:25
 this `match` expression can be replaced with `?` | crates\worktree-ui-gpui\src\view\panes\main\lfs_pointer.rs:174:17
 this function has too many arguments (10/9) | crates\worktree-ui-gpui\src\view\settings_window.rs:3442:5
-this function has too many arguments (35/9) | crates\worktree-ui-gpui\src\view\rows\history_canvas.rs:389:1
+this function has too many arguments (35/9) | crates\worktree-ui-gpui\src\view\rows\history_canvas.rs:390:1
 this let-binding has unit value | crates\worktree-ui-gpui\src\app.rs:501:17
 this let-binding has unit value | crates\worktree-ui-gpui\src\avatar_source.rs:228:13
-this let-binding has unit value | crates\worktree-ui-gpui\src\view\panes\sidebar.rs:1690:13
+this let-binding has unit value | crates\worktree-ui-gpui\src\view\panes\sidebar.rs:1696:13
 unnecessary closure used with `bool::then` | crates\worktree-ui-gpui\src\view\panels\layout.rs:37:24
 unnecessary closure used with `bool::then` | crates\worktree-ui-gpui\src\view\settings_window.rs:2266:21
 unnecessary closure used with `bool::then` | crates\worktree-ui-gpui\src\view\settings_window.rs:2274:21
 unused import: `SystemTime` | crates\worktree-ui-gpui\src\view\date_time.rs:251:21
 useless conversion to the same type: `gpui::SharedString` | crates\worktree-ui-gpui\src\view\panels\popover.rs:1930:34
-useless conversion to the same type: `gpui::SharedString` | crates\worktree-ui-gpui\src\view\panes\reflog.rs:659:21
-useless conversion to the same type: `gpui::SharedString` | crates\worktree-ui-gpui\src\view\panes\reflog.rs:661:21
+useless conversion to the same type: `gpui::SharedString` | crates\worktree-ui-gpui\src\view\panes\reflog.rs:649:21
+useless conversion to the same type: `gpui::SharedString` | crates\worktree-ui-gpui\src\view\panes\reflog.rs:651:21
 useless conversion to the same type: `std::string::String` | crates\worktree-ui-gpui\src\view\terminal_panel.rs:2221:20
 useless conversion to the same type: `u32` | crates\worktree-ui-gpui\src\view\statistics.rs:81:13
 using `chunks_exact_mut` with a constant chunk size | crates\worktree-ui-gpui\src\avatar_source.rs:318:23

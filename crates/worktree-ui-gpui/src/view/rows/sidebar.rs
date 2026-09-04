@@ -1,6 +1,7 @@
 use super::*;
 use crate::ui_scale;
 use crate::view::components::InteractiveRowExt as _;
+use crate::view::panes::PaneChromeExt as _;
 use palette::IntoColor;
 use std::num::NonZeroU32;
 use worktree_core::domain::LogScope;

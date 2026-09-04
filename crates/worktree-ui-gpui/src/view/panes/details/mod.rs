@@ -2,6 +2,7 @@ mod render_impl;
 
 use super::super::path_display;
 use super::super::*;
+use super::PaneChromeExt;
 use crate::kit::text_truncation::path_alignment_visible_signature;
 use rustc_hash::FxHasher;
 use std::hash::{Hash, Hasher};
@@ -262,6 +263,16 @@ impl Element for StatusSectionResizeTracker {
                 cx.stop_propagation();
             }
         });
+    }
+}
+
+impl PaneChromeExt for DetailsPaneView {
+    fn root_view(&self) -> &WeakEntity<WorkTreeView> {
+        &self.root_view
+    }
+
+    fn theme_slot(&mut self) -> &mut AppTheme {
+        &mut self.theme
     }
 }
 
@@ -531,7 +542,7 @@ impl DetailsPaneView {
     }
 
     pub(in super::super) fn set_theme(&mut self, theme: AppTheme, cx: &mut gpui::Context<Self>) {
-        self.theme = theme;
+        PaneChromeExt::set_theme(self, theme, cx);
         self.commit_message_input
             .update(cx, |input, cx| input.set_theme(theme, cx));
         self.commit_details_message_input
@@ -542,7 +553,6 @@ impl DetailsPaneView {
             .update(cx, |input, cx| input.set_theme(theme, cx));
         self.commit_details_parent_input
             .update(cx, |input, cx| input.set_theme(theme, cx));
-        cx.notify();
     }
 
     pub(in crate::view) fn ui_scale(&self) -> ui_scale::UiScale {
@@ -1583,34 +1593,6 @@ impl DetailsPaneView {
             },
         )
         .detach();
-    }
-
-    pub(in super::super) fn open_popover_at(
-        &mut self,
-        kind: PopoverKind,
-        anchor: Point<Pixels>,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let root_view = self.root_view.clone();
-        let window_handle = window.window_handle();
-        cx.defer(move |cx| {
-            let _ = window_handle.update(cx, |_, window, cx| {
-                let _ = root_view.update(cx, |root, cx| {
-                    root.open_popover_at(kind, anchor, window, cx);
-                });
-            });
-        });
-    }
-
-    pub(in super::super) fn activate_context_menu_invoker(
-        &mut self,
-        invoker: SharedString,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let _ = self.root_view.update(cx, move |root, cx| {
-            root.set_active_context_menu_invoker(Some(invoker), cx);
-        });
     }
 
     pub(in super::super) fn schedule_ui_settings_persist(&mut self, cx: &mut gpui::Context<Self>) {

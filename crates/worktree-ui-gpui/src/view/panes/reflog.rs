@@ -1,4 +1,5 @@
 use super::super::*;
+use super::PaneChromeExt;
 use crate::ui_scale::UiScale;
 use crate::view::date_time::{DateTimeFormat, Timezone};
 use crate::view::perf::{self, ViewPerfRenderLane};
@@ -62,6 +63,16 @@ pub(in super::super) struct ReflogPaneView {
     panels: FxHashMap<RepoId, ReflogPanelState>,
     notify_fingerprint: u64,
     _ui_model_subscription: gpui::Subscription,
+}
+
+impl PaneChromeExt for ReflogPaneView {
+    fn root_view(&self) -> &WeakEntity<WorkTreeView> {
+        &self.root_view
+    }
+
+    fn theme_slot(&mut self) -> &mut AppTheme {
+        &mut self.theme
+    }
 }
 
 impl ReflogPaneView {
@@ -197,13 +208,12 @@ impl ReflogPaneView {
         if self.theme == theme {
             return;
         }
-        self.theme = theme;
+        PaneChromeExt::set_theme(self, theme, cx);
         for panel in self.panels.values() {
             panel
                 .query_input
                 .update(cx, |input, cx| input.set_theme(theme, cx));
         }
-        cx.notify();
     }
 
     pub(in super::super) fn set_date_settings(
@@ -536,26 +546,6 @@ impl ReflogPaneView {
                 }),
             )
             .into_any()
-    }
-
-    /// Popovers are owned by the root view; a direct `root_view.update()` from
-    /// here panics on the root→pane→root path, so hop through `cx.defer`.
-    fn open_popover_at(
-        &mut self,
-        kind: PopoverKind,
-        anchor: Point<Pixels>,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let root_view = self.root_view.clone();
-        let window_handle = window.window_handle();
-        cx.defer(move |cx| {
-            let _ = window_handle.update(cx, |_, window, cx| {
-                let _ = root_view.update(cx, |root, cx| {
-                    root.open_popover_at(kind, anchor, window, cx);
-                });
-            });
-        });
     }
 
     /// The panel's own header row, shaped like the terminal panel's

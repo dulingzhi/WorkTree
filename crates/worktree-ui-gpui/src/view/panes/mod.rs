@@ -1,6 +1,7 @@
 mod details;
 mod history;
 pub(in crate::view) mod main;
+mod pane_chrome_ext;
 mod reflog;
 mod sidebar;
 
@@ -23,6 +24,7 @@ pub(in crate::view) use history::{
     history_resize_state_visible_columns_for_current_width,
 };
 pub(crate) use main::MainPaneView;
+pub(in crate::view) use pane_chrome_ext::PaneChromeExt;
 pub(super) use reflog::{ReflogPaneInit, ReflogPaneView};
 pub(in crate::view) use sidebar::file_browser_search_is_active;
 pub(super) use sidebar::{CollapsedSidebarSection, PullRequestFetchReason, SidebarPaneView};

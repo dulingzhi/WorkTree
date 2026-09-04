@@ -277,8 +277,8 @@ use panels::{
 };
 pub(crate) use panes::MainPaneView;
 use panes::{
-    CollapsedSidebarSection, DetailsPaneInit, DetailsPaneView, HistoryView, ReflogPaneInit,
-    ReflogPaneView, SidebarPaneView,
+    CollapsedSidebarSection, DetailsPaneInit, DetailsPaneView, HistoryView, PaneChromeExt as _,
+    ReflogPaneInit, ReflogPaneView, SidebarPaneView,
 };
 use patch_split::PatchSplitRow;
 #[cfg(test)]

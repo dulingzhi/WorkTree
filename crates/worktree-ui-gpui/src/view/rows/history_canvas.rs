@@ -1,4 +1,5 @@
 use super::*;
+use crate::view::panes::PaneChromeExt as _;
 use gpui::{
     Bounds, ContentMask, CursorStyle, DispatchPhase, HitboxBehavior, MouseButton, TruncateFrom,
     fill, point, px, size,
