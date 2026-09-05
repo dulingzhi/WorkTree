@@ -5,6 +5,7 @@
 use super::*;
 
 use super::geometry::{diff_scaled_px, paint_gutter_text};
+use super::streamed::hash_shared_string;
 
 /// Default width of the blame/annotate column shown to the left of the diff
 /// content when annotate is enabled. The live width is stored on the view and
