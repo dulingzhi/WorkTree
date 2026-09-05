@@ -1,15 +1,21 @@
-use super::TwoWayWordHighlightPair;
+//! Word-level highlight computation over conflict sides, the aligned-row
+//! highlight maps and the bounded split-row highlight cache.
 
+use std::collections::VecDeque;
+use std::ops::Range;
+use std::sync::Arc;
+
+use rustc_hash::FxHashMap;
+
+use super::{ThreeWayAlignedMap, indexed_line_text};
+
+#[cfg(any(test, feature = "benchmarks"))]
+use super::{
+    ConflictSegment, LARGE_CONFLICT_BLOCK_WORD_HIGHLIGHT_MAX_LINES, block_max_line_count,
+    text_line_count,
+};
 #[cfg(feature = "benchmarks")]
 use std::num::NonZeroU32;
-#[cfg(any(test, feature = "benchmarks"))]
-use {
-    super::{
-        ConflictSegment, LARGE_CONFLICT_BLOCK_WORD_HIGHLIGHT_MAX_LINES, WordHighlights,
-        block_max_line_count, indexed_line_text, text_line_count,
-    },
-    std::ops::Range,
-};
 
 #[cfg(any(test, feature = "benchmarks"))]
 fn should_skip_large_block_word_highlights(block: &super::ConflictBlock) -> bool {
@@ -376,4 +382,191 @@ mod tests {
         assert!(highlights.get(2).is_some());
         assert_eq!(highlights.iter().filter(|entry| entry.is_some()).count(), 2);
     }
+}
+
+/// Per-line word-highlight ranges. `None` means no highlights for that line.
+pub type WordHighlights = FxHashMap<usize, Vec<Range<usize>>>;
+
+/// Per-line pair of `(old, new)` word-highlight ranges for a two-way diff row.
+pub type TwoWayWordHighlightPair = (
+    crate::view::word_diff::WordDiffRanges,
+    crate::view::word_diff::WordDiffRanges,
+);
+
+const CONFLICT_SPLIT_WORD_HIGHLIGHT_CACHE_ROWS: usize = 4_096;
+
+/// Bounded render cache for giant two-way conflicts. The same row is rendered
+/// independently by the left and right lists, so sharing the computed pair here
+/// avoids running the word diff twice per frame without retaining the whole file.
+#[derive(Clone, Debug, Default)]
+pub(in crate::view) struct ConflictSplitWordHighlightCache {
+    rows: FxHashMap<usize, Arc<TwoWayWordHighlightPair>>,
+    insertion_order: VecDeque<usize>,
+}
+
+impl ConflictSplitWordHighlightCache {
+    pub(in crate::view) fn get(&self, row_ix: usize) -> Option<Arc<TwoWayWordHighlightPair>> {
+        self.rows.get(&row_ix).cloned()
+    }
+
+    pub(in crate::view) fn insert(
+        &mut self,
+        row_ix: usize,
+        highlights: TwoWayWordHighlightPair,
+    ) -> Arc<TwoWayWordHighlightPair> {
+        if let Some(existing) = self.rows.get(&row_ix) {
+            return Arc::clone(existing);
+        }
+        while self.rows.len() >= CONFLICT_SPLIT_WORD_HIGHLIGHT_CACHE_ROWS {
+            let Some(evicted) = self.insertion_order.pop_front() else {
+                break;
+            };
+            self.rows.remove(&evicted);
+        }
+        let highlights = Arc::new(highlights);
+        self.rows.insert(row_ix, Arc::clone(&highlights));
+        self.insertion_order.push_back(row_ix);
+        highlights
+    }
+
+    pub(in crate::view) fn clear(&mut self) {
+        self.rows.clear();
+        self.insertion_order.clear();
+    }
+}
+
+/// section 30 R11: cap on aligned rows that receive word-level highlights, bounding
+/// the per-row word-diff work on files with huge change counts.
+pub const ALIGNED_WORD_HIGHLIGHT_MAX_ROWS: usize = 4_000;
+
+fn merge_word_highlight_ranges(
+    highlights: &mut WordHighlights,
+    line_ix: usize,
+    ranges: Vec<Range<usize>>,
+) {
+    if ranges.is_empty() {
+        return;
+    }
+    let entry = highlights.entry(line_ix).or_default();
+    entry.extend(ranges);
+    entry.sort_by_key(|r| (r.start, r.end));
+    let mut merged: Vec<Range<usize>> = Vec::with_capacity(entry.len());
+    for r in entry.drain(..) {
+        if let Some(last) = merged.last_mut().filter(|l| r.start <= l.end) {
+            last.end = last.end.max(r.end);
+            continue;
+        }
+        merged.push(r);
+    }
+    *entry = merged;
+}
+
+/// section 30 R11 (kdiff3 change colours): word highlights over the aligned row
+/// space. For each aligned row where a side's line differs from the base line
+/// paired at the same row, word-diff the pair and record ranges keyed by each
+/// side's own line index (the renderer's cache key space). Padding rows
+/// (added/removed lines) get no word ranges — the per-side row tint already
+/// marks them whole. Requires a real base; both-added (two-way) maps use the
+/// two-way highlight path instead.
+pub fn compute_aligned_three_way_word_highlights(
+    aligned: &ThreeWayAlignedMap,
+    base_text: &str,
+    base_line_starts: &[usize],
+    ours_text: &str,
+    ours_line_starts: &[usize],
+    theirs_text: &str,
+    theirs_line_starts: &[usize],
+) -> (WordHighlights, WordHighlights, WordHighlights) {
+    let mut wh_base = WordHighlights::default();
+    let mut wh_ours = WordHighlights::default();
+    let mut wh_theirs = WordHighlights::default();
+    if aligned.is_identity() || base_text.is_empty() {
+        return (wh_base, wh_ours, wh_theirs);
+    }
+
+    let mut budget = ALIGNED_WORD_HIGHLIGHT_MAX_ROWS;
+    for row in 0..aligned.aligned_len() {
+        if budget == 0 {
+            break;
+        }
+        let Some(base_ix) = aligned.side_line_for_row(0, row) else {
+            continue;
+        };
+        let Some(base_line) = indexed_line_text(base_text, base_line_starts, base_ix) else {
+            continue;
+        };
+        let mut row_diffed = false;
+        for (side, side_text, side_starts, side_highlights) in [
+            (1usize, ours_text, ours_line_starts, &mut wh_ours),
+            (2usize, theirs_text, theirs_line_starts, &mut wh_theirs),
+        ] {
+            let Some(side_ix) = aligned.side_line_for_row(side, row) else {
+                continue;
+            };
+            let Some(side_line) = indexed_line_text(side_text, side_starts, side_ix) else {
+                continue;
+            };
+            if side_line == base_line {
+                continue;
+            }
+            let (base_ranges, side_ranges) =
+                crate::view::word_diff::capped_word_diff_ranges(base_line, side_line);
+            merge_word_highlight_ranges(&mut wh_base, base_ix, base_ranges);
+            merge_word_highlight_ranges(side_highlights, side_ix, side_ranges);
+            row_diffed = true;
+        }
+        if row_diffed {
+            budget -= 1;
+        }
+    }
+
+    (wh_base, wh_ours, wh_theirs)
+}
+
+/// section 30 R11: aligned two-way (ours↔theirs) word highlights, precomputed
+/// once per conflict-source rebuild and shared by both diff columns (Ours and
+/// Theirs). Keyed by aligned row — the renderer's row space. Only rows where
+/// both sides have a line and the two lines differ byte-wise get an entry; the
+/// render-time whitespace mode still decides whether to *apply* them
+/// (whitespace-equal rows render as context), so this stays independent of that
+/// toggle. Replaces the previous per-render, per-column inline word diff.
+pub fn compute_aligned_two_way_word_highlights(
+    aligned: &ThreeWayAlignedMap,
+    ours_text: &str,
+    ours_line_starts: &[usize],
+    theirs_text: &str,
+    theirs_line_starts: &[usize],
+) -> FxHashMap<usize, TwoWayWordHighlightPair> {
+    let mut highlights = FxHashMap::default();
+    if aligned.is_identity() {
+        return highlights;
+    }
+
+    let mut budget = ALIGNED_WORD_HIGHLIGHT_MAX_ROWS;
+    for row in 0..aligned.aligned_len() {
+        if budget == 0 {
+            break;
+        }
+        let (Some(ours_ix), Some(theirs_ix)) = (
+            aligned.side_line_for_row(1, row),
+            aligned.side_line_for_row(2, row),
+        ) else {
+            continue;
+        };
+        let (Some(ours_line), Some(theirs_line)) = (
+            indexed_line_text(ours_text, ours_line_starts, ours_ix),
+            indexed_line_text(theirs_text, theirs_line_starts, theirs_ix),
+        ) else {
+            continue;
+        };
+        if ours_line == theirs_line {
+            continue;
+        }
+        if let Some(pair) = compute_word_highlights_for_texts(ours_line, theirs_line) {
+            highlights.insert(row, pair);
+            budget -= 1;
+        }
+    }
+
+    highlights
 }

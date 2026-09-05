@@ -1,4 +1,7 @@
 pub(super) use super::*;
+use rustc_hash::FxHashSet;
+use std::ops::Range;
+use std::sync::Arc;
 pub(super) use worktree_core::conflict_output::{
     ConflictMarkerLabels, GenerateResolvedTextOptions, UnresolvedConflictMode,
 };

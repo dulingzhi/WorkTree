@@ -5,6 +5,8 @@ use crate::view::diff_prefs::DiffWhitespaceMode;
 use crate::view::preview_kind::ConflictResolverPreviewMode;
 use gpui::SharedString;
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::ops::Range;
+use std::sync::Arc;
 use worktree_state::model::{Loadable, RepoId};
 #[derive(Clone, Debug)]
 pub(in crate::view) struct ConflictResolverMarkdownPreviewState {
