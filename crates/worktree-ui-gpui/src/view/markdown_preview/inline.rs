@@ -169,38 +169,26 @@ pub(super) fn parse_inline_markdown_fragment(source: &str) -> (String, Vec<Markd
     normalize_whitespace_with_spans(&text_buf, &inline_spans)
 }
 
-pub(super) fn normalize_whitespace(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    let mut prev_ws = false;
-    for ch in s.chars() {
-        if ch.is_whitespace() {
-            if !prev_ws {
-                result.push(' ');
-            }
-            prev_ws = true;
-        } else {
-            result.push(ch);
-            prev_ws = false;
-        }
-    }
-    result
-}
-
+/// Collapse runs of whitespace into single spaces, remapping inline spans.
+///
+/// The no-span case is the common one — most rows carry no styling — so the
+/// byte map the remap reads is only built when there are spans to remap; the
+/// text policy is the same single pass either way.
 pub(super) fn normalize_whitespace_with_spans(
     text: &str,
     inline_spans: &[MarkdownInlineSpan],
 ) -> (String, Vec<MarkdownInlineSpan>) {
-    if inline_spans.is_empty() {
-        return (normalize_whitespace(text), Vec::new());
-    }
-
     let mut normalized = String::with_capacity(text.len());
-    let mut byte_map = vec![0usize; text.len() + 1];
+    // `byte_ix` maps to the position before its char, `byte_ix + ch.len_utf8()`
+    // to the position after it; a span reads both ends through this map.
+    let mut byte_map = (!inline_spans.is_empty()).then(|| vec![0usize; text.len() + 1]);
     let mut prev_ws = false;
     let mut normalized_len = 0usize;
 
     for (byte_ix, ch) in text.char_indices() {
-        byte_map[byte_ix] = normalized_len;
+        if let Some(map) = byte_map.as_mut() {
+            map[byte_ix] = normalized_len;
+        }
         if ch.is_whitespace() {
             if !prev_ws {
                 normalized.push(' ');
@@ -212,19 +200,26 @@ pub(super) fn normalize_whitespace_with_spans(
             normalized_len += ch.len_utf8();
             prev_ws = false;
         }
-        byte_map[byte_ix + ch.len_utf8()] = normalized_len;
+        if let Some(map) = byte_map.as_mut() {
+            map[byte_ix + ch.len_utf8()] = normalized_len;
+        }
     }
 
-    let remapped_spans = inline_spans
-        .iter()
-        .filter_map(|span| {
-            debug_assert!(text.is_char_boundary(span.byte_range.start));
-            debug_assert!(text.is_char_boundary(span.byte_range.end));
-            let start = *byte_map.get(span.byte_range.start)?;
-            let end = *byte_map.get(span.byte_range.end)?;
-            (start < end).then(|| span.restyled(start..end))
+    let remapped_spans = byte_map
+        .as_ref()
+        .map(|byte_map| {
+            inline_spans
+                .iter()
+                .filter_map(|span| {
+                    debug_assert!(text.is_char_boundary(span.byte_range.start));
+                    debug_assert!(text.is_char_boundary(span.byte_range.end));
+                    let start = *byte_map.get(span.byte_range.start)?;
+                    let end = *byte_map.get(span.byte_range.end)?;
+                    (start < end).then(|| span.restyled(start..end))
+                })
+                .collect()
         })
-        .collect();
+        .unwrap_or_default();
 
     (normalized, remapped_spans)
 }

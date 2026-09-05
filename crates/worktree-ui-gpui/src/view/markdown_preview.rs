@@ -56,7 +56,7 @@ use self::diff::{annotate_change_hints, line_range_change_hint, parse_markdown_d
 #[cfg(test)]
 use self::flatten::source_line_for_byte;
 #[cfg(test)]
-use self::inline::normalize_whitespace;
+use self::inline::normalize_whitespace_with_spans;
 #[cfg(test)]
 use self::model::{MARKDOWN_PREVIEW_IMAGE_BLOCK_ROWS, MAX_INLINE_SPANS_PER_ROW};
 #[cfg(test)]
@@ -1470,9 +1470,29 @@ code line
 
     #[test]
     fn normalize_whitespace_collapses_runs() {
-        assert_eq!(normalize_whitespace("a  b\tc\n d"), "a b c d");
-        assert_eq!(normalize_whitespace("  leading"), " leading");
-        assert_eq!(normalize_whitespace(""), "");
+        let plain = |s: &str| normalize_whitespace_with_spans(s, &[]).0;
+        assert_eq!(plain("a  b\tc\n d"), "a b c d");
+        assert_eq!(plain("  leading"), " leading");
+        assert_eq!(plain(""), "");
+    }
+
+    #[test]
+    fn normalize_whitespace_without_spans_returns_no_spans() {
+        // The spans-free fast path of the merged normaliser: same text policy
+        // as the remapping pass, and no spans out.
+        let cases = [
+            ("a  b\tc\n d", "a b c d"),
+            ("", ""),
+            ("  leading", " leading"),
+            ("trailing  ", "trailing "),
+            ("カタカナ  ひらがな", "カタカナ ひらがな"),
+            ("\n\n\t\n", " "),
+        ];
+        for (source, expected) in cases {
+            let (text, spans) = normalize_whitespace_with_spans(source, &[]);
+            assert_eq!(text, expected, "source {source:?}");
+            assert!(spans.is_empty(), "source {source:?}");
+        }
     }
 
     #[test]
