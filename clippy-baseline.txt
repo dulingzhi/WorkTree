@@ -20,7 +20,7 @@ unnecessary closure used with `bool::then` | crates\worktree-ui-gpui\src\view\pa
 unnecessary closure used with `bool::then` | crates\worktree-ui-gpui\src\view\settings_window.rs:2266:21
 unnecessary closure used with `bool::then` | crates\worktree-ui-gpui\src\view\settings_window.rs:2274:21
 unused import: `SystemTime` | crates\worktree-ui-gpui\src\view\date_time.rs:251:21
-useless conversion to the same type: `gpui::SharedString` | crates\worktree-ui-gpui\src\view\panels\popover\host.rs:1322:34
+useless conversion to the same type: `gpui::SharedString` | crates\worktree-ui-gpui\src\view\panels\popover\host.rs:1621:34
 useless conversion to the same type: `gpui::SharedString` | crates\worktree-ui-gpui\src\view\panes\reflog.rs:649:21
 useless conversion to the same type: `gpui::SharedString` | crates\worktree-ui-gpui\src\view\panes\reflog.rs:651:21
 useless conversion to the same type: `std::string::String` | crates\worktree-ui-gpui\src\view\terminal_panel.rs:2221:20
