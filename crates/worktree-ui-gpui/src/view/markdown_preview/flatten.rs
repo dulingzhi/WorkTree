@@ -1,8 +1,9 @@
 //! Flatten markdown events into preview rows.
 //!
-//! [`flatten_to_rows`] walks the pulldown-cmark event stream and turns it into
-//! the row model the diff and single-document previews paint; the row producer
-//! family (`push_row*`) applies the finishing passes each row needs.
+//! [`flatten_to_rows`] is the orchestration shell: it walks the pulldown-cmark
+//! event stream and hands each event to [`FlattenState::handle_event`], which
+//! dispatches to a handler per event family. The row producer family
+//! (`push_row*`) applies the finishing passes each row needs.
 
 use super::html::{HtmlHandling, classify_supported_html};
 use super::inline::{
@@ -19,354 +20,212 @@ use super::model::{
 use super::parse::{markdown_parser_options, source_line_range};
 use super::tables::align_table_columns;
 use gpui::SharedString;
+use pulldown_cmark::{CodeBlockKind, Event, Parser, Tag, TagEnd};
 use std::ops::Range;
 use std::sync::Arc;
 
-/// Flatten markdown events into preview rows.
-pub(super) fn flatten_to_rows(
-    source: &str,
-    line_starts: &[usize],
-) -> Option<Vec<MarkdownPreviewRow>> {
-    use pulldown_cmark::{CodeBlockKind, Event, Parser, Tag, TagEnd};
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ListContext {
+    Unordered,
+    Ordered { next_number: u64 },
+}
 
-    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-    enum ListContext {
-        Unordered,
-        Ordered { next_number: u64 },
-    }
-
-    impl ListContext {
-        fn next_item_kind(&mut self) -> MarkdownPreviewRowKind {
-            match self {
-                Self::Unordered => MarkdownPreviewRowKind::ListItem { number: None },
-                Self::Ordered { next_number } => {
-                    let number = *next_number;
-                    *next_number = next_number.saturating_add(1);
-                    MarkdownPreviewRowKind::ListItem {
-                        number: Some(number),
-                    }
+impl ListContext {
+    fn next_item_kind(&mut self) -> MarkdownPreviewRowKind {
+        match self {
+            Self::Unordered => MarkdownPreviewRowKind::ListItem { number: None },
+            Self::Ordered { next_number } => {
+                let number = *next_number;
+                *next_number = next_number.saturating_add(1);
+                MarkdownPreviewRowKind::ListItem {
+                    number: Some(number),
                 }
             }
         }
     }
+}
 
-    let options = markdown_parser_options();
+/// A picture whose markdown tag is still open: its source, and where its alt
+/// text begins in the buffer so the alt can be split back off at the closing
+/// tag.
+struct PendingImage {
+    source: SharedString,
+    alt_start: usize,
+}
 
-    // Rows are per markdown *block*, not per line, and `push_row_with_context`
-    // bails at MAX_PREVIEW_ROWS regardless, so the line count is only an upper
-    // bound worth honouring up to that cap.
-    let mut rows = Vec::with_capacity(line_starts.len().min(MAX_PREVIEW_ROWS));
-    let mut text_buf = String::new();
-    struct PendingImage {
-        source: SharedString,
-        alt_start: usize,
+/// The parse state the event walk mutates: everything the flatten pass kept as
+/// locals, gathered so each event-family handler can act on it.
+struct FlattenState<'a> {
+    line_starts: &'a [usize],
+    rows: Vec<MarkdownPreviewRow>,
+    text_buf: String,
+    span_stack: Vec<MarkdownInlineStyle>,
+    link_stack: Vec<Option<SharedString>>,
+    pending_image: Option<PendingImage>,
+    inline_spans: Vec<MarkdownInlineSpan>,
+    source_start_byte: usize,
+    indent_level: u8,
+    list_stack: Vec<ListContext>,
+    list_item_stack: Vec<MarkdownPreviewRowKind>,
+    in_heading: bool,
+    in_paragraph: bool,
+    in_blockquote: u8,
+    row_ctx: MarkdownRowContext,
+    in_code_block: bool,
+    in_table_row: bool,
+    table_row_is_header: bool,
+    code_block_start_byte: usize,
+    code_block_starts_after_fence: bool,
+    code_block_language: Option<crate::view::rows::DiffSyntaxLanguage>,
+    footnote_context: Option<MarkdownFootnoteContext>,
+}
+
+impl<'a> FlattenState<'a> {
+    fn new(line_starts: &'a [usize]) -> Self {
+        // Rows are per markdown *block*, not per line, and `push_row_with_context`
+        // bails at MAX_PREVIEW_ROWS regardless, so the line count is only an upper
+        // bound worth honouring up to that cap.
+        Self {
+            line_starts,
+            rows: Vec::with_capacity(line_starts.len().min(MAX_PREVIEW_ROWS)),
+            text_buf: String::new(),
+            span_stack: Vec::new(),
+            link_stack: Vec::new(),
+            pending_image: None,
+            inline_spans: Vec::new(),
+            source_start_byte: 0,
+            indent_level: 0,
+            list_stack: Vec::new(),
+            list_item_stack: Vec::new(),
+            in_heading: false,
+            in_paragraph: false,
+            in_blockquote: 0,
+            row_ctx: MarkdownRowContext::default(),
+            in_code_block: false,
+            in_table_row: false,
+            table_row_is_header: false,
+            code_block_start_byte: 0,
+            code_block_starts_after_fence: false,
+            code_block_language: None,
+            footnote_context: None,
+        }
     }
 
-    let mut span_stack: Vec<MarkdownInlineStyle> = Vec::new();
-    let mut link_stack: Vec<Option<SharedString>> = Vec::new();
-    let mut pending_image: Option<PendingImage> = None;
-    let mut inline_spans: Vec<MarkdownInlineSpan> = Vec::new();
-    let mut source_start_byte: usize = 0;
-    let mut indent_level: u8 = 0;
-    let mut list_stack: Vec<ListContext> = Vec::new();
-    let mut list_item_stack: Vec<MarkdownPreviewRowKind> = Vec::new();
-    let mut in_heading = false;
-    let mut in_paragraph = false;
-    let mut in_blockquote: u8 = 0;
-    let mut row_ctx = MarkdownRowContext::default();
-    let mut in_code_block = false;
-    let mut in_table_row = false;
-    let mut table_row_is_header = false;
-    let mut code_block_start_byte: usize = 0;
-    let mut code_block_starts_after_fence = false;
-    let mut code_block_language: Option<crate::view::rows::DiffSyntaxLanguage> = None;
-    let mut footnote_context: Option<MarkdownFootnoteContext> = None;
+    /// Apply the finishing passes and hand back the flattened rows.
+    fn finish(mut self) -> Vec<MarkdownPreviewRow> {
+        align_table_columns(&mut self.rows);
+        insert_top_level_heading_spacer_rows(&mut self.rows);
+        self.rows
+    }
 
-    for (event, event_range) in Parser::new_ext(source, options).into_offset_iter() {
+    fn handle_event(&mut self, event: Event<'_>, event_range: Range<usize>) -> Option<()> {
         // Block-level HTML stands on its own line with no paragraph around it,
         // so anything it produces has to close its own row.
         let is_block_html = matches!(event, Event::Html(_));
         match event {
             Event::Start(Tag::Heading { .. }) => {
-                text_buf.clear();
-                inline_spans.clear();
-                source_start_byte = event_range.start;
-                in_heading = true;
+                self.text_buf.clear();
+                self.inline_spans.clear();
+                self.source_start_byte = event_range.start;
+                self.in_heading = true;
             }
-            Event::End(TagEnd::Heading(level)) => {
-                push_row_with_context(
-                    &mut rows,
-                    MarkdownPreviewRowInput::plain(
-                        MarkdownPreviewRowKind::Heading { level: level as u8 },
-                        &text_buf,
-                        &inline_spans,
-                        source_line_range(source_start_byte, event_range.end, line_starts),
-                        indent_level,
-                        in_blockquote,
-                    ),
-                    footnote_context.as_mut(),
-                    &mut row_ctx,
-                )?;
-                in_heading = false;
-                text_buf.clear();
-                inline_spans.clear();
-            }
+            Event::End(TagEnd::Heading(level)) => self.end_heading(level as u8, &event_range)?,
 
             Event::Start(Tag::Paragraph) => {
-                text_buf.clear();
-                inline_spans.clear();
-                source_start_byte = event_range.start;
-                in_paragraph = true;
+                self.text_buf.clear();
+                self.inline_spans.clear();
+                self.source_start_byte = event_range.start;
+                self.in_paragraph = true;
             }
-            Event::End(TagEnd::Paragraph) => {
-                // A paragraph whose only content was block-level HTML has
-                // already closed its own row; closing it again would add a
-                // blank row under it.
-                if text_buf.is_empty()
-                    && row_ctx.pending_images.is_empty()
-                    && rows.last().is_some_and(|row| row.kind.is_image())
-                {
-                    in_paragraph = false;
-                    inline_spans.clear();
-                    continue;
-                }
-                let kind = current_row_kind(&list_item_stack, in_blockquote);
+            Event::End(TagEnd::Paragraph) => self.end_paragraph(&event_range)?,
 
-                push_row_with_context(
-                    &mut rows,
-                    MarkdownPreviewRowInput::plain(
-                        kind,
-                        &text_buf,
-                        &inline_spans,
-                        source_line_range(source_start_byte, event_range.end, line_starts),
-                        indent_level,
-                        in_blockquote,
-                    ),
-                    footnote_context.as_mut(),
-                    &mut row_ctx,
-                )?;
-                in_paragraph = false;
-                text_buf.clear();
-                inline_spans.clear();
-            }
-
-            Event::Start(Tag::List(first_number)) => {
-                // Flush any accumulated item text — or picture — before entering
-                // the sub-list, so the parent item gets its own row at the
-                // current indent level.
-                if (!text_buf.is_empty() || row_ctx.has_pending_images())
-                    && !list_item_stack.is_empty()
-                {
-                    let kind = list_item_stack
-                        .last()
-                        .copied()
-                        .unwrap_or(MarkdownPreviewRowKind::ListItem { number: None });
-                    push_row_with_context(
-                        &mut rows,
-                        MarkdownPreviewRowInput::plain(
-                            kind,
-                            &text_buf,
-                            &inline_spans,
-                            source_line_range(source_start_byte, event_range.start, line_starts),
-                            indent_level,
-                            in_blockquote,
-                        ),
-                        footnote_context.as_mut(),
-                        &mut row_ctx,
-                    )?;
-                    text_buf.clear();
-                    inline_spans.clear();
-                }
-                list_stack.push(match first_number {
-                    Some(next_number) => ListContext::Ordered { next_number },
-                    None => ListContext::Unordered,
-                });
-                indent_level = indent_level.saturating_add(1);
-            }
+            Event::Start(Tag::List(first_number)) => self.start_list(first_number, &event_range)?,
             Event::End(TagEnd::List(_)) => {
-                list_stack.pop();
-                indent_level = indent_level.saturating_sub(1);
+                self.list_stack.pop();
+                self.indent_level = self.indent_level.saturating_sub(1);
             }
 
             Event::Start(Tag::Item) => {
-                text_buf.clear();
-                inline_spans.clear();
-                source_start_byte = event_range.start;
-                if let Some(context) = list_stack.last_mut() {
-                    list_item_stack.push(context.next_item_kind());
+                self.text_buf.clear();
+                self.inline_spans.clear();
+                self.source_start_byte = event_range.start;
+                if let Some(context) = self.list_stack.last_mut() {
+                    self.list_item_stack.push(context.next_item_kind());
                 }
             }
-            Event::End(TagEnd::Item) => {
-                // Only emit a row if there is text that hasn't already been
-                // emitted by a nested paragraph or sub-list — or a picture,
-                // which a tight list item like `- ![badge](b.svg)` leaves as
-                // the item's only content.
-                if !text_buf.is_empty() || row_ctx.has_pending_images() {
-                    let kind = list_item_stack
-                        .last()
-                        .copied()
-                        .unwrap_or(MarkdownPreviewRowKind::ListItem { number: None });
-                    push_row_with_context(
-                        &mut rows,
-                        MarkdownPreviewRowInput::plain(
-                            kind,
-                            &text_buf,
-                            &inline_spans,
-                            source_line_range(source_start_byte, event_range.end, line_starts),
-                            indent_level,
-                            in_blockquote,
-                        ),
-                        footnote_context.as_mut(),
-                        &mut row_ctx,
-                    )?;
-                    text_buf.clear();
-                    inline_spans.clear();
-                }
-                list_item_stack.pop();
-            }
+            Event::End(TagEnd::Item) => self.end_item(&event_range)?,
 
             Event::Start(Tag::BlockQuote(kind)) => {
-                row_ctx.blockquote_stack.push(MarkdownBlockQuoteContext {
-                    alert_kind: kind.and_then(markdown_alert_kind_from_blockquote_kind),
-                    emitted_row: false,
-                });
-                in_blockquote = in_blockquote.saturating_add(1);
+                self.row_ctx
+                    .blockquote_stack
+                    .push(MarkdownBlockQuoteContext {
+                        alert_kind: kind.and_then(markdown_alert_kind_from_blockquote_kind),
+                        emitted_row: false,
+                    });
+                self.in_blockquote = self.in_blockquote.saturating_add(1);
             }
             Event::End(TagEnd::BlockQuote(_)) => {
-                row_ctx.blockquote_stack.pop();
-                in_blockquote = in_blockquote.saturating_sub(1);
+                self.row_ctx.blockquote_stack.pop();
+                self.in_blockquote = self.in_blockquote.saturating_sub(1);
             }
 
             Event::Start(Tag::FootnoteDefinition(label)) => {
-                footnote_context = Some(MarkdownFootnoteContext {
+                self.footnote_context = Some(MarkdownFootnoteContext {
                     label: label.to_string().into(),
                     emitted_label: false,
                 });
-                indent_level = indent_level.saturating_add(1);
+                self.indent_level = self.indent_level.saturating_add(1);
             }
             Event::End(TagEnd::FootnoteDefinition) => {
-                footnote_context = None;
-                indent_level = indent_level.saturating_sub(1);
+                self.footnote_context = None;
+                self.indent_level = self.indent_level.saturating_sub(1);
             }
 
-            Event::Start(Tag::CodeBlock(kind)) => {
-                in_code_block = true;
-                code_block_start_byte = event_range.start;
-                code_block_language = match &kind {
-                    CodeBlockKind::Fenced(info) => {
-                        crate::view::rows::diff_syntax_language_for_code_fence_info(info.as_ref())
-                    }
-                    CodeBlockKind::Indented => None,
-                };
-                code_block_starts_after_fence = matches!(kind, CodeBlockKind::Fenced(_));
-                text_buf.clear();
-                inline_spans.clear();
-            }
-            Event::End(TagEnd::CodeBlock) => {
-                // Emit one row per code line.
-                let block_range =
-                    source_line_range(code_block_start_byte, event_range.end, line_starts);
-                let block_start_line = block_range.start;
-                let block_end_line = block_range.end.saturating_sub(1);
-                let content_start_line =
-                    block_start_line + usize::from(code_block_starts_after_fence);
-                let code_text = text_buf.strip_suffix('\n').unwrap_or(&text_buf);
-                let code_lines: Vec<&str> = if code_text.is_empty() {
-                    vec![""]
-                } else {
-                    code_text.split('\n').collect()
-                };
-                let code_block_horizontal_scroll_hint = code_lines
-                    .iter()
-                    .any(|line| line.contains('\t') || line.chars().count() > 80);
-                let last_ix = code_lines.len().saturating_sub(1);
-                for (i, line) in code_lines.iter().enumerate() {
-                    let line_ix = (content_start_line + i).min(block_end_line);
-                    push_row_with_context(
-                        &mut rows,
-                        MarkdownPreviewRowInput::code(
-                            MarkdownPreviewRowKind::CodeLine {
-                                is_first: i == 0,
-                                is_last: i == last_ix,
-                            },
-                            line,
-                            line_ix..line_ix + 1,
-                            code_block_language,
-                            code_block_horizontal_scroll_hint,
-                            indent_level,
-                            in_blockquote,
-                        ),
-                        footnote_context.as_mut(),
-                        &mut row_ctx,
-                    )?;
-                }
-                in_code_block = false;
-                code_block_starts_after_fence = false;
-                code_block_language = None;
-                text_buf.clear();
-                inline_spans.clear();
-            }
+            Event::Start(Tag::CodeBlock(kind)) => self.start_code_block(&kind, &event_range),
+            Event::End(TagEnd::CodeBlock) => self.end_code_block(&event_range)?,
 
             Event::Start(Tag::TableHead) => {
-                text_buf.clear();
-                inline_spans.clear();
-                source_start_byte = event_range.start;
-                in_table_row = true;
-                table_row_is_header = true;
+                self.text_buf.clear();
+                self.inline_spans.clear();
+                self.source_start_byte = event_range.start;
+                self.in_table_row = true;
+                self.table_row_is_header = true;
             }
             Event::Start(Tag::TableRow) => {
-                text_buf.clear();
-                inline_spans.clear();
-                source_start_byte = event_range.start;
-                in_table_row = true;
-                table_row_is_header = false;
+                self.text_buf.clear();
+                self.inline_spans.clear();
+                self.source_start_byte = event_range.start;
+                self.in_table_row = true;
+                self.table_row_is_header = false;
             }
             Event::End(TagEnd::TableRow) | Event::End(TagEnd::TableHead) => {
-                push_row_with_context(
-                    &mut rows,
-                    MarkdownPreviewRowInput::plain(
-                        MarkdownPreviewRowKind::TableRow {
-                            is_header: table_row_is_header,
-                        },
-                        &text_buf,
-                        &inline_spans,
-                        source_line_range(source_start_byte, event_range.end, line_starts),
-                        indent_level,
-                        in_blockquote,
-                    ),
-                    footnote_context.as_mut(),
-                    &mut row_ctx,
-                )?;
-                in_table_row = false;
-                table_row_is_header = false;
-                text_buf.clear();
-                inline_spans.clear();
+                self.end_table_row(&event_range)?;
             }
             Event::End(TagEnd::TableCell) => {
                 // Separate cells with a tab character for display.
-                text_buf.push('\t');
+                self.text_buf.push('\t');
             }
 
             // Inline styling tags
             Event::Start(Tag::Strong) => {
-                span_stack.push(MarkdownInlineStyle::Bold);
+                self.span_stack.push(MarkdownInlineStyle::Bold);
             }
             Event::Start(Tag::Emphasis) => {
-                span_stack.push(MarkdownInlineStyle::Italic);
+                self.span_stack.push(MarkdownInlineStyle::Italic);
             }
             Event::Start(Tag::Strikethrough) => {
-                span_stack.push(MarkdownInlineStyle::Strikethrough);
+                self.span_stack.push(MarkdownInlineStyle::Strikethrough);
             }
             Event::Start(Tag::Link { dest_url, .. }) => {
-                span_stack.push(MarkdownInlineStyle::Link);
-                link_stack.push(web_link_url(dest_url.as_ref()));
+                self.span_stack.push(MarkdownInlineStyle::Link);
+                self.link_stack.push(web_link_url(dest_url.as_ref()));
             }
             Event::End(TagEnd::Link) => {
-                span_stack.pop();
-                link_stack.pop();
+                self.span_stack.pop();
+                self.link_stack.pop();
             }
             Event::End(TagEnd::Strong | TagEnd::Emphasis | TagEnd::Strikethrough) => {
-                span_stack.pop();
+                self.span_stack.pop();
             }
 
             // Pulldown reports an image's alt text as ordinary text between
@@ -374,414 +233,644 @@ pub(super) fn flatten_to_rows(
             // picture is recorded at the offset it occupies. Whether it ends up
             // inline or as a block of its own is decided when the row closes.
             Event::Start(Tag::Image { dest_url, .. }) => {
-                pending_image = Some(PendingImage {
+                self.pending_image = Some(PendingImage {
                     source: SharedString::from(dest_url.as_ref().to_owned()),
-                    alt_start: text_buf.len(),
+                    alt_start: self.text_buf.len(),
                 });
             }
-            Event::End(TagEnd::Image) => {
-                let Some(pending) = pending_image.take() else {
-                    continue;
-                };
-                let alt = text_buf.split_off(pending.alt_start.min(text_buf.len()));
-                if in_table_row {
-                    // A table row is painted as one string whose columns are
-                    // aligned by padding, so a picture cannot sit in a cell
-                    // without breaking that alignment. Its description stays in
-                    // the cell instead, which keeps the column readable and in
-                    // the right place.
-                    text_buf.push_str(&alt);
-                    continue;
-                }
-                // The alt text is not painted, so anything styled inside it —
-                // an image inside a link records the link on its alt — would
-                // leave a span pointing past the end of the row.
-                clamp_inline_spans_to_len(&mut inline_spans, text_buf.len());
-                row_ctx.pending_images.push(MarkdownInlineImage {
-                    byte_offset: text_buf.len(),
-                    source_byte: event_range.start,
-                    // Markdown image syntax cannot declare a size.
-                    image: Arc::new(MarkdownImage {
-                        source: pending.source,
-                        width_px: None,
-                        height_px: None,
-                    }),
-                    alt: SharedString::from(alt),
-                    link_url: current_link_url(&link_stack),
-                });
-            }
+            Event::End(TagEnd::Image) => self.end_image(&event_range)?,
 
-            Event::Text(cow) => {
-                let style = resolve_style_stack(&span_stack);
-                let link_url = current_link_url(&link_stack);
-                let start = text_buf.len();
-                text_buf.push_str(&cow);
-                let end = text_buf.len();
-                if (style != MarkdownInlineStyle::Normal || link_url.is_some()) && !in_code_block {
-                    inline_spans.push(MarkdownInlineSpan {
-                        byte_range: start..end,
-                        style,
-                        link_url,
-                    });
-                }
-            }
+            Event::Text(cow) => self.push_styled_text(&cow),
+            Event::Code(cow) => self.push_inline_code(&cow),
+            Event::FootnoteReference(label) => self.push_footnote_reference(&label),
 
-            Event::Code(cow) => {
-                let start = text_buf.len();
-                text_buf.push_str(&cow);
-                let end = text_buf.len();
-                if !in_code_block {
-                    inline_spans.push(MarkdownInlineSpan {
-                        byte_range: start..end,
-                        style: MarkdownInlineStyle::Code,
-                        link_url: current_link_url(&link_stack),
-                    });
-                }
-            }
+            Event::SoftBreak => self.handle_soft_break(&event_range)?,
+            Event::HardBreak => self.handle_hard_break(&event_range)?,
 
-            Event::FootnoteReference(label) => {
-                let start = text_buf.len();
-                text_buf.push('[');
-                text_buf.push_str(&label);
-                text_buf.push(']');
-                let end = text_buf.len();
-                if !in_code_block {
-                    inline_spans.push(MarkdownInlineSpan {
-                        byte_range: start..end,
-                        style: MarkdownInlineStyle::Link,
-                        // A footnote reference points inside the document, not
-                        // at the web.
-                        link_url: None,
-                    });
-                }
-            }
+            Event::Rule => self.push_rule_row(&event_range)?,
 
-            Event::SoftBreak => {
-                if in_blockquote > 0 && list_item_stack.is_empty() && !in_code_block {
-                    if !text_buf.is_empty() {
-                        push_row_with_context(
-                            &mut rows,
-                            MarkdownPreviewRowInput::plain(
-                                MarkdownPreviewRowKind::BlockquoteLine,
-                                &text_buf,
-                                &inline_spans,
-                                source_line_range(
-                                    source_start_byte,
-                                    event_range.start,
-                                    line_starts,
-                                ),
-                                indent_level,
-                                in_blockquote,
-                            ),
-                            footnote_context.as_mut(),
-                            &mut row_ctx,
-                        )?;
-                        text_buf.clear();
-                        inline_spans.clear();
-                    }
-                    source_start_byte = event_range.end;
-                } else if !text_buf.is_empty() {
-                    text_buf.push(' ');
-                }
-            }
-            Event::HardBreak => {
-                if in_blockquote > 0 && list_item_stack.is_empty() && !in_code_block {
-                    if !text_buf.is_empty() {
-                        push_row_with_context(
-                            &mut rows,
-                            MarkdownPreviewRowInput::plain(
-                                MarkdownPreviewRowKind::BlockquoteLine,
-                                &text_buf,
-                                &inline_spans,
-                                source_line_range(
-                                    source_start_byte,
-                                    event_range.start,
-                                    line_starts,
-                                ),
-                                indent_level,
-                                in_blockquote,
-                            ),
-                            footnote_context.as_mut(),
-                            &mut row_ctx,
-                        )?;
-                        text_buf.clear();
-                        inline_spans.clear();
-                    }
-                    source_start_byte = event_range.end;
-                } else if !in_code_block && !in_heading && !text_buf.is_empty() {
-                    push_row_with_context(
-                        &mut rows,
-                        MarkdownPreviewRowInput::plain(
-                            current_row_kind(&list_item_stack, in_blockquote),
-                            &text_buf,
-                            &inline_spans,
-                            source_line_range(source_start_byte, event_range.start, line_starts),
-                            indent_level,
-                            in_blockquote,
-                        ),
-                        footnote_context.as_mut(),
-                        &mut row_ctx,
-                    )?;
-                    text_buf.clear();
-                    inline_spans.clear();
-                    source_start_byte = event_range.end;
-                } else if !text_buf.is_empty() {
-                    text_buf.push(' ');
-                }
-            }
+            Event::TaskListMarker(checked) => self.push_task_list_marker(checked),
 
-            Event::Rule => {
-                push_row_with_context(
-                    &mut rows,
-                    MarkdownPreviewRowInput::plain(
-                        MarkdownPreviewRowKind::ThematicBreak,
-                        "───",
-                        &[],
-                        source_line_range(event_range.start, event_range.end, line_starts),
-                        indent_level,
-                        in_blockquote,
-                    ),
-                    footnote_context.as_mut(),
-                    &mut row_ctx,
-                )?;
-            }
-
-            Event::TaskListMarker(checked) => {
-                let marker = if checked { "[x] " } else { "[ ] " };
-                text_buf.insert_str(0, marker);
-                // Shift existing span byte ranges.
-                let shift = marker.len();
-                for span in &mut inline_spans {
-                    span.byte_range.start += shift;
-                    span.byte_range.end += shift;
-                }
-            }
-
-            Event::Html(cow) | Event::InlineHtml(cow) => {
-                match classify_supported_html(cow.as_ref()) {
-                    HtmlHandling::Ignore => continue,
-                    HtmlHandling::HardBreak => {
-                        if in_blockquote > 0 && list_item_stack.is_empty() && !in_code_block {
-                            if !text_buf.is_empty() {
-                                push_row_with_context(
-                                    &mut rows,
-                                    MarkdownPreviewRowInput::plain(
-                                        MarkdownPreviewRowKind::BlockquoteLine,
-                                        &text_buf,
-                                        &inline_spans,
-                                        source_line_range(
-                                            source_start_byte,
-                                            event_range.start,
-                                            line_starts,
-                                        ),
-                                        indent_level,
-                                        in_blockquote,
-                                    ),
-                                    footnote_context.as_mut(),
-                                    &mut row_ctx,
-                                )?;
-                                text_buf.clear();
-                                inline_spans.clear();
-                            }
-                            source_start_byte = event_range.end;
-                            continue;
-                        }
-                        if !in_code_block && !in_heading && !text_buf.is_empty() {
-                            push_row_with_context(
-                                &mut rows,
-                                MarkdownPreviewRowInput::plain(
-                                    current_row_kind(&list_item_stack, in_blockquote),
-                                    &text_buf,
-                                    &inline_spans,
-                                    source_line_range(
-                                        source_start_byte,
-                                        event_range.start,
-                                        line_starts,
-                                    ),
-                                    indent_level,
-                                    in_blockquote,
-                                ),
-                                footnote_context.as_mut(),
-                                &mut row_ctx,
-                            )?;
-                            text_buf.clear();
-                            inline_spans.clear();
-                            source_start_byte = event_range.end;
-                        }
-                        continue;
-                    }
-                    HtmlHandling::DetailsSummary(summary_source) => {
-                        if !text_buf.is_empty() {
-                            push_row_with_context(
-                                &mut rows,
-                                MarkdownPreviewRowInput::plain(
-                                    current_row_kind(&list_item_stack, in_blockquote),
-                                    &text_buf,
-                                    &inline_spans,
-                                    source_line_range(
-                                        source_start_byte,
-                                        event_range.start,
-                                        line_starts,
-                                    ),
-                                    indent_level,
-                                    in_blockquote,
-                                ),
-                                footnote_context.as_mut(),
-                                &mut row_ctx,
-                            )?;
-                            text_buf.clear();
-                            inline_spans.clear();
-                        }
-
-                        let (summary_text, summary_spans) =
-                            parse_inline_markdown_fragment(&summary_source);
-                        if !summary_text.is_empty() {
-                            push_row_with_context(
-                                &mut rows,
-                                MarkdownPreviewRowInput::plain(
-                                    MarkdownPreviewRowKind::DetailsSummary,
-                                    &summary_text,
-                                    &summary_spans,
-                                    source_line_range(
-                                        event_range.start,
-                                        event_range.end,
-                                        line_starts,
-                                    ),
-                                    indent_level,
-                                    in_blockquote,
-                                ),
-                                footnote_context.as_mut(),
-                                &mut row_ctx,
-                            )?;
-                        }
-                        source_start_byte = event_range.end;
-                        continue;
-                    }
-                    HtmlHandling::StartInlineStyle(style) => {
-                        span_stack.push(style);
-                        continue;
-                    }
-                    HtmlHandling::EndInlineStyle(style) => {
-                        pop_matching_inline_style(&mut span_stack, style);
-                        continue;
-                    }
-                    HtmlHandling::Images(images) => {
-                        if in_table_row {
-                            // As with a markdown image: a table cell keeps the
-                            // description rather than a picture that cannot be
-                            // placed in its column.
-                            for (_, _, alt) in &images {
-                                text_buf.push_str(alt);
-                            }
-                            continue;
-                        }
-                        // An `<img>` records itself the way a markdown image
-                        // does; the row it closes decides whether it is inline
-                        // or a block.
-                        for (tag_offset, image, alt) in images {
-                            row_ctx.pending_images.push(MarkdownInlineImage {
-                                byte_offset: text_buf.len(),
-                                // Several tags can share one event, so the id
-                                // is the tag's own position, not the event's.
-                                source_byte: event_range.start.saturating_add(tag_offset),
-                                image: Arc::new(image),
-                                alt: SharedString::from(alt),
-                                link_url: current_link_url(&link_stack),
-                            });
-                        }
-                        // A block-level tag has no paragraph to close it, so it
-                        // flushes its own row.
-                        if is_block_html {
-                            push_row_with_context(
-                                &mut rows,
-                                MarkdownPreviewRowInput::plain(
-                                    current_row_kind(&list_item_stack, in_blockquote),
-                                    &text_buf,
-                                    &inline_spans,
-                                    source_line_range(
-                                        source_start_byte,
-                                        event_range.end,
-                                        line_starts,
-                                    ),
-                                    indent_level,
-                                    in_blockquote,
-                                ),
-                                footnote_context.as_mut(),
-                                &mut row_ctx,
-                            )?;
-                            text_buf.clear();
-                            inline_spans.clear();
-                            source_start_byte = event_range.end;
-                        }
-                        continue;
-                    }
-                    HtmlHandling::AppendText(text) => {
-                        let should_append = html_event_should_append(
-                            in_paragraph,
-                            in_heading,
-                            !list_stack.is_empty(),
-                            in_blockquote,
-                            in_code_block,
-                            in_table_row,
-                        );
-                        if should_append {
-                            text_buf.push_str(&text);
-                        } else {
-                            push_row_with_context(
-                                &mut rows,
-                                MarkdownPreviewRowInput::plain(
-                                    current_row_kind(&list_item_stack, in_blockquote),
-                                    &text,
-                                    &[],
-                                    source_line_range(
-                                        event_range.start,
-                                        event_range.end,
-                                        line_starts,
-                                    ),
-                                    indent_level,
-                                    in_blockquote,
-                                ),
-                                footnote_context.as_mut(),
-                                &mut row_ctx,
-                            )?;
-                        }
-                        continue;
-                    }
-                    HtmlHandling::AppendLiteral => {}
-                }
-
-                let should_append = html_event_should_append(
-                    in_paragraph,
-                    in_heading,
-                    !list_stack.is_empty(),
-                    in_blockquote,
-                    in_code_block,
-                    in_table_row,
-                );
-                if should_append {
-                    text_buf.push_str(&cow);
-                } else {
-                    push_plain_fallback_rows(
-                        &mut rows,
-                        cow.as_ref(),
-                        event_range.start,
-                        event_range.end,
-                        line_starts,
-                        indent_level,
-                        in_blockquote,
-                        &mut row_ctx,
-                    )?;
-                }
+            Event::Html(cow) => self.handle_html(cow.as_ref(), &event_range, is_block_html)?,
+            Event::InlineHtml(cow) => {
+                self.handle_html(cow.as_ref(), &event_range, is_block_html)?
             }
 
             // Ignore footnotes, metadata, and math in v1.
             _ => {}
         }
+        Some(())
     }
 
-    align_table_columns(&mut rows);
-    insert_top_level_heading_spacer_rows(&mut rows);
-    Some(rows)
+    fn end_heading(&mut self, level: u8, event_range: &Range<usize>) -> Option<()> {
+        let range = source_line_range(self.source_start_byte, event_range.end, self.line_starts);
+        push_row_with_context(
+            &mut self.rows,
+            MarkdownPreviewRowInput::plain(
+                MarkdownPreviewRowKind::Heading { level },
+                &self.text_buf,
+                &self.inline_spans,
+                range,
+                self.indent_level,
+                self.in_blockquote,
+            ),
+            self.footnote_context.as_mut(),
+            &mut self.row_ctx,
+        )?;
+        self.in_heading = false;
+        self.text_buf.clear();
+        self.inline_spans.clear();
+        Some(())
+    }
+
+    fn end_paragraph(&mut self, event_range: &Range<usize>) -> Option<()> {
+        // A paragraph whose only content was block-level HTML has
+        // already closed its own row; closing it again would add a
+        // blank row under it.
+        if self.text_buf.is_empty()
+            && self.row_ctx.pending_images.is_empty()
+            && self.rows.last().is_some_and(|row| row.kind.is_image())
+        {
+            self.in_paragraph = false;
+            self.inline_spans.clear();
+            return Some(());
+        }
+        let kind = current_row_kind(&self.list_item_stack, self.in_blockquote);
+
+        let range = source_line_range(self.source_start_byte, event_range.end, self.line_starts);
+        push_row_with_context(
+            &mut self.rows,
+            MarkdownPreviewRowInput::plain(
+                kind,
+                &self.text_buf,
+                &self.inline_spans,
+                range,
+                self.indent_level,
+                self.in_blockquote,
+            ),
+            self.footnote_context.as_mut(),
+            &mut self.row_ctx,
+        )?;
+        self.in_paragraph = false;
+        self.text_buf.clear();
+        self.inline_spans.clear();
+        Some(())
+    }
+
+    fn start_list(&mut self, first_number: Option<u64>, event_range: &Range<usize>) -> Option<()> {
+        // Flush any accumulated item text — or picture — before entering
+        // the sub-list, so the parent item gets its own row at the
+        // current indent level.
+        if (!self.text_buf.is_empty() || self.row_ctx.has_pending_images())
+            && !self.list_item_stack.is_empty()
+        {
+            let kind = self
+                .list_item_stack
+                .last()
+                .copied()
+                .unwrap_or(MarkdownPreviewRowKind::ListItem { number: None });
+            let range =
+                source_line_range(self.source_start_byte, event_range.start, self.line_starts);
+            push_row_with_context(
+                &mut self.rows,
+                MarkdownPreviewRowInput::plain(
+                    kind,
+                    &self.text_buf,
+                    &self.inline_spans,
+                    range,
+                    self.indent_level,
+                    self.in_blockquote,
+                ),
+                self.footnote_context.as_mut(),
+                &mut self.row_ctx,
+            )?;
+            self.text_buf.clear();
+            self.inline_spans.clear();
+        }
+        self.list_stack.push(match first_number {
+            Some(next_number) => ListContext::Ordered { next_number },
+            None => ListContext::Unordered,
+        });
+        self.indent_level = self.indent_level.saturating_add(1);
+        Some(())
+    }
+
+    fn end_item(&mut self, event_range: &Range<usize>) -> Option<()> {
+        // Only emit a row if there is text that hasn't already been
+        // emitted by a nested paragraph or sub-list — or a picture,
+        // which a tight list item like `- ![badge](b.svg)` leaves as
+        // the item's only content.
+        if !self.text_buf.is_empty() || self.row_ctx.has_pending_images() {
+            let kind = self
+                .list_item_stack
+                .last()
+                .copied()
+                .unwrap_or(MarkdownPreviewRowKind::ListItem { number: None });
+            let range =
+                source_line_range(self.source_start_byte, event_range.end, self.line_starts);
+            push_row_with_context(
+                &mut self.rows,
+                MarkdownPreviewRowInput::plain(
+                    kind,
+                    &self.text_buf,
+                    &self.inline_spans,
+                    range,
+                    self.indent_level,
+                    self.in_blockquote,
+                ),
+                self.footnote_context.as_mut(),
+                &mut self.row_ctx,
+            )?;
+            self.text_buf.clear();
+            self.inline_spans.clear();
+        }
+        self.list_item_stack.pop();
+        Some(())
+    }
+
+    fn start_code_block(&mut self, kind: &CodeBlockKind, event_range: &Range<usize>) {
+        self.in_code_block = true;
+        self.code_block_start_byte = event_range.start;
+        self.code_block_language = match kind {
+            CodeBlockKind::Fenced(info) => {
+                crate::view::rows::diff_syntax_language_for_code_fence_info(info.as_ref())
+            }
+            CodeBlockKind::Indented => None,
+        };
+        self.code_block_starts_after_fence = matches!(kind, CodeBlockKind::Fenced(_));
+        self.text_buf.clear();
+        self.inline_spans.clear();
+    }
+
+    fn end_code_block(&mut self, event_range: &Range<usize>) -> Option<()> {
+        // Emit one row per code line.
+        let block_range = source_line_range(
+            self.code_block_start_byte,
+            event_range.end,
+            self.line_starts,
+        );
+        let block_start_line = block_range.start;
+        let block_end_line = block_range.end.saturating_sub(1);
+        let content_start_line = block_start_line + usize::from(self.code_block_starts_after_fence);
+        let code_text = self.text_buf.strip_suffix('\n').unwrap_or(&self.text_buf);
+        let code_lines: Vec<&str> = if code_text.is_empty() {
+            vec![""]
+        } else {
+            code_text.split('\n').collect()
+        };
+        let code_block_horizontal_scroll_hint = code_lines
+            .iter()
+            .any(|line| line.contains('\t') || line.chars().count() > 80);
+        let last_ix = code_lines.len().saturating_sub(1);
+        for (i, line) in code_lines.iter().enumerate() {
+            let line_ix = (content_start_line + i).min(block_end_line);
+            push_row_with_context(
+                &mut self.rows,
+                MarkdownPreviewRowInput::code(
+                    MarkdownPreviewRowKind::CodeLine {
+                        is_first: i == 0,
+                        is_last: i == last_ix,
+                    },
+                    line,
+                    line_ix..line_ix + 1,
+                    self.code_block_language,
+                    code_block_horizontal_scroll_hint,
+                    self.indent_level,
+                    self.in_blockquote,
+                ),
+                self.footnote_context.as_mut(),
+                &mut self.row_ctx,
+            )?;
+        }
+        self.in_code_block = false;
+        self.code_block_starts_after_fence = false;
+        self.code_block_language = None;
+        self.text_buf.clear();
+        self.inline_spans.clear();
+        Some(())
+    }
+
+    fn end_table_row(&mut self, event_range: &Range<usize>) -> Option<()> {
+        let range = source_line_range(self.source_start_byte, event_range.end, self.line_starts);
+        push_row_with_context(
+            &mut self.rows,
+            MarkdownPreviewRowInput::plain(
+                MarkdownPreviewRowKind::TableRow {
+                    is_header: self.table_row_is_header,
+                },
+                &self.text_buf,
+                &self.inline_spans,
+                range,
+                self.indent_level,
+                self.in_blockquote,
+            ),
+            self.footnote_context.as_mut(),
+            &mut self.row_ctx,
+        )?;
+        self.in_table_row = false;
+        self.table_row_is_header = false;
+        self.text_buf.clear();
+        self.inline_spans.clear();
+        Some(())
+    }
+
+    /// Close the open blockquote line at a soft or hard break, if one is open.
+    ///
+    /// Returns `true` when the break was consumed by closing a blockquote
+    /// line — the one case in which the surrounding event's own handling of
+    /// the break does not also run.
+    fn close_blockquote_line_at_break(&mut self, break_range: &Range<usize>) -> Option<bool> {
+        if self.in_blockquote == 0 || !self.list_item_stack.is_empty() || self.in_code_block {
+            return Some(false);
+        }
+        if !self.text_buf.is_empty() {
+            let range =
+                source_line_range(self.source_start_byte, break_range.start, self.line_starts);
+            push_row_with_context(
+                &mut self.rows,
+                MarkdownPreviewRowInput::plain(
+                    MarkdownPreviewRowKind::BlockquoteLine,
+                    &self.text_buf,
+                    &self.inline_spans,
+                    range,
+                    self.indent_level,
+                    self.in_blockquote,
+                ),
+                self.footnote_context.as_mut(),
+                &mut self.row_ctx,
+            )?;
+            self.text_buf.clear();
+            self.inline_spans.clear();
+        }
+        self.source_start_byte = break_range.end;
+        Some(true)
+    }
+
+    fn handle_soft_break(&mut self, event_range: &Range<usize>) -> Option<()> {
+        if self.close_blockquote_line_at_break(event_range)? {
+            return Some(());
+        }
+        if !self.text_buf.is_empty() {
+            self.text_buf.push(' ');
+        }
+        Some(())
+    }
+
+    fn handle_hard_break(&mut self, event_range: &Range<usize>) -> Option<()> {
+        if self.close_blockquote_line_at_break(event_range)? {
+            return Some(());
+        }
+        if !self.in_code_block && !self.in_heading && !self.text_buf.is_empty() {
+            let range =
+                source_line_range(self.source_start_byte, event_range.start, self.line_starts);
+            push_row_with_context(
+                &mut self.rows,
+                MarkdownPreviewRowInput::plain(
+                    current_row_kind(&self.list_item_stack, self.in_blockquote),
+                    &self.text_buf,
+                    &self.inline_spans,
+                    range,
+                    self.indent_level,
+                    self.in_blockquote,
+                ),
+                self.footnote_context.as_mut(),
+                &mut self.row_ctx,
+            )?;
+            self.text_buf.clear();
+            self.inline_spans.clear();
+            self.source_start_byte = event_range.end;
+        } else if !self.text_buf.is_empty() {
+            self.text_buf.push(' ');
+        }
+        Some(())
+    }
+
+    fn push_rule_row(&mut self, event_range: &Range<usize>) -> Option<()> {
+        let range = source_line_range(event_range.start, event_range.end, self.line_starts);
+        push_row_with_context(
+            &mut self.rows,
+            MarkdownPreviewRowInput::plain(
+                MarkdownPreviewRowKind::ThematicBreak,
+                "───",
+                &[],
+                range,
+                self.indent_level,
+                self.in_blockquote,
+            ),
+            self.footnote_context.as_mut(),
+            &mut self.row_ctx,
+        )
+    }
+
+    fn push_task_list_marker(&mut self, checked: bool) {
+        let marker = if checked { "[x] " } else { "[ ] " };
+        self.text_buf.insert_str(0, marker);
+        // Shift existing span byte ranges.
+        let shift = marker.len();
+        for span in &mut self.inline_spans {
+            span.byte_range.start += shift;
+            span.byte_range.end += shift;
+        }
+    }
+
+    fn end_image(&mut self, event_range: &Range<usize>) -> Option<()> {
+        let Some(pending) = self.pending_image.take() else {
+            return Some(());
+        };
+        let alt = self
+            .text_buf
+            .split_off(pending.alt_start.min(self.text_buf.len()));
+        if self.in_table_row {
+            // A table row is painted as one string whose columns are
+            // aligned by padding, so a picture cannot sit in a cell
+            // without breaking that alignment. Its description stays in
+            // the cell instead, which keeps the column readable and in
+            // the right place.
+            self.text_buf.push_str(&alt);
+            return Some(());
+        }
+        // The alt text is not painted, so anything styled inside it —
+        // an image inside a link records the link on its alt — would
+        // leave a span pointing past the end of the row.
+        clamp_inline_spans_to_len(&mut self.inline_spans, self.text_buf.len());
+        self.row_ctx.pending_images.push(MarkdownInlineImage {
+            byte_offset: self.text_buf.len(),
+            source_byte: event_range.start,
+            // Markdown image syntax cannot declare a size.
+            image: Arc::new(MarkdownImage {
+                source: pending.source,
+                width_px: None,
+                height_px: None,
+            }),
+            alt: SharedString::from(alt),
+            link_url: current_link_url(&self.link_stack),
+        });
+        Some(())
+    }
+
+    fn push_styled_text(&mut self, text: &str) {
+        let style = resolve_style_stack(&self.span_stack);
+        let link_url = current_link_url(&self.link_stack);
+        let start = self.text_buf.len();
+        self.text_buf.push_str(text);
+        let end = self.text_buf.len();
+        if (style != MarkdownInlineStyle::Normal || link_url.is_some()) && !self.in_code_block {
+            self.inline_spans.push(MarkdownInlineSpan {
+                byte_range: start..end,
+                style,
+                link_url,
+            });
+        }
+    }
+
+    fn push_inline_code(&mut self, code: &str) {
+        let start = self.text_buf.len();
+        self.text_buf.push_str(code);
+        let end = self.text_buf.len();
+        if !self.in_code_block {
+            self.inline_spans.push(MarkdownInlineSpan {
+                byte_range: start..end,
+                style: MarkdownInlineStyle::Code,
+                link_url: current_link_url(&self.link_stack),
+            });
+        }
+    }
+
+    fn push_footnote_reference(&mut self, label: &str) {
+        let start = self.text_buf.len();
+        self.text_buf.push('[');
+        self.text_buf.push_str(label);
+        self.text_buf.push(']');
+        let end = self.text_buf.len();
+        if !self.in_code_block {
+            self.inline_spans.push(MarkdownInlineSpan {
+                byte_range: start..end,
+                style: MarkdownInlineStyle::Link,
+                // A footnote reference points inside the document, not
+                // at the web.
+                link_url: None,
+            });
+        }
+    }
+
+    fn should_append_html(&self) -> bool {
+        html_event_should_append(
+            self.in_paragraph,
+            self.in_heading,
+            !self.list_stack.is_empty(),
+            self.in_blockquote,
+            self.in_code_block,
+            self.in_table_row,
+        )
+    }
+
+    fn handle_html(
+        &mut self,
+        html: &str,
+        event_range: &Range<usize>,
+        is_block_html: bool,
+    ) -> Option<()> {
+        match classify_supported_html(html) {
+            HtmlHandling::Ignore => Some(()),
+            HtmlHandling::HardBreak => self.handle_html_break(event_range),
+            HtmlHandling::DetailsSummary(summary_source) => {
+                self.handle_html_summary(&summary_source, event_range)
+            }
+            HtmlHandling::StartInlineStyle(style) => {
+                self.span_stack.push(style);
+                Some(())
+            }
+            HtmlHandling::EndInlineStyle(style) => {
+                pop_matching_inline_style(&mut self.span_stack, style);
+                Some(())
+            }
+            HtmlHandling::Images(images) => {
+                self.handle_html_images(images, event_range, is_block_html)
+            }
+            HtmlHandling::AppendText(text) => self.handle_html_append_text(text, event_range),
+            HtmlHandling::AppendLiteral => self.handle_html_append_literal(html, event_range),
+        }
+    }
+
+    fn handle_html_break(&mut self, event_range: &Range<usize>) -> Option<()> {
+        if self.close_blockquote_line_at_break(event_range)? {
+            return Some(());
+        }
+        if !self.in_code_block && !self.in_heading && !self.text_buf.is_empty() {
+            let range =
+                source_line_range(self.source_start_byte, event_range.start, self.line_starts);
+            push_row_with_context(
+                &mut self.rows,
+                MarkdownPreviewRowInput::plain(
+                    current_row_kind(&self.list_item_stack, self.in_blockquote),
+                    &self.text_buf,
+                    &self.inline_spans,
+                    range,
+                    self.indent_level,
+                    self.in_blockquote,
+                ),
+                self.footnote_context.as_mut(),
+                &mut self.row_ctx,
+            )?;
+            self.text_buf.clear();
+            self.inline_spans.clear();
+            self.source_start_byte = event_range.end;
+        }
+        Some(())
+    }
+
+    fn handle_html_summary(
+        &mut self,
+        summary_source: &str,
+        event_range: &Range<usize>,
+    ) -> Option<()> {
+        if !self.text_buf.is_empty() {
+            let range =
+                source_line_range(self.source_start_byte, event_range.start, self.line_starts);
+            push_row_with_context(
+                &mut self.rows,
+                MarkdownPreviewRowInput::plain(
+                    current_row_kind(&self.list_item_stack, self.in_blockquote),
+                    &self.text_buf,
+                    &self.inline_spans,
+                    range,
+                    self.indent_level,
+                    self.in_blockquote,
+                ),
+                self.footnote_context.as_mut(),
+                &mut self.row_ctx,
+            )?;
+            self.text_buf.clear();
+            self.inline_spans.clear();
+        }
+
+        let (summary_text, summary_spans) = parse_inline_markdown_fragment(summary_source);
+        if !summary_text.is_empty() {
+            let range = source_line_range(event_range.start, event_range.end, self.line_starts);
+            push_row_with_context(
+                &mut self.rows,
+                MarkdownPreviewRowInput::plain(
+                    MarkdownPreviewRowKind::DetailsSummary,
+                    &summary_text,
+                    &summary_spans,
+                    range,
+                    self.indent_level,
+                    self.in_blockquote,
+                ),
+                self.footnote_context.as_mut(),
+                &mut self.row_ctx,
+            )?;
+        }
+        self.source_start_byte = event_range.end;
+        Some(())
+    }
+
+    fn handle_html_images(
+        &mut self,
+        images: Vec<(usize, MarkdownImage, String)>,
+        event_range: &Range<usize>,
+        is_block_html: bool,
+    ) -> Option<()> {
+        if self.in_table_row {
+            // As with a markdown image: a table cell keeps the
+            // description rather than a picture that cannot be
+            // placed in its column.
+            for (_, _, alt) in &images {
+                self.text_buf.push_str(alt);
+            }
+            return Some(());
+        }
+        // An `<img>` records itself the way a markdown image
+        // does; the row it closes decides whether it is inline
+        // or a block.
+        for (tag_offset, image, alt) in images {
+            self.row_ctx.pending_images.push(MarkdownInlineImage {
+                byte_offset: self.text_buf.len(),
+                // Several tags can share one event, so the id
+                // is the tag's own position, not the event's.
+                source_byte: event_range.start.saturating_add(tag_offset),
+                image: Arc::new(image),
+                alt: SharedString::from(alt),
+                link_url: current_link_url(&self.link_stack),
+            });
+        }
+        // A block-level tag has no paragraph to close it, so it
+        // flushes its own row.
+        if is_block_html {
+            let range =
+                source_line_range(self.source_start_byte, event_range.end, self.line_starts);
+            push_row_with_context(
+                &mut self.rows,
+                MarkdownPreviewRowInput::plain(
+                    current_row_kind(&self.list_item_stack, self.in_blockquote),
+                    &self.text_buf,
+                    &self.inline_spans,
+                    range,
+                    self.indent_level,
+                    self.in_blockquote,
+                ),
+                self.footnote_context.as_mut(),
+                &mut self.row_ctx,
+            )?;
+            self.text_buf.clear();
+            self.inline_spans.clear();
+            self.source_start_byte = event_range.end;
+        }
+        Some(())
+    }
+
+    fn handle_html_append_text(&mut self, text: String, event_range: &Range<usize>) -> Option<()> {
+        if self.should_append_html() {
+            self.text_buf.push_str(&text);
+        } else {
+            let range = source_line_range(event_range.start, event_range.end, self.line_starts);
+            push_row_with_context(
+                &mut self.rows,
+                MarkdownPreviewRowInput::plain(
+                    current_row_kind(&self.list_item_stack, self.in_blockquote),
+                    &text,
+                    &[],
+                    range,
+                    self.indent_level,
+                    self.in_blockquote,
+                ),
+                self.footnote_context.as_mut(),
+                &mut self.row_ctx,
+            )?;
+        }
+        Some(())
+    }
+
+    fn handle_html_append_literal(&mut self, html: &str, event_range: &Range<usize>) -> Option<()> {
+        if self.should_append_html() {
+            self.text_buf.push_str(html);
+        } else {
+            push_plain_fallback_rows(
+                &mut self.rows,
+                html,
+                event_range.start,
+                event_range.end,
+                self.line_starts,
+                self.indent_level,
+                self.in_blockquote,
+                &mut self.row_ctx,
+            )?;
+        }
+        Some(())
+    }
+}
+
+/// Flatten markdown events into preview rows.
+pub(super) fn flatten_to_rows(
+    source: &str,
+    line_starts: &[usize],
+) -> Option<Vec<MarkdownPreviewRow>> {
+    let mut state = FlattenState::new(line_starts);
+    let options = markdown_parser_options();
+    for (event, event_range) in Parser::new_ext(source, options).into_offset_iter() {
+        state.handle_event(event, event_range)?;
+    }
+    Some(state.finish())
 }
 
 fn insert_top_level_heading_spacer_rows(rows: &mut Vec<MarkdownPreviewRow>) {
