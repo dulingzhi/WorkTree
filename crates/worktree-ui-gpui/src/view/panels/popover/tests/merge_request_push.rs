@@ -95,9 +95,10 @@ fn mr_push_prompt_submits_enter_carried_options(cx: &mut gpui::TestAppContext) {
                 );
                 // Defaults: only remove-source is on. Flip the option rows
                 // the way their click handlers would, then target main.
-                host.mr_push_merge_when_pipeline_succeeds = true;
-                host.mr_push_push_to_mr_branch = true;
-                host.mr_push_target_input
+                host.mr_push.mr_push_merge_when_pipeline_succeeds = true;
+                host.mr_push.mr_push_push_to_mr_branch = true;
+                host.mr_push
+                    .mr_push_target_input
                     .update(cx, |input, cx| input.set_text("main", cx));
             });
         });
@@ -171,8 +172,8 @@ fn mr_push_toggle_clicks_flip_options_without_closing(cx: &mut gpui::TestAppCont
         view.update(app, |this, cx| {
             this.popover_host.read_with(cx, |host, _| {
                 (
-                    host.mr_push_remove_source_branch,
-                    host.mr_push_push_to_mr_branch,
+                    host.mr_push.mr_push_remove_source_branch,
+                    host.mr_push.mr_push_push_to_mr_branch,
                 )
             })
         })
@@ -186,8 +187,8 @@ fn mr_push_toggle_clicks_flip_options_without_closing(cx: &mut gpui::TestAppCont
         view.update(app, |this, cx| {
             this.popover_host.read_with(cx, |host, _| {
                 (
-                    host.mr_push_remove_source_branch,
-                    host.mr_push_push_to_mr_branch,
+                    host.mr_push.mr_push_remove_source_branch,
+                    host.mr_push.mr_push_push_to_mr_branch,
                 )
             })
         })
@@ -237,7 +238,7 @@ fn mr_push_prompt_description_generation_lands_and_resets(cx: &mut gpui::TestApp
     cx.update(|_window, app| {
         view.update(app, |this, cx| {
             this.popover_host.update(cx, |host, cx| {
-                host.mr_push_description_generating = true;
+                host.mr_push.mr_push_description_generating = true;
                 host.finish_mr_description_generation(
                     Ok("## Changes\n- Fix the focus ring".to_string()),
                     cx,
@@ -253,9 +254,10 @@ fn mr_push_prompt_description_generation_lands_and_resets(cx: &mut gpui::TestApp
         view.update(app, |this, cx| {
             this.popover_host.read_with(cx, |host, _| {
                 (
-                    host.mr_push_description_generating,
-                    host.mr_push_description_error.is_none(),
-                    host.mr_push_description_input
+                    host.mr_push.mr_push_description_generating,
+                    host.mr_push.mr_push_description_error.is_none(),
+                    host.mr_push
+                        .mr_push_description_input
                         .read_with(cx, |input, _| input.text().to_string()),
                 )
             })
@@ -284,7 +286,8 @@ fn mr_push_prompt_description_generation_lands_and_resets(cx: &mut gpui::TestApp
     let reopened = cx.update(|_window, app| {
         view.update(app, |this, cx| {
             this.popover_host.read_with(cx, |host, _| {
-                host.mr_push_description_input
+                host.mr_push
+                    .mr_push_description_input
                     .read_with(cx, |input, _| input.text().to_string())
             })
         })
@@ -308,7 +311,7 @@ fn mr_push_prompt_description_failure_lands_inline(cx: &mut gpui::TestAppContext
                     window,
                     cx,
                 );
-                host.mr_push_description_generating = true;
+                host.mr_push.mr_push_description_generating = true;
                 host.finish_mr_description_generation(
                     Err("no credentials for the source".to_string()),
                     cx,
@@ -326,8 +329,9 @@ fn mr_push_prompt_description_failure_lands_inline(cx: &mut gpui::TestAppContext
         view.update(app, |this, cx| {
             this.popover_host.read_with(cx, |host, _| {
                 (
-                    host.mr_push_description_generating,
-                    host.mr_push_description_error
+                    host.mr_push.mr_push_description_generating,
+                    host.mr_push
+                        .mr_push_description_error
                         .as_ref()
                         .map(|error| error.to_string()),
                 )

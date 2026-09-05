@@ -74,7 +74,7 @@ pub(super) fn cached(
         rows_signature(this, repo_id, purpose),
         query,
     );
-    super::rows_cache::get_or_build(&this.remote_picker_rows_cache, key, |_now| {
+    super::rows_cache::get_or_build(&this.remote_picker.remote_picker_rows_cache, key, |_now| {
         let Some(repo) = repo_for(this, repo_id) else {
             return (Vec::new(), Vec::new(), None);
         };
@@ -207,7 +207,7 @@ pub(super) fn panel(
         return label(this, text, cx);
     }
 
-    let Some(search) = this.remote_picker_search_input.clone() else {
+    let Some(search) = this.remote_picker.remote_picker_search_input.clone() else {
         return label(
             this,
             crate::i18n::tr("ui.common.search_input_not_initialized"),
@@ -249,7 +249,7 @@ pub(super) fn panel(
                 .tooltip_host(this.tooltip_host.clone())
                 .empty_text(empty_text)
                 .max_height(scaled_px(REMOTE_PICKER_LIST_MAX_HEIGHT_PX))
-                .selected_index(this.remote_picker_selected_index)
+                .selected_index(this.remote_picker.remote_picker_selected_index)
                 .render(
                     theme,
                     ui_scale_percent,

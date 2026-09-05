@@ -41,7 +41,7 @@ pub(super) fn cached(
         rows_signature(this, repo_id),
         query,
     );
-    super::rows_cache::get_or_build(&this.tag_picker_rows_cache, key, |_now| {
+    super::rows_cache::get_or_build(&this.tag_picker.tag_picker_rows_cache, key, |_now| {
         let Some(Loadable::Ready(tags)) = repo_for(this, repo_id).map(|repo| &repo.tags) else {
             return (Vec::new(), Vec::new(), None);
         };
@@ -111,7 +111,7 @@ pub(super) fn panel(
         Loadable::Ready(_) => {}
     }
 
-    let Some(search) = this.tag_picker_search_input.clone() else {
+    let Some(search) = this.tag_picker.tag_picker_search_input.clone() else {
         return label(
             this,
             crate::i18n::tr("ui.common.search_input_not_initialized"),
@@ -142,7 +142,7 @@ pub(super) fn panel(
                 .tooltip_host(this.tooltip_host.clone())
                 .empty_text(crate::i18n::tr("ui.picker.tag.empty"))
                 .max_height(scaled_px(TAG_PICKER_LIST_MAX_HEIGHT_PX))
-                .selected_index(this.tag_picker_selected_index)
+                .selected_index(this.tag_picker.tag_picker_selected_index)
                 .render(
                     theme,
                     ui_scale_percent,

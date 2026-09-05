@@ -65,8 +65,8 @@ pub(super) fn panel(
     let theme = this.theme;
     let can_create = this.can_submit_create_tag(cx);
     let scaled_px = super::popover_scaled_px_fn(cx);
-    let message_scroll = this.create_tag_message_scroll.clone();
-    let annotated = this.create_tag_annotated;
+    let message_scroll = this.create_tag.create_tag_message_scroll.clone();
+    let annotated = this.create_tag.create_tag_annotated;
 
     div()
         .flex()
@@ -90,18 +90,18 @@ pub(super) fn panel(
                 .pb_1()
                 .w_full()
                 .min_w(px(0.0))
-                .child(this.create_tag_input.clone()),
+                .child(this.create_tag.create_tag_input.clone()),
         )
         .child(div().border_t_1().border_color(theme.colors.stroke.default))
         .child(
             annotated_toggle(
                 theme,
                 annotated,
-                &this.create_tag_annotated_focus_handle,
+                &this.create_tag.create_tag_annotated_focus_handle,
                 cx,
             )
             .on_click(cx.listener(|this, _e: &ClickEvent, _w, cx| {
-                this.create_tag_annotated = !this.create_tag_annotated;
+                this.create_tag.create_tag_annotated = !this.create_tag.create_tag_annotated;
                 cx.notify();
             })),
         )
@@ -132,7 +132,7 @@ pub(super) fn panel(
                             message_scroll,
                             scaled_px(140.0),
                         )
-                        .render(theme, this.create_tag_message_input.clone()),
+                        .render(theme, this.create_tag.create_tag_message_input.clone()),
                     ),
                 )
         })
@@ -146,7 +146,7 @@ pub(super) fn panel(
                 .justify_between()
                 .child(
                     cancel_button("create_tag_cancel", "create_tag_cancel_hint", theme)
-                        .focus_handle(this.create_tag_focus.cancel.clone())
+                        .focus_handle(this.create_tag.create_tag_focus.cancel.clone())
                         .on_click(theme, cx, |this, _e, window, cx| {
                             this.dismiss_prompt_popover(window, cx);
                         }),
@@ -156,7 +156,7 @@ pub(super) fn panel(
                         "create_tag_go",
                         crate::i18n::tr("prompts.create_tag.create"),
                     )
-                    .focus_handle(this.create_tag_focus.submit.clone())
+                    .focus_handle(this.create_tag.create_tag_focus.submit.clone())
                     .separated_end_slot(super::hotkey_hint(theme, "create_tag_go_hint", "Enter"))
                     .style(components::ButtonStyle::Filled)
                     .disabled(!can_create)

@@ -238,7 +238,7 @@ pub(super) fn open(
     if let Some(index) = this.open_picker_selected_index() {
         *index = None;
     }
-    this.repo_picker_sort_menu_open = false;
+    this.repo_picker.repo_picker_sort_menu_open = false;
     cx.notify();
 }
 

@@ -79,6 +79,7 @@ fn repo_settings_prompt_renders_fields_and_cycles_the_sign_tri_state(
             view.read(app)
                 .popover_host
                 .read(app)
+                .repo_settings
                 .repo_settings_sign_commits
         })
     };

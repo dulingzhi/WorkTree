@@ -212,33 +212,43 @@ pub(super) fn panel(
                     let restored_branch_for_input = restored_branch.clone();
                     let restored_name = name.unwrap_or_default();
                     let restored_name_for_input = restored_name.clone();
-                    this.submodule_url_input.update(cx, |input, cx| {
-                        input.set_theme(theme, cx);
-                        input.set_text(&url, cx);
-                        cx.notify();
-                    });
-                    this.submodule_path_input.update(cx, |input, cx| {
-                        input.set_theme(theme, cx);
-                        input.set_text(path.display().to_string(), cx);
-                        cx.notify();
-                    });
-                    this.submodule_branch_input.update(cx, move |input, cx| {
-                        input.set_theme(theme, cx);
-                        input.set_text(&restored_branch_for_input, cx);
-                        cx.notify();
-                    });
-                    this.submodule_name_input.update(cx, move |input, cx| {
-                        input.set_theme(theme, cx);
-                        input.set_text(&restored_name_for_input, cx);
-                        cx.notify();
-                    });
-                    this.submodule_add_advanced_expanded = !restored_name.is_empty() || force;
-                    this.submodule_force_enabled = force;
+                    this.submodule_add
+                        .submodule_url_input
+                        .update(cx, |input, cx| {
+                            input.set_theme(theme, cx);
+                            input.set_text(&url, cx);
+                            cx.notify();
+                        });
+                    this.submodule_add
+                        .submodule_path_input
+                        .update(cx, |input, cx| {
+                            input.set_theme(theme, cx);
+                            input.set_text(path.display().to_string(), cx);
+                            cx.notify();
+                        });
+                    this.submodule_add
+                        .submodule_branch_input
+                        .update(cx, move |input, cx| {
+                            input.set_theme(theme, cx);
+                            input.set_text(&restored_branch_for_input, cx);
+                            cx.notify();
+                        });
+                    this.submodule_add
+                        .submodule_name_input
+                        .update(cx, move |input, cx| {
+                            input.set_theme(theme, cx);
+                            input.set_text(&restored_name_for_input, cx);
+                            cx.notify();
+                        });
+                    this.submodule_add.submodule_add_advanced_expanded =
+                        !restored_name.is_empty() || force;
+                    this.submodule_add.submodule_force_enabled = force;
                     this.popover = Some(PopoverKind::submodule(
                         repo_id,
                         SubmodulePopoverKind::AddPrompt,
                     ));
                     let focus = this
+                        .submodule_add
                         .submodule_url_input
                         .read_with(cx, |input, _| input.focus_handle());
                     window.focus(&focus, cx);

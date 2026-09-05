@@ -67,7 +67,8 @@ pub(super) fn suggestions(this: &mut PopoverHost, repo_id: RepoId) -> Arc<[Share
     };
 
     let log_rev = repo.history_state.log_rev;
-    if let Some((cached_repo, cached_rev, cached)) = &this.history_author_suggestions
+    if let Some((cached_repo, cached_rev, cached)) =
+        &this.history_author_filter.history_author_suggestions
         && *cached_repo == repo_id
         && *cached_rev == log_rev
     {
@@ -76,6 +77,7 @@ pub(super) fn suggestions(this: &mut PopoverHost, repo_id: RepoId) -> Arc<[Share
 
     let filtered = repo.history_state.history_author_filter.is_some();
     let cached_for_repo = this
+        .history_author_filter
         .history_author_suggestions
         .as_ref()
         .filter(|(cached_repo, ..)| *cached_repo == repo_id)
@@ -91,7 +93,8 @@ pub(super) fn suggestions(this: &mut PopoverHost, repo_id: RepoId) -> Arc<[Share
         _ => cached_for_repo.unwrap_or(empty),
     };
 
-    this.history_author_suggestions = Some((repo_id, log_rev, authors.clone()));
+    this.history_author_filter.history_author_suggestions =
+        Some((repo_id, log_rev, authors.clone()));
     authors
 }
 
@@ -215,7 +218,11 @@ pub(super) fn panel(
     let scaled_px = |value: f32| super::popover_scaled_px_from_percent(value, ui_scale_percent);
     let width = super::HISTORY_AUTHOR_FILTER_WIDTH;
 
-    let Some(search) = this.history_author_filter_search_input.clone() else {
+    let Some(search) = this
+        .history_author_filter
+        .history_author_filter_search_input
+        .clone()
+    else {
         return components::context_menu(
             theme,
             div().w(width.preferred_px(ui_scale)).child(
@@ -259,7 +266,10 @@ pub(super) fn panel(
         .tooltip_host(this.tooltip_host.clone())
         .empty_text(empty_text)
         .max_height(scaled_px(components::PICKER_LIST_MAX_HEIGHT_PX))
-        .selected_index(this.history_author_filter_selected_index)
+        .selected_index(
+            this.history_author_filter
+                .history_author_filter_selected_index,
+        )
         .marked_index(rows.marked_index)
         .accent_selection()
         // A busy repository has thousands of contributors, and the list windows

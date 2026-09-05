@@ -34,7 +34,7 @@ pub(super) fn panel(
                 .pb_1()
                 .w_full()
                 .min_w(px(0.0))
-                .child(this.remote_ssh_key_input.clone()),
+                .child(this.remote_prompts.remote_ssh_key_input.clone()),
         )
         .child(div().border_t_1().border_color(theme.colors.stroke.default))
         .child(
@@ -46,7 +46,7 @@ pub(super) fn panel(
                 .justify_between()
                 .child(
                     cancel_button("remote_ssh_key_cancel", "remote_ssh_key_cancel_hint", theme)
-                        .focus_handle(this.remote_ssh_key_focus.cancel.clone())
+                        .focus_handle(this.remote_prompts.remote_ssh_key_focus.cancel.clone())
                         .on_click(theme, cx, |this, _e, window, cx| {
                             this.dismiss_prompt_popover(window, cx);
                         }),
@@ -61,7 +61,7 @@ pub(super) fn panel(
                                 "remote_ssh_key_clear",
                                 crate::i18n::tr("input.remote_ssh_key.clear"),
                             )
-                            .focus_handle(this.remote_ssh_key_clear_focus.clone())
+                            .focus_handle(this.remote_prompts.remote_ssh_key_clear_focus.clone())
                             .style(components::ButtonStyle::Subtle)
                             .on_click(theme, cx, |this, _e, _w, cx| {
                                 this.clear_remote_ssh_key(cx);
@@ -72,7 +72,7 @@ pub(super) fn panel(
                                 "remote_ssh_key_go",
                                 crate::i18n::tr("input.remote_ssh_key.save"),
                             )
-                            .focus_handle(this.remote_ssh_key_focus.submit.clone())
+                            .focus_handle(this.remote_prompts.remote_ssh_key_focus.submit.clone())
                             .disabled(!can_submit)
                             .separated_end_slot(super::hotkey_hint(
                                 theme,

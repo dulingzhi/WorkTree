@@ -20,10 +20,13 @@ pub(super) fn panel(
                 components::ScrollContainer::vertical(
                     "commit_prompt_message_scroll_surface",
                     "commit_prompt_message_scrollbar",
-                    this.commit_prompt_message_scroll.clone(),
+                    this.commit_prompt.commit_prompt_message_scroll.clone(),
                     px(200.0),
                 )
-                .render(theme, this.commit_prompt_message_input.clone()),
+                .render(
+                    theme,
+                    this.commit_prompt.commit_prompt_message_input.clone(),
+                ),
             ),
         )
         .child(
@@ -35,7 +38,7 @@ pub(super) fn panel(
                 .justify_between()
                 .child(
                     cancel_button("commit_prompt_cancel", "commit_prompt_cancel_hint", theme)
-                        .focus_handle(this.commit_prompt_focus.cancel.clone())
+                        .focus_handle(this.commit_prompt.commit_prompt_focus.cancel.clone())
                         .on_click(theme, cx, |this, _e, window, cx| {
                             this.dismiss_prompt_popover(window, cx);
                         }),
@@ -45,7 +48,7 @@ pub(super) fn panel(
                         "commit_prompt_submit",
                         crate::i18n::tr("input.commit.commit"),
                     )
-                    .focus_handle(this.commit_prompt_focus.submit.clone())
+                    .focus_handle(this.commit_prompt.commit_prompt_focus.submit.clone())
                     .separated_end_slot(super::hotkey_hint(
                         theme,
                         "commit_prompt_submit_hint",

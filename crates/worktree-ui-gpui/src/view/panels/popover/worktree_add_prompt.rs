@@ -11,7 +11,7 @@ pub(super) fn panel(
     let ui_scale_percent = super::popover_ui_scale_percent(cx);
     let scaled_px = |value: f32| super::popover_scaled_px_from_percent(value, ui_scale_percent);
 
-    let ref_row = if let Some(search) = this.branch_picker_search_input.clone() {
+    let ref_row = if let Some(search) = this.branch_picker.branch_picker_search_input.clone() {
         let is_focused = search
             .read_with(cx, |input, _| input.focus_handle())
             .is_focused(window);
@@ -39,7 +39,7 @@ pub(super) fn panel(
                 .tooltip_host(this.tooltip_host.clone())
                 .empty_text(crate::i18n::tr("ui.common.no_matches"))
                 .max_height(scaled_px(branch_picker::REF_PICKER_LIST_MAX_HEIGHT_PX))
-                .selected_index(this.branch_picker_selected_index)
+                .selected_index(this.branch_picker.branch_picker_selected_index)
                 .select_on_mouse_down()
                 .render(
                     theme,
@@ -63,7 +63,7 @@ pub(super) fn panel(
             .pb_1()
             .w_full()
             .min_w(px(0.0))
-            .child(this.worktree_ref_input.clone())
+            .child(this.worktree_add.worktree_ref_input.clone())
     };
 
     div()
@@ -89,14 +89,14 @@ pub(super) fn panel(
                     div()
                         .flex_1()
                         .min_w(px(0.0))
-                        .child(this.worktree_path_input.clone()),
+                        .child(this.worktree_add.worktree_path_input.clone()),
                 )
                 .child(
                     components::Button::new(
                         "worktree_browse",
                         crate::i18n::tr("prompts.worktree_add.browse"),
                     )
-                    .focus_handle(this.worktree_browse_focus_handle.clone())
+                    .focus_handle(this.worktree_add.worktree_browse_focus_handle.clone())
                     .style(components::ButtonStyle::Outlined)
                     .on_click(theme, cx, |_this, _e, window, cx| {
                         cx.stop_propagation();
@@ -120,9 +120,12 @@ pub(super) fn panel(
                                     return;
                                 };
                                 let _ = view.update(cx, |this, cx| {
-                                    this.worktree_path_input.update(cx, |input, cx| {
-                                        input.set_text(path.display().to_string(), cx);
-                                    });
+                                    this.worktree_add.worktree_path_input.update(
+                                        cx,
+                                        |input, cx| {
+                                            input.set_text(path.display().to_string(), cx);
+                                        },
+                                    );
                                     cx.notify();
                                 });
                             })
@@ -149,7 +152,7 @@ pub(super) fn panel(
                 .justify_between()
                 .child(
                     cancel_button("worktree_add_cancel", "worktree_add_cancel_hint", theme)
-                        .focus_handle(this.worktree_focus.cancel.clone())
+                        .focus_handle(this.worktree_add.worktree_focus.cancel.clone())
                         .on_click(theme, cx, |this, _e, window, cx| {
                             this.dismiss_prompt_popover(window, cx);
                         }),
@@ -159,7 +162,7 @@ pub(super) fn panel(
                         "worktree_add_go",
                         crate::i18n::tr("prompts.worktree_add.add"),
                     )
-                    .focus_handle(this.worktree_focus.submit.clone())
+                    .focus_handle(this.worktree_add.worktree_focus.submit.clone())
                     .disabled(!can_submit)
                     .separated_end_slot(super::hotkey_hint(theme, "worktree_add_go_hint", "Enter"))
                     .style(components::ButtonStyle::Filled)

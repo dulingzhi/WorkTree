@@ -265,7 +265,8 @@ fn stash_prompt_enter_stashes_and_closes(cx: &mut gpui::TestAppContext) {
     cx.update(|_window, app| {
         view.update(app, |this, cx| {
             this.popover_host.update(cx, |host, cx| {
-                host.stash_message_input
+                host.stash
+                    .stash_message_input
                     .update(cx, |input, cx| input.set_text("wip", cx));
             });
         });
@@ -457,9 +458,10 @@ fn stash_prompt_submit_carries_options_and_paths(cx: &mut gpui::TestAppContext) 
                 );
                 // The option rows are click-driven; the submit path reads
                 // these fields, so flip them the way the click handler would.
-                host.stash_include_untracked = false;
-                host.stash_keep_index = true;
-                host.stash_message_input
+                host.stash.stash_include_untracked = false;
+                host.stash.stash_keep_index = true;
+                host.stash
+                    .stash_message_input
                     .update(cx, |input, cx| input.set_text("partial", cx));
             });
         });
@@ -545,7 +547,11 @@ fn stash_menu_branch_entry_opens_prefilled_prompt_and_submits(cx: &mut gpui::Tes
     cx.update(|_window, app| {
         let prefilled = view.update(app, |this, cx| {
             this.popover_host.read_with(cx, |host, _| {
-                host.create_branch_input.read(cx).text().to_string()
+                host.create_branch
+                    .create_branch_input
+                    .read(cx)
+                    .text()
+                    .to_string()
             })
         });
         assert_eq!(prefilled, "stash-3");
@@ -554,7 +560,8 @@ fn stash_menu_branch_entry_opens_prefilled_prompt_and_submits(cx: &mut gpui::Tes
     cx.update(|_window, app| {
         view.update(app, |this, cx| {
             this.popover_host.update(cx, |host, cx| {
-                host.create_branch_input
+                host.create_branch
+                    .create_branch_input
                     .update(cx, |input, cx| input.set_text("recover-wip", cx));
             });
         });

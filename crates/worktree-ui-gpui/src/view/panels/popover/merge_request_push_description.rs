@@ -15,7 +15,7 @@ pub(super) fn section(
     cx: &mut gpui::Context<PopoverHost>,
 ) -> gpui::Div {
     let scaled_px = super::popover_scaled_px_fn(cx);
-    let generating = this.mr_push_description_generating;
+    let generating = this.mr_push.mr_push_description_generating;
     let spinner_id = this
         .popover
         .as_ref()
@@ -72,6 +72,7 @@ pub(super) fn section(
                         )
                         .on_click(theme, cx, |this, _e, window, cx| {
                             let text = this
+                                .mr_push
                                 .mr_push_description_input
                                 .read_with(cx, |input, _| input.text().to_string());
                             if text.trim().is_empty() {
@@ -131,10 +132,10 @@ pub(super) fn section(
                 .min_w(px(0.0))
                 .max_h(scaled_px(140.0))
                 .overflow_y_scroll()
-                .child(this.mr_push_description_input.clone()),
+                .child(this.mr_push.mr_push_description_input.clone()),
         );
 
-    if let Some(error) = this.mr_push_description_error.clone() {
+    if let Some(error) = this.mr_push.mr_push_description_error.clone() {
         section = section.child(
             div()
                 .id("mr_push_description_error")

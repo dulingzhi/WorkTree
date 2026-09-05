@@ -89,19 +89,19 @@ pub(super) fn panel(
                 .py_1()
                 .w_full()
                 .min_w(px(0.0))
-                .child(this.stash_message_input.clone()),
+                .child(this.stash.stash_message_input.clone()),
         )
         .child(
             checkable_option_row(
                 "stash_include_untracked_toggle",
                 crate::i18n::tr("input.stash.include_untracked"),
                 theme,
-                this.stash_include_untracked,
-                &this.stash_include_untracked_focus_handle,
+                this.stash.stash_include_untracked,
+                &this.stash.stash_include_untracked_focus_handle,
                 cx,
             )
             .on_click(cx.listener(|this, _e: &ClickEvent, _w, cx| {
-                this.stash_include_untracked = !this.stash_include_untracked;
+                this.stash.stash_include_untracked = !this.stash.stash_include_untracked;
                 cx.notify();
             })),
         )
@@ -110,12 +110,12 @@ pub(super) fn panel(
                 "stash_keep_index_toggle",
                 crate::i18n::tr("input.stash.keep_index"),
                 theme,
-                this.stash_keep_index,
-                &this.stash_keep_index_focus_handle,
+                this.stash.stash_keep_index,
+                &this.stash.stash_keep_index_focus_handle,
                 cx,
             )
             .on_click(cx.listener(|this, _e: &ClickEvent, _w, cx| {
-                this.stash_keep_index = !this.stash_keep_index;
+                this.stash.stash_keep_index = !this.stash.stash_keep_index;
                 cx.notify();
             })),
         );
@@ -129,14 +129,14 @@ pub(super) fn panel(
             .justify_between()
             .child(
                 cancel_button("stash_cancel", "stash_cancel_hint", theme)
-                    .focus_handle(this.stash_focus.cancel.clone())
+                    .focus_handle(this.stash.stash_focus.cancel.clone())
                     .on_click(theme, cx, |this, _e, window, cx| {
                         this.dismiss_prompt_popover(window, cx);
                     }),
             )
             .child(
                 components::Button::new("stash_go", crate::i18n::tr("input.stash.stash"))
-                    .focus_handle(this.stash_focus.submit.clone())
+                    .focus_handle(this.stash.stash_focus.submit.clone())
                     .separated_end_slot(super::hotkey_hint(theme, "stash_go_hint", "Enter"))
                     .style(components::ButtonStyle::Filled)
                     .disabled(!can_stash)

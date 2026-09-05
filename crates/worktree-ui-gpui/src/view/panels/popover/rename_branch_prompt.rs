@@ -43,7 +43,7 @@ pub(super) fn panel(
                 .pb_1()
                 .w_full()
                 .min_w(px(0.0))
-                .child(this.create_branch_input.clone()),
+                .child(this.create_branch.create_branch_input.clone()),
         )
         .child(div().border_t_1().border_color(theme.colors.stroke.default))
         .child(
@@ -55,7 +55,12 @@ pub(super) fn panel(
                 .justify_between()
                 .child(
                     cancel_button("rename_branch_cancel", "rename_branch_cancel_hint", theme)
-                        .focus_handle(this.create_branch_from_ref_focus.cancel.clone())
+                        .focus_handle(
+                            this.create_branch
+                                .create_branch_from_ref_focus
+                                .cancel
+                                .clone(),
+                        )
                         .on_click(theme, cx, |this, _e, window, cx| {
                             this.dismiss_prompt_popover(window, cx);
                         }),
@@ -65,7 +70,12 @@ pub(super) fn panel(
                         "rename_branch_go",
                         crate::i18n::tr("input.rename_branch.rename"),
                     )
-                    .focus_handle(this.create_branch_from_ref_focus.submit.clone())
+                    .focus_handle(
+                        this.create_branch
+                            .create_branch_from_ref_focus
+                            .submit
+                            .clone(),
+                    )
                     .separated_end_slot(hotkey_hint(theme, "rename_branch_go_hint", "Enter"))
                     .style(components::ButtonStyle::Filled)
                     .disabled(!can_rename)

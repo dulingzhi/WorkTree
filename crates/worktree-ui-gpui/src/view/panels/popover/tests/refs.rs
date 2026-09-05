@@ -576,7 +576,8 @@ fn create_tag_prompt_create_button_click_creates_and_closes(cx: &mut gpui::TestA
     cx.update(|_window, app| {
         view.update(app, |this, cx| {
             this.popover_host.update(cx, |host, cx| {
-                host.create_tag_input
+                host.create_tag
+                    .create_tag_input
                     .update(cx, |input, cx| input.set_text("v2.0.0", cx));
             });
         });
@@ -699,13 +700,15 @@ fn create_tag_prompt_enter_creates_and_closes(cx: &mut gpui::TestAppContext) {
                 // predicate: git rejects a ref ending in `/`, and `submit`
                 // returns early on one — an enabled button over that input is a
                 // click that silently does nothing.
-                host.create_tag_input
+                host.create_tag
+                    .create_tag_input
                     .update(cx, |input, cx| input.set_text("v1.0/", cx));
                 assert!(
                     !host.can_submit_create_tag(cx),
                     "expected a trailing-slash name to disable Create"
                 );
-                host.create_tag_input
+                host.create_tag
+                    .create_tag_input
                     .update(cx, |input, cx| input.set_text("v1.0.0", cx));
                 assert!(
                     host.can_submit_create_tag(cx),

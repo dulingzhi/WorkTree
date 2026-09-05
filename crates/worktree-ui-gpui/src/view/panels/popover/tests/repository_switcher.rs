@@ -58,6 +58,7 @@ fn repository_switcher_opens_the_repo_picker_with_a_fresh_search_input(
         assert!(matches!(host.popover, Some(PopoverKind::RepoPicker)));
 
         let input = host
+            .repo_picker
             .repo_picker_search_input
             .clone()
             .expect("repository switcher should create a search input");
@@ -81,6 +82,7 @@ fn repository_switcher_reopen_clears_previous_search_text(cx: &mut gpui::TestApp
         let popover_host = { view.read(app).popover_host.clone() };
         let input = popover_host
             .read(app)
+            .repo_picker
             .repo_picker_search_input
             .clone()
             .expect("repository switcher should create a search input");
@@ -99,6 +101,7 @@ fn repository_switcher_reopen_clears_previous_search_text(cx: &mut gpui::TestApp
         let popover_host = { view.read(app).popover_host.clone() };
         let input = popover_host
             .read(app)
+            .repo_picker
             .repo_picker_search_input
             .clone()
             .expect("repository switcher should reuse its search input");
@@ -285,7 +288,7 @@ fn repository_switcher_removes_a_recent_repo_subprocess(cx: &mut gpui::TestAppCo
         );
         let host = view.read(app).popover_host.read(app);
         assert_eq!(
-            host.cached_recent_repos,
+            host.repo_picker.cached_recent_repos,
             vec![kept.clone()],
             "expected the removed repository to leave the picker list"
         );

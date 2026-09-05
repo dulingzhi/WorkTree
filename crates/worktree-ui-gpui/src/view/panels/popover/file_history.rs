@@ -78,7 +78,7 @@ pub(super) fn cached(
         rows_signature(this),
         query,
     );
-    super::rows_cache::get_or_build(&this.file_history_rows_cache, key, |_now| {
+    super::rows_cache::get_or_build(&this.file_history.file_history_rows_cache, key, |_now| {
         let Some((repo, current_commit)) = file_history_repo(this) else {
             return (Vec::new(), Vec::new(), None);
         };
@@ -198,7 +198,7 @@ pub(super) fn panel(
         )
         .into_any_element(),
         Some(Loadable::Ready(_)) => {
-            if let Some(search) = this.file_history_search_input.clone() {
+            if let Some(search) = this.file_history.file_history_search_input.clone() {
                 let query = search.read(cx).text().trim().to_string();
                 let built = cached(this, &query);
                 let commit_ids = std::rc::Rc::clone(&built.payloads);
@@ -210,7 +210,7 @@ pub(super) fn panel(
                     .tooltip_host(this.tooltip_host.clone())
                     .empty_text(crate::i18n::tr("ui.picker.file_history.no_commits"))
                     .max_height(scaled_px(FILE_HISTORY_LIST_MAX_HEIGHT_PX))
-                    .selected_index(this.file_history_selected_index)
+                    .selected_index(this.file_history.file_history_selected_index)
                     .render(theme, ui_scale_percent, cx, move |this, ix, _e, _w, cx| {
                         let Some(commit_id) = commit_ids.get(ix).cloned() else {
                             return;

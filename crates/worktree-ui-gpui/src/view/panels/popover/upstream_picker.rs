@@ -128,10 +128,14 @@ pub(super) fn cached(
         rows_signature(repo, branch),
         query,
     );
-    super::rows_cache::get_or_build(&this.upstream_picker_rows_cache, key, |_now| {
-        let built = rows(repo, branch, query);
-        (built.items, built.rows, built.marked_index)
-    })
+    super::rows_cache::get_or_build(
+        &this.upstream_picker.upstream_picker_rows_cache,
+        key,
+        |_now| {
+            let built = rows(repo, branch, query);
+            (built.items, built.rows, built.marked_index)
+        },
+    )
 }
 
 /// Payloads for the rows surviving `query`, in the order the picker renders
@@ -256,7 +260,7 @@ pub(super) fn panel(
         )
         .into_any_element(),
         Some(Loadable::Ready(_)) => {
-            if let Some(search) = this.upstream_picker_search_input.clone() {
+            if let Some(search) = this.upstream_picker.upstream_picker_search_input.clone() {
                 let query = search.read(cx).text().trim().to_string();
                 let built = cached(this, repo_id, &branch, &query);
                 let row_payloads = std::rc::Rc::clone(&built.payloads);
@@ -268,7 +272,7 @@ pub(super) fn panel(
                     .tooltip_host(this.tooltip_host.clone())
                     .empty_text(crate::i18n::tr("ui.picker.upstream.no_remote_branches"))
                     .max_height(scaled_px(components::PICKER_LIST_MAX_HEIGHT_PX))
-                    .selected_index(this.upstream_picker_selected_index)
+                    .selected_index(this.upstream_picker.upstream_picker_selected_index)
                     .marked_index(built.marked_index)
                     .render(theme, ui_scale_percent, cx, move |this, ix, _e, _w, cx| {
                         let Some(row) = row_payloads.get(ix).cloned() else {

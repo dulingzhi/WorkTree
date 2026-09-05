@@ -548,105 +548,17 @@ pub(in crate::view) enum RemoteRow {
     Branch { remote: String, name: String },
 }
 
-pub(in crate::view) struct PopoverHost {
-    pub(super) store: Arc<AppStore>,
-    pub(super) state: Arc<AppState>,
-    pub(super) theme: AppTheme,
-    pub(super) theme_mode: ThemeMode,
-    pub(super) date_time_format: DateTimeFormat,
-    pub(super) timezone: Timezone,
-    pub(super) show_timezone: bool,
-    pub(super) change_tracking_view: ChangeTrackingView,
-    pub(super) commit_amend_enabled: bool,
-    pub(super) commit_push_after_enabled: bool,
-    pub(super) push_pull_retry_enabled: bool,
-    pub(super) diff_content_mode: DiffContentMode,
-    pub(super) diff_whitespace_mode: DiffWhitespaceMode,
-    pub(super) diff_reveal_whitespace_chars: bool,
-    pub(super) diff_word_wrap: bool,
-    pub(super) diff_show_line_numbers: bool,
-    pub(super) _ui_model_subscription: gpui::Subscription,
-    pub(super) _repo_picker_search_input_subscription: Option<gpui::Subscription>,
-    pub(super) _branch_picker_search_input_subscription: Option<gpui::Subscription>,
-    pub(super) _worktree_picker_search_input_subscription: Option<gpui::Subscription>,
-    pub(super) _workspace_picker_search_input_subscription: Option<gpui::Subscription>,
-    pub(super) _upstream_picker_search_input_subscription: Option<gpui::Subscription>,
-    pub(super) _submodule_picker_search_input_subscription: Option<gpui::Subscription>,
-    pub(super) _remote_picker_search_input_subscription: Option<gpui::Subscription>,
-    pub(super) _tag_picker_search_input_subscription: Option<gpui::Subscription>,
-    pub(super) _commit_search_picker_search_input_subscription: Option<gpui::Subscription>,
-    pub(super) _file_history_search_input_subscription: Option<gpui::Subscription>,
-    pub(super) _history_author_filter_search_input_subscription: Option<gpui::Subscription>,
-    pub(super) _history_ref_filter_search_input_subscription: Option<gpui::Subscription>,
-    pub(super) _squash_message_input_subscription: gpui::Subscription,
-    pub(super) _squash_description_input_subscription: gpui::Subscription,
-    pub(super) _prompt_input_subscriptions: Vec<gpui::Subscription>,
-    pub(super) notify_fingerprint: u64,
-    pub(super) root_view: WeakEntity<WorkTreeView>,
-    /// Mirror of the root view's mode, which is fixed for the window's lifetime.
-    /// Held here because menu models are built while the root view's update
-    /// borrow is active, so its entity can't be read at that point.
-    pub(super) root_view_mode: WorkTreeViewMode,
-    pub(super) tooltip_host: WeakEntity<TooltipHost>,
-    pub(super) main_pane: Entity<MainPaneView>,
-    pub(super) details_pane: Entity<DetailsPaneView>,
-    pub(super) reflog_pane: Entity<ReflogPaneView>,
-    pub(super) sidebar_pane: Entity<SidebarPaneView>,
-    /// Mirror of the sidebar pane's pinned branches, keyed by repository
-    /// workdir. Kept here because context menus are built from click handlers
-    /// that already hold the sidebar pane's update borrow, so its entity can't
-    /// be read at that point.
-    pub(super) pinned_branches_by_repo:
-        std::collections::BTreeMap<std::path::PathBuf, std::collections::BTreeSet<String>>,
-    /// Mirror of the sidebar's collapse set, kept here for the same reason as
-    /// [`Self::pinned_branches_by_repo`]: the branch group menu is built while
-    /// the sidebar pane's update borrow is already held.
-    pub(super) collapsed_items_by_repo:
-        std::collections::BTreeMap<std::path::PathBuf, std::collections::BTreeSet<String>>,
-    /// Mirror of the sidebar's branch filter, for the same reason.
-    pub(super) branch_filter_query: String,
-
-    pub(super) popover: Option<PopoverKind>,
-    pub(super) popover_anchor: Option<PopoverAnchor>,
-    /// Explicit 1-based mainline selected for the currently open single
-    /// merge-commit cherry-pick confirmation. Reset every time that dialog
-    /// opens; drafts are intentionally session-local.
-    pub(super) cherry_pick_mainline: Option<usize>,
-    /// Period tab shown by the statistics popover. View-local rather than a
-    /// `PopoverKind` field so switching tabs doesn't reopen the popover (which
-    /// would refocus and re-request data); reset to Week on open.
-    pub(super) statistics_period: statistics::StatisticsPeriod,
-    /// Reset mode chosen in the undo prompt, once the user departs from the
-    /// plan's suggestion. `None` until then; reset on open.
-    pub(super) undo_reset_mode: Option<ResetMode>,
-    /// The diff view's pending (or landed) AI explanation, paired with the
-    /// hunk snapshot it was requested against. Reset on open; every open
-    /// starts a fresh request.
-    pub(super) hunk_explanation: Option<hunk_explanation::HunkExplanation>,
-    /// Test seams standing in for the network call test builds cannot make:
-    /// how many explanation requests were driven, and the patch the last one
-    /// carried.
-    #[cfg(test)]
-    pub(super) hunk_explanation_test_requests: usize,
-    #[cfg(test)]
-    pub(super) hunk_explanation_test_last_patch: Option<String>,
-    pub(super) context_menu_focus_handle: FocusHandle,
-    /// Focus held by the App/Add Repository menu invoker, restored when that
-    /// menu is dismissed without replacing it with another prompt.
-    pub(super) menu_invoker_focus: Option<FocusHandle>,
-    /// Whether the open popover was invoked from inside the diff panel.
-    ///
-    /// Some menus — the web link menu above all — can be raised from either the
-    /// diff panel or the commit details pane, and only the former should hand
-    /// focus back to the diff panel when it closes.
-    pub(super) popover_opened_from_diff_panel: bool,
-    pub(super) prompt_tab_group_focus_handle: FocusHandle,
-    pub(super) prompt_tab_wrap_end_focus_handle: FocusHandle,
+/// Per-popover state for the context menu domain, grouped off the host's top level.
+pub(super) struct ContextMenuState {
     pub(super) context_menu_selected_ix: Option<usize>,
     /// Submenu groups currently expanded in the open context menu, keyed by
     /// the group's stable id. Selection indices shift when a group opens or
     /// closes, so both are cleared together.
     pub(super) context_menu_open_submenus: FxHashSet<SharedString>,
+}
+
+/// Per-popover state for the repo picker domain, grouped off the host's top level.
+pub(super) struct RepoPickerState {
     pub(super) repo_picker_selected_index: Option<usize>,
     /// Session recent repositories snapshotted when a repository picker opens,
     /// so the list can't shift under the user mid-interaction.
@@ -658,69 +570,133 @@ pub(in crate::view) struct PopoverHost {
     pub(super) cached_collapsed_picker_sections: std::collections::BTreeSet<String>,
     pub(super) repo_picker_sort: repo_picker::RepoPickerSort,
     pub(super) repo_picker_sort_menu_open: bool,
-    /// Repository row whose context menu floats over the picker, and the window
-    /// position it was invoked at. The picker stays open underneath it.
-    pub(super) picker_row_menu: Option<picker_row_menu::PickerRowMenu>,
+
+    pub(super) repo_picker_search_input: Option<Entity<components::TextInput>>,
+    pub(super) repo_picker_rows_cache: rows_cache::RowsCache<repo_picker::RepoPickerEntry>,
+    pub(super) _repo_picker_search_input_subscription: Option<gpui::Subscription>,
+}
+
+/// Per-popover state for the branch picker domain, grouped off the host's top level.
+pub(super) struct BranchPickerState {
     pub(super) branch_picker_selected_index: Option<usize>,
-    pub(super) worktree_picker_selected_index: Option<usize>,
-    pub(super) workspace_picker_selected_index: Option<usize>,
-    pub(super) upstream_picker_selected_index: Option<usize>,
-    /// Path/reference the workspace badge's create row hands to the Add-worktree
-    /// dialog. Consumed (and cleared) when that dialog opens, so a later
-    /// open from elsewhere still starts blank.
-    pub(super) pending_worktree_add_prefill: Option<(String, String)>,
-    pub(super) submodule_picker_selected_index: Option<usize>,
-    pub(super) remote_picker_selected_index: Option<usize>,
-    pub(super) tag_picker_selected_index: Option<usize>,
-    pub(super) commit_search_picker_selected_index: Option<usize>,
-    pub(super) file_history_selected_index: Option<usize>,
-    pub(super) history_author_filter_selected_index: Option<usize>,
-    /// Author suggestions for the history author filter, keyed by repository and
-    /// the log revision they were collected from. Collecting them walks the
-    /// whole accumulated log, and the popover re-renders on every mouse move
-    /// over it, so the result has to outlive the frame. See
-    /// [`author_filter::suggestions`].
-    pub(super) history_author_suggestions: Option<(RepoId, u64, std::sync::Arc<[SharedString]>)>,
+    pub(super) branch_picker_search_input: Option<Entity<components::TextInput>>,
     /// Row models for the pickers that build one row per repository, ref or
     /// worktree, rebuilt only when the data behind them changes rather than on
     /// every frame. See [`rows_cache`] — a hover moving between rows re-renders
     /// this whole view.
     pub(super) branch_picker_rows_cache:
         rows_cache::RowsCache<branch_picker::BranchPickerNavTarget>,
+    pub(super) branch_ref_rows_cache: rows_cache::RowsCache<String>,
+    pub(super) _branch_picker_search_input_subscription: Option<gpui::Subscription>,
+}
+
+/// Per-popover state for the worktree picker domain, grouped off the host's top level.
+pub(super) struct WorktreePickerState {
+    pub(super) worktree_picker_selected_index: Option<usize>,
+    pub(super) worktree_picker_search_input: Option<Entity<components::TextInput>>,
+    pub(super) worktree_picker_rows_cache: rows_cache::RowsCache<std::path::PathBuf>,
+    pub(super) _worktree_picker_search_input_subscription: Option<gpui::Subscription>,
+}
+
+/// Per-popover state for the workspace picker domain, grouped off the host's top level.
+pub(super) struct WorkspacePickerState {
+    pub(super) workspace_picker_selected_index: Option<usize>,
+    pub(super) workspace_picker_search_input: Option<Entity<components::TextInput>>,
     pub(super) workspace_picker_rows_cache: rows_cache::RowsCache<workspace_picker::WorkspaceRow>,
+    pub(super) _workspace_picker_search_input_subscription: Option<gpui::Subscription>,
+}
+
+/// Per-popover state for the upstream picker domain, grouped off the host's top level.
+pub(super) struct UpstreamPickerState {
+    pub(super) upstream_picker_selected_index: Option<usize>,
+    pub(super) upstream_picker_search_input: Option<Entity<components::TextInput>>,
     pub(super) upstream_picker_rows_cache: rows_cache::RowsCache<upstream_picker::UpstreamRow>,
-    pub(super) repo_picker_rows_cache: rows_cache::RowsCache<repo_picker::RepoPickerEntry>,
-    pub(super) stash_picker_rows_cache: rows_cache::RowsCache<stash_picker_prompt::StashRow>,
-    pub(super) file_history_rows_cache: rows_cache::RowsCache<CommitId>,
+    pub(super) _upstream_picker_search_input_subscription: Option<gpui::Subscription>,
+}
+
+/// Per-popover state for the submodule picker domain, grouped off the host's top level.
+pub(super) struct SubmodulePickerState {
+    pub(super) submodule_picker_selected_index: Option<usize>,
+    pub(super) submodule_picker_search_input: Option<Entity<components::TextInput>>,
     pub(super) submodule_picker_rows_cache: rows_cache::RowsCache<std::path::PathBuf>,
+    pub(super) _submodule_picker_search_input_subscription: Option<gpui::Subscription>,
+}
+
+/// Per-popover state for the remote picker domain, grouped off the host's top level.
+pub(super) struct RemotePickerState {
+    pub(super) remote_picker_selected_index: Option<usize>,
+    pub(super) remote_picker_search_input: Option<Entity<components::TextInput>>,
     pub(super) remote_picker_rows_cache: rows_cache::RowsCache<remote_picker::RemotePickerRow>,
+    pub(super) _remote_picker_search_input_subscription: Option<gpui::Subscription>,
+}
+
+/// Per-popover state for the tag picker domain, grouped off the host's top level.
+pub(super) struct TagPickerState {
+    pub(super) tag_picker_selected_index: Option<usize>,
+    pub(super) tag_picker_search_input: Option<Entity<components::TextInput>>,
     pub(super) tag_picker_rows_cache: rows_cache::RowsCache<String>,
+    pub(super) _tag_picker_search_input_subscription: Option<gpui::Subscription>,
+}
+
+/// Per-popover state for the commit search picker domain, grouped off the host's top level.
+pub(super) struct CommitSearchPickerState {
+    pub(super) commit_search_picker_selected_index: Option<usize>,
+    pub(super) commit_search_picker_search_input: Option<Entity<components::TextInput>>,
     pub(super) commit_search_picker_rows_cache:
         rows_cache::RowsCache<commit_search_picker::CommitSearchPickerRow>,
-    pub(super) worktree_picker_rows_cache: rows_cache::RowsCache<std::path::PathBuf>,
-    pub(super) branch_ref_rows_cache: rows_cache::RowsCache<String>,
+    pub(super) _commit_search_picker_search_input_subscription: Option<gpui::Subscription>,
+}
 
-    pub(super) repo_picker_search_input: Option<Entity<components::TextInput>>,
-    pub(super) branch_picker_search_input: Option<Entity<components::TextInput>>,
-    pub(super) remote_picker_search_input: Option<Entity<components::TextInput>>,
+/// Per-popover state for the stash picker domain, grouped off the host's top level.
+pub(super) struct StashPickerState {
+    pub(super) stash_picker_prompt_selected_index: Option<usize>,
+    pub(super) stash_picker_search_input: Option<Entity<components::TextInput>>,
+    pub(super) stash_picker_rows_cache: rows_cache::RowsCache<stash_picker_prompt::StashRow>,
+    pub(super) _stash_picker_search_input_subscription: Option<gpui::Subscription>,
+}
+
+/// Per-popover state for the file history domain, grouped off the host's top level.
+pub(super) struct FileHistoryState {
+    pub(super) file_history_selected_index: Option<usize>,
     pub(super) file_history_search_input: Option<Entity<components::TextInput>>,
+    pub(super) file_history_rows_cache: rows_cache::RowsCache<CommitId>,
+    pub(super) _file_history_search_input_subscription: Option<gpui::Subscription>,
+}
+
+/// Per-popover state for the history author filter domain, grouped off the host's top level.
+pub(super) struct HistoryAuthorFilterState {
+    pub(super) history_author_filter_selected_index: Option<usize>,
     pub(super) history_author_filter_search_input: Option<Entity<components::TextInput>>,
+    /// Author suggestions for the history author filter, keyed by repository and
+    /// the log revision they were collected from. Collecting them walks the
+    /// whole accumulated log, and the popover re-renders on every mouse move
+    /// over it, so the result has to outlive the frame. See
+    /// [`author_filter::suggestions`].
+    pub(super) history_author_suggestions: Option<(RepoId, u64, std::sync::Arc<[SharedString]>)>,
+    pub(super) _history_author_filter_search_input_subscription: Option<gpui::Subscription>,
+}
+
+/// Per-popover state for the history ref filter domain, grouped off the host's top level.
+pub(super) struct HistoryRefFilterState {
     /// The ref-filter popover's plain query box: narrows the three ref
     /// sections live, with no Enter semantics — clicks still toggle filters.
     pub(super) history_ref_filter_search_input: Option<Entity<components::TextInput>>,
-    pub(super) worktree_picker_search_input: Option<Entity<components::TextInput>>,
-    pub(super) workspace_picker_search_input: Option<Entity<components::TextInput>>,
-    pub(super) upstream_picker_search_input: Option<Entity<components::TextInput>>,
-    pub(super) submodule_picker_search_input: Option<Entity<components::TextInput>>,
-    pub(super) tag_picker_search_input: Option<Entity<components::TextInput>>,
-    pub(super) commit_search_picker_search_input: Option<Entity<components::TextInput>>,
-    pub(super) picker_prompt_scroll: ScrollHandle,
+    pub(super) _history_ref_filter_search_input_subscription: Option<gpui::Subscription>,
+}
 
+/// Per-popover state for the clone repo domain, grouped off the host's top level.
+pub(super) struct CloneRepoState {
     pub(super) clone_repo_url_input: Entity<components::TextInput>,
     pub(super) clone_repo_parent_dir_input: Entity<components::TextInput>,
     /// Optional per-clone SSH key path: rides the clone as
     /// `core.sshCommand` and persists onto the new `origin` remote.
     pub(super) clone_ssh_key_input: Entity<components::TextInput>,
+    pub(super) clone_repo_focus: DialogFocus,
+    pub(super) clone_repo_browse_focus_handle: FocusHandle,
+}
+
+/// Per-popover state for the repo settings domain, grouped off the host's top level.
+pub(super) struct RepoSettingsState {
     /// Repo-settings prompt state: two inputs plus the tri-state signing
     /// override and the config snapshot read on open.
     pub(super) repo_settings_user_input: Entity<components::TextInput>,
@@ -731,15 +707,32 @@ pub(in crate::view) struct PopoverHost {
     /// the panel so it is re-read on every open, never between renders.
     pub(super) repo_settings_current:
         Option<crate::view::panels::popover::repo_settings::RepoSettingsCurrent>,
+    pub(super) repo_settings_focus: DialogFocus,
     /// Test seam: how many times the repo-settings config snapshot was read
     /// from disk. An open and an apply each read once; renders must read
     /// never — a render-time read is five git spawns per keystroke.
     #[cfg(test)]
     pub(super) repo_settings_test_loads: usize,
+}
+
+/// Per-popover state for the rebase onto domain, grouped off the host's top level.
+pub(super) struct RebaseOntoState {
     pub(super) rebase_onto_input: Entity<components::TextInput>,
+    pub(super) rebase_onto_submit_focus_handle: FocusHandle,
+}
+
+/// Per-popover state for the create tag domain, grouped off the host's top level.
+pub(super) struct CreateTagState {
     pub(super) create_tag_input: Entity<components::TextInput>,
     pub(super) create_tag_message_input: Entity<components::TextInput>,
     pub(super) create_tag_message_scroll: ScrollHandle,
+    pub(super) create_tag_annotated: bool,
+    pub(super) create_tag_focus: DialogFocus,
+    pub(super) create_tag_annotated_focus_handle: FocusHandle,
+}
+
+/// Per-popover state for the gitignore domain, grouped off the host's top level.
+pub(super) struct GitignoreState {
     /// One `.gitignore` line per row. Multiline so a multi-file selection and a
     /// single file share one code path, and so the field reads like the file it
     /// is about to become.
@@ -753,6 +746,10 @@ pub(in crate::view) struct PopoverHost {
     pub(super) gitignore_suggestions: Option<worktree_core::gitignore::GitignoreSuggestions>,
     /// The paths the dialog is about, for the "Ignore <file>" body text.
     pub(super) gitignore_paths: Vec<std::path::PathBuf>,
+}
+
+/// Per-popover state for the squash domain, grouped off the host's top level.
+pub(super) struct SquashState {
     pub(super) squash_message_input: Entity<components::TextInput>,
     pub(super) squash_description_input: Entity<components::TextInput>,
     pub(super) squash_description_scroll: ScrollHandle,
@@ -764,24 +761,35 @@ pub(in crate::view) struct PopoverHost {
         worktree_core::domain::CommitId,
         worktree_core::domain::CommitId,
     )>,
+    pub(super) squash_cancel_focus_handle: FocusHandle,
+    pub(super) squash_submit_focus_handle: FocusHandle,
+    pub(super) _squash_message_input_subscription: gpui::Subscription,
+    pub(super) _squash_description_input_subscription: gpui::Subscription,
+}
+
+/// Per-popover state for the remote prompts domain, grouped off the host's top level.
+pub(super) struct RemotePromptsState {
     pub(super) remote_name_input: Entity<components::TextInput>,
     pub(super) remote_url_input: Entity<components::TextInput>,
     pub(super) remote_url_edit_input: Entity<components::TextInput>,
     pub(super) remote_ssh_key_input: Entity<components::TextInput>,
+    pub(super) remote_add_focus: DialogFocus,
+    pub(super) remote_edit_focus: DialogFocus,
+    pub(super) remote_ssh_key_focus: DialogFocus,
+    pub(super) remote_ssh_key_clear_focus: FocusHandle,
+}
+
+/// Per-popover state for the create branch domain, grouped off the host's top level.
+pub(super) struct CreateBranchState {
     pub(super) create_branch_input: Entity<components::TextInput>,
     pub(super) create_branch_checkout_enabled: bool,
     pub(super) create_branch_source_target: String,
-    pub(super) worktree_ref_source_target: String,
-    pub(super) suppress_worktree_submit_after_ref_enter: bool,
-    /// Set while a row menu floating over a picker runs one of its entries. The
-    /// menu has already closed itself by then, and the popover underneath is the
-    /// picker — which stays up so the next row can be acted on.
-    pub(super) suppress_popover_close_after_action: bool,
     pub(super) create_branch_from_ref_checkout_focus_handle: FocusHandle,
     pub(super) create_branch_from_ref_focus: DialogFocus,
-    pub(super) create_tag_annotated: bool,
-    pub(super) create_tag_annotated_focus_handle: FocusHandle,
-    pub(super) checkout_remote_branch_focus: DialogFocus,
+}
+
+/// Per-popover state for the stash domain, grouped off the host's top level.
+pub(super) struct StashState {
     pub(super) stash_message_input: Entity<components::TextInput>,
     pub(super) stash_focus: DialogFocus,
     /// Stash prompt option rows. Defaults re-applied every time the prompt
@@ -790,6 +798,10 @@ pub(in crate::view) struct PopoverHost {
     pub(super) stash_keep_index: bool,
     pub(super) stash_include_untracked_focus_handle: FocusHandle,
     pub(super) stash_keep_index_focus_handle: FocusHandle,
+}
+
+/// Per-popover state for the mr push domain, grouped off the host's top level.
+pub(super) struct MrPushState {
     /// Merge-request push prompt state. Like the stash options, defaults are
     /// re-applied every time the prompt opens; `merge_request.create` itself
     /// is implicit — the dialog exists to create one.
@@ -805,34 +817,32 @@ pub(in crate::view) struct PopoverHost {
     pub(super) mr_push_pipeline_focus_handle: FocusHandle,
     pub(super) mr_push_remove_source_focus_handle: FocusHandle,
     pub(super) mr_push_mr_branch_focus_handle: FocusHandle,
-    pub(super) stash_branch_focus: DialogFocus,
-    pub(super) stash_picker_prompt_selected_index: Option<usize>,
-    pub(super) stash_picker_search_input: Option<Entity<components::TextInput>>,
-    pub(super) _stash_picker_search_input_subscription: Option<gpui::Subscription>,
+}
+
+/// Per-popover state for the commit prompt domain, grouped off the host's top level.
+pub(super) struct CommitPromptState {
     pub(super) commit_prompt_message_drafts: FxHashMap<RepoId, SharedString>,
     pub(super) commit_prompt_message_input: Entity<components::TextInput>,
     pub(super) commit_prompt_message_scroll: ScrollHandle,
     pub(super) commit_prompt_focus: DialogFocus,
-    pub(super) clone_repo_browse_focus_handle: FocusHandle,
-    pub(super) squash_cancel_focus_handle: FocusHandle,
-    pub(super) squash_submit_focus_handle: FocusHandle,
-    pub(super) rebase_onto_submit_focus_handle: FocusHandle,
-    pub(super) clone_repo_focus: DialogFocus,
-    pub(super) repo_settings_focus: DialogFocus,
-    pub(super) create_tag_focus: DialogFocus,
-    pub(super) remote_add_focus: DialogFocus,
-    pub(super) remote_edit_focus: DialogFocus,
-    pub(super) remote_ssh_key_focus: DialogFocus,
-    pub(super) remote_ssh_key_clear_focus: FocusHandle,
-    pub(super) push_upstream_focus: DialogFocus,
-    pub(super) worktree_browse_focus_handle: FocusHandle,
-    pub(super) worktree_focus: DialogFocus,
-    pub(super) submodule_advanced_focus_handle: FocusHandle,
-    pub(super) submodule_force_focus_handle: FocusHandle,
-    pub(super) submodule_focus: DialogFocus,
-    pub(super) push_upstream_branch_input: Entity<components::TextInput>,
+}
+
+/// Per-popover state for the worktree add domain, grouped off the host's top level.
+pub(super) struct WorktreeAddState {
+    pub(super) worktree_ref_source_target: String,
+    pub(super) suppress_worktree_submit_after_ref_enter: bool,
+    /// Path/reference the workspace badge's create row hands to the Add-worktree
+    /// dialog. Consumed (and cleared) when that dialog opens, so a later
+    /// open from elsewhere still starts blank.
+    pub(super) pending_worktree_add_prefill: Option<(String, String)>,
     pub(super) worktree_path_input: Entity<components::TextInput>,
     pub(super) worktree_ref_input: Entity<components::TextInput>,
+    pub(super) worktree_focus: DialogFocus,
+    pub(super) worktree_browse_focus_handle: FocusHandle,
+}
+
+/// Per-popover state for the submodule add domain, grouped off the host's top level.
+pub(super) struct SubmoduleAddState {
     pub(super) submodule_url_input: Entity<components::TextInput>,
     pub(super) submodule_path_input: Entity<components::TextInput>,
     pub(super) submodule_ref_input: Entity<components::TextInput>,
@@ -840,9 +850,216 @@ pub(in crate::view) struct PopoverHost {
     pub(super) submodule_name_input: Entity<components::TextInput>,
     pub(super) submodule_add_advanced_expanded: bool,
     pub(super) submodule_force_enabled: bool,
+    pub(super) submodule_focus: DialogFocus,
+    pub(super) submodule_advanced_focus_handle: FocusHandle,
+    pub(super) submodule_force_focus_handle: FocusHandle,
+}
+
+/// Per-popover state for the push upstream domain, grouped off the host's top level.
+pub(super) struct PushUpstreamState {
+    pub(super) push_upstream_branch_input: Entity<components::TextInput>,
+    pub(super) push_upstream_focus: DialogFocus,
+}
+
+/// Per-popover state for the rebase reword domain, grouped off the host's top level.
+pub(super) struct RebaseRewordState {
     pub(super) rebase_reword_input: Entity<components::TextInput>,
     pub(super) rebase_reword_description_input: Entity<components::TextInput>,
     pub(super) rebase_reword_description_scroll: ScrollHandle,
+}
+pub(in crate::view) struct PopoverHost {
+    pub(super) store: Arc<AppStore>,
+
+    pub(super) state: Arc<AppState>,
+
+    pub(super) theme: AppTheme,
+
+    pub(super) theme_mode: ThemeMode,
+
+    pub(super) date_time_format: DateTimeFormat,
+
+    pub(super) timezone: Timezone,
+
+    pub(super) show_timezone: bool,
+
+    pub(super) change_tracking_view: ChangeTrackingView,
+
+    pub(super) commit_amend_enabled: bool,
+
+    pub(super) commit_push_after_enabled: bool,
+
+    pub(super) push_pull_retry_enabled: bool,
+
+    pub(super) diff_content_mode: DiffContentMode,
+
+    pub(super) diff_whitespace_mode: DiffWhitespaceMode,
+
+    pub(super) diff_reveal_whitespace_chars: bool,
+
+    pub(super) diff_word_wrap: bool,
+
+    pub(super) diff_show_line_numbers: bool,
+
+    pub(super) _ui_model_subscription: gpui::Subscription,
+
+    pub(super) repo_picker: RepoPickerState,
+
+    pub(super) branch_picker: BranchPickerState,
+
+    pub(super) worktree_picker: WorktreePickerState,
+
+    pub(super) workspace_picker: WorkspacePickerState,
+
+    pub(super) upstream_picker: UpstreamPickerState,
+
+    pub(super) submodule_picker: SubmodulePickerState,
+
+    pub(super) remote_picker: RemotePickerState,
+
+    pub(super) tag_picker: TagPickerState,
+
+    pub(super) commit_search_picker: CommitSearchPickerState,
+
+    pub(super) file_history: FileHistoryState,
+
+    pub(super) history_author_filter: HistoryAuthorFilterState,
+
+    pub(super) history_ref_filter: HistoryRefFilterState,
+
+    pub(super) squash: SquashState,
+
+    pub(super) _prompt_input_subscriptions: Vec<gpui::Subscription>,
+
+    pub(super) notify_fingerprint: u64,
+
+    pub(super) root_view: WeakEntity<WorkTreeView>,
+
+    /// Mirror of the root view's mode, which is fixed for the window's lifetime.
+    /// Held here because menu models are built while the root view's update
+    /// borrow is active, so its entity can't be read at that point.
+    pub(super) root_view_mode: WorkTreeViewMode,
+
+    pub(super) tooltip_host: WeakEntity<TooltipHost>,
+
+    pub(super) main_pane: Entity<MainPaneView>,
+
+    pub(super) details_pane: Entity<DetailsPaneView>,
+
+    pub(super) reflog_pane: Entity<ReflogPaneView>,
+
+    pub(super) sidebar_pane: Entity<SidebarPaneView>,
+
+    /// Mirror of the sidebar pane's pinned branches, keyed by repository
+    /// workdir. Kept here because context menus are built from click handlers
+    /// that already hold the sidebar pane's update borrow, so its entity can't
+    /// be read at that point.
+    pub(super) pinned_branches_by_repo:
+        std::collections::BTreeMap<std::path::PathBuf, std::collections::BTreeSet<String>>,
+
+    /// Mirror of the sidebar's collapse set, kept here for the same reason as
+    /// [`Self::pinned_branches_by_repo`]: the branch group menu is built while
+    /// the sidebar pane's update borrow is already held.
+    pub(super) collapsed_items_by_repo:
+        std::collections::BTreeMap<std::path::PathBuf, std::collections::BTreeSet<String>>,
+
+    /// Mirror of the sidebar's branch filter, for the same reason.
+    pub(super) branch_filter_query: String,
+
+    pub(super) popover: Option<PopoverKind>,
+
+    pub(super) popover_anchor: Option<PopoverAnchor>,
+
+    /// Explicit 1-based mainline selected for the currently open single
+    /// merge-commit cherry-pick confirmation. Reset every time that dialog
+    /// opens; drafts are intentionally session-local.
+    pub(super) cherry_pick_mainline: Option<usize>,
+
+    /// Period tab shown by the statistics popover. View-local rather than a
+    /// `PopoverKind` field so switching tabs doesn't reopen the popover (which
+    /// would refocus and re-request data); reset to Week on open.
+    pub(super) statistics_period: statistics::StatisticsPeriod,
+
+    /// Reset mode chosen in the undo prompt, once the user departs from the
+    /// plan's suggestion. `None` until then; reset on open.
+    pub(super) undo_reset_mode: Option<ResetMode>,
+
+    /// The diff view's pending (or landed) AI explanation, paired with the
+    /// hunk snapshot it was requested against. Reset on open; every open
+    /// starts a fresh request.
+    pub(super) hunk_explanation: Option<hunk_explanation::HunkExplanation>,
+
+    /// Test seams standing in for the network call test builds cannot make:
+    /// how many explanation requests were driven, and the patch the last one
+    /// carried.
+    #[cfg(test)]
+    pub(super) hunk_explanation_test_requests: usize,
+
+    #[cfg(test)]
+    pub(super) hunk_explanation_test_last_patch: Option<String>,
+
+    pub(super) context_menu_focus_handle: FocusHandle,
+
+    /// Focus held by the App/Add Repository menu invoker, restored when that
+    /// menu is dismissed without replacing it with another prompt.
+    pub(super) menu_invoker_focus: Option<FocusHandle>,
+
+    /// Whether the open popover was invoked from inside the diff panel.
+    ///
+    /// Some menus — the web link menu above all — can be raised from either the
+    /// diff panel or the commit details pane, and only the former should hand
+    /// focus back to the diff panel when it closes.
+    pub(super) popover_opened_from_diff_panel: bool,
+
+    pub(super) prompt_tab_group_focus_handle: FocusHandle,
+
+    pub(super) prompt_tab_wrap_end_focus_handle: FocusHandle,
+
+    pub(super) context_menu: ContextMenuState,
+
+    /// Repository row whose context menu floats over the picker, and the window
+    /// position it was invoked at. The picker stays open underneath it.
+    pub(super) picker_row_menu: Option<picker_row_menu::PickerRowMenu>,
+
+    pub(super) worktree_add: WorktreeAddState,
+
+    pub(super) stash_picker: StashPickerState,
+
+    pub(super) picker_prompt_scroll: ScrollHandle,
+
+    pub(super) clone_repo: CloneRepoState,
+
+    pub(super) repo_settings: RepoSettingsState,
+
+    pub(super) rebase_onto: RebaseOntoState,
+
+    pub(super) create_tag: CreateTagState,
+
+    pub(super) gitignore: GitignoreState,
+
+    pub(super) remote_prompts: RemotePromptsState,
+
+    pub(super) create_branch: CreateBranchState,
+
+    /// Set while a row menu floating over a picker runs one of its entries. The
+    /// menu has already closed itself by then, and the popover underneath is the
+    /// picker — which stays up so the next row can be acted on.
+    pub(super) suppress_popover_close_after_action: bool,
+
+    pub(super) checkout_remote_branch_focus: DialogFocus,
+
+    pub(super) stash: StashState,
+
+    pub(super) mr_push: MrPushState,
+
+    pub(super) stash_branch_focus: DialogFocus,
+
+    pub(super) commit_prompt: CommitPromptState,
+
+    pub(super) push_upstream: PushUpstreamState,
+
+    pub(super) submodule_add: SubmoduleAddState,
+
+    pub(super) rebase_reword: RebaseRewordState,
 }
 
 /// Rows the branch badge's checkout picker would show for `query`, for the
@@ -873,7 +1090,10 @@ impl PopoverHost {
         &self,
         app: &App,
     ) -> FocusHandle {
-        self.create_branch_input.read(app).focus_handle()
+        self.create_branch
+            .create_branch_input
+            .read(app)
+            .focus_handle()
     }
 
     /// The history author filter's search box, once its popover has opened it.
@@ -881,7 +1101,9 @@ impl PopoverHost {
     pub(in crate::view) fn history_author_filter_search_input_for_test(
         &self,
     ) -> Option<&Entity<components::TextInput>> {
-        self.history_author_filter_search_input.as_ref()
+        self.history_author_filter
+            .history_author_filter_search_input
+            .as_ref()
     }
 
     /// Scrolls the author dropdown to a displayed row exactly as its keyboard
@@ -997,7 +1219,8 @@ impl PopoverHost {
         let state = Arc::clone(&ui_model.read(cx).state);
         let subscription = cx.observe(&ui_model, |this, model, cx| {
             this.state = Arc::clone(&model.read(cx).state);
-            this.commit_prompt_message_drafts
+            this.commit_prompt
+                .commit_prompt_message_drafts
                 .retain(|repo_id, _| this.state.repos.iter().any(|repo| repo.id == *repo_id));
 
             // Prefill the squash prompt from the message preview when it lands,
@@ -1655,21 +1878,98 @@ impl PopoverHost {
             diff_word_wrap,
             diff_show_line_numbers,
             _ui_model_subscription: subscription,
-            _repo_picker_search_input_subscription: None,
-            _branch_picker_search_input_subscription: None,
-            _worktree_picker_search_input_subscription: None,
-            _workspace_picker_search_input_subscription: None,
-            _upstream_picker_search_input_subscription: None,
-            _submodule_picker_search_input_subscription: None,
-            _remote_picker_search_input_subscription: None,
-            _tag_picker_search_input_subscription: None,
-            _commit_search_picker_search_input_subscription: None,
-            _file_history_search_input_subscription: None,
-            _history_author_filter_search_input_subscription: None,
-            _history_ref_filter_search_input_subscription: None,
-            _stash_picker_search_input_subscription: None,
-            _squash_message_input_subscription: squash_message_input_subscription,
-            _squash_description_input_subscription: squash_description_input_subscription,
+            repo_picker: RepoPickerState {
+                _repo_picker_search_input_subscription: None,
+                repo_picker_selected_index: None,
+                cached_recent_repos: Vec::new(),
+                cached_pinned_repos: Vec::new(),
+                cached_collapsed_picker_sections: std::collections::BTreeSet::new(),
+                repo_picker_sort: repo_picker::RepoPickerSort::default(),
+                repo_picker_sort_menu_open: false,
+                repo_picker_rows_cache: rows_cache::RowsCache::default(),
+                repo_picker_search_input: None,
+            },
+            branch_picker: BranchPickerState {
+                _branch_picker_search_input_subscription: None,
+                branch_picker_selected_index: None,
+                branch_picker_rows_cache: rows_cache::RowsCache::default(),
+                branch_ref_rows_cache: rows_cache::RowsCache::default(),
+                branch_picker_search_input: None,
+            },
+            worktree_picker: WorktreePickerState {
+                _worktree_picker_search_input_subscription: None,
+                worktree_picker_selected_index: None,
+                worktree_picker_rows_cache: rows_cache::RowsCache::default(),
+                worktree_picker_search_input: None,
+            },
+            workspace_picker: WorkspacePickerState {
+                _workspace_picker_search_input_subscription: None,
+                workspace_picker_selected_index: None,
+                workspace_picker_rows_cache: rows_cache::RowsCache::default(),
+                workspace_picker_search_input: None,
+            },
+            upstream_picker: UpstreamPickerState {
+                _upstream_picker_search_input_subscription: None,
+                upstream_picker_selected_index: None,
+                upstream_picker_rows_cache: rows_cache::RowsCache::default(),
+                upstream_picker_search_input: None,
+            },
+            submodule_picker: SubmodulePickerState {
+                _submodule_picker_search_input_subscription: None,
+                submodule_picker_selected_index: None,
+                submodule_picker_rows_cache: rows_cache::RowsCache::default(),
+                submodule_picker_search_input: None,
+            },
+            remote_picker: RemotePickerState {
+                _remote_picker_search_input_subscription: None,
+                remote_picker_selected_index: None,
+                remote_picker_rows_cache: rows_cache::RowsCache::default(),
+                remote_picker_search_input: None,
+            },
+            tag_picker: TagPickerState {
+                _tag_picker_search_input_subscription: None,
+                tag_picker_selected_index: None,
+                tag_picker_rows_cache: rows_cache::RowsCache::default(),
+                tag_picker_search_input: None,
+            },
+            commit_search_picker: CommitSearchPickerState {
+                _commit_search_picker_search_input_subscription: None,
+                commit_search_picker_selected_index: None,
+                commit_search_picker_rows_cache: rows_cache::RowsCache::default(),
+                commit_search_picker_search_input: None,
+            },
+            file_history: FileHistoryState {
+                _file_history_search_input_subscription: None,
+                file_history_selected_index: None,
+                file_history_rows_cache: rows_cache::RowsCache::default(),
+                file_history_search_input: None,
+            },
+            history_author_filter: HistoryAuthorFilterState {
+                _history_author_filter_search_input_subscription: None,
+                history_author_filter_selected_index: None,
+                history_author_suggestions: None,
+                history_author_filter_search_input: None,
+            },
+            history_ref_filter: HistoryRefFilterState {
+                _history_ref_filter_search_input_subscription: None,
+                history_ref_filter_search_input: None,
+            },
+            stash_picker: StashPickerState {
+                _stash_picker_search_input_subscription: None,
+                stash_picker_rows_cache: rows_cache::RowsCache::default(),
+                stash_picker_prompt_selected_index: None,
+                stash_picker_search_input: None,
+            },
+            squash: SquashState {
+                _squash_message_input_subscription: squash_message_input_subscription,
+                _squash_description_input_subscription: squash_description_input_subscription,
+                squash_message_input,
+                squash_description_input,
+                squash_description_scroll,
+                squash_prompt_prefilled_range: None,
+                squash_cancel_focus_handle,
+                squash_submit_focus_handle,
+            },
             _prompt_input_subscriptions: prompt_input_subscriptions,
             notify_fingerprint: 0,
             root_view,
@@ -1697,144 +1997,125 @@ impl PopoverHost {
             popover_opened_from_diff_panel: false,
             prompt_tab_group_focus_handle,
             prompt_tab_wrap_end_focus_handle,
-            context_menu_selected_ix: None,
-            context_menu_open_submenus: FxHashSet::default(),
-            repo_picker_selected_index: None,
-            cached_recent_repos: Vec::new(),
-            cached_pinned_repos: Vec::new(),
-            cached_collapsed_picker_sections: std::collections::BTreeSet::new(),
-            repo_picker_sort: repo_picker::RepoPickerSort::default(),
-            repo_picker_sort_menu_open: false,
+            context_menu: ContextMenuState {
+                context_menu_selected_ix: None,
+                context_menu_open_submenus: FxHashSet::default(),
+            },
             picker_row_menu: None,
-            branch_picker_selected_index: None,
-            worktree_picker_selected_index: None,
-            workspace_picker_selected_index: None,
-            upstream_picker_selected_index: None,
-            pending_worktree_add_prefill: None,
-            submodule_picker_selected_index: None,
-            remote_picker_selected_index: None,
-            tag_picker_selected_index: None,
-            commit_search_picker_selected_index: None,
-            file_history_selected_index: None,
-            history_author_filter_selected_index: None,
-            history_author_suggestions: None,
-            branch_picker_rows_cache: rows_cache::RowsCache::default(),
-            workspace_picker_rows_cache: rows_cache::RowsCache::default(),
-            upstream_picker_rows_cache: rows_cache::RowsCache::default(),
-            repo_picker_rows_cache: rows_cache::RowsCache::default(),
-            stash_picker_rows_cache: rows_cache::RowsCache::default(),
-            file_history_rows_cache: rows_cache::RowsCache::default(),
-            submodule_picker_rows_cache: rows_cache::RowsCache::default(),
-            remote_picker_rows_cache: rows_cache::RowsCache::default(),
-            tag_picker_rows_cache: rows_cache::RowsCache::default(),
-            commit_search_picker_rows_cache: rows_cache::RowsCache::default(),
-            worktree_picker_rows_cache: rows_cache::RowsCache::default(),
-            branch_ref_rows_cache: rows_cache::RowsCache::default(),
-            repo_picker_search_input: None,
-            branch_picker_search_input: None,
-            remote_picker_search_input: None,
-            file_history_search_input: None,
-            history_author_filter_search_input: None,
-            history_ref_filter_search_input: None,
-            worktree_picker_search_input: None,
-            workspace_picker_search_input: None,
-            upstream_picker_search_input: None,
-            submodule_picker_search_input: None,
-            tag_picker_search_input: None,
-            commit_search_picker_search_input: None,
+            worktree_add: WorktreeAddState {
+                pending_worktree_add_prefill: None,
+                worktree_ref_source_target: String::new(),
+                suppress_worktree_submit_after_ref_enter: false,
+                worktree_browse_focus_handle,
+                worktree_focus,
+                worktree_path_input,
+                worktree_ref_input,
+            },
             picker_prompt_scroll: ScrollHandle::new(),
-            clone_repo_url_input,
-            clone_repo_parent_dir_input,
-            clone_ssh_key_input,
-            repo_settings_user_input,
-            repo_settings_email_input,
-            repo_settings_sign_commits: None,
-            repo_settings_error: None,
-            repo_settings_current: None,
-            #[cfg(test)]
-            repo_settings_test_loads: 0,
-            rebase_onto_input,
-            create_tag_input,
-            create_tag_message_input,
-            create_tag_message_scroll,
-            gitignore_patterns_input,
-            gitignore_patterns_scroll,
-            gitignore_scope: worktree_core::gitignore::GitignoreScope::File,
-            gitignore_suggestions: None,
-            gitignore_paths: Vec::new(),
-            squash_message_input,
-            squash_description_input,
-            squash_description_scroll,
-            squash_prompt_prefilled_range: None,
-            remote_name_input,
-            remote_url_input,
-            remote_url_edit_input,
-            remote_ssh_key_input,
-            create_branch_input,
-            create_branch_checkout_enabled: true,
-            create_branch_source_target: String::new(),
-            worktree_ref_source_target: String::new(),
-            suppress_worktree_submit_after_ref_enter: false,
+            clone_repo: CloneRepoState {
+                clone_repo_url_input,
+                clone_repo_parent_dir_input,
+                clone_ssh_key_input,
+                clone_repo_browse_focus_handle,
+                clone_repo_focus,
+            },
+            repo_settings: RepoSettingsState {
+                repo_settings_user_input,
+                repo_settings_email_input,
+                repo_settings_sign_commits: None,
+                repo_settings_error: None,
+                repo_settings_current: None,
+                #[cfg(test)]
+                repo_settings_test_loads: 0,
+                repo_settings_focus,
+            },
+            rebase_onto: RebaseOntoState {
+                rebase_onto_input,
+                rebase_onto_submit_focus_handle,
+            },
+            create_tag: CreateTagState {
+                create_tag_input,
+                create_tag_message_input,
+                create_tag_message_scroll,
+                create_tag_annotated: false,
+                create_tag_annotated_focus_handle,
+                create_tag_focus,
+            },
+            gitignore: GitignoreState {
+                gitignore_patterns_input,
+                gitignore_patterns_scroll,
+                gitignore_scope: worktree_core::gitignore::GitignoreScope::File,
+                gitignore_suggestions: None,
+                gitignore_paths: Vec::new(),
+            },
+            remote_prompts: RemotePromptsState {
+                remote_name_input,
+                remote_url_input,
+                remote_url_edit_input,
+                remote_ssh_key_input,
+                remote_add_focus,
+                remote_edit_focus,
+                remote_ssh_key_clear_focus,
+                remote_ssh_key_focus,
+            },
+            create_branch: CreateBranchState {
+                create_branch_input,
+                create_branch_checkout_enabled: true,
+                create_branch_source_target: String::new(),
+                create_branch_from_ref_checkout_focus_handle,
+                create_branch_from_ref_focus,
+            },
             suppress_popover_close_after_action: false,
-            create_branch_from_ref_checkout_focus_handle,
-            create_branch_from_ref_focus,
-            create_tag_annotated: false,
-            create_tag_annotated_focus_handle,
             checkout_remote_branch_focus,
-            stash_message_input,
-            stash_focus,
-            stash_include_untracked: true,
-            stash_keep_index: false,
-            stash_include_untracked_focus_handle,
-            stash_keep_index_focus_handle,
-            mr_push_target_input,
-            mr_push_description_input,
-            mr_push_description_generating: false,
-            mr_push_description_error: None,
-            mr_push_merge_when_pipeline_succeeds: false,
-            // GitLab-side default from the C# client's push dialog.
-            mr_push_remove_source_branch: true,
-            mr_push_push_to_mr_branch: false,
-            mr_push_pipeline_focus_handle,
-            mr_push_remove_source_focus_handle,
-            mr_push_mr_branch_focus_handle,
+            stash: StashState {
+                stash_message_input,
+                stash_focus,
+                stash_include_untracked: true,
+                stash_keep_index: false,
+                stash_include_untracked_focus_handle,
+                stash_keep_index_focus_handle,
+            },
+            mr_push: MrPushState {
+                mr_push_target_input,
+                mr_push_description_input,
+                mr_push_description_generating: false,
+                mr_push_description_error: None,
+                mr_push_merge_when_pipeline_succeeds: false,
+                // GitLab-side default from the C# client's push dialog.
+                mr_push_remove_source_branch: true,
+                mr_push_push_to_mr_branch: false,
+                mr_push_pipeline_focus_handle,
+                mr_push_remove_source_focus_handle,
+                mr_push_mr_branch_focus_handle,
+            },
             stash_branch_focus,
-            stash_picker_prompt_selected_index: None,
-            stash_picker_search_input: None,
-            commit_prompt_message_drafts: FxHashMap::default(),
-            commit_prompt_message_input,
-            commit_prompt_message_scroll,
-            commit_prompt_focus,
-            clone_repo_browse_focus_handle,
-            squash_cancel_focus_handle,
-            squash_submit_focus_handle,
-            rebase_onto_submit_focus_handle,
-            clone_repo_focus,
-            repo_settings_focus,
-            create_tag_focus,
-            remote_add_focus,
-            remote_edit_focus,
-            remote_ssh_key_clear_focus,
-            remote_ssh_key_focus,
-            push_upstream_focus,
-            worktree_browse_focus_handle,
-            worktree_focus,
-            submodule_advanced_focus_handle,
-            submodule_force_focus_handle,
-            submodule_focus,
-            push_upstream_branch_input,
-            worktree_path_input,
-            worktree_ref_input,
-            submodule_url_input,
-            submodule_path_input,
-            submodule_ref_input,
-            submodule_branch_input,
-            submodule_name_input,
-            submodule_add_advanced_expanded: false,
-            submodule_force_enabled: false,
-            rebase_reword_input,
-            rebase_reword_description_input,
-            rebase_reword_description_scroll,
+            commit_prompt: CommitPromptState {
+                commit_prompt_message_drafts: FxHashMap::default(),
+                commit_prompt_message_input,
+                commit_prompt_message_scroll,
+                commit_prompt_focus,
+            },
+            push_upstream: PushUpstreamState {
+                push_upstream_focus,
+                push_upstream_branch_input,
+            },
+            submodule_add: SubmoduleAddState {
+                submodule_advanced_focus_handle,
+                submodule_force_focus_handle,
+                submodule_focus,
+                submodule_url_input,
+                submodule_path_input,
+                submodule_ref_input,
+                submodule_branch_input,
+                submodule_name_input,
+                submodule_add_advanced_expanded: false,
+                submodule_force_enabled: false,
+            },
+            rebase_reword: RebaseRewordState {
+                rebase_reword_input,
+                rebase_reword_description_input,
+                rebase_reword_description_scroll,
+            },
         }
     }
 
@@ -1842,48 +2123,50 @@ impl PopoverHost {
     /// picker search inputs that currently exist.
     pub(super) fn all_text_inputs(&self) -> impl Iterator<Item = &Entity<components::TextInput>> {
         [
-            &self.clone_repo_url_input,
-            &self.clone_repo_parent_dir_input,
-            &self.rebase_onto_input,
-            &self.create_tag_input,
-            &self.create_tag_message_input,
-            &self.gitignore_patterns_input,
-            &self.squash_message_input,
-            &self.squash_description_input,
-            &self.remote_name_input,
-            &self.remote_url_input,
-            &self.remote_url_edit_input,
-            &self.remote_ssh_key_input,
-            &self.create_branch_input,
-            &self.stash_message_input,
-            &self.commit_prompt_message_input,
-            &self.push_upstream_branch_input,
-            &self.worktree_path_input,
-            &self.worktree_ref_input,
-            &self.submodule_url_input,
-            &self.submodule_path_input,
-            &self.submodule_ref_input,
-            &self.submodule_branch_input,
-            &self.submodule_name_input,
-            &self.rebase_reword_input,
-            &self.rebase_reword_description_input,
+            &self.clone_repo.clone_repo_url_input,
+            &self.clone_repo.clone_repo_parent_dir_input,
+            &self.rebase_onto.rebase_onto_input,
+            &self.create_tag.create_tag_input,
+            &self.create_tag.create_tag_message_input,
+            &self.gitignore.gitignore_patterns_input,
+            &self.squash.squash_message_input,
+            &self.squash.squash_description_input,
+            &self.remote_prompts.remote_name_input,
+            &self.remote_prompts.remote_url_input,
+            &self.remote_prompts.remote_url_edit_input,
+            &self.remote_prompts.remote_ssh_key_input,
+            &self.create_branch.create_branch_input,
+            &self.stash.stash_message_input,
+            &self.commit_prompt.commit_prompt_message_input,
+            &self.push_upstream.push_upstream_branch_input,
+            &self.worktree_add.worktree_path_input,
+            &self.worktree_add.worktree_ref_input,
+            &self.submodule_add.submodule_url_input,
+            &self.submodule_add.submodule_path_input,
+            &self.submodule_add.submodule_ref_input,
+            &self.submodule_add.submodule_branch_input,
+            &self.submodule_add.submodule_name_input,
+            &self.rebase_reword.rebase_reword_input,
+            &self.rebase_reword.rebase_reword_description_input,
         ]
         .into_iter()
         .chain(
             [
-                &self.repo_picker_search_input,
-                &self.branch_picker_search_input,
-                &self.remote_picker_search_input,
-                &self.file_history_search_input,
-                &self.history_author_filter_search_input,
-                &self.history_ref_filter_search_input,
-                &self.worktree_picker_search_input,
-                &self.workspace_picker_search_input,
-                &self.upstream_picker_search_input,
-                &self.submodule_picker_search_input,
-                &self.tag_picker_search_input,
-                &self.commit_search_picker_search_input,
-                &self.stash_picker_search_input,
+                &self.repo_picker.repo_picker_search_input,
+                &self.branch_picker.branch_picker_search_input,
+                &self.remote_picker.remote_picker_search_input,
+                &self.file_history.file_history_search_input,
+                &self
+                    .history_author_filter
+                    .history_author_filter_search_input,
+                &self.history_ref_filter.history_ref_filter_search_input,
+                &self.worktree_picker.worktree_picker_search_input,
+                &self.workspace_picker.workspace_picker_search_input,
+                &self.upstream_picker.upstream_picker_search_input,
+                &self.submodule_picker.submodule_picker_search_input,
+                &self.tag_picker.tag_picker_search_input,
+                &self.commit_search_picker.commit_search_picker_search_input,
+                &self.stash_picker.stash_picker_search_input,
             ]
             .into_iter()
             .flatten(),
@@ -1926,12 +2209,16 @@ impl PopoverHost {
 
     #[cfg(test)]
     pub(in crate::view) fn worktree_path_input_text_for_tests(&self, app: &gpui::App) -> String {
-        self.worktree_path_input.read(app).text().to_string()
+        self.worktree_add
+            .worktree_path_input
+            .read(app)
+            .text()
+            .to_string()
     }
 
     #[cfg(test)]
     pub(in crate::view) fn worktree_ref_source_target_for_tests(&self) -> &str {
-        &self.worktree_ref_source_target
+        &self.worktree_add.worktree_ref_source_target
     }
 
     /// Whether the unsaved-edits confirmation is the popover on screen.

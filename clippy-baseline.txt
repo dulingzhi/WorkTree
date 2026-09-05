@@ -2,14 +2,14 @@ constant `SURVEY_ID` is never used | crates\worktree-ui-gpui\src\view\user_surve
 constant `SURVEY_POSTPONE_SECONDS` is never used | crates\worktree-ui-gpui\src\view\user_survey.rs:5:18
 constant `SURVEY_URL` is never used | crates\worktree-ui-gpui\src\view\user_survey.rs:4:18
 empty line after doc comment | crates\worktree-ui-gpui\src\view\date_time.rs:248:1
-match expression looks like `matches!` macro | crates\worktree-ui-gpui\src\view\panels\popover\context_menu.rs:2159:63
+match expression looks like `matches!` macro | crates\worktree-ui-gpui\src\view\panels\popover\context_menu.rs:2179:63
 method `maybe_show_user_survey_on_startup` is never used | crates\worktree-ui-gpui\src\view\user_survey.rs:8:28
 method `push_survey_toast` is never used | crates\worktree-ui-gpui\src\view\toast_host.rs:315:19
 redundant redefinition of a binding `hover_author_email` | crates\worktree-ui-gpui\src\view\rows\history_canvas.rs:1227:17
 this `if` statement can be collapsed | crates\worktree-ui-gpui\src\ai_commit_sources.rs:324:5
 this `if` statement can be collapsed | crates\worktree-ui-gpui\src\ai_commit_sources.rs:345:9
-this `if` statement can be collapsed | crates\worktree-ui-gpui\src\view\panels\popover\commit_search_picker.rs:150:9
-this `let...else` may be rewritten with the `?` operator | crates\worktree-ui-gpui\src\view\panels\popover\search_inputs.rs:556:25
+this `if` statement can be collapsed | crates\worktree-ui-gpui\src\view\panels\popover\commit_search_picker.rs:153:13
+this `let...else` may be rewritten with the `?` operator | crates\worktree-ui-gpui\src\view\panels\popover\search_inputs.rs:594:25
 this `match` expression can be replaced with `?` | crates\worktree-ui-gpui\src\view\panes\main\lfs_pointer.rs:174:17
 this function has too many arguments (10/9) | crates\worktree-ui-gpui\src\view\settings_window.rs:3442:5
 this function has too many arguments (35/9) | crates\worktree-ui-gpui\src\view\rows\history_canvas.rs:390:1
@@ -20,7 +20,7 @@ unnecessary closure used with `bool::then` | crates\worktree-ui-gpui\src\view\pa
 unnecessary closure used with `bool::then` | crates\worktree-ui-gpui\src\view\settings_window.rs:2266:21
 unnecessary closure used with `bool::then` | crates\worktree-ui-gpui\src\view\settings_window.rs:2274:21
 unused import: `SystemTime` | crates\worktree-ui-gpui\src\view\date_time.rs:251:21
-useless conversion to the same type: `gpui::SharedString` | crates\worktree-ui-gpui\src\view\panels\popover\host.rs:1099:34
+useless conversion to the same type: `gpui::SharedString` | crates\worktree-ui-gpui\src\view\panels\popover\host.rs:1322:34
 useless conversion to the same type: `gpui::SharedString` | crates\worktree-ui-gpui\src\view\panes\reflog.rs:649:21
 useless conversion to the same type: `gpui::SharedString` | crates\worktree-ui-gpui\src\view\panes\reflog.rs:651:21
 useless conversion to the same type: `std::string::String` | crates\worktree-ui-gpui\src\view\terminal_panel.rs:2221:20

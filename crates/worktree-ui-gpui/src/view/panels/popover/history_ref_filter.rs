@@ -270,6 +270,7 @@ pub(super) fn panel(
         .unwrap_or_default();
     let filter_active = !filters.is_empty();
     let query = this
+        .history_ref_filter
         .history_ref_filter_search_input
         .as_ref()
         .map(|input| input.read(cx).text().trim().to_string())
@@ -479,7 +480,9 @@ pub(super) fn panel(
                     .child(crate::i18n::tr("panels.ref_filter.hint")),
             )
             .when_some(
-                this.history_ref_filter_search_input.clone(),
+                this.history_ref_filter
+                    .history_ref_filter_search_input
+                    .clone(),
                 |popover, search| {
                     popover.child(
                         div()

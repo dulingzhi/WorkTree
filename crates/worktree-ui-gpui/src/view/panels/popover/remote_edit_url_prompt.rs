@@ -39,7 +39,7 @@ pub(super) fn panel(
                 .pb_1()
                 .w_full()
                 .min_w(px(0.0))
-                .child(this.remote_url_edit_input.clone()),
+                .child(this.remote_prompts.remote_url_edit_input.clone()),
         )
         .child(div().border_t_1().border_color(theme.colors.stroke.default))
         .child(
@@ -55,7 +55,7 @@ pub(super) fn panel(
                         "edit_remote_url_cancel_hint",
                         theme,
                     )
-                    .focus_handle(this.remote_edit_focus.cancel.clone())
+                    .focus_handle(this.remote_prompts.remote_edit_focus.cancel.clone())
                     .on_click(theme, cx, |this, _e, window, cx| {
                         this.dismiss_prompt_popover(window, cx);
                     }),
@@ -65,7 +65,7 @@ pub(super) fn panel(
                         "edit_remote_url_go",
                         crate::i18n::tr("input.remote_edit_url.save"),
                     )
-                    .focus_handle(this.remote_edit_focus.submit.clone())
+                    .focus_handle(this.remote_prompts.remote_edit_focus.submit.clone())
                     .disabled(!can_submit)
                     .separated_end_slot(super::hotkey_hint(
                         theme,

@@ -880,14 +880,17 @@ impl PopoverHost {
                 // repository picker's own snapshot of that list in step, cap
                 // included, for the frames before it next reads the session.
                 if let Some(workdir) = self.workdir_for_repo(repo_id) {
-                    session::promote_recent_repo(&mut self.cached_recent_repos, &workdir);
+                    session::promote_recent_repo(
+                        &mut self.repo_picker.cached_recent_repos,
+                        &workdir,
+                    );
                 }
                 self.store.dispatch(Msg::CloseRepo { repo_id });
             }
             ContextMenuAction::PinRepository { path } => {
                 let _ = session::persist_pinned_repo(&path);
-                if !self.cached_pinned_repos.contains(&path) {
-                    self.cached_pinned_repos.push(path);
+                if !self.repo_picker.cached_pinned_repos.contains(&path) {
+                    self.repo_picker.cached_pinned_repos.push(path);
                 }
                 // Pinning is bookkeeping, not navigation: the menu that offered
                 // it goes, but the list it was over stays.
@@ -895,16 +898,20 @@ impl PopoverHost {
             }
             ContextMenuAction::UnpinRepository { path } => {
                 let _ = session::remove_pinned_repo(&path);
-                self.cached_pinned_repos.retain(|pin| pin != &path);
+                self.repo_picker
+                    .cached_pinned_repos
+                    .retain(|pin| pin != &path);
                 close_after_action = false;
             }
             ContextMenuAction::ForgetRecentRepository { path } => {
                 // Open and pinned repositories have no entry for this, and the
                 // guard keeps it that way: a pin is what keeps a closed
                 // repository listed, so forgetting one would strand it.
-                if !self.cached_pinned_repos.contains(&path) {
+                if !self.repo_picker.cached_pinned_repos.contains(&path) {
                     let _ = session::remove_recent_repo(&path);
-                    self.cached_recent_repos.retain(|recent| recent != &path);
+                    self.repo_picker
+                        .cached_recent_repos
+                        .retain(|recent| recent != &path);
                 }
                 close_after_action = false;
             }
@@ -1828,9 +1835,9 @@ impl PopoverHost {
     /// Open or close one submenu group. Row positions shift with the group's
     /// children, so the keyboard selection cannot survive the toggle.
     fn toggle_context_menu_submenu(&mut self, id: SharedString) {
-        self.context_menu_selected_ix = None;
-        if !self.context_menu_open_submenus.remove(&id) {
-            self.context_menu_open_submenus.insert(id);
+        self.context_menu.context_menu_selected_ix = None;
+        if !self.context_menu.context_menu_open_submenus.remove(&id) {
+            self.context_menu.context_menu_open_submenus.insert(id);
         }
     }
 
@@ -1919,23 +1926,27 @@ impl PopoverHost {
             None => (vec![path.clone()], None),
         };
 
-        self.gitignore_paths = paths;
-        self.gitignore_suggestions = suggestions;
-        self.gitignore_scope = scope;
+        self.gitignore.gitignore_paths = paths;
+        self.gitignore.gitignore_suggestions = suggestions;
+        self.gitignore.gitignore_scope = scope;
 
         let theme = self.theme;
-        self.gitignore_patterns_input.update(cx, |input, cx| {
-            input.clear_transient_key_presses();
-            input.set_theme(theme, cx);
-            input.set_text(&text, cx);
-            cx.notify();
-        });
+        self.gitignore
+            .gitignore_patterns_input
+            .update(cx, |input, cx| {
+                input.clear_transient_key_presses();
+                input.set_theme(theme, cx);
+                input.set_text(&text, cx);
+                cx.notify();
+            });
         // `set_text` resets only the horizontal offset, so a dialog reopened
         // after scrolling a long selection would show blank space where the
         // patterns are.
-        self.gitignore_patterns_scroll
+        self.gitignore
+            .gitignore_patterns_scroll
             .set_offset(gpui::point(px(0.0), px(0.0)));
         let focus = self
+            .gitignore
             .gitignore_patterns_input
             .read_with(cx, |i, _| i.focus_handle());
         window.focus(&focus, cx);
@@ -1952,34 +1963,40 @@ impl PopoverHost {
         cx: &mut gpui::Context<Self>,
     ) {
         let Some(text) = self
+            .gitignore
             .gitignore_suggestions
             .as_ref()
             .map(|s| s.lines_for(scope).join("\n"))
         else {
             return;
         };
-        self.gitignore_scope = scope;
-        self.gitignore_patterns_input.update(cx, |input, cx| {
-            input.set_text(&text, cx);
-            cx.notify();
-        });
+        self.gitignore.gitignore_scope = scope;
+        self.gitignore
+            .gitignore_patterns_input
+            .update(cx, |input, cx| {
+                input.set_text(&text, cx);
+                cx.notify();
+            });
         // As in `prepare_add_to_gitignore`: the new text is usually shorter than
         // what it replaced, so a stale vertical offset would scroll it off.
-        self.gitignore_patterns_scroll
+        self.gitignore
+            .gitignore_patterns_scroll
             .set_offset(gpui::point(px(0.0), px(0.0)));
         cx.notify();
     }
 
     /// The non-blank lines currently in the pattern field.
     pub(super) fn add_to_gitignore_patterns(&self, cx: &gpui::App) -> Vec<String> {
-        self.gitignore_patterns_input.read_with(cx, |input, _| {
-            input
-                .text()
-                .lines()
-                .filter_map(gitignore_pattern_line)
-                .map(ToOwned::to_owned)
-                .collect()
-        })
+        self.gitignore
+            .gitignore_patterns_input
+            .read_with(cx, |input, _| {
+                input
+                    .text()
+                    .lines()
+                    .filter_map(gitignore_pattern_line)
+                    .map(ToOwned::to_owned)
+                    .collect()
+            })
     }
 
     /// Whether the pattern field holds anything submittable.
@@ -1989,12 +2006,14 @@ impl PopoverHost {
     /// to ask whether it is empty allocates one `String` per selected file per
     /// frame.
     pub(super) fn can_submit_add_to_gitignore(&self, cx: &gpui::App) -> bool {
-        self.gitignore_patterns_input.read_with(cx, |input, _| {
-            input
-                .text()
-                .lines()
-                .any(|line| gitignore_pattern_line(line).is_some())
-        })
+        self.gitignore
+            .gitignore_patterns_input
+            .read_with(cx, |input, _| {
+                input
+                    .text()
+                    .lines()
+                    .any(|line| gitignore_pattern_line(line).is_some())
+            })
     }
 
     pub(super) fn submit_add_to_gitignore(
@@ -2141,17 +2160,18 @@ impl PopoverHost {
         let shortcut_keycaps = model.shortcut_keycaps;
         // Everything below indexes the flattened rows — submenu children only
         // exist as rows while their group is open.
-        let rows = ContextMenuRows::from_model(&model, &self.context_menu_open_submenus);
+        let rows =
+            ContextMenuRows::from_model(&model, &self.context_menu.context_menu_open_submenus);
         let rows_for_keys = rows.clone();
         let rows_for_mouse = rows.clone();
-        let open_submenus_render = self.context_menu_open_submenus.clone();
+        let open_submenus_render = self.context_menu.context_menu_open_submenus.clone();
 
         let focus = self.context_menu_focus_handle.clone();
         // No fallback highlight: the menu opens with nothing selected (like
         // native menus), and hovering a disabled entry parks the selection on
         // it, which renders as no highlight at all rather than jumping to the
         // first selectable row.
-        let current_selected = self.context_menu_selected_ix;
+        let current_selected = self.context_menu.context_menu_selected_ix;
         let selected_for_render = current_selected.filter(|&ix| rows.is_selectable(ix));
 
         // Keep labels aligned across entries when only some of them (e.g. the
@@ -2192,39 +2212,44 @@ impl PopoverHost {
                         }
                         "up" => {
                             cx.stop_propagation();
-                            let next =
-                                rows_for_keys.next_selectable(this.context_menu_selected_ix, -1);
-                            this.context_menu_selected_ix = next;
+                            let next = rows_for_keys
+                                .next_selectable(this.context_menu.context_menu_selected_ix, -1);
+                            this.context_menu.context_menu_selected_ix = next;
                             cx.notify();
                         }
                         "down" => {
                             cx.stop_propagation();
-                            let next =
-                                rows_for_keys.next_selectable(this.context_menu_selected_ix, 1);
-                            this.context_menu_selected_ix = next;
+                            let next = rows_for_keys
+                                .next_selectable(this.context_menu.context_menu_selected_ix, 1);
+                            this.context_menu.context_menu_selected_ix = next;
                             cx.notify();
                         }
                         "tab" => {
                             cx.stop_propagation();
                             let direction = if mods.shift { -1 } else { 1 };
-                            this.context_menu_selected_ix = rows_for_keys
-                                .next_selectable(this.context_menu_selected_ix, direction);
+                            this.context_menu.context_menu_selected_ix = rows_for_keys
+                                .next_selectable(
+                                    this.context_menu.context_menu_selected_ix,
+                                    direction,
+                                );
                             cx.notify();
                         }
                         "home" => {
                             cx.stop_propagation();
-                            this.context_menu_selected_ix = rows_for_keys.first_selectable();
+                            this.context_menu.context_menu_selected_ix =
+                                rows_for_keys.first_selectable();
                             cx.notify();
                         }
                         "end" => {
                             cx.stop_propagation();
-                            this.context_menu_selected_ix = rows_for_keys.last_selectable();
+                            this.context_menu.context_menu_selected_ix =
+                                rows_for_keys.last_selectable();
                             cx.notify();
                         }
                         "enter" | "space" => {
                             let Some(ix) = context_menu_activate_entry_ix(
                                 &rows_for_keys,
-                                this.context_menu_selected_ix,
+                                this.context_menu.context_menu_selected_ix,
                             ) else {
                                 return;
                             };
@@ -2405,7 +2430,7 @@ impl PopoverHost {
 
                                 row.on_mouse_move(cx.listener(
                                     move |this, event: &MouseMoveEvent, _w, cx| {
-                                        this.context_menu_selected_ix = Some(ix);
+                                        this.context_menu.context_menu_selected_ix = Some(ix);
                                         if let Some(tooltip_text) = tooltip_text_for_move.as_ref() {
                                             let _ = tooltip_host_for_move.update(cx, |host, cx| {
                                                 host.on_mouse_moved(event.position, cx);
@@ -2420,7 +2445,7 @@ impl PopoverHost {
                                 ))
                                 .on_hover(cx.listener(move |this, hovering: &bool, _w, cx| {
                                     if *hovering {
-                                        this.context_menu_selected_ix = Some(ix);
+                                        this.context_menu.context_menu_selected_ix = Some(ix);
                                         cx.notify();
                                     } else if let Some(tooltip_text) = tooltip_text.as_ref() {
                                         let _ = tooltip_host_for_hover.update(cx, |host, cx| {
@@ -2492,7 +2517,7 @@ impl PopoverHost {
 
                                 row.on_mouse_move(cx.listener(
                                     move |this, _e: &MouseMoveEvent, _w, cx| {
-                                        this.context_menu_selected_ix = Some(ix);
+                                        this.context_menu.context_menu_selected_ix = Some(ix);
                                         cx.notify();
                                     },
                                 ))

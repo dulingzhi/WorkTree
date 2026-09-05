@@ -57,7 +57,7 @@ pub(super) fn panel(
                 .pb_1()
                 .w_full()
                 .min_w(px(0.0))
-                .child(this.create_branch_input.clone()),
+                .child(this.create_branch.create_branch_input.clone()),
         )
         .child(div().border_t_1().border_color(theme.colors.stroke.default))
         .child(

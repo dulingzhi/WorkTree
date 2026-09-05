@@ -83,15 +83,16 @@ pub(super) fn panel(
 ) -> gpui::Div {
     let theme = this.theme;
     let scaled_px = super::popover_scaled_px_fn(cx);
-    let patterns_scroll = this.gitignore_patterns_scroll.clone();
+    let patterns_scroll = this.gitignore.gitignore_patterns_scroll.clone();
 
-    let paths = this.gitignore_paths.clone();
+    let paths = this.gitignore.gitignore_paths.clone();
     let scopes = this
+        .gitignore
         .gitignore_suggestions
         .as_ref()
         .map(|s| s.applicable_scopes())
         .unwrap_or_default();
-    let selected_scope = this.gitignore_scope;
+    let selected_scope = this.gitignore.gitignore_scope;
     let can_submit = this.can_submit_add_to_gitignore(cx);
 
     // The editor writes whole buffers, so an unsaved `.gitignore` would be
@@ -150,7 +151,7 @@ pub(super) fn panel(
                     patterns_scroll,
                     scaled_px(120.0),
                 )
-                .render(theme, this.gitignore_patterns_input.clone()),
+                .render(theme, this.gitignore.gitignore_patterns_input.clone()),
             ),
         )
         .note(

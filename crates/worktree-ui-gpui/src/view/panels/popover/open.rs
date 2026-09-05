@@ -110,8 +110,8 @@ impl PopoverHost {
         crate::view::tooltip::set_tooltips_suppressed_by_overlay(false, cx);
         self.popover = None;
         self.popover_anchor = None;
-        self.context_menu_selected_ix = None;
-        self.context_menu_open_submenus.clear();
+        self.context_menu.context_menu_selected_ix = None;
+        self.context_menu.context_menu_open_submenus.clear();
         self.picker_row_menu = None;
         self.menu_invoker_focus = None;
         self.notify_fingerprint = 0;
@@ -271,9 +271,9 @@ impl PopoverHost {
     pub(super) fn handle_inline_branch_picker_escape(&mut self, cx: &mut gpui::Context<Self>) {
         match &self.popover {
             Some(PopoverKind::CreateBranchFromRefPrompt { .. }) => {
-                self.branch_picker_selected_index = None;
-                if let Some(input) = &self.branch_picker_search_input {
-                    let target = self.create_branch_source_target.clone();
+                self.branch_picker.branch_picker_selected_index = None;
+                if let Some(input) = &self.branch_picker.branch_picker_search_input {
+                    let target = self.create_branch.create_branch_source_target.clone();
                     let theme = self.theme;
                     input.update(cx, |input, cx| {
                         input.clear_transient_key_presses();
@@ -288,9 +288,9 @@ impl PopoverHost {
                 kind: RepoPopoverKind::Worktree(WorktreePopoverKind::AddPrompt),
                 ..
             }) => {
-                self.branch_picker_selected_index = None;
-                if let Some(input) = &self.branch_picker_search_input {
-                    let target = self.worktree_ref_source_target.clone();
+                self.branch_picker.branch_picker_selected_index = None;
+                if let Some(input) = &self.branch_picker.branch_picker_search_input {
+                    let target = self.worktree_add.worktree_ref_source_target.clone();
                     let theme = self.theme;
                     input.update(cx, |input, cx| {
                         input.clear_transient_key_presses();
@@ -316,23 +316,24 @@ impl PopoverHost {
     ) {
         match &self.popover {
             Some(PopoverKind::CreateBranchFromRefPrompt { .. }) => {
-                self.create_branch_source_target = name;
-                if let Some(input) = &self.branch_picker_search_input {
+                self.create_branch.create_branch_source_target = name;
+                if let Some(input) = &self.branch_picker.branch_picker_search_input {
                     let theme = self.theme;
                     input.update(cx, |input, cx| {
                         input.clear_transient_key_presses();
                         input.set_theme(theme, cx);
-                        input.set_text(self.create_branch_source_target.clone(), cx);
+                        input.set_text(self.create_branch.create_branch_source_target.clone(), cx);
                         cx.notify();
                     });
                 }
-                self.branch_picker_selected_index = None;
+                self.branch_picker.branch_picker_selected_index = None;
                 cx.defer_in(window, |this, window, cx| {
                     if matches!(
                         this.popover,
                         Some(PopoverKind::CreateBranchFromRefPrompt { .. })
                     ) {
                         let focus = this
+                            .create_branch
                             .create_branch_input
                             .read_with(cx, |input, _| input.focus_handle());
                         window.focus(&focus, cx);
@@ -345,17 +346,17 @@ impl PopoverHost {
                 kind: RepoPopoverKind::Worktree(WorktreePopoverKind::AddPrompt),
                 ..
             }) => {
-                self.worktree_ref_source_target = name;
-                if let Some(input) = &self.branch_picker_search_input {
+                self.worktree_add.worktree_ref_source_target = name;
+                if let Some(input) = &self.branch_picker.branch_picker_search_input {
                     let theme = self.theme;
                     input.update(cx, |input, cx| {
                         input.clear_transient_key_presses();
                         input.set_theme(theme, cx);
-                        input.set_text(self.worktree_ref_source_target.clone(), cx);
+                        input.set_text(self.worktree_add.worktree_ref_source_target.clone(), cx);
                         cx.notify();
                     });
                 }
-                self.branch_picker_selected_index = None;
+                self.branch_picker.branch_picker_selected_index = None;
                 // Hand focus to Add once the keystroke that picked the ref has
                 // finished dispatching, so it cannot land on the button it just
                 // moved to; `suppress_worktree_submit_after_ref_enter` covers
@@ -369,16 +370,17 @@ impl PopoverHost {
                         })
                     ) {
                         let focus = if this.can_submit_worktree_add(cx) {
-                            this.worktree_focus.submit.clone()
+                            this.worktree_add.worktree_focus.submit.clone()
                         } else {
-                            this.worktree_path_input
+                            this.worktree_add
+                                .worktree_path_input
                                 .read_with(cx, |input, _| input.focus_handle())
                         };
                         window.focus(&focus, cx);
                         cx.notify();
                     }
                     cx.on_next_frame(window, |this, _window, cx| {
-                        this.suppress_worktree_submit_after_ref_enter = false;
+                        this.worktree_add.suppress_worktree_submit_after_ref_enter = false;
                         cx.notify();
                     });
                 });
@@ -613,57 +615,63 @@ impl PopoverHost {
         }
 
         self.popover_anchor = Some(anchor);
-        self.context_menu_selected_ix = None;
-        self.context_menu_open_submenus.clear();
-        self.repo_picker_selected_index = None;
+        self.context_menu.context_menu_selected_ix = None;
+        self.context_menu.context_menu_open_submenus.clear();
+        self.repo_picker.repo_picker_selected_index = None;
         // Belongs with the reset above, not with the RepoPicker arm below: every
         // popover kind draws `row_menu_layer`, so a menu left over from a closed
         // picker would spread its occluding scrim over an unrelated popover.
         self.picker_row_menu = None;
-        self.branch_picker_selected_index = None;
-        self.worktree_picker_selected_index = None;
-        self.workspace_picker_selected_index = None;
-        self.upstream_picker_selected_index = None;
-        self.submodule_picker_selected_index = None;
-        self.remote_picker_selected_index = None;
-        self.tag_picker_selected_index = None;
-        self.commit_search_picker_selected_index = None;
-        self.file_history_selected_index = None;
-        self.history_author_filter_selected_index = None;
+        self.branch_picker.branch_picker_selected_index = None;
+        self.worktree_picker.worktree_picker_selected_index = None;
+        self.workspace_picker.workspace_picker_selected_index = None;
+        self.upstream_picker.upstream_picker_selected_index = None;
+        self.submodule_picker.submodule_picker_selected_index = None;
+        self.remote_picker.remote_picker_selected_index = None;
+        self.tag_picker.tag_picker_selected_index = None;
+        self.commit_search_picker
+            .commit_search_picker_selected_index = None;
+        self.file_history.file_history_selected_index = None;
+        self.history_author_filter
+            .history_author_filter_selected_index = None;
         // Rows are keyed by the data they were built from, so a stale slot can
         // only be reused when that data is unchanged. Dropping them on open still
         // keeps the memory from outliving the picker that needed it.
-        self.branch_picker_rows_cache.clear();
-        self.workspace_picker_rows_cache.clear();
-        self.upstream_picker_rows_cache.clear();
-        self.repo_picker_rows_cache.clear();
-        self.stash_picker_rows_cache.clear();
-        self.file_history_rows_cache.clear();
-        self.submodule_picker_rows_cache.clear();
-        self.remote_picker_rows_cache.clear();
-        self.tag_picker_rows_cache.clear();
-        self.commit_search_picker_rows_cache.clear();
-        self.worktree_picker_rows_cache.clear();
-        self.branch_ref_rows_cache.clear();
+        self.branch_picker.branch_picker_rows_cache.clear();
+        self.workspace_picker.workspace_picker_rows_cache.clear();
+        self.upstream_picker.upstream_picker_rows_cache.clear();
+        self.repo_picker.repo_picker_rows_cache.clear();
+        self.stash_picker.stash_picker_rows_cache.clear();
+        self.file_history.file_history_rows_cache.clear();
+        self.submodule_picker.submodule_picker_rows_cache.clear();
+        self.remote_picker.remote_picker_rows_cache.clear();
+        self.tag_picker.tag_picker_rows_cache.clear();
+        self.commit_search_picker
+            .commit_search_picker_rows_cache
+            .clear();
+        self.worktree_picker.worktree_picker_rows_cache.clear();
+        self.branch_picker.branch_ref_rows_cache.clear();
         if is_context_menu {
             self.popover = Some(kind);
-            self.context_menu_selected_ix = self
+            self.context_menu.context_menu_selected_ix = self
                 .popover
                 .as_ref()
                 .and_then(|kind| self.context_menu_model(kind, cx))
-                .map(|m| ContextMenuRows::from_model(&m, &self.context_menu_open_submenus))
+                .map(|m| {
+                    ContextMenuRows::from_model(&m, &self.context_menu.context_menu_open_submenus)
+                })
                 .and_then(|rows| rows.first_selectable());
             window.focus(&self.context_menu_focus_handle, cx);
         } else {
             match &kind {
                 PopoverKind::RepoPicker => {
                     let ui_session = session::load();
-                    self.repo_picker_sort = repo_picker::sort_from_session(&ui_session);
-                    self.cached_recent_repos = ui_session.recent_repos;
-                    self.cached_pinned_repos = ui_session.pinned_repos;
-                    self.cached_collapsed_picker_sections =
+                    self.repo_picker.repo_picker_sort = repo_picker::sort_from_session(&ui_session);
+                    self.repo_picker.cached_recent_repos = ui_session.recent_repos;
+                    self.repo_picker.cached_pinned_repos = ui_session.pinned_repos;
+                    self.repo_picker.cached_collapsed_picker_sections =
                         ui_session.repo_picker_collapsed_sections;
-                    self.repo_picker_sort_menu_open = false;
+                    self.repo_picker.repo_picker_sort_menu_open = false;
                     let _ = self.ensure_repo_picker_search_input(window, cx);
                 }
                 PopoverKind::BranchPicker { .. } => {
@@ -688,89 +696,102 @@ impl PopoverHost {
                     ..
                 } => {
                     let theme = self.theme;
-                    self.create_branch_checkout_enabled = true;
-                    self.create_branch_source_target = target.clone();
+                    self.create_branch.create_branch_checkout_enabled = true;
+                    self.create_branch.create_branch_source_target = target.clone();
                     if *source_selectable {
                         let _ = self.ensure_branch_picker_search_input(window, cx);
-                        if let Some(input) = &self.branch_picker_search_input {
+                        if let Some(input) = &self.branch_picker.branch_picker_search_input {
                             input.update(cx, |input, cx| {
                                 input.set_text(target.clone(), cx);
                             });
                         }
                     }
                     let name_prefix = name_prefix.clone();
-                    self.create_branch_input.update(cx, |input, cx| {
-                        input.clear_transient_key_presses();
-                        input.set_theme(theme, cx);
-                        input.set_text(name_prefix, cx);
-                        cx.notify();
-                    });
+                    self.create_branch
+                        .create_branch_input
+                        .update(cx, |input, cx| {
+                            input.clear_transient_key_presses();
+                            input.set_theme(theme, cx);
+                            input.set_text(name_prefix, cx);
+                            cx.notify();
+                        });
                     let focus = self
+                        .create_branch
                         .create_branch_input
                         .read_with(cx, |i, _| i.focus_handle());
                     window.focus(&focus, cx);
                 }
                 PopoverKind::RenameBranchPrompt { name, .. } => {
                     let theme = self.theme;
-                    self.create_branch_input.update(cx, |input, cx| {
-                        input.clear_transient_key_presses();
-                        input.set_theme(theme, cx);
-                        input.set_text(name.clone(), cx);
-                        cx.notify();
-                    });
+                    self.create_branch
+                        .create_branch_input
+                        .update(cx, |input, cx| {
+                            input.clear_transient_key_presses();
+                            input.set_theme(theme, cx);
+                            input.set_text(name.clone(), cx);
+                            cx.notify();
+                        });
                     let focus = self
+                        .create_branch
                         .create_branch_input
                         .read_with(cx, |input, _| input.focus_handle());
                     window.focus(&focus, cx);
                 }
                 PopoverKind::CheckoutRemoteBranchPrompt { branch, .. } => {
                     let theme = self.theme;
-                    self.create_branch_input.update(cx, |input, cx| {
-                        input.clear_transient_key_presses();
-                        input.set_theme(theme, cx);
-                        input.set_text(branch.clone(), cx);
-                        cx.notify();
-                    });
+                    self.create_branch
+                        .create_branch_input
+                        .update(cx, |input, cx| {
+                            input.clear_transient_key_presses();
+                            input.set_theme(theme, cx);
+                            input.set_text(branch.clone(), cx);
+                            cx.notify();
+                        });
                     let focus = self
+                        .create_branch
                         .create_branch_input
                         .read_with(cx, |i, _| i.focus_handle());
                     window.focus(&focus, cx);
                 }
                 PopoverKind::StashPrompt { .. } => {
                     let theme = self.theme;
-                    self.stash_include_untracked = true;
-                    self.stash_keep_index = false;
-                    self.stash_message_input.update(cx, |input, cx| {
+                    self.stash.stash_include_untracked = true;
+                    self.stash.stash_keep_index = false;
+                    self.stash.stash_message_input.update(cx, |input, cx| {
                         input.clear_transient_key_presses();
                         input.set_theme(theme, cx);
                         input.set_text("", cx);
                         cx.notify();
                     });
                     let focus = self
+                        .stash
                         .stash_message_input
                         .read_with(cx, |i, _| i.focus_handle());
                     window.focus(&focus, cx);
                 }
                 PopoverKind::MergeRequestPushPrompt { .. } => {
                     let theme = self.theme;
-                    self.mr_push_merge_when_pipeline_succeeds = false;
-                    self.mr_push_remove_source_branch = true;
-                    self.mr_push_push_to_mr_branch = false;
-                    self.mr_push_description_generating = false;
-                    self.mr_push_description_error = None;
-                    self.mr_push_description_input.update(cx, |input, cx| {
-                        input.clear_transient_key_presses();
-                        input.set_theme(theme, cx);
-                        input.set_text("", cx);
-                        cx.notify();
-                    });
-                    self.mr_push_target_input.update(cx, |input, cx| {
+                    self.mr_push.mr_push_merge_when_pipeline_succeeds = false;
+                    self.mr_push.mr_push_remove_source_branch = true;
+                    self.mr_push.mr_push_push_to_mr_branch = false;
+                    self.mr_push.mr_push_description_generating = false;
+                    self.mr_push.mr_push_description_error = None;
+                    self.mr_push
+                        .mr_push_description_input
+                        .update(cx, |input, cx| {
+                            input.clear_transient_key_presses();
+                            input.set_theme(theme, cx);
+                            input.set_text("", cx);
+                            cx.notify();
+                        });
+                    self.mr_push.mr_push_target_input.update(cx, |input, cx| {
                         input.clear_transient_key_presses();
                         input.set_theme(theme, cx);
                         input.set_text("", cx);
                         cx.notify();
                     });
                     let focus = self
+                        .mr_push
                         .mr_push_target_input
                         .read_with(cx, |i, _| i.focus_handle());
                     window.focus(&focus, cx);
@@ -778,13 +799,16 @@ impl PopoverHost {
                 PopoverKind::StashBranchPrompt { index, .. } => {
                     let theme = self.theme;
                     let suggested = format!("stash-{index}");
-                    self.create_branch_input.update(cx, |input, cx| {
-                        input.clear_transient_key_presses();
-                        input.set_theme(theme, cx);
-                        input.set_text(suggested, cx);
-                        cx.notify();
-                    });
+                    self.create_branch
+                        .create_branch_input
+                        .update(cx, |input, cx| {
+                            input.clear_transient_key_presses();
+                            input.set_theme(theme, cx);
+                            input.set_text(suggested, cx);
+                            cx.notify();
+                        });
                     let focus = self
+                        .create_branch
                         .create_branch_input
                         .read_with(cx, |input, _| input.focus_handle());
                     window.focus(&focus, cx);
@@ -792,92 +816,112 @@ impl PopoverHost {
                 PopoverKind::CommitPrompt { repo_id } => {
                     let theme = self.theme;
                     let draft = self
+                        .commit_prompt
                         .commit_prompt_message_drafts
                         .get(repo_id)
                         .cloned()
                         .unwrap_or_default();
-                    self.commit_prompt_message_input.update(cx, |input, cx| {
-                        input.clear_transient_key_presses();
-                        input.set_theme(theme, cx);
-                        input.set_text(draft.to_string(), cx);
-                        cx.notify();
-                    });
-                    self.commit_prompt_message_scroll
+                    self.commit_prompt
+                        .commit_prompt_message_input
+                        .update(cx, |input, cx| {
+                            input.clear_transient_key_presses();
+                            input.set_theme(theme, cx);
+                            input.set_text(draft.to_string(), cx);
+                            cx.notify();
+                        });
+                    self.commit_prompt
+                        .commit_prompt_message_scroll
                         .set_offset(point(px(0.0), px(0.0)));
                     let focus = self
+                        .commit_prompt
                         .commit_prompt_message_input
                         .read_with(cx, |i, _| i.focus_handle());
                     window.focus(&focus, cx);
                 }
                 PopoverKind::StashPickerPrompt { .. } => {
                     let _ = self.ensure_stash_picker_search_input(window, cx);
-                    self.stash_picker_prompt_selected_index = Some(0);
+                    self.stash_picker.stash_picker_prompt_selected_index = Some(0);
                 }
                 PopoverKind::CloneRepo => {
                     let theme = self.theme;
                     let url_text = self
+                        .clone_repo
                         .clone_repo_url_input
                         .read_with(cx, |i, _| i.text().to_string());
                     let parent_text = self
+                        .clone_repo
                         .clone_repo_parent_dir_input
                         .read_with(cx, |i, _| i.text().to_string());
-                    self.clone_repo_url_input.update(cx, |input, cx| {
-                        input.clear_transient_key_presses();
-                        input.set_theme(theme, cx);
-                        input.set_text(url_text, cx);
-                        cx.notify();
-                    });
-                    self.clone_repo_parent_dir_input.update(cx, |input, cx| {
-                        input.clear_transient_key_presses();
-                        input.set_theme(theme, cx);
-                        input.set_text(parent_text, cx);
-                        cx.notify();
-                    });
+                    self.clone_repo
+                        .clone_repo_url_input
+                        .update(cx, |input, cx| {
+                            input.clear_transient_key_presses();
+                            input.set_theme(theme, cx);
+                            input.set_text(url_text, cx);
+                            cx.notify();
+                        });
+                    self.clone_repo
+                        .clone_repo_parent_dir_input
+                        .update(cx, |input, cx| {
+                            input.clear_transient_key_presses();
+                            input.set_theme(theme, cx);
+                            input.set_text(parent_text, cx);
+                            cx.notify();
+                        });
                     let focus = self
+                        .clone_repo
                         .clone_repo_url_input
                         .read_with(cx, |i, _| i.focus_handle());
                     window.focus(&focus, cx);
                 }
                 PopoverKind::SquashPrompt { .. } => {
                     let theme = self.theme;
-                    self.squash_prompt_prefilled_range = None;
-                    self.squash_message_input.update(cx, |input, cx| {
+                    self.squash.squash_prompt_prefilled_range = None;
+                    self.squash.squash_message_input.update(cx, |input, cx| {
                         input.clear_transient_key_presses();
                         input.set_theme(theme, cx);
                         input.set_text("", cx);
                         cx.notify();
                     });
-                    self.squash_description_input.update(cx, |input, cx| {
-                        input.clear_transient_key_presses();
-                        input.set_theme(theme, cx);
-                        input.set_text("", cx);
-                        cx.notify();
-                    });
+                    self.squash
+                        .squash_description_input
+                        .update(cx, |input, cx| {
+                            input.clear_transient_key_presses();
+                            input.set_theme(theme, cx);
+                            input.set_text("", cx);
+                            cx.notify();
+                        });
                     // The preview may already be Ready (e.g. reopening the same
                     // range); prefill immediately rather than waiting for the
                     // next model update.
                     self.sync_squash_prompt_prefill(cx);
                     let focus = self
+                        .squash
                         .squash_message_input
                         .read_with(cx, |i, _| i.focus_handle());
                     window.focus(&focus, cx);
                 }
                 PopoverKind::CreateTagPrompt { .. } => {
                     let theme = self.theme;
-                    self.create_tag_annotated =
+                    self.create_tag.create_tag_annotated =
                         matches!(self.state.default_tag_type, DefaultTagType::Annotated);
-                    self.create_tag_input.update(cx, |input, cx| {
+                    self.create_tag.create_tag_input.update(cx, |input, cx| {
                         input.clear_transient_key_presses();
                         input.set_theme(theme, cx);
                         input.set_text("", cx);
                         cx.notify();
                     });
-                    self.create_tag_message_input.update(cx, |input, cx| {
-                        input.set_theme(theme, cx);
-                        input.set_text("", cx);
-                        cx.notify();
-                    });
-                    let focus = self.create_tag_input.read_with(cx, |i, _| i.focus_handle());
+                    self.create_tag
+                        .create_tag_message_input
+                        .update(cx, |input, cx| {
+                            input.set_theme(theme, cx);
+                            input.set_text("", cx);
+                            cx.notify();
+                        });
+                    let focus = self
+                        .create_tag
+                        .create_tag_input
+                        .read_with(cx, |i, _| i.focus_handle());
                     window.focus(&focus, cx);
                 }
                 PopoverKind::Repo {
@@ -885,17 +929,22 @@ impl PopoverHost {
                     ..
                 } => {
                     let theme = self.theme;
-                    self.remote_name_input.update(cx, |input, cx| {
-                        input.set_theme(theme, cx);
-                        input.set_text("", cx);
-                        cx.notify();
-                    });
-                    self.remote_url_input.update(cx, |input, cx| {
-                        input.set_theme(theme, cx);
-                        input.set_text("", cx);
-                        cx.notify();
-                    });
+                    self.remote_prompts
+                        .remote_name_input
+                        .update(cx, |input, cx| {
+                            input.set_theme(theme, cx);
+                            input.set_text("", cx);
+                            cx.notify();
+                        });
+                    self.remote_prompts
+                        .remote_url_input
+                        .update(cx, |input, cx| {
+                            input.set_theme(theme, cx);
+                            input.set_text("", cx);
+                            cx.notify();
+                        });
                     let focus = self
+                        .remote_prompts
                         .remote_name_input
                         .read_with(cx, |i, _| i.focus_handle());
                     window.focus(&focus, cx);
@@ -905,12 +954,15 @@ impl PopoverHost {
                     kind: RepoPopoverKind::Remote(RemotePopoverKind::SshKeyPrompt { .. }),
                 } => {
                     let theme = self.theme;
-                    self.remote_ssh_key_input.update(cx, |input, cx| {
-                        input.set_theme(theme, cx);
-                        input.set_text("", cx);
-                        cx.notify();
-                    });
+                    self.remote_prompts
+                        .remote_ssh_key_input
+                        .update(cx, |input, cx| {
+                            input.set_theme(theme, cx);
+                            input.set_text("", cx);
+                            cx.notify();
+                        });
                     let focus = self
+                        .remote_prompts
                         .remote_ssh_key_input
                         .read_with(cx, |i, _| i.focus_handle());
                     window.focus(&focus, cx);
@@ -933,12 +985,15 @@ impl PopoverHost {
                             _ => None,
                         })
                         .unwrap_or_default();
-                    self.remote_url_edit_input.update(cx, |input, cx| {
-                        input.set_theme(theme, cx);
-                        input.set_text(text, cx);
-                        cx.notify();
-                    });
+                    self.remote_prompts
+                        .remote_url_edit_input
+                        .update(cx, |input, cx| {
+                            input.set_theme(theme, cx);
+                            input.set_text(text, cx);
+                            cx.notify();
+                        });
                     let focus = self
+                        .remote_prompts
                         .remote_url_edit_input
                         .read_with(cx, |i, _| i.focus_handle());
                     window.focus(&focus, cx);
@@ -948,15 +1003,20 @@ impl PopoverHost {
                     ..
                 } => {
                     let theme = self.theme;
-                    let (path_prefill, reference_prefill) =
-                        self.pending_worktree_add_prefill.take().unwrap_or_default();
-                    self.worktree_path_input.update(cx, |input, cx| {
-                        input.set_theme(theme, cx);
-                        input.set_text(path_prefill, cx);
-                        cx.notify();
-                    });
-                    self.worktree_ref_source_target = reference_prefill.clone();
-                    self.suppress_worktree_submit_after_ref_enter = false;
+                    let (path_prefill, reference_prefill) = self
+                        .worktree_add
+                        .pending_worktree_add_prefill
+                        .take()
+                        .unwrap_or_default();
+                    self.worktree_add
+                        .worktree_path_input
+                        .update(cx, |input, cx| {
+                            input.set_theme(theme, cx);
+                            input.set_text(path_prefill, cx);
+                            cx.notify();
+                        });
+                    self.worktree_add.worktree_ref_source_target = reference_prefill.clone();
+                    self.worktree_add.suppress_worktree_submit_after_ref_enter = false;
                     let ref_input = self.ensure_branch_picker_search_input(window, cx);
                     // `ensure_*` blanks the input, so the prefilled ref has to be
                     // written back afterwards or the box would read empty while
@@ -968,6 +1028,7 @@ impl PopoverHost {
                         });
                     }
                     let focus = self
+                        .worktree_add
                         .worktree_path_input
                         .read_with(cx, |i, _| i.focus_handle());
                     window.focus(&focus, cx);
@@ -996,29 +1057,38 @@ impl PopoverHost {
                     ..
                 } => {
                     let theme = self.theme;
-                    self.submodule_add_advanced_expanded = false;
-                    self.submodule_force_enabled = false;
-                    self.submodule_url_input.update(cx, |input, cx| {
-                        input.set_theme(theme, cx);
-                        input.set_text("", cx);
-                        cx.notify();
-                    });
-                    self.submodule_path_input.update(cx, |input, cx| {
-                        input.set_theme(theme, cx);
-                        input.set_text("", cx);
-                        cx.notify();
-                    });
-                    self.submodule_branch_input.update(cx, |input, cx| {
-                        input.set_theme(theme, cx);
-                        input.set_text("", cx);
-                        cx.notify();
-                    });
-                    self.submodule_name_input.update(cx, |input, cx| {
-                        input.set_theme(theme, cx);
-                        input.set_text("", cx);
-                        cx.notify();
-                    });
+                    self.submodule_add.submodule_add_advanced_expanded = false;
+                    self.submodule_add.submodule_force_enabled = false;
+                    self.submodule_add
+                        .submodule_url_input
+                        .update(cx, |input, cx| {
+                            input.set_theme(theme, cx);
+                            input.set_text("", cx);
+                            cx.notify();
+                        });
+                    self.submodule_add
+                        .submodule_path_input
+                        .update(cx, |input, cx| {
+                            input.set_theme(theme, cx);
+                            input.set_text("", cx);
+                            cx.notify();
+                        });
+                    self.submodule_add
+                        .submodule_branch_input
+                        .update(cx, |input, cx| {
+                            input.set_theme(theme, cx);
+                            input.set_text("", cx);
+                            cx.notify();
+                        });
+                    self.submodule_add
+                        .submodule_name_input
+                        .update(cx, |input, cx| {
+                            input.set_theme(theme, cx);
+                            input.set_text("", cx);
+                            cx.notify();
+                        });
                     let focus = self
+                        .submodule_add
                         .submodule_url_input
                         .read_with(cx, |i, _| i.focus_handle());
                     window.focus(&focus, cx);
@@ -1029,12 +1099,15 @@ impl PopoverHost {
                     ..
                 } => {
                     let theme = self.theme;
-                    self.submodule_ref_input.update(cx, |input, cx| {
-                        input.set_theme(theme, cx);
-                        input.set_text("", cx);
-                        cx.notify();
-                    });
+                    self.submodule_add
+                        .submodule_ref_input
+                        .update(cx, |input, cx| {
+                            input.set_theme(theme, cx);
+                            input.set_text("", cx);
+                            cx.notify();
+                        });
                     let focus = self
+                        .submodule_add
                         .submodule_ref_input
                         .read_with(cx, |i, _| i.focus_handle());
                     window.focus(&focus, cx);
@@ -1087,23 +1160,28 @@ impl PopoverHost {
                         return;
                     };
                     let current = self.load_repo_settings_current(&workdir);
-                    self.repo_settings_user_input.update(cx, |input, cx| {
-                        input.clear_transient_key_presses();
-                        input.set_theme(theme, cx);
-                        input.set_text(current.user_name.clone().unwrap_or_default(), cx);
-                        cx.notify();
-                    });
-                    self.repo_settings_email_input.update(cx, |input, cx| {
-                        input.clear_transient_key_presses();
-                        input.set_theme(theme, cx);
-                        input.set_text(current.user_email.clone().unwrap_or_default(), cx);
-                        cx.notify();
-                    });
-                    self.repo_settings_sign_commits = current.sign_commits;
-                    self.repo_settings_error = None;
-                    self.repo_settings_current = Some(current);
+                    self.repo_settings
+                        .repo_settings_user_input
+                        .update(cx, |input, cx| {
+                            input.clear_transient_key_presses();
+                            input.set_theme(theme, cx);
+                            input.set_text(current.user_name.clone().unwrap_or_default(), cx);
+                            cx.notify();
+                        });
+                    self.repo_settings
+                        .repo_settings_email_input
+                        .update(cx, |input, cx| {
+                            input.clear_transient_key_presses();
+                            input.set_theme(theme, cx);
+                            input.set_text(current.user_email.clone().unwrap_or_default(), cx);
+                            cx.notify();
+                        });
+                    self.repo_settings.repo_settings_sign_commits = current.sign_commits;
+                    self.repo_settings.repo_settings_error = None;
+                    self.repo_settings.repo_settings_current = Some(current);
                     // Land in the first field, like every other prompt dialog.
                     let focus = self
+                        .repo_settings
                         .repo_settings_user_input
                         .read_with(cx, |i, _| i.focus_handle());
                     window.focus(&focus, cx);
@@ -1111,6 +1189,7 @@ impl PopoverHost {
                 PopoverKind::PushSetUpstreamPrompt { repo_id, .. } => {
                     let theme = self.theme;
                     let current_text = self
+                        .push_upstream
                         .push_upstream_branch_input
                         .read_with(cx, |i, _| i.text().to_string());
                     let text = self
@@ -1123,12 +1202,15 @@ impl PopoverHost {
                             _ => None,
                         })
                         .unwrap_or(current_text);
-                    self.push_upstream_branch_input.update(cx, |input, cx| {
-                        input.set_theme(theme, cx);
-                        input.set_text(text, cx);
-                        cx.notify();
-                    });
+                    self.push_upstream
+                        .push_upstream_branch_input
+                        .update(cx, |input, cx| {
+                            input.set_theme(theme, cx);
+                            input.set_text(text, cx);
+                            cx.notify();
+                        });
                     let focus = self
+                        .push_upstream
                         .push_upstream_branch_input
                         .read_with(cx, |i, _| i.focus_handle());
                     window.focus(&focus, cx);
@@ -1143,22 +1225,27 @@ impl PopoverHost {
                         .split_once("\n\n")
                         .map(|(s, b)| (s.to_owned(), b.to_owned()))
                         .unwrap_or_else(|| (original_message.clone(), String::new()));
-                    self.rebase_reword_input.update(cx, |input, cx| {
-                        input.clear_transient_key_presses();
-                        input.set_theme(theme, cx);
-                        input.set_text(subject, cx);
-                        cx.notify();
-                    });
-                    self.rebase_reword_description_input
+                    self.rebase_reword
+                        .rebase_reword_input
+                        .update(cx, |input, cx| {
+                            input.clear_transient_key_presses();
+                            input.set_theme(theme, cx);
+                            input.set_text(subject, cx);
+                            cx.notify();
+                        });
+                    self.rebase_reword
+                        .rebase_reword_description_input
                         .update(cx, |input, cx| {
                             input.clear_transient_key_presses();
                             input.set_theme(theme, cx);
                             input.set_text(body, cx);
                             cx.notify();
                         });
-                    self.rebase_reword_description_scroll
+                    self.rebase_reword
+                        .rebase_reword_description_scroll
                         .set_offset(point(px(0.0), px(0.0)));
                     let focus = self
+                        .rebase_reword
                         .rebase_reword_input
                         .read_with(cx, |i, _| i.focus_handle());
                     window.focus(&focus, cx);
@@ -1166,7 +1253,7 @@ impl PopoverHost {
                 PopoverKind::RebaseOntoConfirm { .. } => {
                     // Focus the primary (Rebase) button so Enter confirms and
                     // Tab/Esc still reach Cancel.
-                    window.focus(&self.rebase_onto_submit_focus_handle, cx);
+                    window.focus(&self.rebase_onto.rebase_onto_submit_focus_handle, cx);
                 }
                 // Must sit above the generic confirm-dialog arm below, which
                 // would otherwise swallow it and park focus on the tab group
@@ -1197,12 +1284,14 @@ impl PopoverHost {
     /// it can read the filter without knowing which picker it is over.
     pub(super) fn open_picker_search_input(&self) -> Option<&Entity<components::TextInput>> {
         match &self.popover {
-            Some(PopoverKind::RepoPicker) => self.repo_picker_search_input.as_ref(),
-            Some(PopoverKind::BranchPicker { .. }) => self.branch_picker_search_input.as_ref(),
+            Some(PopoverKind::RepoPicker) => self.repo_picker.repo_picker_search_input.as_ref(),
+            Some(PopoverKind::BranchPicker { .. }) => {
+                self.branch_picker.branch_picker_search_input.as_ref()
+            }
             Some(PopoverKind::Repo {
                 kind: RepoPopoverKind::Worktree(WorktreePopoverKind::BadgePicker),
                 ..
-            }) => self.workspace_picker_search_input.as_ref(),
+            }) => self.workspace_picker.workspace_picker_search_input.as_ref(),
             _ => None,
         }
     }
@@ -1214,24 +1303,28 @@ impl PopoverHost {
     /// say so.
     pub(super) fn open_picker_selected_index(&mut self) -> Option<&mut Option<usize>> {
         match &self.popover {
-            Some(PopoverKind::RepoPicker) => Some(&mut self.repo_picker_selected_index),
-            Some(PopoverKind::BranchPicker { .. }) => Some(&mut self.branch_picker_selected_index),
+            Some(PopoverKind::RepoPicker) => Some(&mut self.repo_picker.repo_picker_selected_index),
+            Some(PopoverKind::BranchPicker { .. }) => {
+                Some(&mut self.branch_picker.branch_picker_selected_index)
+            }
             Some(PopoverKind::Repo {
                 kind: RepoPopoverKind::Worktree(WorktreePopoverKind::BadgePicker),
                 ..
-            }) => Some(&mut self.workspace_picker_selected_index),
+            }) => Some(&mut self.workspace_picker.workspace_picker_selected_index),
             _ => None,
         }
     }
 
     pub(super) fn open_picker_selected_index_value(&self) -> Option<usize> {
         match &self.popover {
-            Some(PopoverKind::RepoPicker) => self.repo_picker_selected_index,
-            Some(PopoverKind::BranchPicker { .. }) => self.branch_picker_selected_index,
+            Some(PopoverKind::RepoPicker) => self.repo_picker.repo_picker_selected_index,
+            Some(PopoverKind::BranchPicker { .. }) => {
+                self.branch_picker.branch_picker_selected_index
+            }
             Some(PopoverKind::Repo {
                 kind: RepoPopoverKind::Worktree(WorktreePopoverKind::BadgePicker),
                 ..
-            }) => self.workspace_picker_selected_index,
+            }) => self.workspace_picker.workspace_picker_selected_index,
             _ => None,
         }
     }

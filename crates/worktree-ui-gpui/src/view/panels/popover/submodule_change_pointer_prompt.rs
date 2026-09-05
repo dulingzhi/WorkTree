@@ -42,7 +42,7 @@ pub(super) fn panel(
                 .pb_1()
                 .w_full()
                 .min_w(px(0.0))
-                .child(this.submodule_ref_input.clone()),
+                .child(this.submodule_add.submodule_ref_input.clone()),
         )
         .child(div().border_t_1().border_color(theme.colors.stroke.default))
         .child(

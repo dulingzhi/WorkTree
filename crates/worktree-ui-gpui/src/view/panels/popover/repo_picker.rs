@@ -114,7 +114,11 @@ fn collapsed_sections(this: &PopoverHost, query: &str) -> BTreeSet<gpui::SharedS
     }
     SECTIONS
         .into_iter()
-        .filter(|(_, key)| this.cached_collapsed_picker_sections.contains(*key))
+        .filter(|(_, key)| {
+            this.repo_picker
+                .cached_collapsed_picker_sections
+                .contains(*key)
+        })
         .map(|(section, _)| gpui::SharedString::from(section))
         .collect()
 }
@@ -129,14 +133,22 @@ pub(super) fn toggle_section(
     let Some(key) = section_storage_key(label.as_ref()) else {
         return;
     };
-    if !this.cached_collapsed_picker_sections.insert(key.to_owned()) {
-        this.cached_collapsed_picker_sections.remove(key);
+    if !this
+        .repo_picker
+        .cached_collapsed_picker_sections
+        .insert(key.to_owned())
+    {
+        this.repo_picker
+            .cached_collapsed_picker_sections
+            .remove(key);
     }
     // Rows above the selection come and go, so a kept index would highlight a
     // different repository than the one it was on.
-    this.repo_picker_selected_index = None;
+    this.repo_picker.repo_picker_selected_index = None;
     let _ = session::persist_ui_settings(session::UiSettings {
-        repo_picker_collapsed_sections: Some(this.cached_collapsed_picker_sections.clone()),
+        repo_picker_collapsed_sections: Some(
+            this.repo_picker.cached_collapsed_picker_sections.clone(),
+        ),
         ..Default::default()
     });
     cx.notify();
@@ -201,10 +213,15 @@ fn repo_picker_item(workdir: &std::path::Path) -> components::PickerPromptItem {
 /// The three sections live in one flat list so the rendered rows, keyboard
 /// navigation and Enter target share an index space.
 pub(super) fn entries(this: &PopoverHost) -> Vec<(RepoPickerEntry, components::PickerPromptItem)> {
-    let sort = this.repo_picker_sort;
+    let sort = this.repo_picker.repo_picker_sort;
     // Pins, recents and open workdirs are all canonicalized before they are
     // stored, so plain equality is enough to match them up.
-    let is_pinned = |path: &std::path::Path| this.cached_pinned_repos.iter().any(|p| p == path);
+    let is_pinned = |path: &std::path::Path| {
+        this.repo_picker
+            .cached_pinned_repos
+            .iter()
+            .any(|p| p == path)
+    };
     let open_repo_for = |path: &std::path::Path| {
         this.state
             .repos
@@ -218,8 +235,9 @@ pub(super) fn entries(this: &PopoverHost) -> Vec<(RepoPickerEntry, components::P
     // Pins are stored oldest-first, but `recency` counts the other way in every
     // section, so the index is flipped here — otherwise "Newest" would list the
     // oldest pin at the top while the two sections below it read newest-first.
-    let last_pin = this.cached_pinned_repos.len().saturating_sub(1);
+    let last_pin = this.repo_picker.cached_pinned_repos.len().saturating_sub(1);
     let mut pinned_rows = this
+        .repo_picker
         .cached_pinned_repos
         .iter()
         .enumerate()
@@ -266,6 +284,7 @@ pub(super) fn entries(this: &PopoverHost) -> Vec<(RepoPickerEntry, components::P
     // The session's recent list is already most-recent-first, so its index is
     // the recency rank.
     let mut recent_rows = this
+        .repo_picker
         .cached_recent_repos
         .iter()
         .filter(|path| open_repo_for(path).is_none() && !is_pinned(path))
@@ -408,9 +427,9 @@ fn rows_signature(this: &PopoverHost) -> u64 {
     use std::hash::Hash;
 
     super::rows_cache::signature(|hasher| {
-        this.repo_picker_sort.hash(hasher);
-        this.cached_pinned_repos.hash(hasher);
-        this.cached_recent_repos.hash(hasher);
+        this.repo_picker.repo_picker_sort.hash(hasher);
+        this.repo_picker.cached_pinned_repos.hash(hasher);
+        this.repo_picker.cached_recent_repos.hash(hasher);
         // Marks the row for the repository that is active.
         this.state.active_repo.hash(hasher);
         this.state.repos.len().hash(hasher);
@@ -441,7 +460,7 @@ pub(super) fn cached(
     // Must match what `panel` renders with, or Enter activates a different row
     // than the highlighted one.
     .with_collapsed(&collapsed_sections(this, query));
-    super::rows_cache::get_or_build(&this.repo_picker_rows_cache, key, |_now| {
+    super::rows_cache::get_or_build(&this.repo_picker.repo_picker_rows_cache, key, |_now| {
         let entries = entries(this);
         let marked_index = this.state.active_repo.and_then(|active| {
             entries
@@ -483,7 +502,7 @@ pub(super) fn nav_targets(
             .map(RepoPickerNavTarget::RowAction)
             .collect();
     }
-    if this.repo_picker_sort_menu_open {
+    if this.repo_picker.repo_picker_sort_menu_open {
         return RepoPickerSort::ALL
             .into_iter()
             .map(RepoPickerNavTarget::Sort)
@@ -518,7 +537,7 @@ pub(super) fn dismiss(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost
         picker_row_menu::close(this, cx);
         return;
     }
-    if this.repo_picker_sort_menu_open {
+    if this.repo_picker.repo_picker_sort_menu_open {
         toggle_sort_menu(this, cx);
         return;
     }
@@ -526,10 +545,10 @@ pub(super) fn dismiss(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost
 }
 
 pub(super) fn toggle_sort_menu(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>) {
-    this.repo_picker_sort_menu_open = !this.repo_picker_sort_menu_open;
+    this.repo_picker.repo_picker_sort_menu_open = !this.repo_picker.repo_picker_sort_menu_open;
     // The selection index is shared between the repo list and the sort menu, so
     // reset it whenever the two swap places.
-    this.repo_picker_selected_index = None;
+    this.repo_picker.repo_picker_selected_index = None;
     cx.notify();
 }
 
@@ -538,9 +557,9 @@ pub(super) fn apply_sort(
     sort: RepoPickerSort,
     cx: &mut gpui::Context<PopoverHost>,
 ) {
-    this.repo_picker_sort = sort;
-    this.repo_picker_sort_menu_open = false;
-    this.repo_picker_selected_index = None;
+    this.repo_picker.repo_picker_sort = sort;
+    this.repo_picker.repo_picker_sort_menu_open = false;
+    this.repo_picker.repo_picker_selected_index = None;
     persist_sort(sort);
     cx.notify();
 }
@@ -550,7 +569,7 @@ fn sort_toggle(this: &PopoverHost, cx: &mut gpui::Context<PopoverHost>) -> impl 
     let theme = this.theme;
     let ui_scale = super::popover_ui_scale(cx);
     let scaled_px = |value: f32| ui_scale.px(value);
-    let menu_open = this.repo_picker_sort_menu_open;
+    let menu_open = this.repo_picker.repo_picker_sort_menu_open;
     let hover_overlay = theme.hover_overlay();
     let active_overlay = theme.active_overlay();
 
@@ -573,7 +592,7 @@ fn sort_toggle(this: &PopoverHost, cx: &mut gpui::Context<PopoverHost>) -> impl 
         .when(menu_open, |toggle| toggle.bg(active_overlay))
         .hover(move |s| s.bg(hover_overlay))
         .active(move |s| s.bg(active_overlay))
-        .child(sort_toggle_label(this.repo_picker_sort))
+        .child(sort_toggle_label(this.repo_picker.repo_picker_sort))
         .child(crate::view::icons::svg_icon(
             "icons/chevron_down.svg",
             theme.colors.foreground.secondary,
@@ -593,8 +612,8 @@ fn sort_toggle_label(sort: RepoPickerSort) -> String {
 fn sort_menu(this: &PopoverHost, cx: &mut gpui::Context<PopoverHost>) -> impl IntoElement {
     let theme = this.theme;
     let ui_scale_percent = super::popover_ui_scale(cx).percent();
-    let current = this.repo_picker_sort;
-    let selected_index = this.repo_picker_selected_index;
+    let current = this.repo_picker.repo_picker_sort;
+    let selected_index = this.repo_picker.repo_picker_selected_index;
 
     let mut menu = div()
         .id("repo_picker_sort_menu")
@@ -653,14 +672,21 @@ pub(super) fn forget(
     let RepoPickerEntry::Closed(path) = entry else {
         return;
     };
-    if this.cached_pinned_repos.iter().any(|pin| pin == path) {
+    if this
+        .repo_picker
+        .cached_pinned_repos
+        .iter()
+        .any(|pin| pin == path)
+    {
         return;
     }
     let _ = session::remove_recent_repo(path);
-    this.cached_recent_repos.retain(|recent| recent != path);
+    this.repo_picker
+        .cached_recent_repos
+        .retain(|recent| recent != path);
     // The rows below the removed one shift up, so a stale selection would
     // point at a different repository than the one it highlighted.
-    this.repo_picker_selected_index = None;
+    this.repo_picker.repo_picker_selected_index = None;
     cx.notify();
 }
 
@@ -671,7 +697,7 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
     let scaled_px = |value: f32| super::popover_scaled_px_from_percent(value, ui_scale_percent);
     let width = super::PICKER_WIDTH;
 
-    if let Some(search) = this.repo_picker_search_input.clone() {
+    if let Some(search) = this.repo_picker.repo_picker_search_input.clone() {
         // Match the Create Branch search field: a chromeless input, here with a
         // leading magnifier to read as a search box, sitting in the popover card.
         search.update(cx, |input, cx| {
@@ -710,7 +736,7 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
             .selected_index(
                 row_menu
                     .map(|menu| menu.display_index)
-                    .or(this.repo_picker_selected_index),
+                    .or(this.repo_picker.repo_picker_selected_index),
             )
             .marked_index(built.marked_index)
             .accent_selection()
@@ -744,7 +770,7 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
         if row_menu.is_none() {
             prompt = prompt.selected_hint("Enter");
         }
-        if this.repo_picker_sort_menu_open {
+        if this.repo_picker.repo_picker_sort_menu_open {
             prompt = prompt.list_override(sort_menu(this, cx));
         }
 

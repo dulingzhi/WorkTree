@@ -21,7 +21,7 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
                 .pb_1()
                 .w_full()
                 .min_w(px(0.0))
-                .child(this.clone_repo_url_input.clone()),
+                .child(this.clone_repo.clone_repo_url_input.clone()),
         )
         .child(input_label(
             theme,
@@ -40,14 +40,14 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
                     div()
                         .flex_1()
                         .min_w(px(0.0))
-                        .child(this.clone_repo_parent_dir_input.clone()),
+                        .child(this.clone_repo.clone_repo_parent_dir_input.clone()),
                 )
                 .child(
                     components::Button::new(
                         "clone_repo_browse",
                         crate::i18n::tr("prompts.worktree_add.browse"),
                     )
-                    .focus_handle(this.clone_repo_browse_focus_handle.clone())
+                    .focus_handle(this.clone_repo.clone_repo_browse_focus_handle.clone())
                     .style(components::ButtonStyle::Outlined)
                     .on_click(theme, cx, |_this, _e, window, cx| {
                         cx.stop_propagation();
@@ -71,9 +71,12 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
                                     return;
                                 };
                                 let _ = view.update(cx, |this, cx| {
-                                    this.clone_repo_parent_dir_input.update(cx, |input, cx| {
-                                        input.set_text(path.display().to_string(), cx);
-                                    });
+                                    this.clone_repo.clone_repo_parent_dir_input.update(
+                                        cx,
+                                        |input, cx| {
+                                            input.set_text(path.display().to_string(), cx);
+                                        },
+                                    );
                                     cx.notify();
                                 });
                             })
@@ -93,7 +96,7 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
                 .pb_1()
                 .w_full()
                 .min_w(px(0.0))
-                .child(this.clone_ssh_key_input.clone()),
+                .child(this.clone_repo.clone_ssh_key_input.clone()),
         )
         .child(div().border_t_1().border_color(theme.colors.stroke.default))
         .child(
@@ -105,7 +108,7 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
                 .justify_between()
                 .child(
                     cancel_button("clone_repo_cancel", "clone_repo_cancel_hint", theme)
-                        .focus_handle(this.clone_repo_focus.cancel.clone())
+                        .focus_handle(this.clone_repo.clone_repo_focus.cancel.clone())
                         .on_click(theme, cx, |this, _e, window, cx| {
                             this.dismiss_prompt_popover(window, cx);
                         }),
@@ -115,7 +118,7 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
                         "clone_repo_go",
                         crate::i18n::tr("input.clone_repo.clone"),
                     )
-                    .focus_handle(this.clone_repo_focus.submit.clone())
+                    .focus_handle(this.clone_repo.clone_repo_focus.submit.clone())
                     .separated_end_slot(super::hotkey_hint(theme, "clone_repo_go_hint", "Enter"))
                     .style(components::ButtonStyle::Filled)
                     .disabled(!can_clone)

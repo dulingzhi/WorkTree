@@ -98,7 +98,7 @@ fn app_menu_owns_keyboard_focus_and_escape_dismisses_it(cx: &mut gpui::TestAppCo
             "opening the app menu should move keyboard focus into the menu"
         );
         assert_eq!(
-            host.context_menu_selected_ix,
+            host.context_menu.context_menu_selected_ix,
             Some(0),
             "the first application action should be selected"
         );
@@ -110,6 +110,7 @@ fn app_menu_owns_keyboard_focus_and_escape_dismisses_it(cx: &mut gpui::TestAppCo
             view.read(app)
                 .popover_host
                 .read(app)
+                .context_menu
                 .context_menu_selected_ix,
             Some(1),
             "Tab should select Settings"
@@ -122,6 +123,7 @@ fn app_menu_owns_keyboard_focus_and_escape_dismisses_it(cx: &mut gpui::TestAppCo
             view.read(app)
                 .popover_host
                 .read(app)
+                .context_menu
                 .context_menu_selected_ix,
             Some(0),
             "Shift+Tab should select Command Palette"

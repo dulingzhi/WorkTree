@@ -541,6 +541,7 @@ fn create_branch_source_picker_selects_items_on_mouse_down(cx: &mut gpui::TestAp
                     cx,
                 );
                 let search = host
+                    .branch_picker
                     .branch_picker_search_input
                     .as_ref()
                     .expect("branch picker search input");
@@ -564,9 +565,10 @@ fn create_branch_source_picker_selects_items_on_mouse_down(cx: &mut gpui::TestAp
 
     cx.update(|window, app| {
         let host = view.read(app).popover_host.read(app);
-        assert_eq!(host.create_branch_source_target, "main");
+        assert_eq!(host.create_branch.create_branch_source_target, "main");
         assert_eq!(
-            host.branch_picker_search_input
+            host.branch_picker
+                .branch_picker_search_input
                 .as_ref()
                 .expect("branch picker search input")
                 .read(app)
@@ -576,7 +578,10 @@ fn create_branch_source_picker_selects_items_on_mouse_down(cx: &mut gpui::TestAp
         assert_window_focus(
             window,
             app,
-            host.create_branch_input.read(app).focus_handle(),
+            host.create_branch
+                .create_branch_input
+                .read(app)
+                .focus_handle(),
             "expected clicking a source branch to focus the new branch name",
         );
     });
@@ -607,6 +612,7 @@ fn create_branch_source_picker_enter_selects_and_focuses_name(cx: &mut gpui::Tes
                     cx,
                 );
                 let search = host
+                    .branch_picker
                     .branch_picker_search_input
                     .as_ref()
                     .expect("branch picker search input");
@@ -625,9 +631,10 @@ fn create_branch_source_picker_enter_selects_and_focuses_name(cx: &mut gpui::Tes
 
     cx.update(|window, app| {
         let host = view.read(app).popover_host.read(app);
-        assert_eq!(host.create_branch_source_target, "main");
+        assert_eq!(host.create_branch.create_branch_source_target, "main");
         assert_eq!(
-            host.branch_picker_search_input
+            host.branch_picker
+                .branch_picker_search_input
                 .as_ref()
                 .expect("branch picker search input")
                 .read(app)
@@ -637,7 +644,10 @@ fn create_branch_source_picker_enter_selects_and_focuses_name(cx: &mut gpui::Tes
         assert_window_focus(
             window,
             app,
-            host.create_branch_input.read(app).focus_handle(),
+            host.create_branch
+                .create_branch_input
+                .read(app)
+                .focus_handle(),
             "expected Enter on a source branch to focus the new branch name",
         );
     });
@@ -664,9 +674,11 @@ fn worktree_ref_picker_click_selects_and_focuses_add(cx: &mut gpui::TestAppConte
                     window,
                     cx,
                 );
-                host.worktree_path_input
+                host.worktree_add
+                    .worktree_path_input
                     .update(cx, |input, cx| input.set_text("/tmp/worktree", cx));
                 let search = host
+                    .branch_picker
                     .branch_picker_search_input
                     .as_ref()
                     .expect("branch picker search input");
@@ -686,9 +698,10 @@ fn worktree_ref_picker_click_selects_and_focuses_add(cx: &mut gpui::TestAppConte
 
     cx.update(|window, app| {
         let host = view.read(app).popover_host.read(app);
-        assert_eq!(host.worktree_ref_source_target, "main");
+        assert_eq!(host.worktree_add.worktree_ref_source_target, "main");
         assert_eq!(
-            host.branch_picker_search_input
+            host.branch_picker
+                .branch_picker_search_input
                 .as_ref()
                 .expect("branch picker search input")
                 .read(app)
@@ -698,7 +711,7 @@ fn worktree_ref_picker_click_selects_and_focuses_add(cx: &mut gpui::TestAppConte
         assert_window_focus(
             window,
             app,
-            host.worktree_focus.submit.clone(),
+            host.worktree_add.worktree_focus.submit.clone(),
             "expected clicking a worktree ref to focus Add",
         );
     });
@@ -726,9 +739,11 @@ fn worktree_ref_picker_enter_selects_and_focuses_add(cx: &mut gpui::TestAppConte
                     window,
                     cx,
                 );
-                host.worktree_path_input
+                host.worktree_add
+                    .worktree_path_input
                     .update(cx, |input, cx| input.set_text("/tmp/worktree", cx));
                 let search = host
+                    .branch_picker
                     .branch_picker_search_input
                     .as_ref()
                     .expect("branch picker search input");
@@ -757,11 +772,11 @@ fn worktree_ref_picker_enter_selects_and_focuses_add(cx: &mut gpui::TestAppConte
             ),
             "expected selecting a worktree ref with Enter to keep the dialog open"
         );
-        assert_eq!(host.worktree_ref_source_target, "main");
+        assert_eq!(host.worktree_add.worktree_ref_source_target, "main");
         assert_window_focus(
             window,
             app,
-            host.worktree_focus.submit.clone(),
+            host.worktree_add.worktree_focus.submit.clone(),
             "expected Enter on a worktree ref to focus Add",
         );
     });
@@ -887,7 +902,8 @@ fn create_branch_from_ref_popover_tabs_to_checkout_and_wraps(cx: &mut gpui::Test
                     window,
                     cx,
                 );
-                host.create_branch_input
+                host.create_branch
+                    .create_branch_input
                     .update(cx, |input, cx| input.set_text("feature", cx));
             });
         });
@@ -898,7 +914,10 @@ fn create_branch_from_ref_popover_tabs_to_checkout_and_wraps(cx: &mut gpui::Test
         assert_window_focus(
             window,
             app,
-            host.create_branch_input.read(app).focus_handle(),
+            host.create_branch
+                .create_branch_input
+                .read(app)
+                .focus_handle(),
             "expected create-branch-from-ref to focus the name input first",
         );
     });
@@ -910,7 +929,9 @@ fn create_branch_from_ref_popover_tabs_to_checkout_and_wraps(cx: &mut gpui::Test
         assert_window_focus(
             window,
             app,
-            host.create_branch_from_ref_checkout_focus_handle.clone(),
+            host.create_branch
+                .create_branch_from_ref_checkout_focus_handle
+                .clone(),
             "expected Tab to move from the name input to Checkout",
         );
     });
@@ -920,7 +941,7 @@ fn create_branch_from_ref_popover_tabs_to_checkout_and_wraps(cx: &mut gpui::Test
         let _ = window.draw(app);
         let host = view.read(app).popover_host.read(app);
         assert!(
-            !host.create_branch_checkout_enabled,
+            !host.create_branch.create_branch_checkout_enabled,
             "expected Space to toggle Checkout off"
         );
     });
@@ -932,7 +953,10 @@ fn create_branch_from_ref_popover_tabs_to_checkout_and_wraps(cx: &mut gpui::Test
         assert_window_focus(
             window,
             app,
-            host.create_branch_from_ref_focus.cancel.clone(),
+            host.create_branch
+                .create_branch_from_ref_focus
+                .cancel
+                .clone(),
             "expected Tab to move from Checkout to Cancel",
         );
     });
@@ -944,7 +968,10 @@ fn create_branch_from_ref_popover_tabs_to_checkout_and_wraps(cx: &mut gpui::Test
         assert_window_focus(
             window,
             app,
-            host.create_branch_from_ref_focus.submit.clone(),
+            host.create_branch
+                .create_branch_from_ref_focus
+                .submit
+                .clone(),
             "expected Tab to move from Cancel to Create",
         );
     });
@@ -956,7 +983,10 @@ fn create_branch_from_ref_popover_tabs_to_checkout_and_wraps(cx: &mut gpui::Test
         assert_window_focus(
             window,
             app,
-            host.create_branch_input.read(app).focus_handle(),
+            host.create_branch
+                .create_branch_input
+                .read(app)
+                .focus_handle(),
             "expected Tab to wrap from Create back to the name input",
         );
     });
@@ -968,7 +998,10 @@ fn create_branch_from_ref_popover_tabs_to_checkout_and_wraps(cx: &mut gpui::Test
         assert_window_focus(
             window,
             app,
-            host.create_branch_from_ref_focus.submit.clone(),
+            host.create_branch
+                .create_branch_from_ref_focus
+                .submit
+                .clone(),
             "expected Shift-Tab to wrap from the name input back to Create",
         );
     });
@@ -1024,7 +1057,8 @@ fn create_branch_popover_enter_creates_and_closes(cx: &mut gpui::TestAppContext)
     cx.update(|_window, app| {
         view.update(app, |this, cx| {
             this.popover_host.update(cx, |host, cx| {
-                host.create_branch_input
+                host.create_branch
+                    .create_branch_input
                     .update(cx, |input, cx| input.set_text("feature", cx));
             });
         });
@@ -1181,6 +1215,7 @@ fn create_branch_popover_enter_with_a_bare_group_prefix_does_not_close_or_create
             .read(app)
             .popover_host
             .read(app)
+            .create_branch
             .create_branch_input
             .read(app)
             .text();
@@ -1690,7 +1725,7 @@ mod checkout_picker {
             let host = view.read(app).popover_host.read(app);
             let rows = branch_picker::cached(host, "");
             (
-                host.branch_picker_selected_index,
+                host.branch_picker.branch_picker_selected_index,
                 rows.layout.item_indices.len(),
                 rows.layout.item_indices.last().copied().unwrap_or_default(),
             )

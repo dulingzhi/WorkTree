@@ -588,9 +588,11 @@ impl PopoverHost {
                 let main_pane = self.main_pane.clone();
                 let submit = cx.listener(move |this, _: &gpui::ClickEvent, window, cx| {
                     let subject = this
+                        .rebase_reword
                         .rebase_reword_input
                         .read_with(cx, |input, _| input.text().to_string());
                     let body = this
+                        .rebase_reword
                         .rebase_reword_description_input
                         .read_with(cx, |input, _| input.text().to_string());
                     let new_message = if body.trim().is_empty() {
@@ -657,7 +659,7 @@ impl PopoverHost {
                                         "prompts.popover.reword.commit_message",
                                     )),
                             )
-                            .child(self.rebase_reword_input.clone()),
+                            .child(self.rebase_reword.rebase_reword_input.clone()),
                     )
                     .child(
                         div()
@@ -677,11 +679,14 @@ impl PopoverHost {
                                 components::ScrollContainer::vertical(
                                     "rebase_reword_description_scroll_surface",
                                     "rebase_reword_description_scrollbar",
-                                    self.rebase_reword_description_scroll.clone(),
+                                    self.rebase_reword.rebase_reword_description_scroll.clone(),
                                     scaled_px(180.0),
                                 )
                                 .debug_selector("rebase_reword_description_scroll_surface")
-                                .render(theme, self.rebase_reword_description_input.clone()),
+                                .render(
+                                    theme,
+                                    self.rebase_reword.rebase_reword_description_input.clone(),
+                                ),
                             ),
                     )
                     .child(

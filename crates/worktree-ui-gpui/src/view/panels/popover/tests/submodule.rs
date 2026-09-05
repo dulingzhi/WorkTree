@@ -34,6 +34,7 @@ fn submodule_add_advanced_toggle_keeps_its_geometry_when_focused(cx: &mut gpui::
             .read(app)
             .popover_host
             .read(app)
+            .submodule_add
             .submodule_advanced_focus_handle
             .clone();
         window.focus(&focus_handle, app);
@@ -86,7 +87,10 @@ fn submodule_add_popover_tabs_through_advanced_fields_and_wraps(cx: &mut gpui::T
         assert_window_focus(
             window,
             app,
-            host.submodule_url_input.read(app).focus_handle(),
+            host.submodule_add
+                .submodule_url_input
+                .read(app)
+                .focus_handle(),
             "expected submodule add to focus the URL input first",
         );
     });
@@ -96,12 +100,16 @@ fn submodule_add_popover_tabs_through_advanced_fields_and_wraps(cx: &mut gpui::T
     cx.update(|window, app| {
         view.update(app, |this, cx| {
             this.popover_host.update(cx, |host, cx| {
-                host.submodule_url_input.update(cx, |input, cx| {
-                    input.set_text("https://example.com/org/repo.git", cx);
-                });
-                host.submodule_path_input.update(cx, |input, cx| {
-                    input.set_text("vendor/repo", cx);
-                });
+                host.submodule_add
+                    .submodule_url_input
+                    .update(cx, |input, cx| {
+                        input.set_text("https://example.com/org/repo.git", cx);
+                    });
+                host.submodule_add
+                    .submodule_path_input
+                    .update(cx, |input, cx| {
+                        input.set_text("vendor/repo", cx);
+                    });
             });
         });
         let _ = window.draw(app);
@@ -114,7 +122,10 @@ fn submodule_add_popover_tabs_through_advanced_fields_and_wraps(cx: &mut gpui::T
         assert_window_focus(
             window,
             app,
-            host.submodule_path_input.read(app).focus_handle(),
+            host.submodule_add
+                .submodule_path_input
+                .read(app)
+                .focus_handle(),
             "expected Tab to move from submodule URL to path",
         );
     });
@@ -126,7 +137,10 @@ fn submodule_add_popover_tabs_through_advanced_fields_and_wraps(cx: &mut gpui::T
         assert_window_focus(
             window,
             app,
-            host.submodule_branch_input.read(app).focus_handle(),
+            host.submodule_add
+                .submodule_branch_input
+                .read(app)
+                .focus_handle(),
             "expected Tab to move from path to branch",
         );
     });
@@ -138,7 +152,7 @@ fn submodule_add_popover_tabs_through_advanced_fields_and_wraps(cx: &mut gpui::T
         assert_window_focus(
             window,
             app,
-            host.submodule_advanced_focus_handle.clone(),
+            host.submodule_add.submodule_advanced_focus_handle.clone(),
             "expected Tab to move from branch to Advanced",
         );
     });
@@ -148,7 +162,7 @@ fn submodule_add_popover_tabs_through_advanced_fields_and_wraps(cx: &mut gpui::T
         let _ = window.draw(app);
         let host = view.read(app).popover_host.read(app);
         assert!(
-            host.submodule_add_advanced_expanded,
+            host.submodule_add.submodule_add_advanced_expanded,
             "expected Enter to expand Advanced fields"
         );
     });
@@ -160,7 +174,10 @@ fn submodule_add_popover_tabs_through_advanced_fields_and_wraps(cx: &mut gpui::T
         assert_window_focus(
             window,
             app,
-            host.submodule_name_input.read(app).focus_handle(),
+            host.submodule_add
+                .submodule_name_input
+                .read(app)
+                .focus_handle(),
             "expected Tab to move from Advanced to the logical name input",
         );
     });
@@ -172,7 +189,7 @@ fn submodule_add_popover_tabs_through_advanced_fields_and_wraps(cx: &mut gpui::T
         assert_window_focus(
             window,
             app,
-            host.submodule_force_focus_handle.clone(),
+            host.submodule_add.submodule_force_focus_handle.clone(),
             "expected Tab to move from the logical name input to Force reuse",
         );
     });
@@ -182,7 +199,7 @@ fn submodule_add_popover_tabs_through_advanced_fields_and_wraps(cx: &mut gpui::T
         let _ = window.draw(app);
         let host = view.read(app).popover_host.read(app);
         assert!(
-            host.submodule_force_enabled,
+            host.submodule_add.submodule_force_enabled,
             "expected Space to toggle Force reuse on"
         );
     });
@@ -194,7 +211,7 @@ fn submodule_add_popover_tabs_through_advanced_fields_and_wraps(cx: &mut gpui::T
         assert_window_focus(
             window,
             app,
-            host.submodule_focus.cancel.clone(),
+            host.submodule_add.submodule_focus.cancel.clone(),
             "expected Tab to move from Force reuse to Cancel",
         );
     });
@@ -206,7 +223,7 @@ fn submodule_add_popover_tabs_through_advanced_fields_and_wraps(cx: &mut gpui::T
         assert_window_focus(
             window,
             app,
-            host.submodule_focus.submit.clone(),
+            host.submodule_add.submodule_focus.submit.clone(),
             "expected Tab to move from Cancel to Add",
         );
     });
@@ -218,7 +235,10 @@ fn submodule_add_popover_tabs_through_advanced_fields_and_wraps(cx: &mut gpui::T
         assert_window_focus(
             window,
             app,
-            host.submodule_url_input.read(app).focus_handle(),
+            host.submodule_add
+                .submodule_url_input
+                .read(app)
+                .focus_handle(),
             "expected Tab to wrap from Add back to URL",
         );
     });
@@ -230,7 +250,7 @@ fn submodule_add_popover_tabs_through_advanced_fields_and_wraps(cx: &mut gpui::T
         assert_window_focus(
             window,
             app,
-            host.submodule_focus.submit.clone(),
+            host.submodule_add.submodule_focus.submit.clone(),
             "expected Shift-Tab to wrap from URL back to Add",
         );
     });
@@ -257,7 +277,7 @@ fn submodule_add_popover_escape_closes_from_advanced_toggle(cx: &mut gpui::TestA
                     window,
                     cx,
                 );
-                window.focus(&host.submodule_advanced_focus_handle, cx);
+                window.focus(&host.submodule_add.submodule_advanced_focus_handle, cx);
             });
         });
     });

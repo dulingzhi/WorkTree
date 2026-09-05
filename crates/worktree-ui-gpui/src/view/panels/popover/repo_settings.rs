@@ -100,7 +100,7 @@ impl PopoverHost {
     ) -> RepoSettingsCurrent {
         #[cfg(test)]
         {
-            self.repo_settings_test_loads += 1;
+            self.repo_settings.repo_settings_test_loads += 1;
         }
         RepoSettingsCurrent::load(workdir)
     }
@@ -110,7 +110,7 @@ impl PopoverHost {
     /// as input lag.
     #[cfg(test)]
     pub(in super::super) fn repo_settings_test_loads_for_tests(&self) -> usize {
-        self.repo_settings_test_loads
+        self.repo_settings.repo_settings_test_loads
     }
 
     /// Enter on either input applies, resolving the repo from the open kind.
@@ -147,16 +147,19 @@ impl PopoverHost {
     ) {
         let draft = RepoSettingsDraft {
             user_name: self
+                .repo_settings
                 .repo_settings_user_input
                 .read_with(cx, |input, _| input.text().to_string()),
             user_email: self
+                .repo_settings
                 .repo_settings_email_input
                 .read_with(cx, |input, _| input.text().to_string()),
-            sign_commits: self.repo_settings_sign_commits,
+            sign_commits: self.repo_settings.repo_settings_sign_commits,
         };
         // The panel takes the open snapshot; applying re-reads the live
         // locals so a write plan never goes stale against an outside edit.
         let current = self
+            .repo_settings
             .repo_settings_current
             .take()
             .unwrap_or_else(|| self.load_repo_settings_current(&workdir));
@@ -167,11 +170,11 @@ impl PopoverHost {
         }
         match apply_repo_settings(&workdir, &plan) {
             Ok(()) => {
-                self.repo_settings_error = None;
+                self.repo_settings.repo_settings_error = None;
                 self.dismiss_prompt_popover_window(cx);
             }
             Err(message) => {
-                self.repo_settings_error = Some(message.into());
+                self.repo_settings.repo_settings_error = Some(message.into());
                 cx.notify();
             }
         }
@@ -217,31 +220,35 @@ pub(super) fn panel(
     // the placeholders quote the globals once, the inputs own their drafts
     // afterwards, and a read is five git process spawns — every keystroke
     // re-renders this host, so a re-render must never re-read.
-    if let Some(current) = this.repo_settings_current.take() {
+    if let Some(current) = this.repo_settings.repo_settings_current.take() {
         let placeholder = |global: &Option<String>, inherit: &str| -> SharedString {
             match global {
                 Some(value) => format!("{inherit}: {value}").into(),
                 None => inherit.to_string().into(),
             }
         };
-        this.repo_settings_user_input.update(cx, |input, cx| {
-            input.set_placeholder(
-                placeholder(
-                    &current.global_user_name,
-                    crate::i18n::tr_str("input.repo_settings.inherit"),
-                ),
-                cx,
-            );
-        });
-        this.repo_settings_email_input.update(cx, |input, cx| {
-            input.set_placeholder(
-                placeholder(
-                    &current.global_user_email,
-                    crate::i18n::tr_str("input.repo_settings.inherit"),
-                ),
-                cx,
-            );
-        });
+        this.repo_settings
+            .repo_settings_user_input
+            .update(cx, |input, cx| {
+                input.set_placeholder(
+                    placeholder(
+                        &current.global_user_name,
+                        crate::i18n::tr_str("input.repo_settings.inherit"),
+                    ),
+                    cx,
+                );
+            });
+        this.repo_settings
+            .repo_settings_email_input
+            .update(cx, |input, cx| {
+                input.set_placeholder(
+                    placeholder(
+                        &current.global_user_email,
+                        crate::i18n::tr_str("input.repo_settings.inherit"),
+                    ),
+                    cx,
+                );
+            });
     }
 
     let sign_row = |state: Option<bool>| -> &'static str {
@@ -265,7 +272,7 @@ pub(super) fn panel(
                 .debug_selector(|| "repo_settings_user_input".to_string())
                 .w_full()
                 .min_w(px(0.0))
-                .child(this.repo_settings_user_input.clone()),
+                .child(this.repo_settings.repo_settings_user_input.clone()),
         )
         .child(input_label(
             theme,
@@ -277,12 +284,12 @@ pub(super) fn panel(
                 .debug_selector(|| "repo_settings_email_input".to_string())
                 .w_full()
                 .min_w(px(0.0))
-                .child(this.repo_settings_email_input.clone()),
+                .child(this.repo_settings.repo_settings_email_input.clone()),
         );
 
     // The signing override cycles inherit → on → off, so all three states
     // are reachable without a third widget.
-    let sign_state = this.repo_settings_sign_commits;
+    let sign_state = this.repo_settings.repo_settings_sign_commits;
     body = body.child(
         div()
             .id("repo_settings_sign_row")
@@ -293,11 +300,12 @@ pub(super) fn panel(
             .px_1()
             .cursor(gpui::CursorStyle::PointingHand)
             .on_click(cx.listener(move |this, _e: &ClickEvent, _w, cx| {
-                this.repo_settings_sign_commits = match this.repo_settings_sign_commits {
-                    None => Some(true),
-                    Some(true) => Some(false),
-                    Some(false) => None,
-                };
+                this.repo_settings.repo_settings_sign_commits =
+                    match this.repo_settings.repo_settings_sign_commits {
+                        None => Some(true),
+                        Some(true) => Some(false),
+                        Some(false) => None,
+                    };
                 cx.notify();
             }))
             .child(
@@ -315,16 +323,20 @@ pub(super) fn panel(
             ),
     );
 
-    let error_row = this.repo_settings_error.clone().map(|message| {
-        div()
-            .id("repo_settings_error")
-            .debug_selector(|| "repo_settings_error".to_string())
-            .px_1()
-            .text_xs()
-            .text_color(theme.colors.status.danger.foreground)
-            .line_clamp(2)
-            .child(message)
-    });
+    let error_row = this
+        .repo_settings
+        .repo_settings_error
+        .clone()
+        .map(|message| {
+            div()
+                .id("repo_settings_error")
+                .debug_selector(|| "repo_settings_error".to_string())
+                .px_1()
+                .text_xs()
+                .text_color(theme.colors.status.danger.foreground)
+                .line_clamp(2)
+                .child(message)
+        });
 
     components::context_menu(
         theme,
@@ -354,7 +366,7 @@ pub(super) fn panel(
                                     "repo_settings_cancel_hint",
                                     theme,
                                 )
-                                .focus_handle(this.repo_settings_focus.cancel.clone())
+                                .focus_handle(this.repo_settings.repo_settings_focus.cancel.clone())
                                 .on_click(
                                     theme,
                                     cx,
@@ -372,7 +384,7 @@ pub(super) fn panel(
                                     "repo_settings_apply_btn",
                                     crate::i18n::tr("input.repo_settings.apply"),
                                 )
-                                .focus_handle(this.repo_settings_focus.submit.clone())
+                                .focus_handle(this.repo_settings.repo_settings_focus.submit.clone())
                                 .style(components::ButtonStyle::Filled)
                                 .on_click(
                                     theme,

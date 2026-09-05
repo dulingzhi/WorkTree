@@ -26,7 +26,7 @@ fn add_repo_menu_keyboard_navigation_opens_clone_prompt(cx: &mut gpui::TestAppCo
             host.context_menu_focus_handle.is_focused(window),
             "opening the Add Repository menu should move focus into it"
         );
-        assert_eq!(host.context_menu_selected_ix, Some(0));
+        assert_eq!(host.context_menu.context_menu_selected_ix, Some(0));
     });
 
     simulate_key_press(cx, "down");
@@ -35,6 +35,7 @@ fn add_repo_menu_keyboard_navigation_opens_clone_prompt(cx: &mut gpui::TestAppCo
             view.read(app)
                 .popover_host
                 .read(app)
+                .context_menu
                 .context_menu_selected_ix,
             Some(1),
             "Down should select Clone repository"

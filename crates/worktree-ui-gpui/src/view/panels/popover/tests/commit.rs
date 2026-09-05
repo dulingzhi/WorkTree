@@ -38,7 +38,8 @@ fn clean_repo_disables_commit_prompt_submission(cx: &mut gpui::TestAppContext) {
                     window,
                     cx,
                 );
-                host.commit_prompt_message_input
+                host.commit_prompt
+                    .commit_prompt_message_input
                     .update(cx, |input, cx| input.set_text("Commit message", cx));
 
                 assert!(
@@ -83,7 +84,8 @@ fn commit_prompt_restores_drafts_per_repo(cx: &mut gpui::TestAppContext) {
                     window,
                     cx,
                 );
-                host.commit_prompt_message_input
+                host.commit_prompt
+                    .commit_prompt_message_input
                     .update(cx, |input, cx| input.set_text("repo A draft", cx));
                 host.dismiss_prompt_popover(window, cx);
 
@@ -93,8 +95,15 @@ fn commit_prompt_restores_drafts_per_repo(cx: &mut gpui::TestAppContext) {
                     window,
                     cx,
                 );
-                assert_eq!(host.commit_prompt_message_input.read(cx).text(), "");
-                host.commit_prompt_message_input
+                assert_eq!(
+                    host.commit_prompt
+                        .commit_prompt_message_input
+                        .read(cx)
+                        .text(),
+                    ""
+                );
+                host.commit_prompt
+                    .commit_prompt_message_input
                     .update(cx, |input, cx| input.set_text("repo B draft", cx));
                 host.dismiss_prompt_popover(window, cx);
 
@@ -105,7 +114,10 @@ fn commit_prompt_restores_drafts_per_repo(cx: &mut gpui::TestAppContext) {
                     cx,
                 );
                 assert_eq!(
-                    host.commit_prompt_message_input.read(cx).text(),
+                    host.commit_prompt
+                        .commit_prompt_message_input
+                        .read(cx)
+                        .text(),
                     "repo A draft"
                 );
                 host.dismiss_prompt_popover(window, cx);
@@ -117,7 +129,10 @@ fn commit_prompt_restores_drafts_per_repo(cx: &mut gpui::TestAppContext) {
                     cx,
                 );
                 assert_eq!(
-                    host.commit_prompt_message_input.read(cx).text(),
+                    host.commit_prompt
+                        .commit_prompt_message_input
+                        .read(cx)
+                        .text(),
                     "repo B draft"
                 );
             });
@@ -147,13 +162,20 @@ fn successful_commit_prompt_submission_clears_draft(cx: &mut gpui::TestAppContex
             this.popover_host.update(cx, |host, cx| {
                 let anchor = gpui::point(gpui::px(120.0), gpui::px(72.0));
                 host.open_popover_at(PopoverKind::CommitPrompt { repo_id }, anchor, window, cx);
-                host.commit_prompt_message_input
+                host.commit_prompt
+                    .commit_prompt_message_input
                     .update(cx, |input, cx| input.set_text("finish merge", cx));
                 assert!(host.can_submit_commit_prompt(cx));
                 host.submit_commit_prompt(window, cx);
 
                 host.open_popover_at(PopoverKind::CommitPrompt { repo_id }, anchor, window, cx);
-                assert_eq!(host.commit_prompt_message_input.read(cx).text(), "");
+                assert_eq!(
+                    host.commit_prompt
+                        .commit_prompt_message_input
+                        .read(cx)
+                        .text(),
+                    ""
+                );
             });
         });
     });

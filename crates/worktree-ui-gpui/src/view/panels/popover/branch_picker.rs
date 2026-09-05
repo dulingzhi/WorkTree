@@ -321,7 +321,7 @@ pub(super) fn ref_rows_cached(
         ref_rows_signature(repo, spec),
         query,
     );
-    super::rows_cache::get_or_build(&this.branch_ref_rows_cache, key, |_now| {
+    super::rows_cache::get_or_build(&this.branch_picker.branch_ref_rows_cache, key, |_now| {
         let head_branch = repo.head_branch.ready().map(String::as_str);
         let branch_count = repo.branches.ready().map_or(0usize, |values| values.len());
         let tag_count = if spec.with_refs {
@@ -428,7 +428,7 @@ pub(super) fn cached(
         rows_signature(repo),
         query,
     );
-    super::rows_cache::get_or_build(&this.branch_picker_rows_cache, key, |now| {
+    super::rows_cache::get_or_build(&this.branch_picker.branch_picker_rows_cache, key, |now| {
         let built = rows(repo, query, now);
         (built.items, built.rows, built.marked_index)
     })
@@ -536,7 +536,7 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
     // row, so it drives PickerPrompt directly rather than through
     // BranchRefPicker (which only builds plain single-part rows).
     if is_checkout {
-        let Some(search) = this.branch_picker_search_input.clone() else {
+        let Some(search) = this.branch_picker.branch_picker_search_input.clone() else {
             return components::context_menu(theme, menu).w(width.preferred_px(ui_scale));
         };
         let repo_id = this.active_repo().map(|repo| repo.id);
@@ -572,7 +572,7 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
                     this.picker_row_menu
                         .as_ref()
                         .map(|menu| menu.display_index)
-                        .or(this.branch_picker_selected_index),
+                        .or(this.branch_picker.branch_picker_selected_index),
                 )
                 .marked_index(built.marked_index)
                 // Right-click offers the branch its sidebar row offers, floating
@@ -619,7 +619,7 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
     if let Some(repo) = this.active_repo() {
         match &repo.branches {
             Loadable::Ready(branches) => {
-                if let Some(search) = this.branch_picker_search_input.clone() {
+                if let Some(search) = this.branch_picker.branch_picker_search_input.clone() {
                     let repo_id = repo.id;
                     // The current branch cannot be rebased onto itself, merged
                     // into itself, or deleted.
@@ -633,7 +633,7 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
                             .tooltip_host(this.tooltip_host.clone())
                             .empty_text(crate::i18n::tr("ui.picker.branch.no_branches"))
                             .max_height(scaled_px(REF_PICKER_LIST_MAX_HEIGHT_PX))
-                            .selected_index(this.branch_picker_selected_index)
+                            .selected_index(this.branch_picker.branch_picker_selected_index)
                             .render(
                                 theme,
                                 ui_scale_percent,
@@ -712,7 +712,7 @@ fn branch_picker_status_panel(
     let ui_scale_percent = super::popover_ui_scale_percent(cx);
     let scaled_px = |value: f32| super::popover_scaled_px_from_percent(value, ui_scale_percent);
 
-    if let Some(search) = this.branch_picker_search_input.clone() {
+    if let Some(search) = this.branch_picker.branch_picker_search_input.clone() {
         // No rows at all — this panel exists to say why, in the picker's own
         // shape so the search field above it keeps its chrome.
         let empty = super::rows_cache::CachedRows::<String>::empty();
@@ -720,7 +720,7 @@ fn branch_picker_status_panel(
             .tooltip_host(this.tooltip_host.clone())
             .empty_text(empty_text)
             .max_height(scaled_px(REF_PICKER_LIST_MAX_HEIGHT_PX))
-            .selected_index(this.branch_picker_selected_index)
+            .selected_index(this.branch_picker.branch_picker_selected_index)
             .render(theme, ui_scale_percent, cx, |_, _, _, _, _| {})
     } else {
         components::context_menu_label(

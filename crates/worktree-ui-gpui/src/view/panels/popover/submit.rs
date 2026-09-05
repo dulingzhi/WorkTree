@@ -54,15 +54,17 @@ impl PopoverHost {
             return;
         }
         let range = (plan.oldest.clone(), plan.head.clone());
-        if self.squash_prompt_prefilled_range.as_ref() == Some(&range) {
+        if self.squash.squash_prompt_prefilled_range.as_ref() == Some(&range) {
             return;
         }
         // Empty inputs mean the user has not typed anything for this range yet;
         // if they had, we must not overwrite it.
         let inputs_empty = self
+            .squash
             .squash_message_input
             .read_with(cx, |input, _| input.text().is_empty())
             && self
+                .squash
                 .squash_description_input
                 .read_with(cx, |input, _| input.text().is_empty());
         if !inputs_empty {
@@ -71,15 +73,17 @@ impl PopoverHost {
 
         let subject = preview.subject.clone();
         let body = preview.body.clone();
-        self.squash_prompt_prefilled_range = Some(range);
-        self.squash_message_input.update(cx, |input, cx| {
+        self.squash.squash_prompt_prefilled_range = Some(range);
+        self.squash.squash_message_input.update(cx, |input, cx| {
             input.set_text(subject, cx);
             cx.notify();
         });
-        self.squash_description_input.update(cx, |input, cx| {
-            input.set_text(body, cx);
-            cx.notify();
-        });
+        self.squash
+            .squash_description_input
+            .update(cx, |input, cx| {
+                input.set_text(body, cx);
+                cx.notify();
+            });
     }
 
     /// Reads the squash prompt inputs, builds the final message, and dispatches
@@ -93,12 +97,14 @@ impl PopoverHost {
             return;
         };
         let subject = self
+            .squash
             .squash_message_input
             .read_with(cx, |input, _| input.text().trim().to_string());
         if subject.is_empty() {
             return;
         }
         let body = self
+            .squash
             .squash_description_input
             .read_with(cx, |input, _| input.text().to_string());
         let message = if body.trim().is_empty() {
@@ -119,6 +125,7 @@ impl PopoverHost {
     pub(super) fn can_submit_create_tag(&self, cx: &mut gpui::Context<Self>) -> bool {
         matches!(self.popover, Some(PopoverKind::CreateTagPrompt { .. }))
             && self
+                .create_tag
                 .create_tag_input
                 .read_with(cx, |input, _| is_submittable_branch_name(input.text()))
     }
@@ -126,9 +133,11 @@ impl PopoverHost {
     pub(super) fn can_submit_clone_repo(&self, cx: &mut gpui::Context<Self>) -> bool {
         matches!(self.popover, Some(PopoverKind::CloneRepo))
             && self
+                .clone_repo
                 .clone_repo_url_input
                 .read_with(cx, |input, _| !input.text().trim().is_empty())
             && self
+                .clone_repo
                 .clone_repo_parent_dir_input
                 .read_with(cx, |input, _| !input.text().trim().is_empty())
     }
@@ -141,6 +150,7 @@ impl PopoverHost {
                 ..
             })
         ) && self
+            .submodule_add
             .submodule_ref_input
             .read_with(cx, |input, _| !input.text().trim().is_empty())
     }
@@ -151,15 +161,17 @@ impl PopoverHost {
         };
 
         let name = self
+            .create_tag
             .create_tag_input
             .read_with(cx, |input, _| input.text().trim().to_string());
         if !is_submittable_branch_name(&name) {
             return;
         }
 
-        let annotated = self.create_tag_annotated;
+        let annotated = self.create_tag.create_tag_annotated;
         let message = if annotated {
             let msg = self
+                .create_tag
                 .create_tag_message_input
                 .read_with(cx, |input, _| input.text().trim().to_string());
             Some(msg)
@@ -183,9 +195,11 @@ impl PopoverHost {
         }
 
         let url = self
+            .clone_repo
             .clone_repo_url_input
             .read_with(cx, |input, _| input.text().trim().to_string());
         let parent = self
+            .clone_repo
             .clone_repo_parent_dir_input
             .read_with(cx, |input, _| input.text().trim().to_string());
         if url.is_empty() || parent.is_empty() {
@@ -195,6 +209,7 @@ impl PopoverHost {
         let repo_name = clone_repo_name_from_url(&url);
         let dest = std::path::PathBuf::from(parent).join(repo_name);
         let ssh_key = self
+            .clone_repo
             .clone_ssh_key_input
             .read_with(cx, |input, _| input.text().trim().to_string());
         let ssh_key = (!ssh_key.is_empty()).then_some(ssh_key);
@@ -216,6 +231,7 @@ impl PopoverHost {
         };
 
         let reference = self
+            .submodule_add
             .submodule_ref_input
             .read_with(cx, |input, _| input.text().trim().to_string());
         if reference.is_empty() {
@@ -233,6 +249,7 @@ impl PopoverHost {
     pub(super) fn can_submit_create_branch(&self, cx: &mut gpui::Context<Self>) -> bool {
         self.create_branch_prompt_repo_and_target().is_some()
             && self
+                .create_branch
                 .create_branch_input
                 .read_with(cx, |input, _| is_submittable_branch_name(input.text()))
     }
@@ -244,7 +261,7 @@ impl PopoverHost {
                 source_selectable: true,
                 ..
             }) => {
-                let target = self.create_branch_source_target.clone();
+                let target = self.create_branch.create_branch_source_target.clone();
                 if target.is_empty() {
                     None
                 } else {
@@ -267,6 +284,7 @@ impl PopoverHost {
             return;
         };
         let name = self
+            .create_branch
             .create_branch_input
             .read_with(cx, |input, _| input.text().trim().to_string());
         if !is_submittable_branch_name(&name) {
@@ -275,7 +293,7 @@ impl PopoverHost {
 
         let checkout = match self.popover {
             Some(PopoverKind::CreateBranchFromRefPrompt { .. }) => {
-                self.create_branch_checkout_enabled
+                self.create_branch.create_branch_checkout_enabled
             }
             _ => return,
         };
@@ -300,10 +318,12 @@ impl PopoverHost {
         let Some(PopoverKind::RenameBranchPrompt { name, .. }) = &self.popover else {
             return false;
         };
-        self.create_branch_input.read_with(cx, |input, _| {
-            let new_name = input.text().trim();
-            !new_name.is_empty() && new_name != name
-        })
+        self.create_branch
+            .create_branch_input
+            .read_with(cx, |input, _| {
+                let new_name = input.text().trim();
+                !new_name.is_empty() && new_name != name
+            })
     }
 
     pub(super) fn submit_rename_branch(
@@ -316,6 +336,7 @@ impl PopoverHost {
             return;
         };
         let new_name = self
+            .create_branch
             .create_branch_input
             .read_with(cx, |input, _| input.text().trim().to_string());
         if new_name.is_empty() || new_name == name {
@@ -332,6 +353,7 @@ impl PopoverHost {
     pub(super) fn can_submit_stash(&self, cx: &mut gpui::Context<Self>) -> bool {
         self.active_repo_id().is_some()
             && self
+                .stash
                 .stash_message_input
                 .read_with(cx, |input, _| !input.text().trim().is_empty())
     }
@@ -348,6 +370,7 @@ impl PopoverHost {
             return;
         };
         let message = self
+            .commit_prompt
             .commit_prompt_message_input
             .read_with(cx, |input, _| input.text().trim().to_string());
         if message.is_empty() {
@@ -358,10 +381,14 @@ impl PopoverHost {
             message,
             push_after_commit: false,
         });
-        self.commit_prompt_message_drafts.remove(&repo_id);
-        self.commit_prompt_message_input
+        self.commit_prompt
+            .commit_prompt_message_drafts
+            .remove(&repo_id);
+        self.commit_prompt
+            .commit_prompt_message_input
             .update(cx, |input, cx| input.set_text(String::new(), cx));
-        self.commit_prompt_message_scroll
+        self.commit_prompt
+            .commit_prompt_message_scroll
             .set_offset(point(px(0.0), px(0.0)));
         self.dismiss_inline_popover(window, cx);
     }
@@ -371,15 +398,20 @@ impl PopoverHost {
             return;
         };
         let draft: SharedString = self
+            .commit_prompt
             .commit_prompt_message_input
             .read(cx)
             .text()
             .to_string()
             .into();
         if draft.is_empty() {
-            self.commit_prompt_message_drafts.remove(&repo_id);
+            self.commit_prompt
+                .commit_prompt_message_drafts
+                .remove(&repo_id);
         } else {
-            self.commit_prompt_message_drafts.insert(repo_id, draft);
+            self.commit_prompt
+                .commit_prompt_message_drafts
+                .insert(repo_id, draft);
         }
     }
 
@@ -392,6 +424,7 @@ impl PopoverHost {
                 .is_some_and(|entries| !entries.is_empty())
                 || matches!(repo.merge_commit_message, Loadable::Ready(Some(_)))
         }) && self
+            .commit_prompt
             .commit_prompt_message_input
             .read_with(cx, |input, _| !input.text().trim().is_empty())
     }
@@ -404,14 +437,15 @@ impl PopoverHost {
             return;
         };
         let message = self
+            .stash
             .stash_message_input
             .read_with(cx, |input, _| input.text().trim().to_string());
         if message.is_empty() {
             return;
         }
 
-        let include_untracked = self.stash_include_untracked;
-        let keep_index = self.stash_keep_index;
+        let include_untracked = self.stash.stash_include_untracked;
+        let keep_index = self.stash.stash_keep_index;
         let stashing_selection = !paths.is_empty();
         self.store.dispatch(Msg::Stash {
             repo_id,
@@ -432,6 +466,7 @@ impl PopoverHost {
     pub(super) fn can_submit_stash_branch(&self, cx: &mut gpui::Context<Self>) -> bool {
         matches!(self.popover, Some(PopoverKind::StashBranchPrompt { .. }))
             && self
+                .create_branch
                 .create_branch_input
                 .read_with(cx, |input, _| !input.text().trim().is_empty())
     }
@@ -450,14 +485,15 @@ impl PopoverHost {
             return;
         };
         let target_branch = self
+            .mr_push
             .mr_push_target_input
             .read_with(cx, |input, _| input.text().trim().to_string());
         let options = worktree_core::services::MergeRequestPushOptions {
             create: true,
             target_branch: (!target_branch.is_empty()).then_some(target_branch),
-            merge_when_pipeline_succeeds: self.mr_push_merge_when_pipeline_succeeds,
-            remove_source_branch: self.mr_push_remove_source_branch,
-            push_to_mr_branch: self.mr_push_push_to_mr_branch,
+            merge_when_pipeline_succeeds: self.mr_push.mr_push_merge_when_pipeline_succeeds,
+            remove_source_branch: self.mr_push.mr_push_remove_source_branch,
+            push_to_mr_branch: self.mr_push.mr_push_push_to_mr_branch,
         };
         self.store
             .dispatch(Msg::PushMergeRequest { repo_id, options });
@@ -474,7 +510,7 @@ impl PopoverHost {
         let Some(PopoverKind::MergeRequestPushPrompt { repo_id }) = self.popover.clone() else {
             return;
         };
-        if self.mr_push_description_generating {
+        if self.mr_push.mr_push_description_generating {
             return;
         }
         if !crate::ai_commit::current().is_configured() {
@@ -490,10 +526,11 @@ impl PopoverHost {
         };
         let workdir = repo.spec.workdir.clone();
         let target_input = self
+            .mr_push
             .mr_push_target_input
             .read_with(cx, |input, _| input.text().to_string());
-        self.mr_push_description_generating = true;
-        self.mr_push_description_error = None;
+        self.mr_push.mr_push_description_generating = true;
+        self.mr_push.mr_push_description_error = None;
         cx.notify();
 
         // The request itself needs git and the network; test builds exercise
@@ -551,16 +588,18 @@ impl PopoverHost {
         result: Result<String, String>,
         cx: &mut gpui::Context<Self>,
     ) {
-        self.mr_push_description_generating = false;
+        self.mr_push.mr_push_description_generating = false;
         match result {
             Ok(description) => {
-                self.mr_push_description_error = None;
-                self.mr_push_description_input.update(cx, |input, cx| {
-                    input.set_text(description, cx);
-                    cx.notify();
-                });
+                self.mr_push.mr_push_description_error = None;
+                self.mr_push
+                    .mr_push_description_input
+                    .update(cx, |input, cx| {
+                        input.set_text(description, cx);
+                        cx.notify();
+                    });
             }
-            Err(message) => self.mr_push_description_error = Some(message.into()),
+            Err(message) => self.mr_push.mr_push_description_error = Some(message.into()),
         }
         cx.notify();
     }
@@ -574,6 +613,7 @@ impl PopoverHost {
             return;
         };
         let branch = self
+            .create_branch
             .create_branch_input
             .read_with(cx, |input, _| input.text().trim().to_string());
         if branch.is_empty() {
@@ -592,9 +632,11 @@ impl PopoverHost {
         &self,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
-        self.remote_name_input
+        self.remote_prompts
+            .remote_name_input
             .read_with(cx, |i, _| !i.text().trim().is_empty())
             && self
+                .remote_prompts
                 .remote_url_input
                 .read_with(cx, |i, _| !i.text().trim().is_empty())
     }
@@ -611,9 +653,11 @@ impl PopoverHost {
             return;
         }
         let name = self
+            .remote_prompts
             .remote_name_input
             .read_with(cx, |i, _| i.text().trim().to_string());
         let url = self
+            .remote_prompts
             .remote_url_input
             .read_with(cx, |i, _| i.text().trim().to_string());
         self.store.dispatch(Msg::AddRemote { repo_id, name, url });
@@ -624,7 +668,8 @@ impl PopoverHost {
         &self,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
-        self.remote_url_edit_input
+        self.remote_prompts
+            .remote_url_edit_input
             .read_with(cx, |i, _| !i.text().trim().is_empty())
     }
 
@@ -640,6 +685,7 @@ impl PopoverHost {
             return;
         }
         let url = self
+            .remote_prompts
             .remote_url_edit_input
             .read_with(cx, |i, _| i.text().trim().to_string());
         self.store.dispatch(Msg::SetRemoteUrl {
@@ -655,7 +701,8 @@ impl PopoverHost {
         &self,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
-        self.remote_ssh_key_input
+        self.remote_prompts
+            .remote_ssh_key_input
             .read_with(cx, |i, _| !i.text().trim().is_empty())
     }
 
@@ -671,6 +718,7 @@ impl PopoverHost {
             return;
         }
         let key = self
+            .remote_prompts
             .remote_ssh_key_input
             .read_with(cx, |i, _| i.text().trim().to_string());
         self.store.dispatch(Msg::SetRemoteSshKey {
@@ -701,7 +749,8 @@ impl PopoverHost {
         &self,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
-        self.push_upstream_branch_input
+        self.push_upstream
+            .push_upstream_branch_input
             .read_with(cx, |i, _| !i.text().trim().is_empty())
     }
 
@@ -717,6 +766,7 @@ impl PopoverHost {
             return;
         }
         let branch = self
+            .push_upstream
             .push_upstream_branch_input
             .read_with(cx, |i, _| i.text().trim().to_string());
         self.store.dispatch(Msg::PushSetUpstream {
@@ -731,7 +781,8 @@ impl PopoverHost {
         &self,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
-        self.create_branch_input
+        self.create_branch
+            .create_branch_input
             .read_with(cx, |i, _| !i.text().trim().is_empty())
     }
 
@@ -751,6 +802,7 @@ impl PopoverHost {
             return;
         }
         let local_branch = self
+            .create_branch
             .create_branch_input
             .read_with(cx, |i, _| i.text().trim().to_string());
 
@@ -792,12 +844,13 @@ impl PopoverHost {
         &self,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
-        self.worktree_path_input
+        self.worktree_add
+            .worktree_path_input
             .read_with(cx, |i, _| !i.text().trim().is_empty())
     }
 
     pub(in crate::view::panels) fn submit_worktree_add(&mut self, cx: &mut gpui::Context<Self>) {
-        if self.suppress_worktree_submit_after_ref_enter {
+        if self.worktree_add.suppress_worktree_submit_after_ref_enter {
             return;
         }
         let Some(PopoverKind::Repo {
@@ -811,9 +864,14 @@ impl PopoverHost {
             return;
         }
         let folder = self
+            .worktree_add
             .worktree_path_input
             .read_with(cx, |i, _| i.text().trim().to_string());
-        let reference = self.worktree_ref_source_target.trim().to_string();
+        let reference = self
+            .worktree_add
+            .worktree_ref_source_target
+            .trim()
+            .to_string();
         let reference = (!reference.is_empty()).then_some(reference);
         self.store.dispatch(Msg::AddWorktree {
             repo_id,
@@ -827,9 +885,11 @@ impl PopoverHost {
         &self,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
-        self.submodule_url_input
+        self.submodule_add
+            .submodule_url_input
             .read_with(cx, |i, _| !i.text().trim().is_empty())
             && self
+                .submodule_add
                 .submodule_path_input
                 .read_with(cx, |i, _| !i.text().trim().is_empty())
     }
@@ -846,20 +906,28 @@ impl PopoverHost {
             return;
         }
         let url = self
+            .submodule_add
             .submodule_url_input
             .read_with(cx, |i, _| i.text().trim().to_string());
         let path_text = self
+            .submodule_add
             .submodule_path_input
             .read_with(cx, |i, _| i.text().trim().to_string());
-        let branch = self.submodule_branch_input.read_with(cx, |i, _| {
-            let text = i.text().trim().to_string();
-            if text.is_empty() { None } else { Some(text) }
-        });
-        let name = self.submodule_name_input.read_with(cx, |i, _| {
-            let text = i.text().trim().to_string();
-            if text.is_empty() { None } else { Some(text) }
-        });
-        let force = self.submodule_force_enabled;
+        let branch = self
+            .submodule_add
+            .submodule_branch_input
+            .read_with(cx, |i, _| {
+                let text = i.text().trim().to_string();
+                if text.is_empty() { None } else { Some(text) }
+            });
+        let name = self
+            .submodule_add
+            .submodule_name_input
+            .read_with(cx, |i, _| {
+                let text = i.text().trim().to_string();
+                if text.is_empty() { None } else { Some(text) }
+            });
+        let force = self.submodule_add.submodule_force_enabled;
         self.store.dispatch(Msg::AddSubmodule {
             repo_id,
             url,

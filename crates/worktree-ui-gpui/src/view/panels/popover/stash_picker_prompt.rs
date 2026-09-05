@@ -41,7 +41,7 @@ pub(super) fn cached(
         rows_signature(this),
         query,
     );
-    super::rows_cache::get_or_build(&this.stash_picker_rows_cache, key, |_now| {
+    super::rows_cache::get_or_build(&this.stash_picker.stash_picker_rows_cache, key, |_now| {
         let Some(Loadable::Ready(stashes)) = this.active_repo().map(|repo| &repo.stashes) else {
             return (Vec::new(), Vec::new(), None);
         };
@@ -141,7 +141,7 @@ pub(super) fn panel(
         .child(popover_title(title))
         .child(div().border_t_1().border_color(theme.colors.stroke.default));
 
-    if let Some(search) = this.stash_picker_search_input.clone() {
+    if let Some(search) = this.stash_picker.stash_picker_search_input.clone() {
         match this
             .active_repo()
             .map(|r| matches!(&r.stashes, Loadable::Ready(_)))
@@ -157,7 +157,7 @@ pub(super) fn panel(
                         .tooltip_host(this.tooltip_host.clone())
                         .empty_text(crate::i18n::tr("ui.picker.stash.empty"))
                         .max_height(scaled_px(STASH_PICKER_LIST_MAX_HEIGHT_PX))
-                        .selected_index(this.stash_picker_prompt_selected_index)
+                        .selected_index(this.stash_picker.stash_picker_prompt_selected_index)
                         .render(
                             theme,
                             ui_scale_percent,

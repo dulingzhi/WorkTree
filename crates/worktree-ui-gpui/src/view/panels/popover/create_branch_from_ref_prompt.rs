@@ -71,6 +71,7 @@ pub(super) fn panel(
 
     let source_row = if source_selectable {
         let search = this
+            .branch_picker
             .branch_picker_search_input
             .clone()
             .expect("branch_picker_search_input must be initialized");
@@ -113,7 +114,7 @@ pub(super) fn panel(
                         .tooltip_host(this.tooltip_host.clone())
                         .empty_text(crate::i18n::tr("ui.common.no_matches"))
                         .max_height(scaled_px(branch_picker::REF_PICKER_LIST_MAX_HEIGHT_PX))
-                        .selected_index(this.branch_picker_selected_index)
+                        .selected_index(this.branch_picker.branch_picker_selected_index)
                         .select_on_mouse_down()
                         .render(
                             theme,
@@ -174,17 +175,20 @@ pub(super) fn panel(
                 .pb_1()
                 .w_full()
                 .min_w(px(0.0))
-                .child(this.create_branch_input.clone()),
+                .child(this.create_branch.create_branch_input.clone()),
         )
         .child(
             checkout_toggle(
                 theme,
-                this.create_branch_checkout_enabled,
-                &this.create_branch_from_ref_checkout_focus_handle,
+                this.create_branch.create_branch_checkout_enabled,
+                &this
+                    .create_branch
+                    .create_branch_from_ref_checkout_focus_handle,
                 cx,
             )
             .on_click(cx.listener(|this, _e: &ClickEvent, _w, cx| {
-                this.create_branch_checkout_enabled = !this.create_branch_checkout_enabled;
+                this.create_branch.create_branch_checkout_enabled =
+                    !this.create_branch.create_branch_checkout_enabled;
                 cx.notify();
             })),
         )
@@ -202,7 +206,12 @@ pub(super) fn panel(
                         "create_branch_from_ref_cancel_hint",
                         theme,
                     )
-                    .focus_handle(this.create_branch_from_ref_focus.cancel.clone())
+                    .focus_handle(
+                        this.create_branch
+                            .create_branch_from_ref_focus
+                            .cancel
+                            .clone(),
+                    )
                     .on_click(theme, cx, |this, _e, window, cx| {
                         this.dismiss_prompt_popover(window, cx);
                     }),
@@ -212,7 +221,12 @@ pub(super) fn panel(
                         "create_branch_from_ref_go",
                         crate::i18n::tr("prompts.create_branch.create"),
                     )
-                    .focus_handle(this.create_branch_from_ref_focus.submit.clone())
+                    .focus_handle(
+                        this.create_branch
+                            .create_branch_from_ref_focus
+                            .submit
+                            .clone(),
+                    )
                     .separated_end_slot(hotkey_hint(
                         theme,
                         "create_branch_from_ref_go_hint",

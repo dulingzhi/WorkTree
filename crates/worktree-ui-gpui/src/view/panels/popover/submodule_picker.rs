@@ -44,26 +44,30 @@ pub(super) fn cached(
         rows_signature(this, repo_id),
         query,
     );
-    super::rows_cache::get_or_build(&this.submodule_picker_rows_cache, key, |_now| {
-        let Some(Loadable::Ready(submodules)) =
-            repo_for(this, repo_id).map(|repo| &repo.submodules)
-        else {
-            return (Vec::new(), Vec::new(), None);
-        };
-        let (items, payloads) = submodules
-            .iter()
-            .map(|submodule| {
-                (
-                    components::PickerPromptItem::single(
-                        submodule.path.display().to_string(),
-                        components::TextTruncationProfile::Path,
-                    ),
-                    submodule.path.clone(),
-                )
-            })
-            .unzip();
-        (items, payloads, None)
-    })
+    super::rows_cache::get_or_build(
+        &this.submodule_picker.submodule_picker_rows_cache,
+        key,
+        |_now| {
+            let Some(Loadable::Ready(submodules)) =
+                repo_for(this, repo_id).map(|repo| &repo.submodules)
+            else {
+                return (Vec::new(), Vec::new(), None);
+            };
+            let (items, payloads) = submodules
+                .iter()
+                .map(|submodule| {
+                    (
+                        components::PickerPromptItem::single(
+                            submodule.path.display().to_string(),
+                            components::TextTruncationProfile::Path,
+                        ),
+                        submodule.path.clone(),
+                    )
+                })
+                .unzip();
+            (items, payloads, None)
+        },
+    )
 }
 
 pub(super) fn nav_targets(
@@ -138,7 +142,7 @@ pub(super) fn panel(
         Loadable::Ready(_) => {}
     }
 
-    let Some(search) = this.submodule_picker_search_input.clone() else {
+    let Some(search) = this.submodule_picker.submodule_picker_search_input.clone() else {
         return label(
             this,
             crate::i18n::tr("ui.common.search_input_not_initialized"),
@@ -156,7 +160,7 @@ pub(super) fn panel(
             .tooltip_host(this.tooltip_host.clone())
             .empty_text(crate::i18n::tr("ui.picker.submodule.empty"))
             .max_height(scaled_px(SUBMODULE_PICKER_LIST_MAX_HEIGHT_PX))
-            .selected_index(this.submodule_picker_selected_index)
+            .selected_index(this.submodule_picker.submodule_picker_selected_index)
             .render(
                 theme,
                 ui_scale_percent,

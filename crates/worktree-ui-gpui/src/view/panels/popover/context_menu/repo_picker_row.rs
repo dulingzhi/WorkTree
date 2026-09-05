@@ -9,9 +9,12 @@ use super::*;
 
 pub(super) fn model(host: &PopoverHost, entry: &repo_picker::RepoPickerEntry) -> ContextMenuModel {
     let workdir = entry.workdir(host);
-    let pinned = workdir
-        .as_ref()
-        .is_some_and(|path| host.cached_pinned_repos.iter().any(|pin| pin == path));
+    let pinned = workdir.as_ref().is_some_and(|path| {
+        host.repo_picker
+            .cached_pinned_repos
+            .iter()
+            .any(|pin| pin == path)
+    });
 
     let mut items = Vec::new();
     if let Some(workdir) = workdir.clone() {

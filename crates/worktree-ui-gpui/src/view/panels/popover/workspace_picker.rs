@@ -209,10 +209,14 @@ pub(super) fn cached(
         rows_signature(repo),
         query,
     );
-    super::rows_cache::get_or_build(&this.workspace_picker_rows_cache, key, |_now| {
-        let built = rows(repo, query);
-        (built.items, built.rows, built.marked_index)
-    })
+    super::rows_cache::get_or_build(
+        &this.workspace_picker.workspace_picker_rows_cache,
+        key,
+        |_now| {
+            let built = rows(repo, query);
+            (built.items, built.rows, built.marked_index)
+        },
+    )
 }
 
 /// Payloads for the rows surviving `query`, in the order the picker renders them
@@ -260,7 +264,7 @@ pub(super) fn activate(
             // "based on <head>" label promises. Passing the head branch itself
             // would fail — git refuses to check out a branch that is already
             // checked out in another worktree.
-            this.pending_worktree_add_prefill = Some((path, String::new()));
+            this.worktree_add.pending_worktree_add_prefill = Some((path, String::new()));
             this.open_popover_centered(
                 PopoverKind::worktree(repo_id, WorktreePopoverKind::AddPrompt),
                 window,
@@ -281,7 +285,7 @@ pub(super) fn panel(
     let scaled_px = |value: f32| super::popover_scaled_px_from_percent(value, ui_scale_percent);
     let width = super::LARGE_PICKER_WIDTH;
 
-    let Some(search) = this.workspace_picker_search_input.clone() else {
+    let Some(search) = this.workspace_picker.workspace_picker_search_input.clone() else {
         return components::context_menu_label(
             theme,
             ui_scale_percent,
@@ -317,7 +321,7 @@ pub(super) fn panel(
                 this.picker_row_menu
                     .as_ref()
                     .map(|menu| menu.display_index)
-                    .or(this.workspace_picker_selected_index),
+                    .or(this.workspace_picker.workspace_picker_selected_index),
             )
             .marked_index(built.marked_index)
             // Right-click offers the worktree its sidebar row offers, floating
@@ -343,6 +347,7 @@ pub(super) fn panel(
                         return;
                     };
                     let query = this
+                        .workspace_picker
                         .workspace_picker_search_input
                         .as_ref()
                         .map(|input| input.read(cx).text().trim().to_string())

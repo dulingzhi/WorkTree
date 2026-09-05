@@ -136,20 +136,20 @@ pub(super) fn panel(
                 .py_1()
                 .w_full()
                 .min_w(px(0.0))
-                .child(this.mr_push_target_input.clone()),
+                .child(this.mr_push.mr_push_target_input.clone()),
         )
         .child(
             checkable_option_row(
                 "mr_push_pipeline_toggle",
                 crate::i18n::tr("input.mr_push.pipeline"),
                 theme,
-                this.mr_push_merge_when_pipeline_succeeds,
-                &this.mr_push_pipeline_focus_handle,
+                this.mr_push.mr_push_merge_when_pipeline_succeeds,
+                &this.mr_push.mr_push_pipeline_focus_handle,
                 cx,
             )
             .on_click(cx.listener(|this, _e: &ClickEvent, _w, cx| {
-                this.mr_push_merge_when_pipeline_succeeds =
-                    !this.mr_push_merge_when_pipeline_succeeds;
+                this.mr_push.mr_push_merge_when_pipeline_succeeds =
+                    !this.mr_push.mr_push_merge_when_pipeline_succeeds;
                 cx.notify();
             })),
         )
@@ -158,12 +158,13 @@ pub(super) fn panel(
                 "mr_push_remove_source_toggle",
                 crate::i18n::tr("input.mr_push.remove_source"),
                 theme,
-                this.mr_push_remove_source_branch,
-                &this.mr_push_remove_source_focus_handle,
+                this.mr_push.mr_push_remove_source_branch,
+                &this.mr_push.mr_push_remove_source_focus_handle,
                 cx,
             )
             .on_click(cx.listener(|this, _e: &ClickEvent, _w, cx| {
-                this.mr_push_remove_source_branch = !this.mr_push_remove_source_branch;
+                this.mr_push.mr_push_remove_source_branch =
+                    !this.mr_push.mr_push_remove_source_branch;
                 cx.notify();
             })),
         )
@@ -172,12 +173,12 @@ pub(super) fn panel(
                 "mr_push_mr_branch_toggle",
                 crate::i18n::tr("input.mr_push.mr_branch"),
                 theme,
-                this.mr_push_push_to_mr_branch,
-                &this.mr_push_mr_branch_focus_handle,
+                this.mr_push.mr_push_push_to_mr_branch,
+                &this.mr_push.mr_push_mr_branch_focus_handle,
                 cx,
             )
             .on_click(cx.listener(|this, _e: &ClickEvent, _w, cx| {
-                this.mr_push_push_to_mr_branch = !this.mr_push_push_to_mr_branch;
+                this.mr_push.mr_push_push_to_mr_branch = !this.mr_push.mr_push_push_to_mr_branch;
                 cx.notify();
             })),
         )

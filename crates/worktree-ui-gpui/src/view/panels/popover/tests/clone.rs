@@ -85,6 +85,7 @@ fn clone_repo_popover_escape_closes_from_parent_input(cx: &mut gpui::TestAppCont
                     cx,
                 );
                 let focus = host
+                    .clone_repo
                     .clone_repo_parent_dir_input
                     .read_with(cx, |input, _| input.focus_handle());
                 window.focus(&focus, cx);
@@ -130,7 +131,7 @@ fn clone_repo_popover_escape_closes_from_browse_button(cx: &mut gpui::TestAppCon
                     window,
                     cx,
                 );
-                window.focus(&host.clone_repo_browse_focus_handle, cx);
+                window.focus(&host.clone_repo.clone_repo_browse_focus_handle, cx);
             });
         });
     });
@@ -175,10 +176,13 @@ fn clone_repo_popover_tabs_between_inputs_buttons_and_wraps(cx: &mut gpui::TestA
                     window,
                     cx,
                 );
-                host.clone_repo_url_input.update(cx, |input, cx| {
-                    input.set_text("http://example.com/org/repo.git", cx)
-                });
-                host.clone_repo_parent_dir_input
+                host.clone_repo
+                    .clone_repo_url_input
+                    .update(cx, |input, cx| {
+                        input.set_text("http://example.com/org/repo.git", cx)
+                    });
+                host.clone_repo
+                    .clone_repo_parent_dir_input
                     .update(cx, |input, cx| input.set_text("/tmp", cx));
             });
         });
@@ -189,7 +193,10 @@ fn clone_repo_popover_tabs_between_inputs_buttons_and_wraps(cx: &mut gpui::TestA
         assert_window_focus(
             window,
             app,
-            host.clone_repo_url_input.read(app).focus_handle(),
+            host.clone_repo
+                .clone_repo_url_input
+                .read(app)
+                .focus_handle(),
             "expected clone popover to focus the URL input first",
         );
     });
@@ -201,7 +208,10 @@ fn clone_repo_popover_tabs_between_inputs_buttons_and_wraps(cx: &mut gpui::TestA
         assert_window_focus(
             window,
             app,
-            host.clone_repo_parent_dir_input.read(app).focus_handle(),
+            host.clone_repo
+                .clone_repo_parent_dir_input
+                .read(app)
+                .focus_handle(),
             "expected Tab to move from clone URL to parent dir",
         );
     });
@@ -213,7 +223,7 @@ fn clone_repo_popover_tabs_between_inputs_buttons_and_wraps(cx: &mut gpui::TestA
         assert_window_focus(
             window,
             app,
-            host.clone_repo_browse_focus_handle.clone(),
+            host.clone_repo.clone_repo_browse_focus_handle.clone(),
             "expected Tab to move from clone parent dir to Browse",
         );
     });
@@ -225,7 +235,7 @@ fn clone_repo_popover_tabs_between_inputs_buttons_and_wraps(cx: &mut gpui::TestA
         assert_window_focus(
             window,
             app,
-            host.clone_ssh_key_input.read(app).focus_handle(),
+            host.clone_repo.clone_ssh_key_input.read(app).focus_handle(),
             "expected Tab to move from Browse to the SSH key",
         );
     });
@@ -237,7 +247,7 @@ fn clone_repo_popover_tabs_between_inputs_buttons_and_wraps(cx: &mut gpui::TestA
         assert_window_focus(
             window,
             app,
-            host.clone_repo_focus.cancel.clone(),
+            host.clone_repo.clone_repo_focus.cancel.clone(),
             "expected Tab to move from Browse to Cancel",
         );
     });
@@ -249,7 +259,7 @@ fn clone_repo_popover_tabs_between_inputs_buttons_and_wraps(cx: &mut gpui::TestA
         assert_window_focus(
             window,
             app,
-            host.clone_repo_focus.submit.clone(),
+            host.clone_repo.clone_repo_focus.submit.clone(),
             "expected Tab to move from Cancel to Clone",
         );
     });
@@ -261,7 +271,10 @@ fn clone_repo_popover_tabs_between_inputs_buttons_and_wraps(cx: &mut gpui::TestA
         assert_window_focus(
             window,
             app,
-            host.clone_repo_url_input.read(app).focus_handle(),
+            host.clone_repo
+                .clone_repo_url_input
+                .read(app)
+                .focus_handle(),
             "expected Tab to wrap from Clone back to URL",
         );
     });
@@ -273,7 +286,7 @@ fn clone_repo_popover_tabs_between_inputs_buttons_and_wraps(cx: &mut gpui::TestA
         assert_window_focus(
             window,
             app,
-            host.clone_repo_focus.submit.clone(),
+            host.clone_repo.clone_repo_focus.submit.clone(),
             "expected Shift-Tab to wrap from URL back to Clone",
         );
     });
@@ -307,12 +320,16 @@ fn clone_repo_popover_enter_from_parent_input_submits_and_closes(cx: &mut gpui::
                     window,
                     cx,
                 );
-                host.clone_repo_url_input
+                host.clone_repo
+                    .clone_repo_url_input
                     .update(cx, |input, cx| input.set_text(url, cx));
-                host.clone_repo_parent_dir_input.update(cx, |input, cx| {
-                    input.set_text(parent.display().to_string(), cx);
-                });
+                host.clone_repo
+                    .clone_repo_parent_dir_input
+                    .update(cx, |input, cx| {
+                        input.set_text(parent.display().to_string(), cx);
+                    });
                 let focus = host
+                    .clone_repo
                     .clone_repo_parent_dir_input
                     .read_with(cx, |input, _| input.focus_handle());
                 window.focus(&focus, cx);
@@ -371,7 +388,8 @@ fn clone_repo_popover_clone_button_requires_parent_path(cx: &mut gpui::TestAppCo
                     window,
                     cx,
                 );
-                host.clone_repo_url_input
+                host.clone_repo
+                    .clone_repo_url_input
                     .update(cx, |input, cx| input.set_text(url, cx));
             });
         });

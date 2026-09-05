@@ -405,7 +405,7 @@ fn repo_picker_sort_menu_takes_over_navigation_and_escape(cx: &mut gpui::TestApp
 
             // Escape backs out of the menu before it closes the picker.
             repo_picker::dismiss(host, cx);
-            assert!(!host.repo_picker_sort_menu_open);
+            assert!(!host.repo_picker.repo_picker_sort_menu_open);
             assert!(host.is_open(), "expected the picker to stay open");
 
             repo_picker::dismiss(host, cx);
@@ -620,6 +620,7 @@ fn repo_picker_collapsing_a_section_hides_its_rows_but_keeps_its_header(
         cx.update(|_window, app| {
             popover_host
                 .read(app)
+                .repo_picker
                 .cached_collapsed_picker_sections
                 .is_empty()
         }),
@@ -632,6 +633,7 @@ fn repo_picker_collapsing_a_section_hides_its_rows_but_keeps_its_header(
     cx.update(|_window, app| {
         popover_host.update(app, |host, cx| {
             let input = host
+                .repo_picker
                 .repo_picker_search_input
                 .clone()
                 .expect("the picker owns a search input");
@@ -666,7 +668,7 @@ fn repo_picker_pinned_section_sorts_newest_pin_first(cx: &mut gpui::TestAppConte
     // Pinned oldest-first, the order `persist_pinned_repo` appends in.
     cx.update(|_window, app| {
         popover_host.update(app, |host, _cx| {
-            host.cached_pinned_repos = vec![
+            host.repo_picker.cached_pinned_repos = vec![
                 std::path::PathBuf::from("/tmp/first-pinned"),
                 std::path::PathBuf::from("/tmp/second-pinned"),
             ];
@@ -873,7 +875,7 @@ fn repo_picker_row_menu_closes_when_the_filter_changes(cx: &mut gpui::TestAppCon
     let kept = std::path::PathBuf::from("/tmp/zebra-repo");
     cx.update(|_window, app| {
         popover_host.update(app, |host, _cx| {
-            host.cached_recent_repos =
+            host.repo_picker.cached_recent_repos =
                 vec![std::path::PathBuf::from("/tmp/aardvark-repo"), kept.clone()];
         });
     });
@@ -921,7 +923,7 @@ fn repo_picker_row_menu_closes_when_the_filter_changes(cx: &mut gpui::TestAppCon
         );
         let filtered = repo_picker::filtered_layout(host, "zeb").0;
         assert_eq!(
-            host.repo_picker_selected_index,
+            host.repo_picker.repo_picker_selected_index,
             filtered.iter().position(|candidate| *candidate == entry),
             "the selection should follow the row the menu belonged to into the filtered list"
         );
@@ -946,7 +948,7 @@ fn repo_picker_row_menu_escape_reanchors_to_its_row(cx: &mut gpui::TestAppContex
     let last = std::path::PathBuf::from("/tmp/last-repo");
     cx.update(|_window, app| {
         popover_host.update(app, |host, _cx| {
-            host.cached_recent_repos = vec![dropped.clone(), last.clone()];
+            host.repo_picker.cached_recent_repos = vec![dropped.clone(), last.clone()];
         });
     });
 
@@ -970,7 +972,7 @@ fn repo_picker_row_menu_escape_reanchors_to_its_row(cx: &mut gpui::TestAppContex
             );
             // A row above the menu's own disappears, so its index now names a
             // different repository than the one the menu was opened on.
-            host.cached_recent_repos = vec![last.clone()];
+            host.repo_picker.cached_recent_repos = vec![last.clone()];
             repo_picker::dismiss(host, cx);
 
             let moved_to = repo_picker::filtered_layout(host, "")
@@ -979,7 +981,7 @@ fn repo_picker_row_menu_escape_reanchors_to_its_row(cx: &mut gpui::TestAppContex
                 .position(|candidate| *candidate == entry);
             assert_ne!(moved_to, Some(stale_index), "the row should have moved up");
             assert_eq!(
-                host.repo_picker_selected_index, moved_to,
+                host.repo_picker.repo_picker_selected_index, moved_to,
                 "Escape should land on the row the menu belonged to, wherever it is now"
             );
 
@@ -991,9 +993,9 @@ fn repo_picker_row_menu_escape_reanchors_to_its_row(cx: &mut gpui::TestAppContex
                 gpui::point(gpui::px(140.0), gpui::px(120.0)),
                 cx,
             );
-            host.cached_recent_repos = Vec::new();
+            host.repo_picker.cached_recent_repos = Vec::new();
             repo_picker::dismiss(host, cx);
-            assert_eq!(host.repo_picker_selected_index, None);
+            assert_eq!(host.repo_picker.repo_picker_selected_index, None);
         });
     });
 }
@@ -1017,8 +1019,8 @@ fn repo_picker_forget_refuses_a_pinned_repository(cx: &mut gpui::TestAppContext)
     let entry = repo_picker::RepoPickerEntry::Closed(pinned.clone());
     cx.update(|_window, app| {
         popover_host.update(app, |host, cx| {
-            host.cached_pinned_repos = vec![pinned.clone()];
-            host.cached_recent_repos = vec![pinned.clone()];
+            host.repo_picker.cached_pinned_repos = vec![pinned.clone()];
+            host.repo_picker.cached_recent_repos = vec![pinned.clone()];
 
             assert!(
                 !row_menu_labels(host, &entry)
@@ -1029,7 +1031,7 @@ fn repo_picker_forget_refuses_a_pinned_repository(cx: &mut gpui::TestAppContext)
 
             repo_picker::forget(host, &entry, cx);
             assert_eq!(
-                host.cached_recent_repos,
+                host.repo_picker.cached_recent_repos,
                 vec![pinned.clone()],
                 "forgetting a pinned repository must be a no-op"
             );
@@ -1058,7 +1060,7 @@ fn repo_picker_close_row_action_promotes_the_recents_cache(cx: &mut gpui::TestAp
         popover_host.update(app, |host, cx| {
             // The repository is already on the list from when it was opened, so
             // closing it has to move that entry rather than add a second one.
-            host.cached_recent_repos = vec![older.clone(), workdir.clone()];
+            host.repo_picker.cached_recent_repos = vec![older.clone(), workdir.clone()];
             picker_row_menu::open(
                 host,
                 picker_row_menu::PickerRowMenuTarget::Repo(entry.clone()),
@@ -1076,12 +1078,12 @@ fn repo_picker_close_row_action_promotes_the_recents_cache(cx: &mut gpui::TestAp
             );
 
             assert_eq!(
-                host.cached_recent_repos,
+                host.repo_picker.cached_recent_repos,
                 vec![workdir.clone(), older.clone()],
                 "the closed repository should lead the list, exactly once"
             );
             assert!(host.picker_row_menu.is_none());
-            assert_eq!(host.repo_picker_selected_index, None);
+            assert_eq!(host.repo_picker.repo_picker_selected_index, None);
             assert!(
                 host.is_open(),
                 "closing keeps the picker up for the next one"
@@ -1146,7 +1148,7 @@ fn repo_picker_row_action_says_so_when_the_repository_is_gone(cx: &mut gpui::Tes
                 cx,
             );
             assert!(
-                host.cached_pinned_repos.is_empty(),
+                host.repo_picker.cached_pinned_repos.is_empty(),
                 "nothing should have been pinned"
             );
         });
@@ -1298,7 +1300,7 @@ fn a_long_repo_list_renders_only_the_rows_in_view(cx: &mut gpui::TestAppContext)
 
     cx.update(|_window, app| {
         popover_host.update(app, |host, cx| {
-            host.cached_pinned_repos = (0..200)
+            host.repo_picker.cached_pinned_repos = (0..200)
                 .map(|ix| std::path::PathBuf::from(format!("/tmp/pinned-{ix:03}")))
                 .collect();
             cx.notify();
@@ -1345,7 +1347,7 @@ fn repo_row_geometry_matches_the_height_rows_paint_at(cx: &mut gpui::TestAppCont
     // the rows this compares.
     cx.update(|_window, app| {
         popover_host.update(app, |host, cx| {
-            host.cached_pinned_repos = vec![
+            host.repo_picker.cached_pinned_repos = vec![
                 std::path::PathBuf::from("/tmp/pinned-one"),
                 std::path::PathBuf::from("/tmp/pinned-two"),
             ];
@@ -1404,7 +1406,7 @@ fn arrowing_to_the_last_row_scrolls_it_into_a_windowed_repo_list(cx: &mut gpui::
     let popover_host = cx.update(|_window, app| view.read(app).popover_host.clone());
     cx.update(|_window, app| {
         popover_host.update(app, |host, cx| {
-            host.cached_pinned_repos = (0..200)
+            host.repo_picker.cached_pinned_repos = (0..200)
                 .map(|ix| std::path::PathBuf::from(format!("/tmp/pinned-{ix:03}")))
                 .collect();
             cx.notify();
@@ -1437,7 +1439,10 @@ fn arrowing_to_the_last_row_scrolls_it_into_a_windowed_repo_list(cx: &mut gpui::
     });
 
     assert_eq!(
-        cx.update(|_window, app| popover_host.read(app).repo_picker_selected_index),
+        cx.update(|_window, app| popover_host
+            .read(app)
+            .repo_picker
+            .repo_picker_selected_index),
         Some(last),
         "arrowing up from nothing selects the last row"
     );
@@ -1469,8 +1474,10 @@ fn repo_picker_rows_are_reused_until_their_data_changes(cx: &mut gpui::TestAppCo
     let popover_host = cx.update(|_window, app| view.read(app).popover_host.clone());
     cx.update(|_window, app| {
         popover_host.update(app, |host, cx| {
-            host.cached_pinned_repos = vec![std::path::PathBuf::from("/tmp/pinned-one")];
-            host.cached_recent_repos = vec![std::path::PathBuf::from("/tmp/closed-one")];
+            host.repo_picker.cached_pinned_repos =
+                vec![std::path::PathBuf::from("/tmp/pinned-one")];
+            host.repo_picker.cached_recent_repos =
+                vec![std::path::PathBuf::from("/tmp/closed-one")];
             cx.notify();
         });
     });
@@ -1493,11 +1500,13 @@ fn repo_picker_rows_are_reused_until_their_data_changes(cx: &mut gpui::TestAppCo
             repo_picker::apply_sort(host, repo_picker::RepoPickerSort::Oldest, cx);
         }),
         ("a pin", |host, _cx| {
-            host.cached_pinned_repos
+            host.repo_picker
+                .cached_pinned_repos
                 .push(std::path::PathBuf::from("/tmp/pinned-two"));
         }),
         ("a recent", |host, _cx| {
-            host.cached_recent_repos
+            host.repo_picker
+                .cached_recent_repos
                 .push(std::path::PathBuf::from("/tmp/closed-two"));
         }),
         ("a collapsed section", |host, cx| {
@@ -1709,6 +1718,7 @@ fn rebase_onto_picker_excludes_current_branch_and_opens_confirm(cx: &mut gpui::T
                     cx,
                 );
                 let search = host
+                    .branch_picker
                     .branch_picker_search_input
                     .as_ref()
                     .expect("branch picker search input");

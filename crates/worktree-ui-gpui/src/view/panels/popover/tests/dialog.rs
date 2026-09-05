@@ -325,6 +325,7 @@ fn gitignore_pattern_text(view: &gpui::Entity<WorkTreeView>, app: &gpui::App) ->
     view.read(app)
         .popover_host
         .read(app)
+        .gitignore
         .gitignore_patterns_input
         .read(app)
         .text()
@@ -457,9 +458,11 @@ fn add_to_gitignore_prompt_submits_the_hand_edited_pattern(cx: &mut gpui::TestAp
     cx.update(|_window, app| {
         view.update(app, |this, cx| {
             this.popover_host.update(cx, |host, cx| {
-                host.gitignore_patterns_input.update(cx, |input, cx| {
-                    input.set_text("/target/\n\n  *.tmp  ", cx);
-                });
+                host.gitignore
+                    .gitignore_patterns_input
+                    .update(cx, |input, cx| {
+                        input.set_text("/target/\n\n  *.tmp  ", cx);
+                    });
             });
         });
     });

@@ -23,7 +23,7 @@ pub(super) fn panel(
 
     let cancel_button = |this: &PopoverHost, cx: &mut gpui::Context<PopoverHost>| {
         super::cancel_button("squash_cancel", "squash_cancel_hint", theme)
-            .focus_handle(this.squash_cancel_focus_handle.clone())
+            .focus_handle(this.squash.squash_cancel_focus_handle.clone())
             .on_click(theme, cx, |this, _e, window, cx| {
                 this.dismiss_prompt_popover(window, cx);
             })
@@ -57,6 +57,7 @@ pub(super) fn panel(
     };
 
     let message_empty = this
+        .squash
         .squash_message_input
         .read_with(cx, |input, _| input.text().trim().is_empty());
 
@@ -87,7 +88,7 @@ pub(super) fn panel(
         Loadable::Ready(_) => None,
     };
 
-    let description_scroll = this.squash_description_scroll.clone();
+    let description_scroll = this.squash.squash_description_scroll.clone();
     let count = plan.commit_count;
 
     div()
@@ -124,7 +125,7 @@ pub(super) fn panel(
                     div()
                         .w_full()
                         .min_w(px(0.0))
-                        .child(this.squash_message_input.clone()),
+                        .child(this.squash.squash_message_input.clone()),
                 ),
         )
         .child(
@@ -148,7 +149,7 @@ pub(super) fn panel(
                         description_scroll,
                         scaled_px(180.0),
                     )
-                    .render(theme, this.squash_description_input.clone()),
+                    .render(theme, this.squash.squash_description_input.clone()),
                 ),
         )
         .when_some(message_hint, |el, hint| {
@@ -172,7 +173,7 @@ pub(super) fn panel(
                 .child(cancel_button(this, cx))
                 .child(
                     components::Button::new("squash_go", crate::i18n::tr("prompts.squash.submit"))
-                        .focus_handle(this.squash_submit_focus_handle.clone())
+                        .focus_handle(this.squash.squash_submit_focus_handle.clone())
                         .style(components::ButtonStyle::Filled)
                         .disabled(message_empty)
                         .on_click(theme, cx, move |this, _e, _w, cx| {

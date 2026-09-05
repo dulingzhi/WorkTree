@@ -73,8 +73,8 @@ pub(super) fn panel(
     cx: &mut gpui::Context<PopoverHost>,
 ) -> gpui::Div {
     let theme = this.theme;
-    let advanced_expanded = this.submodule_add_advanced_expanded;
-    let force_enabled = this.submodule_force_enabled;
+    let advanced_expanded = this.submodule_add.submodule_add_advanced_expanded;
+    let force_enabled = this.submodule_add.submodule_force_enabled;
     let can_submit = this.can_submit_submodule_add(cx);
     let scaled_px = super::popover_scaled_px_fn(cx);
 
@@ -96,7 +96,7 @@ pub(super) fn panel(
                 .pb_1()
                 .w_full()
                 .min_w(px(0.0))
-                .child(this.submodule_url_input.clone()),
+                .child(this.submodule_add.submodule_url_input.clone()),
         )
         .child(input_label(
             theme,
@@ -108,7 +108,7 @@ pub(super) fn panel(
                 .pb_1()
                 .w_full()
                 .min_w(px(0.0))
-                .child(this.submodule_path_input.clone()),
+                .child(this.submodule_add.submodule_path_input.clone()),
         )
         .child(input_label(
             theme,
@@ -120,17 +120,18 @@ pub(super) fn panel(
                 .pb_1()
                 .w_full()
                 .min_w(px(0.0))
-                .child(this.submodule_branch_input.clone()),
+                .child(this.submodule_add.submodule_branch_input.clone()),
         )
         .child(
             advanced_toggle(
                 theme,
                 advanced_expanded,
-                &this.submodule_advanced_focus_handle,
+                &this.submodule_add.submodule_advanced_focus_handle,
                 cx,
             )
             .on_click(cx.listener(|this, _e: &ClickEvent, _w, cx| {
-                this.submodule_add_advanced_expanded = !this.submodule_add_advanced_expanded;
+                this.submodule_add.submodule_add_advanced_expanded =
+                    !this.submodule_add.submodule_add_advanced_expanded;
                 cx.notify();
             })),
         )
@@ -146,14 +147,20 @@ pub(super) fn panel(
                         .pb_1()
                         .w_full()
                         .min_w(px(0.0))
-                        .child(this.submodule_name_input.clone()),
+                        .child(this.submodule_add.submodule_name_input.clone()),
                 )
                 .child(
-                    force_toggle(theme, force_enabled, &this.submodule_force_focus_handle, cx)
-                        .on_click(cx.listener(|this, _e: &ClickEvent, _w, cx| {
-                            this.submodule_force_enabled = !this.submodule_force_enabled;
-                            cx.notify();
-                        })),
+                    force_toggle(
+                        theme,
+                        force_enabled,
+                        &this.submodule_add.submodule_force_focus_handle,
+                        cx,
+                    )
+                    .on_click(cx.listener(|this, _e: &ClickEvent, _w, cx| {
+                        this.submodule_add.submodule_force_enabled =
+                            !this.submodule_add.submodule_force_enabled;
+                        cx.notify();
+                    })),
                 )
                 .child(
                     div()
@@ -174,7 +181,7 @@ pub(super) fn panel(
                 .justify_between()
                 .child(
                     cancel_button("submodule_add_cancel", "submodule_add_cancel_hint", theme)
-                        .focus_handle(this.submodule_focus.cancel.clone())
+                        .focus_handle(this.submodule_add.submodule_focus.cancel.clone())
                         .on_click(theme, cx, |this, _e, window, cx| {
                             this.dismiss_prompt_popover(window, cx);
                         }),
@@ -184,7 +191,7 @@ pub(super) fn panel(
                         "submodule_add_go",
                         crate::i18n::tr("prompts.submodule_add.add"),
                     )
-                    .focus_handle(this.submodule_focus.submit.clone())
+                    .focus_handle(this.submodule_add.submodule_focus.submit.clone())
                     .disabled(!can_submit)
                     .separated_end_slot(super::hotkey_hint(theme, "submodule_add_go_hint", "Enter"))
                     .style(components::ButtonStyle::Filled)

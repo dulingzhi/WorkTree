@@ -133,7 +133,10 @@ fn arrowing_to_the_last_file_history_row_scrolls_it_into_view(cx: &mut gpui::Tes
     });
 
     assert_eq!(
-        cx.update(|_window, app| popover_host.read(app).file_history_selected_index),
+        cx.update(|_window, app| popover_host
+            .read(app)
+            .file_history
+            .file_history_selected_index),
         Some(COMMIT_COUNT - 1),
         "arrowing up from nothing selects the last row"
     );

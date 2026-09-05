@@ -25,7 +25,7 @@ pub(super) fn panel(
                 .pb_1()
                 .w_full()
                 .min_w(px(0.0))
-                .child(this.remote_name_input.clone()),
+                .child(this.remote_prompts.remote_name_input.clone()),
         )
         .child(input_label(
             theme,
@@ -37,7 +37,7 @@ pub(super) fn panel(
                 .pb_1()
                 .w_full()
                 .min_w(px(0.0))
-                .child(this.remote_url_input.clone()),
+                .child(this.remote_prompts.remote_url_input.clone()),
         )
         .child(div().border_t_1().border_color(theme.colors.stroke.default))
         .child(
@@ -49,7 +49,7 @@ pub(super) fn panel(
                 .justify_between()
                 .child(
                     cancel_button("add_remote_cancel", "add_remote_cancel_hint", theme)
-                        .focus_handle(this.remote_add_focus.cancel.clone())
+                        .focus_handle(this.remote_prompts.remote_add_focus.cancel.clone())
                         .on_click(theme, cx, |this, _e, window, cx| {
                             this.dismiss_prompt_popover(window, cx);
                         }),
@@ -59,7 +59,7 @@ pub(super) fn panel(
                         "add_remote_go",
                         crate::i18n::tr("prompts.submodule_add.add"),
                     )
-                    .focus_handle(this.remote_add_focus.submit.clone())
+                    .focus_handle(this.remote_prompts.remote_add_focus.submit.clone())
                     .disabled(!can_submit)
                     .separated_end_slot(super::hotkey_hint(theme, "add_remote_go_hint", "Enter"))
                     .style(components::ButtonStyle::Filled)

@@ -120,60 +120,64 @@ pub(super) fn cached(
         rows_signature(this, repo_id),
         query,
     );
-    super::rows_cache::get_or_build(&this.commit_search_picker_rows_cache, key, |now| {
-        let Some(repo) = repo_for(this, repo_id) else {
-            return (Vec::new(), Vec::new(), None);
-        };
-        let query = query.trim();
-        let mut items: Vec<components::PickerPromptItem> = Vec::new();
-        let mut rows: Vec<CommitSearchPickerRow> = Vec::new();
+    super::rows_cache::get_or_build(
+        &this.commit_search_picker.commit_search_picker_rows_cache,
+        key,
+        |now| {
+            let Some(repo) = repo_for(this, repo_id) else {
+                return (Vec::new(), Vec::new(), None);
+            };
+            let query = query.trim();
+            let mut items: Vec<components::PickerPromptItem> = Vec::new();
+            let mut rows: Vec<CommitSearchPickerRow> = Vec::new();
 
-        // Tier one: everything the loaded page holds. The prompt's filter is
-        // the search — rows whose summary, author or sha don't contain the
-        // query are dropped at layout time, not here.
-        let mut loaded_ids: HashSet<&CommitId> = HashSet::new();
-        if let Loadable::Ready(page) = &repo.log {
-            for commit in &page.commits {
-                loaded_ids.insert(&commit.id);
-                items.push(
-                    commit_row(commit, now)
-                        .section(crate::i18n::tr("ui.picker.commit_search.section.loaded")),
-                );
-                rows.push(CommitSearchPickerRow::Commit(commit.id.clone()));
-            }
-        }
-
-        // Tier two: only when the stored results answer this exact query — a
-        // new query must not parade old results as its own. These rows were
-        // vetted by the search itself, so they match any query and are never
-        // re-filtered (a body-only match would otherwise vanish).
-        if repo.commit_search_query.as_deref() == Some(query) && !query.is_empty() {
-            if let Loadable::Ready(results) = &repo.commit_search {
-                for commit in results.iter() {
-                    // Already listed in the loaded section — a second row for
-                    // it would only add noise.
-                    if loaded_ids.contains(&commit.id) {
-                        continue;
-                    }
+            // Tier one: everything the loaded page holds. The prompt's filter is
+            // the search — rows whose summary, author or sha don't contain the
+            // query are dropped at layout time, not here.
+            let mut loaded_ids: HashSet<&CommitId> = HashSet::new();
+            if let Loadable::Ready(page) = &repo.log {
+                for commit in &page.commits {
+                    loaded_ids.insert(&commit.id);
                     items.push(
                         commit_row(commit, now)
-                            .section(crate::i18n::tr(
-                                "ui.picker.commit_search.section.all_history",
-                            ))
-                            .match_any_query(),
+                            .section(crate::i18n::tr("ui.picker.commit_search.section.loaded")),
                     );
                     rows.push(CommitSearchPickerRow::Commit(commit.id.clone()));
                 }
             }
-        }
 
-        if !query.is_empty() {
-            items.push(search_all_row(query, repo));
-            rows.push(CommitSearchPickerRow::SearchAll);
-        }
+            // Tier two: only when the stored results answer this exact query — a
+            // new query must not parade old results as its own. These rows were
+            // vetted by the search itself, so they match any query and are never
+            // re-filtered (a body-only match would otherwise vanish).
+            if repo.commit_search_query.as_deref() == Some(query) && !query.is_empty() {
+                if let Loadable::Ready(results) = &repo.commit_search {
+                    for commit in results.iter() {
+                        // Already listed in the loaded section — a second row for
+                        // it would only add noise.
+                        if loaded_ids.contains(&commit.id) {
+                            continue;
+                        }
+                        items.push(
+                            commit_row(commit, now)
+                                .section(crate::i18n::tr(
+                                    "ui.picker.commit_search.section.all_history",
+                                ))
+                                .match_any_query(),
+                        );
+                        rows.push(CommitSearchPickerRow::Commit(commit.id.clone()));
+                    }
+                }
+            }
 
-        (items, rows, None)
-    })
+            if !query.is_empty() {
+                items.push(search_all_row(query, repo));
+                rows.push(CommitSearchPickerRow::SearchAll);
+            }
+
+            (items, rows, None)
+        },
+    )
 }
 
 pub(super) fn nav_targets(
@@ -200,7 +204,11 @@ pub(super) fn activate(
             this.close_popover(cx);
         }
         CommitSearchPickerRow::SearchAll => {
-            let Some(search) = this.commit_search_picker_search_input.clone() else {
+            let Some(search) = this
+                .commit_search_picker
+                .commit_search_picker_search_input
+                .clone()
+            else {
                 return;
             };
             let query = search.read(cx).text().trim().to_string();
@@ -238,7 +246,11 @@ pub(super) fn panel(
             )
         };
 
-    let Some(search) = this.commit_search_picker_search_input.clone() else {
+    let Some(search) = this
+        .commit_search_picker
+        .commit_search_picker_search_input
+        .clone()
+    else {
         return label(
             this,
             crate::i18n::tr("ui.common.search_input_not_initialized"),
@@ -269,7 +281,10 @@ pub(super) fn panel(
                 .tooltip_host(this.tooltip_host.clone())
                 .empty_text(crate::i18n::tr("ui.picker.commit_search.empty"))
                 .max_height(scaled_px(COMMIT_SEARCH_PICKER_LIST_MAX_HEIGHT_PX))
-                .selected_index(this.commit_search_picker_selected_index)
+                .selected_index(
+                    this.commit_search_picker
+                        .commit_search_picker_selected_index,
+                )
                 .render(
                     theme,
                     ui_scale_percent,
@@ -309,8 +324,7 @@ mod tests {
         let commit = synthetic_commit("0123456789abcdef0123456789abcdef01234567");
         let row = commit_row(&commit, std::time::UNIX_EPOCH);
 
-        let layout =
-            components::picker_prompt_layout(std::slice::from_ref(&row), "0123456789");
+        let layout = components::picker_prompt_layout(std::slice::from_ref(&row), "0123456789");
         assert_eq!(
             layout.item_indices.len(),
             1,

@@ -77,34 +77,38 @@ pub(super) fn cached(
         rows_signature(this, repo_id, is_remove),
         query,
     );
-    super::rows_cache::get_or_build(&this.worktree_picker_rows_cache, key, |_now| {
-        let Some(repo) = repo_for(this, repo_id) else {
-            return (Vec::new(), Vec::new(), None);
-        };
-        let Loadable::Ready(worktrees) = &repo.worktrees else {
-            return (Vec::new(), Vec::new(), None);
-        };
-        let (items, payloads) = worktrees
-            .iter()
-            .filter(|worktree| worktree.path != repo.spec.workdir)
-            .map(|worktree| {
-                let item = if is_remove {
-                    components::PickerPromptItem::single(
-                        worktree.path.display().to_string(),
-                        components::TextTruncationProfile::Path,
-                    )
-                } else {
-                    worktree_picker_item(
-                        worktree.branch.as_deref(),
-                        worktree.detached,
-                        &worktree.path,
-                    )
-                };
-                (item, worktree.path.clone())
-            })
-            .unzip();
-        (items, payloads, None)
-    })
+    super::rows_cache::get_or_build(
+        &this.worktree_picker.worktree_picker_rows_cache,
+        key,
+        |_now| {
+            let Some(repo) = repo_for(this, repo_id) else {
+                return (Vec::new(), Vec::new(), None);
+            };
+            let Loadable::Ready(worktrees) = &repo.worktrees else {
+                return (Vec::new(), Vec::new(), None);
+            };
+            let (items, payloads) = worktrees
+                .iter()
+                .filter(|worktree| worktree.path != repo.spec.workdir)
+                .map(|worktree| {
+                    let item = if is_remove {
+                        components::PickerPromptItem::single(
+                            worktree.path.display().to_string(),
+                            components::TextTruncationProfile::Path,
+                        )
+                    } else {
+                        worktree_picker_item(
+                            worktree.branch.as_deref(),
+                            worktree.detached,
+                            &worktree.path,
+                        )
+                    };
+                    (item, worktree.path.clone())
+                })
+                .unzip();
+            (items, payloads, None)
+        },
+    )
 }
 
 pub(super) fn nav_targets(
@@ -180,7 +184,7 @@ pub(super) fn panel(
         Loadable::Ready(_) => {}
     }
 
-    let Some(search) = this.worktree_picker_search_input.clone() else {
+    let Some(search) = this.worktree_picker.worktree_picker_search_input.clone() else {
         return label(
             this,
             crate::i18n::tr("ui.common.search_input_not_initialized"),
@@ -198,7 +202,7 @@ pub(super) fn panel(
             .tooltip_host(this.tooltip_host.clone())
             .empty_text(crate::i18n::tr("ui.picker.worktree.empty"))
             .max_height(scaled_px(WORKTREE_PICKER_LIST_MAX_HEIGHT_PX))
-            .selected_index(this.worktree_picker_selected_index)
+            .selected_index(this.worktree_picker.worktree_picker_selected_index)
             .render(
                 theme,
                 ui_scale_percent,

@@ -33,7 +33,7 @@ pub(super) fn panel(
                 .py_1()
                 .w_full()
                 .min_w(px(0.0))
-                .child(this.push_upstream_branch_input.clone()),
+                .child(this.push_upstream.push_upstream_branch_input.clone()),
         )
         .child(
             div()
@@ -44,7 +44,7 @@ pub(super) fn panel(
                 .justify_between()
                 .child(
                     cancel_button("push_upstream_cancel", "push_upstream_cancel_hint", theme)
-                        .focus_handle(this.push_upstream_focus.cancel.clone())
+                        .focus_handle(this.push_upstream.push_upstream_focus.cancel.clone())
                         .on_click(theme, cx, |this, _e, window, cx| {
                             this.dismiss_prompt_popover(window, cx);
                         }),
@@ -54,7 +54,7 @@ pub(super) fn panel(
                         "push_upstream_go",
                         crate::i18n::tr("input.push_upstream.push"),
                     )
-                    .focus_handle(this.push_upstream_focus.submit.clone())
+                    .focus_handle(this.push_upstream.push_upstream_focus.submit.clone())
                     .disabled(!can_submit)
                     .separated_end_slot(super::hotkey_hint(theme, "push_upstream_go_hint", "Enter"))
                     .style(components::ButtonStyle::Filled)
