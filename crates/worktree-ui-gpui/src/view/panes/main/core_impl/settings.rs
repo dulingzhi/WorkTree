@@ -2,6 +2,38 @@
 //! through the root view's UI settings store.
 use super::*;
 
+/// Generate the `_and_persist` variant of a diff-view setting: apply the
+/// in-pane setter only when the value actually changed, then sync the root
+/// preference without re-entering `main_pane.update(...)`.
+macro_rules! diff_setting_and_persist {
+    ($name:ident, $field:ident, $setter:ident, $root_sync:ident, $ty:ty) => {
+        pub(in crate::view) fn $name(&mut self, next: $ty, cx: &mut gpui::Context<Self>) {
+            if self.$field != next {
+                self.$setter(next, cx);
+            }
+            let root_view = self.root_view.clone();
+            let _ = root_view.update(cx, |root, cx| {
+                root.$root_sync(next, cx);
+            });
+        }
+    };
+}
+
+/// Generate a merge-tool boolean preference setter: no-op when unchanged,
+/// store, schedule the root persist, re-render.
+macro_rules! mergetool_flag_and_persist {
+    ($name:ident, $field:ident) => {
+        pub(in crate::view) fn $name(&mut self, next: bool, cx: &mut gpui::Context<Self>) {
+            if self.$field == next {
+                return;
+            }
+            self.$field = next;
+            self.schedule_ui_settings_persist(cx);
+            cx.notify();
+        }
+    };
+}
+
 impl MainPaneView {
     pub(in crate::view) fn set_active_context_menu_invoker(
         &mut self,
@@ -250,75 +282,41 @@ impl MainPaneView {
 
     // Apply the mode inside the pane first, then sync the root preference
     // without re-entering `main_pane.update(...)`.
-    pub(in crate::view) fn set_diff_content_mode_and_persist(
-        &mut self,
-        next: DiffContentMode,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.diff_content_mode != next {
-            self.set_diff_content_mode(next, cx);
-        }
-        let root_view = self.root_view.clone();
-        let _ = root_view.update(cx, |root, cx| {
-            root.sync_diff_content_mode_from_pane(next, cx);
-        });
-    }
-
-    pub(in crate::view) fn set_diff_whitespace_mode_and_persist(
-        &mut self,
-        next: DiffWhitespaceMode,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.diff_whitespace_mode != next {
-            self.set_diff_whitespace_mode(next, cx);
-        }
-        let root_view = self.root_view.clone();
-        let _ = root_view.update(cx, |root, cx| {
-            root.sync_diff_whitespace_mode_from_pane(next, cx);
-        });
-    }
-
-    pub(in crate::view) fn set_diff_reveal_whitespace_chars_and_persist(
-        &mut self,
-        next: bool,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.reveal_whitespace_chars != next {
-            self.set_diff_reveal_whitespace_chars(next, cx);
-        }
-        let root_view = self.root_view.clone();
-        let _ = root_view.update(cx, |root, cx| {
-            root.sync_diff_reveal_whitespace_chars_from_pane(next, cx);
-        });
-    }
-
-    pub(in crate::view) fn set_diff_word_wrap_and_persist(
-        &mut self,
-        next: bool,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.diff_word_wrap != next {
-            self.set_diff_word_wrap(next, cx);
-        }
-        let root_view = self.root_view.clone();
-        let _ = root_view.update(cx, |root, cx| {
-            root.sync_diff_word_wrap_from_pane(next, cx);
-        });
-    }
-
-    pub(in crate::view) fn set_diff_show_line_numbers_and_persist(
-        &mut self,
-        next: bool,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.diff_show_line_numbers != next {
-            self.set_diff_show_line_numbers(next, cx);
-        }
-        let root_view = self.root_view.clone();
-        let _ = root_view.update(cx, |root, cx| {
-            root.sync_diff_show_line_numbers_from_pane(next, cx);
-        });
-    }
+    diff_setting_and_persist!(
+        set_diff_content_mode_and_persist,
+        diff_content_mode,
+        set_diff_content_mode,
+        sync_diff_content_mode_from_pane,
+        DiffContentMode
+    );
+    diff_setting_and_persist!(
+        set_diff_whitespace_mode_and_persist,
+        diff_whitespace_mode,
+        set_diff_whitespace_mode,
+        sync_diff_whitespace_mode_from_pane,
+        DiffWhitespaceMode
+    );
+    diff_setting_and_persist!(
+        set_diff_reveal_whitespace_chars_and_persist,
+        reveal_whitespace_chars,
+        set_diff_reveal_whitespace_chars,
+        sync_diff_reveal_whitespace_chars_from_pane,
+        bool
+    );
+    diff_setting_and_persist!(
+        set_diff_word_wrap_and_persist,
+        diff_word_wrap,
+        set_diff_word_wrap,
+        sync_diff_word_wrap_from_pane,
+        bool
+    );
+    diff_setting_and_persist!(
+        set_diff_show_line_numbers_and_persist,
+        diff_show_line_numbers,
+        set_diff_show_line_numbers,
+        sync_diff_show_line_numbers_from_pane,
+        bool
+    );
 
     pub(in crate::view) fn history_visible_column_preferences(
         &self,
@@ -347,32 +345,21 @@ impl MainPaneView {
         });
     }
 
-    pub(in crate::view) fn set_mergetool_auto_advance_and_persist(
-        &mut self,
-        next: bool,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.mergetool_auto_advance == next {
-            return;
-        }
-        self.mergetool_auto_advance = next;
-        self.schedule_ui_settings_persist(cx);
-        cx.notify();
-    }
+    mergetool_flag_and_persist!(
+        set_mergetool_auto_advance_and_persist,
+        mergetool_auto_advance
+    );
+    mergetool_flag_and_persist!(
+        set_mergetool_output_scroll_sync_and_persist,
+        mergetool_output_scroll_sync
+    );
+    mergetool_flag_and_persist!(
+        set_mergetool_show_line_numbers_and_persist,
+        mergetool_show_line_numbers
+    );
 
-    pub(in crate::view) fn set_mergetool_output_scroll_sync_and_persist(
-        &mut self,
-        next: bool,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.mergetool_output_scroll_sync == next {
-            return;
-        }
-        self.mergetool_output_scroll_sync = next;
-        self.schedule_ui_settings_persist(cx);
-        cx.notify();
-    }
-
+    // Stays hand-written: it diverges from mergetool_flag_and_persist! by
+    // deferring the persist (see the body comment).
     pub(in crate::view) fn set_mergetool_view_three_way_and_persist(
         &mut self,
         next: bool,
@@ -391,19 +378,6 @@ impl MainPaneView {
                 root.schedule_ui_settings_persist(cx);
             });
         });
-        cx.notify();
-    }
-
-    pub(in crate::view) fn set_mergetool_show_line_numbers_and_persist(
-        &mut self,
-        next: bool,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.mergetool_show_line_numbers == next {
-            return;
-        }
-        self.mergetool_show_line_numbers = next;
-        self.schedule_ui_settings_persist(cx);
         cx.notify();
     }
 
