@@ -1,6 +1,7 @@
 use super::helpers::DiffTextAutoscrollTarget;
 use super::*;
 use crate::kit::text_expand::maybe_expand_tabs;
+use crate::view::panes::PaneChromeExt as _;
 
 #[derive(Clone, Copy)]
 enum DiffTextOffsetBias {

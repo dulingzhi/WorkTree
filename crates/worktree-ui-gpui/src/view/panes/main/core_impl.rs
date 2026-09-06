@@ -17,6 +17,7 @@ use super::helpers::{
 use super::*;
 use crate::kit::text_model::TextModelSnapshot;
 use crate::view::branch_sidebar::BranchSection;
+use crate::view::panes::PaneChromeExt as _;
 use rustc_hash::{FxHashMap, FxHashSet, FxHasher};
 use std::sync::Arc;
 use worktree_core::domain::LogScope;

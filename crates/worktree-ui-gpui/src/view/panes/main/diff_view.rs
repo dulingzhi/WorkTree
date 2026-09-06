@@ -1,5 +1,6 @@
 use super::*;
 use crate::view::panels::COMMIT_MESSAGE_INPUT_MAX_HEIGHT_PX;
+use crate::view::panes::PaneChromeExt as _;
 use crate::view::panes::main::DiffHorizontalScrollColumn;
 use crate::view::panes::main::diff_search::DiffSearchOptions;
 use gpui::Focusable;

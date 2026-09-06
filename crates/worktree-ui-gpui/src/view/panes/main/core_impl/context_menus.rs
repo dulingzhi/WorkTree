@@ -5,54 +5,19 @@ use super::super::helpers::{
     line_start_offset_for_index, resolved_output_marker_for_line,
 };
 use super::*;
+use crate::view::panes::PaneChromeExt;
+
+impl PaneChromeExt for MainPaneView {
+    fn root_view(&self) -> &WeakEntity<WorkTreeView> {
+        &self.root_view
+    }
+
+    fn theme_slot(&mut self) -> &mut AppTheme {
+        &mut self.theme
+    }
+}
 
 impl MainPaneView {
-    pub(in crate::view) fn open_popover_at(
-        &mut self,
-        kind: PopoverKind,
-        anchor: Point<Pixels>,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let root_view = self.root_view.clone();
-        let window_handle = window.window_handle();
-        cx.defer(move |cx| {
-            let _ = window_handle.update(cx, |_, window, cx| {
-                let _ = root_view.update(cx, |root, cx| {
-                    root.open_popover_at(kind, anchor, window, cx);
-                });
-            });
-        });
-    }
-
-    pub(in crate::view) fn open_popover_for_bounds(
-        &mut self,
-        kind: PopoverKind,
-        anchor_bounds: Bounds<Pixels>,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let root_view = self.root_view.clone();
-        let window_handle = window.window_handle();
-        cx.defer(move |cx| {
-            let _ = window_handle.update(cx, |_, window, cx| {
-                let _ = root_view.update(cx, |root, cx| {
-                    root.open_popover_for_bounds(kind, anchor_bounds, window, cx);
-                });
-            });
-        });
-    }
-
-    pub(in crate::view) fn activate_context_menu_invoker(
-        &mut self,
-        invoker: SharedString,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let _ = self.root_view.update(cx, move |root, cx| {
-            root.set_active_context_menu_invoker(Some(invoker), cx);
-        });
-    }
-
     #[allow(clippy::too_many_arguments)]
     pub(in crate::view) fn open_conflict_resolver_input_row_context_menu(
         &mut self,
