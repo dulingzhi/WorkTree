@@ -52,20 +52,12 @@ impl SettingsWindowView {
         cx.notify();
     }
 
-    pub(in crate::view::settings_window) fn set_default_tag_type(
-        &mut self,
-        tag_type: DefaultTagType,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.default_tag_type == tag_type {
-            return;
-        }
-
-        self.default_tag_type = tag_type;
-        self.persist_preferences(cx);
-        self.update_main_windows(cx, move |view, _window, cx| {
-            view.set_default_tag_type_preference(tag_type, cx);
-        });
-        cx.notify();
-    }
+    settings_setter!(
+        set_default_tag_type,
+        default_tag_type,
+        DefaultTagType,
+        tag_type,
+        _window,
+        set_default_tag_type_preference
+    );
 }

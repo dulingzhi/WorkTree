@@ -58,38 +58,23 @@ impl SettingsWindowView {
         cx.notify();
     }
 
-    pub(in crate::view::settings_window) fn set_history_highlight_commit_chain(
-        &mut self,
-        enabled: bool,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.history_highlight_commit_chain == enabled {
-            return;
-        }
-        self.history_highlight_commit_chain = enabled;
-        self.persist_preferences(cx);
-        self.update_main_windows(cx, move |view, _window, cx| {
-            view.set_history_highlight_commit_chain(enabled, cx);
-        });
-        cx.notify();
-    }
+    settings_setter!(
+        set_history_highlight_commit_chain,
+        history_highlight_commit_chain,
+        bool,
+        enabled,
+        _window,
+        set_history_highlight_commit_chain
+    );
 
-    pub(in crate::view::settings_window) fn set_history_relative_dates(
-        &mut self,
-        enabled: bool,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.history_relative_dates == enabled {
-            return;
-        }
-
-        self.history_relative_dates = enabled;
-        self.persist_preferences(cx);
-        self.update_main_windows(cx, move |view, _window, cx| {
-            view.set_history_relative_dates(enabled, cx);
-        });
-        cx.notify();
-    }
+    settings_setter!(
+        set_history_relative_dates,
+        history_relative_dates,
+        bool,
+        enabled,
+        _window,
+        set_history_relative_dates
+    );
 
     pub(in crate::view::settings_window) fn set_default_history_mode(
         &mut self,

@@ -80,143 +80,79 @@ pub(in crate::view::settings_window) const DIFF_VIEW_MODE_OPTIONS: &[(&str, Diff
     ];
 
 impl SettingsWindowView {
-    pub(in crate::view::settings_window) fn set_change_tracking_view(
-        &mut self,
-        next: ChangeTrackingView,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.change_tracking_view == next {
-            return;
-        }
+    settings_setter!(
+        set_change_tracking_view,
+        change_tracking_view,
+        ChangeTrackingView,
+        next,
+        _window,
+        set_change_tracking_view,
+        reset_section
+    );
 
-        self.change_tracking_view = next;
-        self.expanded_section = None;
-        self.persist_preferences(cx);
-        self.update_main_windows(cx, move |view, _window, cx| {
-            view.set_change_tracking_view(next, cx);
-        });
-        cx.notify();
-    }
+    settings_setter!(
+        set_diff_scroll_sync,
+        diff_scroll_sync,
+        DiffScrollSync,
+        next,
+        _window,
+        set_diff_scroll_sync,
+        reset_section
+    );
 
-    pub(in crate::view::settings_window) fn set_diff_scroll_sync(
-        &mut self,
-        next: DiffScrollSync,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.diff_scroll_sync == next {
-            return;
-        }
+    settings_setter!(
+        set_diff_content_mode,
+        diff_content_mode,
+        DiffContentMode,
+        next,
+        _window,
+        set_diff_content_mode,
+        reset_section
+    );
 
-        self.diff_scroll_sync = next;
-        self.expanded_section = None;
-        self.persist_preferences(cx);
-        self.update_main_windows(cx, move |view, _window, cx| {
-            view.set_diff_scroll_sync(next, cx);
-        });
-        cx.notify();
-    }
+    settings_setter!(
+        set_diff_whitespace_mode,
+        diff_whitespace_mode,
+        DiffWhitespaceMode,
+        next,
+        _window,
+        set_diff_whitespace_mode
+    );
 
-    pub(in crate::view::settings_window) fn set_diff_content_mode(
-        &mut self,
-        next: DiffContentMode,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.diff_content_mode == next {
-            return;
-        }
+    settings_setter!(
+        set_diff_view_mode,
+        diff_view_mode,
+        DiffViewMode,
+        next,
+        _window,
+        set_diff_view_mode,
+        reset_section
+    );
 
-        self.diff_content_mode = next;
-        self.expanded_section = None;
-        self.persist_preferences(cx);
-        self.update_main_windows(cx, move |view, _window, cx| {
-            view.set_diff_content_mode(next, cx);
-        });
-        cx.notify();
-    }
+    settings_setter!(
+        set_diff_reveal_whitespace_chars,
+        diff_reveal_whitespace_chars,
+        bool,
+        next,
+        _window,
+        set_diff_reveal_whitespace_chars
+    );
 
-    pub(in crate::view::settings_window) fn set_diff_whitespace_mode(
-        &mut self,
-        next: DiffWhitespaceMode,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.diff_whitespace_mode == next {
-            return;
-        }
+    settings_setter!(
+        set_diff_word_wrap,
+        diff_word_wrap,
+        bool,
+        next,
+        _window,
+        set_diff_word_wrap
+    );
 
-        self.diff_whitespace_mode = next;
-        self.persist_preferences(cx);
-        self.update_main_windows(cx, move |view, _window, cx| {
-            view.set_diff_whitespace_mode(next, cx);
-        });
-        cx.notify();
-    }
-
-    pub(in crate::view::settings_window) fn set_diff_view_mode(
-        &mut self,
-        next: DiffViewMode,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.diff_view_mode == next {
-            return;
-        }
-
-        self.diff_view_mode = next;
-        self.expanded_section = None;
-        self.persist_preferences(cx);
-        self.update_main_windows(cx, move |view, _window, cx| {
-            view.set_diff_view_mode(next, cx);
-        });
-        cx.notify();
-    }
-
-    pub(in crate::view::settings_window) fn set_diff_reveal_whitespace_chars(
-        &mut self,
-        next: bool,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.diff_reveal_whitespace_chars == next {
-            return;
-        }
-
-        self.diff_reveal_whitespace_chars = next;
-        self.persist_preferences(cx);
-        self.update_main_windows(cx, move |view, _window, cx| {
-            view.set_diff_reveal_whitespace_chars(next, cx);
-        });
-        cx.notify();
-    }
-
-    pub(in crate::view::settings_window) fn set_diff_word_wrap(
-        &mut self,
-        next: bool,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.diff_word_wrap == next {
-            return;
-        }
-
-        self.diff_word_wrap = next;
-        self.persist_preferences(cx);
-        self.update_main_windows(cx, move |view, _window, cx| {
-            view.set_diff_word_wrap(next, cx);
-        });
-        cx.notify();
-    }
-
-    pub(in crate::view::settings_window) fn set_diff_show_line_numbers(
-        &mut self,
-        next: bool,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.diff_show_line_numbers == next {
-            return;
-        }
-
-        self.diff_show_line_numbers = next;
-        self.persist_preferences(cx);
-        self.update_main_windows(cx, move |view, _window, cx| {
-            view.set_diff_show_line_numbers(next, cx);
-        });
-        cx.notify();
-    }
+    settings_setter!(
+        set_diff_show_line_numbers,
+        diff_show_line_numbers,
+        bool,
+        next,
+        _window,
+        set_diff_show_line_numbers
+    );
 }

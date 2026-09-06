@@ -108,23 +108,15 @@ impl SettingsWindowView {
         cx.notify();
     }
 
-    pub(in crate::view::settings_window) fn set_ui_density(
-        &mut self,
-        density: crate::density::Density,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.ui_density == density {
-            return;
-        }
-
-        self.ui_density = density;
-        self.expanded_section = None;
-        self.persist_preferences(cx);
-        self.update_main_windows(cx, move |view, _root_window, cx| {
-            view.apply_ui_density(density, cx);
-        });
-        cx.notify();
-    }
+    settings_setter!(
+        set_ui_density,
+        ui_density,
+        crate::density::Density,
+        density,
+        _root_window,
+        apply_ui_density,
+        reset_section
+    );
 
     pub(in crate::view::settings_window) fn set_theme_mode(
         &mut self,
@@ -213,152 +205,64 @@ impl SettingsWindowView {
         }
     }
 
-    pub(in crate::view::settings_window) fn set_ui_font_family(
-        &mut self,
-        family: String,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.ui_font_family == family {
-            return;
-        }
+    settings_font_setter!(
+        set_ui_font_family,
+        ui_font_family,
+        String,
+        family,
+        reset_section
+    );
 
-        self.ui_font_family = family;
-        self.expanded_section = None;
-        crate::font_preferences::set_current(
-            cx,
-            self.ui_font_family.clone(),
-            self.editor_font_family.clone(),
-            self.use_font_ligatures,
-        );
-        self.persist_preferences(cx);
-        self.update_main_windows(cx, move |view, _window, cx| {
-            view.notify_font_preferences_changed(cx);
-        });
-        cx.notify();
-    }
+    settings_font_setter!(
+        set_editor_font_family,
+        editor_font_family,
+        String,
+        family,
+        reset_section
+    );
 
-    pub(in crate::view::settings_window) fn set_editor_font_family(
-        &mut self,
-        family: String,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.editor_font_family == family {
-            return;
-        }
+    settings_font_setter!(set_use_font_ligatures, use_font_ligatures, bool, enabled);
 
-        self.editor_font_family = family;
-        self.expanded_section = None;
-        crate::font_preferences::set_current(
-            cx,
-            self.ui_font_family.clone(),
-            self.editor_font_family.clone(),
-            self.use_font_ligatures,
-        );
-        self.persist_preferences(cx);
-        self.update_main_windows(cx, move |view, _window, cx| {
-            view.notify_font_preferences_changed(cx);
-        });
-        cx.notify();
-    }
+    settings_setter!(
+        set_date_time_format,
+        date_time_format,
+        DateTimeFormat,
+        format,
+        _window,
+        set_date_time_format,
+        popover,
+        reset_section
+    );
 
-    pub(in crate::view::settings_window) fn set_use_font_ligatures(
-        &mut self,
-        enabled: bool,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.use_font_ligatures == enabled {
-            return;
-        }
+    settings_setter!(
+        set_timezone,
+        timezone,
+        Timezone,
+        timezone,
+        _window,
+        set_timezone,
+        popover,
+        reset_section
+    );
 
-        self.use_font_ligatures = enabled;
-        crate::font_preferences::set_current(
-            cx,
-            self.ui_font_family.clone(),
-            self.editor_font_family.clone(),
-            self.use_font_ligatures,
-        );
-        self.persist_preferences(cx);
-        self.update_main_windows(cx, move |view, _window, cx| {
-            view.notify_font_preferences_changed(cx);
-        });
-        cx.notify();
-    }
+    settings_setter!(
+        set_show_timezone,
+        show_timezone,
+        bool,
+        enabled,
+        _window,
+        set_show_timezone,
+        popover
+    );
 
-    pub(in crate::view::settings_window) fn set_date_time_format(
-        &mut self,
-        format: DateTimeFormat,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.date_time_format == format {
-            return;
-        }
-
-        self.date_time_format = format;
-        self.expanded_section = None;
-        self.persist_preferences(cx);
-        self.update_main_windows(cx, move |view, _window, cx| {
-            view.popover_host.update(cx, |host, cx| {
-                host.set_date_time_format(format, cx);
-            });
-        });
-        cx.notify();
-    }
-
-    pub(in crate::view::settings_window) fn set_timezone(
-        &mut self,
-        timezone: Timezone,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.timezone == timezone {
-            return;
-        }
-
-        self.timezone = timezone;
-        self.expanded_section = None;
-        self.persist_preferences(cx);
-        self.update_main_windows(cx, move |view, _window, cx| {
-            view.popover_host.update(cx, |host, cx| {
-                host.set_timezone(timezone, cx);
-            });
-        });
-        cx.notify();
-    }
-
-    pub(in crate::view::settings_window) fn set_show_timezone(
-        &mut self,
-        enabled: bool,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.show_timezone == enabled {
-            return;
-        }
-
-        self.show_timezone = enabled;
-        self.persist_preferences(cx);
-        self.update_main_windows(cx, move |view, _window, cx| {
-            view.popover_host.update(cx, |host, cx| {
-                host.set_show_timezone(enabled, cx);
-            });
-        });
-        cx.notify();
-    }
-
-    pub(in crate::view::settings_window) fn set_auto_save_file_edits(
-        &mut self,
-        next: bool,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.auto_save_file_edits == next {
-            return;
-        }
-
-        self.auto_save_file_edits = next;
-        self.persist_preferences(cx);
-        self.update_main_windows(cx, move |view, _window, cx| {
-            view.set_auto_save_file_edits(next, cx);
-        });
-        cx.notify();
-    }
+    settings_setter!(
+        set_auto_save_file_edits,
+        auto_save_file_edits,
+        bool,
+        next,
+        _window,
+        set_auto_save_file_edits
+    );
 
     /// One row per theme file the loader refused, named and with its reason.
     ///
