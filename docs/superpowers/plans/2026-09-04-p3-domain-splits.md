@@ -7,7 +7,7 @@
 
 ## 继承约束（与 P2 Global Constraints 全同，此处锁定）
 
-- **四腿验证矩阵**（每任务必跑，全绿才可提交）：(a) `cargo test --workspace --no-default-features --features gix`；(b) `cargo test --workspace`；(c) `rtk proxy cargo clippy --workspace --no-default-features --features gix -- -D warnings` → message|location 对集与仓库根 `clippy-baseline.txt`（31 行）逐字节比对（基线行站点漂移时按 T2/T3 先例更新该行并记录）；(d) `rtk proxy cargo test -p worktree-ui-gpui -- --list` 名单比对——纯搬移任务须空 diff；**测试外迁/拆模块任务允许纯模块路径改名**（裸名集全等，T2/T5 裁定类）。
+- **四腿验证矩阵**（每任务必跑，全绿才可提交）：(a) `cargo test --workspace --no-default-features --features gix`；(b) `cargo test --workspace`；(c) `rtk proxy cargo clippy --workspace --no-default-features --features gix --message-format=json` → message|location 对集与仓库根 `clippy-baseline.txt`（31 行）逐字节比对（基线行站点漂移时按 T2/T3 先例更新该行并记录）；(d) `rtk proxy cargo test -p worktree-ui-gpui -- --list` 名单比对——纯搬移任务须空 diff；**测试外迁/拆模块任务允许纯模块路径改名**（裸名集全等，T2/T5 裁定类）。
 - **W2**：具名 import/re-export 为默认接线；禁止新增 `use xxx::*` 行（既有 `use super::*;` 文化保留；迁入新文件的文件头 `use super::*;` 为 T2 特许惯例）。
 - **G1**：末次全量验证后零源码改动；任何改动（含注释）→ 全量重跑四腿。
 - **受众保持**：可见性升级须有编译器证据（E0603/E0425/E0616/E0451/E0446），逐名记录消费方；禁止预防性放宽。
