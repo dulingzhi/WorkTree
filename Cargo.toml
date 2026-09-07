@@ -3,7 +3,6 @@ resolver = "3"
 members = [
   "crates/worktree",
   "crates/worktree-core",
-  "crates/worktree-git",
   "crates/worktree-git-gix",
   "crates/worktree-state",
   "crates/worktree-tree-sitter-alloc",
@@ -14,7 +13,6 @@ exclude = ["crates/win32-window-utils", "vendor/tree-sitter-vue"]
 default-members = [
   "crates/worktree",
   "crates/worktree-core",
-  "crates/worktree-git",
   "crates/worktree-git-gix",
   "crates/worktree-state",
   "crates/worktree-ui-gpui",
@@ -31,7 +29,6 @@ rust-version = "1.98.0"
 [workspace.dependencies]
 # Internal crates
 worktree-core = { path = "crates/worktree-core" }
-worktree-git = { path = "crates/worktree-git" }
 worktree-git-gix = { path = "crates/worktree-git-gix" }
 worktree-state = { path = "crates/worktree-state" }
 worktree-ui-gpui = { path = "crates/worktree-ui-gpui", default-features = false }

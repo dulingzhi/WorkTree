@@ -2,8 +2,7 @@
 
 ### Workspace layout
 
-- `crates/worktree-core`: domain types, merge algorithm, conflict session, text utils.
-- `crates/worktree-git`: Git abstraction + no-op backend.
+- `crates/worktree-core`: domain types, Git service traits + no-op backend fallback, merge algorithm, conflict session, text utils.
 - `crates/worktree-git-gix`: `gix`/gitoxide backend implementation.
 - `crates/worktree-state`: MVU state store, reducers, effects, conflict session management.
 - `crates/worktree-ui-gpui`: GPUI views/components (focused diff/merge windows, conflict resolver, word diff).

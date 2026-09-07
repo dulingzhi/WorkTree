@@ -8879,13 +8879,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "worktree-git"
-version = "0.3.0"
-dependencies = [
- "worktree-core",
-]
-
-[[package]]
 name = "worktree-git-gix"
 version = "0.3.0"
 dependencies = [
