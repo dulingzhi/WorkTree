@@ -5,6 +5,7 @@ members = [
   "crates/worktree-core",
   "crates/worktree-git-gix",
   "crates/worktree-state",
+  "crates/worktree-test-support",
   "crates/worktree-tree-sitter-alloc",
   "crates/worktree-ui-gpui",
 ]
@@ -31,6 +32,7 @@ rust-version = "1.98.0"
 worktree-core = { path = "crates/worktree-core" }
 worktree-git-gix = { path = "crates/worktree-git-gix" }
 worktree-state = { path = "crates/worktree-state" }
+worktree-test-support = { path = "crates/worktree-test-support" }
 worktree-ui-gpui = { path = "crates/worktree-ui-gpui", default-features = false }
 
 # External crates

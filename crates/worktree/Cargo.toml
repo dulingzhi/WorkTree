@@ -35,6 +35,9 @@ serde_json = { workspace = true }
 sysinfo = { workspace = true, optional = true }
 tempfile = { workspace = true }
 
+[dev-dependencies]
+worktree-test-support = { workspace = true }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 wayland-client = { workspace = true }
 
