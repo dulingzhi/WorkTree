@@ -117,12 +117,27 @@ set "LIB=%MSVC_LIB%;%SDK_UM_LIB%;%SDK_UCRT_LIB%;%LIB%"
 set "LIBPATH=%MSVC_LIB%;%SDK_UM_LIB%;%SDK_UCRT_LIB%;%LIBPATH%"
 set "INCLUDE=%MSVC_INCLUDE%;%SDK_SHARED_INC%;%SDK_UM_INC%;%SDK_UCRT_INC%;%SDK_WINRT_INC%;%SDK_CPPWINRT_INC%;%INCLUDE%"
 
-rem ── Invoke link.exe ───────────────────────────────────────────────────────
+rem ── Prefer rust-lld (LLVM lld, link.exe-compatible) ───────────────────────
+rem rust-lld ships with every rustc toolchain and links (incl. PDB writing)
+rem several times faster than link.exe.  It still consumes the LIB/INCLUDE
+rem environment prepared above.  Set WORKTREE_LINK_NO_LLD=1 to opt out.
+set "RUST_LLD="
+if not defined WORKTREE_LINK_NO_LLD (
+  for /f "delims=" %%I in ('rustc --print target-libdir 2^>nul') do (
+    if exist "%%I\..\bin\rust-lld.exe" set "RUST_LLD=%%I\..\bin\rust-lld.exe"
+  )
+)
+
+rem ── Invoke the linker ─────────────────────────────────────────────────────
 rem WorkTree's GPUI diff/render paths are substantially deeper in debug builds.
 rem The Windows default 1 MiB main-thread stack is not enough there, which can
 rem abort the process with a stack overflow before Rust's panic hook runs.
 if "%WORKTREE_LINK_STACK_RESERVE%"=="" set "WORKTREE_LINK_STACK_RESERVE=8388608"
 
-"%LINK_EXE%" /STACK:%WORKTREE_LINK_STACK_RESERVE% %*
+if defined RUST_LLD (
+  "%RUST_LLD%" -flavor link /STACK:%WORKTREE_LINK_STACK_RESERVE% %*
+) else (
+  "%LINK_EXE%" /STACK:%WORKTREE_LINK_STACK_RESERVE% %*
+)
 set "EXITCODE=%ERRORLEVEL%"
 exit /b %EXITCODE%
