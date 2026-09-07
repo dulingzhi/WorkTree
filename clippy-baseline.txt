@@ -19,7 +19,6 @@ this let-binding has unit value | crates\worktree-ui-gpui\src\view\panes\sidebar
 unnecessary closure used with `bool::then` | crates\worktree-ui-gpui\src\view\panels\layout.rs:37:24
 unnecessary closure used with `bool::then` | crates\worktree-ui-gpui\src\view\settings_window\domain\gpg_signing.rs:107:21
 unnecessary closure used with `bool::then` | crates\worktree-ui-gpui\src\view\settings_window\domain\gpg_signing.rs:118:21
-unused import: `SystemTime` | crates\worktree-ui-gpui\src\view\date_time.rs:251:21
 useless conversion to the same type: `gpui::SharedString` | crates\worktree-ui-gpui\src\view\panels\popover\host.rs:1621:34
 useless conversion to the same type: `gpui::SharedString` | crates\worktree-ui-gpui\src\view\panes\reflog.rs:649:21
 useless conversion to the same type: `gpui::SharedString` | crates\worktree-ui-gpui\src\view\panes\reflog.rs:651:21

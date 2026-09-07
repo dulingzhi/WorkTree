@@ -248,7 +248,7 @@ pub(super) fn format_datetime(
 /// Calendar math shared by the datetime and date-only formatters.
 
 fn unix_seconds(t: std::time::SystemTime) -> i64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::time::UNIX_EPOCH;
     match t.duration_since(UNIX_EPOCH) {
         Ok(d) => d.as_secs() as i64,
         Err(e) => -(e.duration().as_secs() as i64),
