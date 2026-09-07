@@ -4,6 +4,174 @@
 use super::*;
 use gpui::Stateful;
 
+// ---------------------------------------------------------------------------
+// Option-row convergence (P3/T13-13b): the macros below generate the
+// isomorphic `render_*_option_rows` uniform-list row sources.
+// Expansion-equivalence evidence: every generated function is token-equal
+// (modulo rustfmt) to the handwritten body it replaced; the per-function
+// proof table lives in the task evidence (D:\tmp\p3t13-13b2-*).
+//
+// Kept handwritten (divergence points):
+//   render_theme_option_rows        - (mode, label) tuple source; the click
+//                                     forwards the real `window` (theme
+//                                     switch re-resolves per window)
+//   render_merge_tool_option_rows   - three-way option-kind match building
+//                                     (id, label, selected, next_selection)
+//   render_ai_commit_model_option_rows - let-else early return on the model
+//                                     fetch state; models are plain strings
+//   render_external_editor_option_rows - per-kind selected logic and three
+//                                     different click handlers
+//   render_date_format_option_rows  - row id comes from a match on the format
+//   render_timezone_option_rows     - dense detail row with a cities list
+// ---------------------------------------------------------------------------
+
+/// Row source over an `Enum::ALL` table: one `option_row` per variant.
+/// The default arm labels via `$var.label()`; the `this_label` arm labels via
+/// `this.$label_fn($var)` (the language row translates its label).
+macro_rules! all_options_rows {
+    ($name:ident, $all:path, $var:ident, $id:literal, $field:ident, $setter:ident) => {
+        pub(super) fn $name(
+            this: &mut Self,
+            range: Range<usize>,
+            _window: &mut Window,
+            cx: &mut gpui::Context<Self>,
+        ) -> Vec<AnyElement> {
+            let theme = this.theme;
+            range
+                .filter_map(|ix| $all.get(ix).copied())
+                .map(|$var| {
+                    this.option_row(
+                        format!($id, $var.key()),
+                        $var.label(),
+                        None,
+                        this.$field == $var,
+                        theme,
+                    )
+                    .on_click(cx.listener(move |this, _e: &ClickEvent, _window, cx| {
+                        this.$setter($var, cx);
+                    }))
+                    .into_any_element()
+                })
+                .collect()
+        }
+    };
+    ($name:ident, $all:path, $var:ident, $id:literal, $field:ident, $setter:ident, this_label: $label_fn:ident) => {
+        pub(super) fn $name(
+            this: &mut Self,
+            range: Range<usize>,
+            _window: &mut Window,
+            cx: &mut gpui::Context<Self>,
+        ) -> Vec<AnyElement> {
+            let theme = this.theme;
+            range
+                .filter_map(|ix| $all.get(ix).copied())
+                .map(|$var| {
+                    this.option_row(
+                        format!($id, $var.key()),
+                        this.$label_fn($var),
+                        None,
+                        this.$field == $var,
+                        theme,
+                    )
+                    .on_click(cx.listener(move |this, _e: &ClickEvent, _window, cx| {
+                        this.$setter($var, cx);
+                    }))
+                    .into_any_element()
+                })
+                .collect()
+        }
+    };
+}
+
+/// Row source over a `(id, option, detail_key)` constant table. The default
+/// arm labels via `option.label()`; the `settings_label` arm uses the
+/// settings-specific label (diff view mode).
+macro_rules! table_options_rows {
+    ($name:ident, $table:ident, $field:ident, $setter:ident) => {
+        pub(super) fn $name(
+            this: &mut Self,
+            range: Range<usize>,
+            _window: &mut Window,
+            cx: &mut gpui::Context<Self>,
+        ) -> Vec<AnyElement> {
+            let theme = this.theme;
+            range
+                .filter_map(|ix| $table.get(ix).copied())
+                .map(|(id, option, detail)| {
+                    this.option_row(
+                        id,
+                        option.label(),
+                        Some(tr(detail)),
+                        this.$field == option,
+                        theme,
+                    )
+                    .on_click(cx.listener(move |this, _e: &ClickEvent, _window, cx| {
+                        this.$setter(option, cx);
+                    }))
+                    .into_any_element()
+                })
+                .collect()
+        }
+    };
+    ($name:ident, $table:ident, $field:ident, $setter:ident, settings_label) => {
+        pub(super) fn $name(
+            this: &mut Self,
+            range: Range<usize>,
+            _window: &mut Window,
+            cx: &mut gpui::Context<Self>,
+        ) -> Vec<AnyElement> {
+            let theme = this.theme;
+            range
+                .filter_map(|ix| $table.get(ix).copied())
+                .map(|(id, option, detail)| {
+                    this.option_row(
+                        id,
+                        option.settings_label(),
+                        Some(tr(detail)),
+                        this.$field == option,
+                        theme,
+                    )
+                    .on_click(cx.listener(move |this, _e: &ClickEvent, _window, cx| {
+                        this.$setter(option, cx);
+                    }))
+                    .into_any_element()
+                })
+                .collect()
+        }
+    };
+}
+
+/// Row source over a cached font-family list: one `font_option_row_for_family`
+/// per entry, indexed by position.
+macro_rules! font_options_rows {
+    ($name:ident, $options:ident, $id:literal, $field:ident, $setter:ident) => {
+        pub(super) fn $name(
+            this: &mut Self,
+            range: Range<usize>,
+            _window: &mut Window,
+            cx: &mut gpui::Context<Self>,
+        ) -> Vec<AnyElement> {
+            let theme = this.theme;
+            range
+                .filter_map(|ix| this.$options.get(ix).cloned().map(|family| (ix, family)))
+                .map(|(ix, family)| {
+                    this.font_option_row_for_family(
+                        $id,
+                        ix,
+                        family.as_str(),
+                        this.$field == family,
+                        theme,
+                    )
+                    .on_click(cx.listener(move |this, _e: &ClickEvent, _window, cx| {
+                        this.$setter(family.clone(), cx);
+                    }))
+                    .into_any_element()
+                })
+                .collect()
+        }
+    };
+}
+
 impl SettingsWindowView {
     fn font_option_detail(&self, family: &str) -> Option<SharedString> {
         match family {
@@ -246,35 +414,13 @@ impl SettingsWindowView {
             )
     }
 
-    pub(super) fn render_ui_font_option_rows(
-        this: &mut Self,
-        range: Range<usize>,
-        _window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) -> Vec<AnyElement> {
-        let theme = this.theme;
-        range
-            .filter_map(|ix| {
-                this.ui_font_options
-                    .get(ix)
-                    .cloned()
-                    .map(|family| (ix, family))
-            })
-            .map(|(ix, family)| {
-                this.font_option_row_for_family(
-                    "settings_window_ui_font",
-                    ix,
-                    family.as_str(),
-                    this.ui_font_family == family,
-                    theme,
-                )
-                .on_click(cx.listener(move |this, _e: &ClickEvent, _window, cx| {
-                    this.set_ui_font_family(family.clone(), cx);
-                }))
-                .into_any_element()
-            })
-            .collect()
-    }
+    font_options_rows!(
+        render_ui_font_option_rows,
+        ui_font_options,
+        "settings_window_ui_font",
+        ui_font_family,
+        set_ui_font_family
+    );
 
     pub(super) fn render_theme_option_rows(
         this: &mut Self,
@@ -302,80 +448,25 @@ impl SettingsWindowView {
             .collect()
     }
 
-    pub(super) fn render_language_option_rows(
-        this: &mut Self,
-        range: Range<usize>,
-        _window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) -> Vec<AnyElement> {
-        let theme = this.theme;
-        range
-            .filter_map(|ix| crate::i18n::Language::ALL.get(ix).copied())
-            .map(|language| {
-                this.option_row(
-                    format!("settings_window_language_{}", language.key()),
-                    this.language_option_label(language),
-                    None,
-                    this.language == language,
-                    theme,
-                )
-                .on_click(cx.listener(move |this, _e: &ClickEvent, _window, cx| {
-                    this.set_language(language, cx);
-                }))
-                .into_any_element()
-            })
-            .collect()
-    }
+    all_options_rows!(render_language_option_rows, crate::i18n::Language::ALL, language, "settings_window_language_{}", language, set_language, this_label: language_option_label);
 
-    pub(super) fn render_avatar_source_option_rows(
-        this: &mut Self,
-        range: Range<usize>,
-        _window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) -> Vec<AnyElement> {
-        let theme = this.theme;
-        range
-            .filter_map(|ix| crate::avatar_source::AvatarSource::ALL.get(ix).copied())
-            .map(|source| {
-                this.option_row(
-                    format!("settings_window_avatar_source_{}", source.key()),
-                    source.label(),
-                    None,
-                    this.avatar_source == source,
-                    theme,
-                )
-                .on_click(cx.listener(move |this, _e: &ClickEvent, _window, cx| {
-                    this.set_avatar_source(source, cx);
-                }))
-                .into_any_element()
-            })
-            .collect()
-    }
+    all_options_rows!(
+        render_avatar_source_option_rows,
+        crate::avatar_source::AvatarSource::ALL,
+        source,
+        "settings_window_avatar_source_{}",
+        avatar_source,
+        set_avatar_source
+    );
 
-    pub(super) fn render_ai_commit_source_option_rows(
-        this: &mut Self,
-        range: Range<usize>,
-        _window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) -> Vec<AnyElement> {
-        let theme = this.theme;
-        range
-            .filter_map(|ix| crate::ai_commit_sources::AiSource::ALL.get(ix).copied())
-            .map(|source| {
-                this.option_row(
-                    format!("settings_window_ai_commit_source_{}", source.key()),
-                    source.label(),
-                    None,
-                    this.ai_commit_source == source,
-                    theme,
-                )
-                .on_click(cx.listener(move |this, _e: &ClickEvent, _window, cx| {
-                    this.set_ai_commit_source(source, cx);
-                }))
-                .into_any_element()
-            })
-            .collect()
-    }
+    all_options_rows!(
+        render_ai_commit_source_option_rows,
+        crate::ai_commit_sources::AiSource::ALL,
+        source,
+        "settings_window_ai_commit_source_{}",
+        ai_commit_source,
+        set_ai_commit_source
+    );
 
     pub(super) fn render_merge_tool_option_rows(
         this: &mut Self,
@@ -442,30 +533,14 @@ impl SettingsWindowView {
             .collect()
     }
 
-    pub(super) fn render_ai_commit_provider_option_rows(
-        this: &mut Self,
-        range: Range<usize>,
-        _window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) -> Vec<AnyElement> {
-        let theme = this.theme;
-        range
-            .filter_map(|ix| crate::ai_commit::AiProvider::ALL.get(ix).copied())
-            .map(|provider| {
-                this.option_row(
-                    format!("settings_window_ai_commit_provider_{}", provider.key()),
-                    provider.label(),
-                    None,
-                    this.ai_commit_provider == provider,
-                    theme,
-                )
-                .on_click(cx.listener(move |this, _e: &ClickEvent, _window, cx| {
-                    this.set_ai_commit_provider(provider, cx);
-                }))
-                .into_any_element()
-            })
-            .collect()
-    }
+    all_options_rows!(
+        render_ai_commit_provider_option_rows,
+        crate::ai_commit::AiProvider::ALL,
+        provider,
+        "settings_window_ai_commit_provider_{}",
+        ai_commit_provider,
+        set_ai_commit_provider
+    );
 
     pub(super) fn render_ai_commit_model_option_rows(
         this: &mut Self,
@@ -496,35 +571,13 @@ impl SettingsWindowView {
             .collect()
     }
 
-    pub(super) fn render_editor_font_option_rows(
-        this: &mut Self,
-        range: Range<usize>,
-        _window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) -> Vec<AnyElement> {
-        let theme = this.theme;
-        range
-            .filter_map(|ix| {
-                this.editor_font_options
-                    .get(ix)
-                    .cloned()
-                    .map(|family| (ix, family))
-            })
-            .map(|(ix, family)| {
-                this.font_option_row_for_family(
-                    "settings_window_editor_font",
-                    ix,
-                    family.as_str(),
-                    this.editor_font_family == family,
-                    theme,
-                )
-                .on_click(cx.listener(move |this, _e: &ClickEvent, _window, cx| {
-                    this.set_editor_font_family(family.clone(), cx);
-                }))
-                .into_any_element()
-            })
-            .collect()
-    }
+    font_options_rows!(
+        render_editor_font_option_rows,
+        editor_font_options,
+        "settings_window_editor_font",
+        editor_font_family,
+        set_editor_font_family
+    );
 
     pub(super) fn render_external_editor_option_rows(
         this: &mut Self,
@@ -640,103 +693,32 @@ impl SettingsWindowView {
             .collect()
     }
 
-    pub(super) fn render_change_tracking_option_rows(
-        this: &mut Self,
-        range: Range<usize>,
-        _window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) -> Vec<AnyElement> {
-        let theme = this.theme;
-        range
-            .filter_map(|ix| CHANGE_TRACKING_OPTIONS.get(ix).copied())
-            .map(|(id, option, detail)| {
-                this.option_row(
-                    id,
-                    option.label(),
-                    Some(tr(detail)),
-                    this.change_tracking_view == option,
-                    theme,
-                )
-                .on_click(cx.listener(move |this, _e: &ClickEvent, _window, cx| {
-                    this.set_change_tracking_view(option, cx);
-                }))
-                .into_any_element()
-            })
-            .collect()
-    }
+    table_options_rows!(
+        render_change_tracking_option_rows,
+        CHANGE_TRACKING_OPTIONS,
+        change_tracking_view,
+        set_change_tracking_view
+    );
 
-    pub(super) fn render_diff_scroll_sync_option_rows(
-        this: &mut Self,
-        range: Range<usize>,
-        _window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) -> Vec<AnyElement> {
-        let theme = this.theme;
-        range
-            .filter_map(|ix| DIFF_SCROLL_SYNC_OPTIONS.get(ix).copied())
-            .map(|(id, option, detail)| {
-                this.option_row(
-                    id,
-                    option.label(),
-                    Some(tr(detail)),
-                    this.diff_scroll_sync == option,
-                    theme,
-                )
-                .on_click(cx.listener(move |this, _e: &ClickEvent, _window, cx| {
-                    this.set_diff_scroll_sync(option, cx);
-                }))
-                .into_any_element()
-            })
-            .collect()
-    }
+    table_options_rows!(
+        render_diff_scroll_sync_option_rows,
+        DIFF_SCROLL_SYNC_OPTIONS,
+        diff_scroll_sync,
+        set_diff_scroll_sync
+    );
 
-    pub(super) fn render_diff_view_mode_option_rows(
-        this: &mut Self,
-        range: Range<usize>,
-        _window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) -> Vec<AnyElement> {
-        let theme = this.theme;
-        range
-            .filter_map(|ix| DIFF_VIEW_MODE_OPTIONS.get(ix).copied())
-            .map(|(id, option, detail)| {
-                this.option_row(
-                    id,
-                    option.settings_label(),
-                    Some(tr(detail)),
-                    this.diff_view_mode == option,
-                    theme,
-                )
-                .on_click(cx.listener(move |this, _e: &ClickEvent, _window, cx| {
-                    this.set_diff_view_mode(option, cx);
-                }))
-                .into_any_element()
-            })
-            .collect()
-    }
+    table_options_rows!(
+        render_diff_view_mode_option_rows,
+        DIFF_VIEW_MODE_OPTIONS,
+        diff_view_mode,
+        set_diff_view_mode,
+        settings_label
+    );
 
-    pub(super) fn render_diff_content_mode_option_rows(
-        this: &mut Self,
-        range: Range<usize>,
-        _window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) -> Vec<AnyElement> {
-        let theme = this.theme;
-        range
-            .filter_map(|ix| DIFF_CONTENT_MODE_OPTIONS.get(ix).copied())
-            .map(|(id, option, detail)| {
-                this.option_row(
-                    id,
-                    option.label(),
-                    Some(tr(detail)),
-                    this.diff_content_mode == option,
-                    theme,
-                )
-                .on_click(cx.listener(move |this, _e: &ClickEvent, _window, cx| {
-                    this.set_diff_content_mode(option, cx);
-                }))
-                .into_any_element()
-            })
-            .collect()
-    }
+    table_options_rows!(
+        render_diff_content_mode_option_rows,
+        DIFF_CONTENT_MODE_OPTIONS,
+        diff_content_mode,
+        set_diff_content_mode
+    );
 }
