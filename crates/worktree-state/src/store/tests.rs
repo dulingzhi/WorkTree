@@ -18,6 +18,9 @@ use worktree_core::process::{
     GitExecutablePreference, current_git_executable_preference, install_git_executable_preference,
 };
 use worktree_core::services::{CancellationToken, CommandOutput, PullMode, Result};
+#[cfg(windows)]
+use worktree_test_support::is_git_shell_startup_failure;
+use worktree_test_support::run_git;
 
 pub(in crate::store) struct DummyRepo {
     spec: RepoSpec,
@@ -142,22 +145,6 @@ impl GitBackend for FailingBackend {
             "store test backend open failure",
         )))
     }
-}
-
-fn run_git(repo: &Path, args: &[&str]) {
-    let status = Command::new("git")
-        .arg("-C")
-        .arg(repo)
-        .args(args)
-        .status()
-        .expect("git command to run");
-    assert!(status.success(), "git {:?} failed", args);
-}
-
-#[cfg(windows)]
-fn is_git_shell_startup_failure(text: &str) -> bool {
-    text.contains("sh.exe: *** fatal error -")
-        && (text.contains("couldn't create signal pipe") || text.contains("CreateFileMapping"))
 }
 
 #[cfg(windows)]

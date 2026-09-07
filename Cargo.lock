@@ -8856,6 +8856,7 @@ dependencies = [
  "worktree-core",
  "worktree-git-gix",
  "worktree-state",
+ "worktree-test-support",
  "worktree-ui-gpui",
  "worktree-win32-window-utils",
 ]
@@ -8876,6 +8877,7 @@ dependencies = [
  "strsim",
  "tempfile",
  "thiserror 2.0.20",
+ "worktree-test-support",
 ]
 
 [[package]]
@@ -8888,6 +8890,7 @@ dependencies = [
  "syn 3.0.3",
  "tempfile",
  "worktree-core",
+ "worktree-test-support",
 ]
 
 [[package]]
@@ -8905,7 +8908,12 @@ dependencies = [
  "tempfile",
  "worktree-core",
  "worktree-git-gix",
+ "worktree-test-support",
 ]
+
+[[package]]
+name = "worktree-test-support"
+version = "0.3.0"
 
 [[package]]
 name = "worktree-tree-sitter-alloc"
