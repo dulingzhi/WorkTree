@@ -197,4 +197,294 @@ impl SettingsWindowView {
             ),
         }
     }
+
+    pub(in crate::view::settings_window) fn terminal_card(
+        &self,
+        theme: AppTheme,
+        no_separator: gpui::Rgba,
+        cx: &mut gpui::Context<Self>,
+    ) -> gpui::Stateful<gpui::Div> {
+        let terminal_external_row = self
+            .summary_row(
+                "settings_window_terminal_external",
+                tr_str("settings.row.external_terminal"),
+                self.terminal_preferences.external_summary().into(),
+                self.expanded_section == Some(SettingsSection::TerminalExternal),
+                theme,
+            )
+            .on_click(cx.listener(|this, _e: &ClickEvent, _window, cx| {
+                this.toggle_section(SettingsSection::TerminalExternal, cx);
+            }));
+
+        let terminal_action_bar_row = self
+            .summary_row(
+                "settings_window_terminal_action_bar",
+                tr_str("settings.row.action_bar_terminal"),
+                self.terminal_preferences
+                    .action_bar_terminal_target
+                    .label()
+                    .into(),
+                self.expanded_section == Some(SettingsSection::TerminalActionBar),
+                theme,
+            )
+            .border_color(no_separator)
+            .on_click(cx.listener(|this, _e: &ClickEvent, _window, cx| {
+                this.toggle_section(SettingsSection::TerminalActionBar, cx);
+            }));
+        let mut terminal_card = self.card(
+            "settings_window_terminal_card",
+            tr_str("settings.nav.terminal"),
+            theme,
+        );
+
+        terminal_card = terminal_card.child(terminal_external_row);
+        if self.expanded_section == Some(SettingsSection::TerminalExternal) {
+            terminal_card = terminal_card
+                .child(
+                    div()
+                        .px_2()
+                        .pb_1()
+                        .text_xs()
+                        .text_color(theme.colors.foreground.secondary)
+                        .child(tr_str("settings.terminal.note_best_effort")),
+                )
+                .child(
+                    div()
+                        .px_2()
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .child(
+                            self.option_row(
+                                "settings_window_terminal_external_default",
+                                ExternalTerminalMode::SystemDefault.label(),
+                                Some(tr("settings.terminal.default_detail")),
+                                self.terminal_preferences.external_terminal_mode
+                                    == ExternalTerminalMode::SystemDefault,
+                                theme,
+                            )
+                            .on_click(cx.listener(
+                                |this, _e: &ClickEvent, _window, cx| {
+                                    this.set_external_terminal_mode(
+                                        ExternalTerminalMode::SystemDefault,
+                                        cx,
+                                    );
+                                },
+                            )),
+                        )
+                        .child(
+                            self.option_row(
+                                "settings_window_terminal_external_custom",
+                                ExternalTerminalMode::CustomProgram.label(),
+                                Some(tr("settings.terminal.custom_detail")),
+                                self.terminal_preferences.external_terminal_mode
+                                    == ExternalTerminalMode::CustomProgram,
+                                theme,
+                            )
+                            .on_click(cx.listener(
+                                |this, _e: &ClickEvent, _window, cx| {
+                                    this.set_external_terminal_mode(
+                                        ExternalTerminalMode::CustomProgram,
+                                        cx,
+                                    );
+                                },
+                            )),
+                        ),
+                );
+
+            if self.terminal_preferences.external_terminal_mode
+                == ExternalTerminalMode::CustomProgram
+            {
+                terminal_card = terminal_card
+                    .child(
+                        div()
+                            .px_2()
+                            .pt_1()
+                            .text_xs()
+                            .text_color(theme.colors.foreground.secondary)
+                            .child(tr_str("settings.terminal.program")),
+                    )
+                    .child(
+                        div()
+                            .px_2()
+                            .pb_1()
+                            .w_full()
+                            .min_w(px(0.0))
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w(px(0.0))
+                                    .child(self.terminal_external_program_input.clone()),
+                            )
+                            .child(
+                                components::Button::new(
+                                    "settings_window_terminal_external_browse",
+                                    tr("settings.action.browse"),
+                                )
+                                .style(components::ButtonStyle::Outlined)
+                                .on_click(
+                                    theme,
+                                    cx,
+                                    |this, _e, window, cx| {
+                                        this.browse_terminal_program_input(
+                                            TerminalProgramInputTarget::ExternalTerminal,
+                                            window,
+                                            cx,
+                                        );
+                                    },
+                                ),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .px_2()
+                            .pt_1()
+                            .text_xs()
+                            .text_color(theme.colors.foreground.secondary)
+                            .child(tr_str("settings.terminal.arguments")),
+                    )
+                    .child(
+                        div()
+                            .px_2()
+                            .pb_1()
+                            .w_full()
+                            .min_w(px(0.0))
+                            .child(self.terminal_external_args_input.clone()),
+                    )
+                    .child(
+                        div()
+                            .px_2()
+                            .pb_1()
+                            .text_xs()
+                            .text_color(theme.colors.foreground.secondary)
+                            .child(tr_str("settings.terminal.args_hint")),
+                    )
+                    .child(
+                        div()
+                            .px_2()
+                            .pb_1()
+                            .flex()
+                            .items_center()
+                            .gap_1()
+                            .child(
+                                components::Button::new(
+                                    "settings_window_terminal_external_save",
+                                    tr("settings.action.save"),
+                                )
+                                .style(components::ButtonStyle::Filled)
+                                .on_click(
+                                    theme,
+                                    cx,
+                                    |this, _e, _w, cx| {
+                                        this.save_terminal_external_draft(cx);
+                                    },
+                                ),
+                            )
+                            .child(
+                                components::Button::new(
+                                    "settings_window_terminal_external_reset",
+                                    tr("settings.action.reset"),
+                                )
+                                .style(components::ButtonStyle::Outlined)
+                                .on_click(
+                                    theme,
+                                    cx,
+                                    |this, _e, _w, cx| {
+                                        this.reset_terminal_external_draft(cx);
+                                    },
+                                ),
+                            )
+                            .child(
+                                components::Button::new(
+                                    "settings_window_terminal_external_test",
+                                    tr("settings.action.test_launch"),
+                                )
+                                .style(components::ButtonStyle::Outlined)
+                                .on_click(
+                                    theme,
+                                    cx,
+                                    |this, _e, _w, cx| {
+                                        this.test_terminal_launch_from_draft(cx);
+                                    },
+                                ),
+                            ),
+                    );
+            }
+        }
+
+        terminal_card = terminal_card.child(terminal_action_bar_row);
+        if self.expanded_section == Some(SettingsSection::TerminalActionBar) {
+            terminal_card = terminal_card
+                .child(
+                    div()
+                        .px_2()
+                        .pb_1()
+                        .text_xs()
+                        .text_color(theme.colors.foreground.secondary)
+                        .child(tr_str("settings.action_bar_terminal.note")),
+                )
+                .child(
+                    div()
+                        .px_2()
+                        .flex()
+                        .flex_col()
+                        .gap_1()
+                        .child(
+                            self.option_row(
+                                "settings_window_terminal_action_bar_embedded",
+                                ActionBarTerminalTarget::Embedded.label(),
+                                Some(tr("settings.action_bar_terminal.embedded_detail")),
+                                self.terminal_preferences.action_bar_terminal_target
+                                    == ActionBarTerminalTarget::Embedded,
+                                theme,
+                            )
+                            .on_click(cx.listener(
+                                |this, _e: &ClickEvent, _window, cx| {
+                                    this.set_action_bar_terminal_target(
+                                        ActionBarTerminalTarget::Embedded,
+                                        cx,
+                                    );
+                                },
+                            )),
+                        )
+                        .child(
+                            self.option_row(
+                                "settings_window_terminal_action_bar_external",
+                                ActionBarTerminalTarget::External.label(),
+                                Some(tr("settings.action_bar_terminal.external_detail")),
+                                self.terminal_preferences.action_bar_terminal_target
+                                    == ActionBarTerminalTarget::External,
+                                theme,
+                            )
+                            .on_click(cx.listener(
+                                |this, _e: &ClickEvent, _window, cx| {
+                                    this.set_action_bar_terminal_target(
+                                        ActionBarTerminalTarget::External,
+                                        cx,
+                                    );
+                                },
+                            )),
+                        ),
+                );
+        }
+
+        if let Some(status) = self.terminal_status.clone() {
+            terminal_card = terminal_card.child(
+                div()
+                    .px_2()
+                    .pt_1()
+                    .text_xs()
+                    .text_color(if status.is_error {
+                        theme.colors.status.danger.foreground
+                    } else {
+                        theme.colors.status.success.foreground
+                    })
+                    .child(status.text),
+            );
+        }
+        terminal_card
+    }
 }

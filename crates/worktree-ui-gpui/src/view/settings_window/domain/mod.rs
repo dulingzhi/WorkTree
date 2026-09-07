@@ -178,6 +178,7 @@ macro_rules! settings_font_setter {
 // (compiler evidence: E0603 at the facade's `use self::domain::<name>::…`
 // lines when these were private).
 pub(super) mod diff;
+pub(super) mod environment;
 pub(super) mod general;
 pub(super) mod git_log;
 pub(super) mod gpg_signing;

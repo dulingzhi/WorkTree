@@ -333,4 +333,294 @@ impl SettingsWindowView {
         })
         .detach();
     }
+
+    pub(in crate::view::settings_window) fn merge_tool_card(
+        &self,
+        theme: AppTheme,
+        cx: &mut gpui::Context<Self>,
+    ) -> gpui::Stateful<gpui::Div> {
+        let merge_tool_row = self
+            .summary_row(
+                "settings_window_merge_tool_selection",
+                tr_str("settings.merge_tool.row_label"),
+                merge_tool_selection_summary(&self.merge_tool_selection),
+                self.expanded_section == Some(SettingsSection::MergeTool),
+                theme,
+            )
+            .on_click(cx.listener(|this, _e: &ClickEvent, _window, cx| {
+                this.toggle_section(SettingsSection::MergeTool, cx);
+            }));
+
+        let merge_tool_custom = matches!(
+            &self.merge_tool_selection,
+            ExternalMergeToolSelection::Custom { .. }
+        );
+        let merge_tool_trust_exit_code = match &self.merge_tool_selection {
+            ExternalMergeToolSelection::Custom {
+                trust_exit_code, ..
+            } => *trust_exit_code,
+            _ => false,
+        };
+        let merge_tool_trust_exit_code_row = self
+            .toggle_row(
+                "settings_window_merge_tool_trust_exit_code",
+                tr_str("settings.merge_tool.trust_exit_code"),
+                merge_tool_trust_exit_code,
+                theme,
+            )
+            .on_click(cx.listener(move |this, _e: &ClickEvent, _window, cx| {
+                this.set_merge_tool_trust_exit_code(
+                    !matches!(
+                        &this.merge_tool_selection,
+                        ExternalMergeToolSelection::Custom {
+                            trust_exit_code: true,
+                            ..
+                        }
+                    ),
+                    cx,
+                );
+            }));
+
+        let mut merge_tool_card = self
+            .card(
+                "settings_window_merge_tool",
+                tr_str("settings.nav.merge_tool"),
+                theme,
+            )
+            .child(
+                div()
+                    .id("settings_window_merge_tool_scope_note")
+                    .px_2()
+                    .pb_1()
+                    .text_xs()
+                    .text_color(theme.colors.foreground.secondary)
+                    .child(tr("settings.merge_tool.scope_note")),
+            )
+            .child(merge_tool_row);
+
+        if self.expanded_section == Some(SettingsSection::MergeTool) {
+            let option_count = merge_tool_options().len();
+            let list = uniform_list(
+                "settings_window_merge_tool_list",
+                option_count,
+                cx.processor(Self::render_merge_tool_option_rows),
+            )
+            .w_full()
+            .min_w(px(0.0))
+            .h_full()
+            .min_h(px(0.0))
+            .track_scroll(&self.merge_tool_scroll)
+            .on_scroll_wheel(stop_dropdown_wheel_chaining(self.merge_tool_scroll.clone()));
+            let list = restrict_scroll_to_vertical_axis(list).into_any_element();
+            merge_tool_card = merge_tool_card.child(self.dropdown_list_container(
+                "settings_window_merge_tool_list_container",
+                "settings_window_merge_tool_scrollbar",
+                self.merge_tool_scroll.clone(),
+                option_count,
+                SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
+                SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
+                SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
+                list,
+                theme,
+            ));
+
+            let merge_tool_manual_path = match &self.merge_tool_selection {
+                ExternalMergeToolSelection::Builtin {
+                    path: Some(path), ..
+                } => {
+                    let trimmed = path.trim();
+                    (!trimmed.is_empty()).then(|| trimmed.to_string())
+                }
+                _ => None,
+            };
+            if let ExternalMergeToolSelection::Builtin { id, .. } = &self.merge_tool_selection {
+                let preset_missing =
+                    worktree_core::external_merge_tool::merge_tool_preset(id).is_none();
+                let resolved_program = |resolved: &str| {
+                    std::path::Path::new(resolved)
+                        .file_name()
+                        .map(|name| name.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| resolved.to_string())
+                };
+                let (status_text, status_color) = match &self.merge_tool_availability {
+                    None if preset_missing => (
+                        tr("settings.merge_tool.unknown_preset"),
+                        theme.colors.status.warning.foreground,
+                    ),
+                    None => (
+                        tr("settings.merge_tool.checking"),
+                        theme.colors.foreground.secondary,
+                    ),
+                    Some(MergeToolAvailability::Available {
+                        resolved,
+                        via_override: false,
+                    }) => (
+                        crate::i18n::t!(
+                            "settings.merge_tool.available",
+                            program = resolved_program(resolved)
+                        )
+                        .into_owned()
+                        .into(),
+                        theme.colors.status.success.foreground,
+                    ),
+                    Some(MergeToolAvailability::Available {
+                        resolved,
+                        via_override: true,
+                    }) => (
+                        crate::i18n::t!("settings.merge_tool.available_override", path = resolved)
+                            .into_owned()
+                            .into(),
+                        theme.colors.status.success.foreground,
+                    ),
+                    Some(MergeToolAvailability::OverrideMissing(path)) => (
+                        crate::i18n::t!("settings.merge_tool.override_missing", path = path)
+                            .into_owned()
+                            .into(),
+                        theme.colors.status.warning.foreground,
+                    ),
+                    Some(MergeToolAvailability::Missing(candidates)) => (
+                        crate::i18n::t!(
+                            "settings.merge_tool.missing",
+                            programs = candidates.join(", ")
+                        )
+                        .into_owned()
+                        .into(),
+                        theme.colors.status.warning.foreground,
+                    ),
+                };
+                merge_tool_card = merge_tool_card.child(
+                    div()
+                        .id("settings_window_merge_tool_availability")
+                        .debug_selector(|| "settings_window_merge_tool_availability".to_string())
+                        .px_2()
+                        .pb_1()
+                        .text_xs()
+                        .text_color(status_color)
+                        .child(status_text),
+                );
+
+                // Manual executable path: empty means "resolve
+                // from PATH", and the field echoes the PATH hit
+                // so the effective executable is always visible.
+                let browse_button = components::Button::new(
+                    "settings_window_merge_tool_executable_path_browse",
+                    tr("settings.action.browse"),
+                )
+                .style(components::ButtonStyle::Outlined)
+                .on_click(theme, cx, |this, _e, window, cx| {
+                    this.browse_merge_tool_executable_path(window, cx);
+                });
+                let path_row = div()
+                    .px_2()
+                    .pb_1()
+                    .w_full()
+                    .min_w(px(0.0))
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w(px(0.0))
+                            .child(self.merge_tool_executable_path_input.clone()),
+                    )
+                    .child(browse_button);
+                // Clearing hands the field back to the PATH echo.
+                let path_row = if merge_tool_manual_path.is_some() {
+                    let clear_button = components::Button::new(
+                        "settings_window_merge_tool_executable_path_clear",
+                        tr("settings.merge_tool.clear_path"),
+                    )
+                    .style(components::ButtonStyle::Outlined)
+                    .on_click(theme, cx, |this, _e, _window, cx| {
+                        this.clear_merge_tool_manual_path(cx);
+                    });
+                    path_row.child(
+                        div()
+                            .id("settings_window_merge_tool_executable_path_clear")
+                            .debug_selector(|| {
+                                "settings_window_merge_tool_executable_path_clear".to_string()
+                            })
+                            .child(clear_button),
+                    )
+                } else {
+                    path_row
+                };
+                merge_tool_card = merge_tool_card.child(
+                    self.detail_container(
+                        "settings_window_merge_tool_executable_path_container",
+                        theme,
+                    )
+                    .child(
+                        div()
+                            .px_2()
+                            .pt_1()
+                            .text_xs()
+                            .text_color(theme.colors.foreground.secondary)
+                            .child(tr_str("settings.merge_tool.executable_path")),
+                    )
+                    .child(path_row)
+                    .child(
+                        div()
+                            .px_2()
+                            .pb_1()
+                            .text_xs()
+                            .text_color(theme.colors.foreground.secondary)
+                            .child(tr_str("settings.merge_tool.executable_path_hint")),
+                    ),
+                );
+            }
+
+            merge_tool_card = merge_tool_card.child(
+                div()
+                    .id("settings_window_merge_tool_hint")
+                    .px_2()
+                    .pb_1()
+                    .text_xs()
+                    .text_color(theme.colors.foreground.secondary)
+                    .child(tr_str("settings.merge_tool.hint")),
+            );
+
+            if merge_tool_custom {
+                merge_tool_card = merge_tool_card.child(
+                    self.detail_container("settings_window_merge_tool_custom_container", theme)
+                        .child(
+                            div()
+                                .px_2()
+                                .pt_1()
+                                .text_xs()
+                                .text_color(theme.colors.foreground.secondary)
+                                .child(tr_str("settings.merge_tool.custom_command")),
+                        )
+                        .child(
+                            div()
+                                .px_2()
+                                .pb_1()
+                                .w_full()
+                                .min_w(px(0.0))
+                                .child(self.merge_tool_custom_command_input.clone()),
+                        )
+                        .child(
+                            div()
+                                .px_2()
+                                .pb_1()
+                                .text_xs()
+                                .text_color(theme.colors.foreground.secondary)
+                                .child(tr_str("settings.merge_tool.custom_hint")),
+                        ),
+                );
+                merge_tool_card = merge_tool_card.child(merge_tool_trust_exit_code_row);
+                merge_tool_card = merge_tool_card.child(
+                    div()
+                        .id("settings_window_merge_tool_trust_exit_code_hint")
+                        .px_2()
+                        .pb_1()
+                        .text_xs()
+                        .text_color(theme.colors.foreground.secondary)
+                        .child(tr_str("settings.merge_tool.trust_exit_code_hint")),
+                );
+            }
+        }
+        merge_tool_card
+    }
 }

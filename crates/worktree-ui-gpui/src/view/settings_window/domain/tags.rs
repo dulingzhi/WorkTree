@@ -60,4 +60,42 @@ impl SettingsWindowView {
         _window,
         set_default_tag_type_preference
     );
+
+    pub(in crate::view::settings_window) fn tags_card(
+        &self,
+        theme: AppTheme,
+        no_separator: gpui::Rgba,
+        cx: &mut gpui::Context<Self>,
+    ) -> gpui::Stateful<gpui::Div> {
+        self.card(
+            "settings_window_tags_card",
+            tr_str("settings.nav.tags"),
+            theme,
+        )
+        .child(
+            self.setting_option_row(
+                "settings_window_tags_default_lightweight",
+                tr_str("settings.tags.lightweight"),
+                Some(tr("settings.tags.lightweight_detail")),
+                self.default_tag_type == DefaultTagType::Lightweight,
+                theme,
+            )
+            .on_click(cx.listener(|this, _e: &ClickEvent, _window, cx| {
+                this.set_default_tag_type(DefaultTagType::Lightweight, cx);
+            })),
+        )
+        .child(
+            self.setting_option_row(
+                "settings_window_tags_default_annotated",
+                tr_str("settings.tags.annotated"),
+                Some(tr("settings.tags.annotated_detail")),
+                self.default_tag_type == DefaultTagType::Annotated,
+                theme,
+            )
+            .border_color(no_separator)
+            .on_click(cx.listener(|this, _e: &ClickEvent, _window, cx| {
+                this.set_default_tag_type(DefaultTagType::Annotated, cx);
+            })),
+        )
+    }
 }

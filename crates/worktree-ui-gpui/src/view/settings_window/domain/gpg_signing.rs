@@ -120,4 +120,144 @@ impl SettingsWindowView {
             self.gpg_config.gpg_program = next;
         }
     }
+
+    pub(in crate::view::settings_window) fn gpg_signing_card(
+        &self,
+        theme: AppTheme,
+        cx: &mut gpui::Context<Self>,
+    ) -> gpui::Stateful<gpui::Div> {
+        let gpg_commit_signing_row = self
+            .toggle_row(
+                "settings_window_gpg_commit_signing",
+                tr_str("settings.gpg_signing.commit_signing"),
+                self.gpg_config.commit_signing_enabled,
+                theme,
+            )
+            .on_click(cx.listener(|this, _e: &ClickEvent, _window, cx| {
+                this.set_gpg_commit_signing(!this.gpg_config.commit_signing_enabled, cx);
+            }));
+
+        let gpg_signing_key_apply = components::Button::new(
+            "settings_window_gpg_signing_key_apply",
+            tr("settings.gpg_signing.apply"),
+        )
+        .style(components::ButtonStyle::Filled)
+        .on_click(theme, cx, |this, _e, _window, cx| {
+            this.apply_gpg_signing_key(cx);
+        });
+
+        let gpg_program_apply = components::Button::new(
+            "settings_window_gpg_program_apply",
+            tr("settings.gpg_signing.apply"),
+        )
+        .style(components::ButtonStyle::Filled)
+        .on_click(theme, cx, |this, _e, _window, cx| {
+            this.apply_gpg_program(cx);
+        });
+
+        let mut gpg_signing_card = self
+            .card(
+                "settings_window_gpg_signing",
+                tr_str("settings.nav.gpg_signing"),
+                theme,
+            )
+            .child(
+                div()
+                    .id("settings_window_gpg_signing_scope_note")
+                    .px_2()
+                    .pb_1()
+                    .text_xs()
+                    .text_color(theme.colors.foreground.secondary)
+                    .child(tr("settings.gpg_signing.scope_note")),
+            )
+            .child(gpg_commit_signing_row)
+            .child(
+                self.detail_container("settings_window_gpg_signing_key_container", theme)
+                    .child(
+                        div()
+                            .px_2()
+                            .pt_1()
+                            .text_xs()
+                            .text_color(theme.colors.foreground.secondary)
+                            .child(tr_str("settings.gpg_signing.signing_key_label")),
+                    )
+                    .child(
+                        div()
+                            .px_2()
+                            .pb_1()
+                            .w_full()
+                            .min_w(px(0.0))
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w(px(0.0))
+                                    .child(self.gpg_signing_key_input.clone()),
+                            )
+                            .child(gpg_signing_key_apply),
+                    )
+                    .child(
+                        div()
+                            .px_2()
+                            .pb_1()
+                            .text_xs()
+                            .text_color(theme.colors.foreground.secondary)
+                            .child(tr_str("settings.gpg_signing.signing_key_hint")),
+                    ),
+            )
+            .child(
+                self.detail_container("settings_window_gpg_program_container", theme)
+                    .child(
+                        div()
+                            .px_2()
+                            .pt_1()
+                            .text_xs()
+                            .text_color(theme.colors.foreground.secondary)
+                            .child(tr_str("settings.gpg_signing.program_label")),
+                    )
+                    .child(
+                        div()
+                            .px_2()
+                            .pb_1()
+                            .w_full()
+                            .min_w(px(0.0))
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w(px(0.0))
+                                    .child(self.gpg_program_input.clone()),
+                            )
+                            .child(gpg_program_apply),
+                    )
+                    .child(
+                        div()
+                            .px_2()
+                            .pb_1()
+                            .text_xs()
+                            .text_color(theme.colors.foreground.secondary)
+                            .child(tr_str("settings.gpg_signing.program_hint")),
+                    ),
+            );
+
+        if let Some(error) = self.gpg_save_error.clone() {
+            gpg_signing_card = gpg_signing_card.child(
+                div()
+                    .id("settings_window_gpg_save_error")
+                    .px_2()
+                    .pb_1()
+                    .text_xs()
+                    .text_color(theme.colors.status.danger.foreground)
+                    .child(format!(
+                        "{}: {error}",
+                        tr_str("settings.gpg_signing.save_failed")
+                    )),
+            );
+        }
+        gpg_signing_card
+    }
 }

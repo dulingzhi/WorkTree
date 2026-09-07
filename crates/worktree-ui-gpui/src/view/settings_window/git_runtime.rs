@@ -316,4 +316,152 @@ impl SettingsWindowView {
                     ),
             )
     }
+
+    pub(super) fn git_executable_card(
+        &self,
+        theme: AppTheme,
+        cx: &mut gpui::Context<Self>,
+    ) -> gpui::Stateful<gpui::Div> {
+        let system_git_row = self
+            .setting_option_row(
+                "settings_window_git_executable_system",
+                tr_str("settings.git_executable.system_path"),
+                Some(tr("settings.git_executable.system_detail")),
+                self.git_executable_mode == GitExecutableMode::SystemPath,
+                theme,
+            )
+            .on_click(cx.listener(|this, _e: &ClickEvent, _window, cx| {
+                this.set_git_executable_mode(GitExecutableMode::SystemPath, cx);
+            }));
+
+        let custom_git_row = self
+            .setting_option_row(
+                "settings_window_git_executable_custom",
+                tr_str("settings.git_executable.custom"),
+                Some(tr("settings.git_executable.custom_detail")),
+                self.git_executable_mode == GitExecutableMode::Custom,
+                theme,
+            )
+            .on_click(cx.listener(|this, _e: &ClickEvent, _window, cx| {
+                this.set_git_executable_mode(GitExecutableMode::Custom, cx);
+            }));
+
+        let mut git_executable_card = self
+            .card(
+                "settings_window_git_executable",
+                tr_str("settings.nav.git_executable"),
+                theme,
+            )
+            .child(
+                div()
+                    .id("settings_window_git_executable_scope_note")
+                    .px_2()
+                    .pb_1()
+                    .text_xs()
+                    .text_color(theme.colors.foreground.secondary)
+                    .child(git_executable_scope_note()),
+            )
+            .child(system_git_row)
+            .child(custom_git_row);
+
+        if self.git_executable_mode == GitExecutableMode::Custom {
+            let browse_button = components::Button::new(
+                "settings_window_git_executable_browse",
+                tr("settings.action.browse"),
+            )
+            .style(components::ButtonStyle::Outlined)
+            .on_click(theme, cx, |_this, _e, window, cx| {
+                let view = cx.weak_entity();
+                let rx = cx.prompt_for_paths(gpui::PathPromptOptions {
+                    files: true,
+                    directories: false,
+                    multiple: false,
+                    prompt: Some(tr("settings.git_executable.prompt_select")),
+                });
+
+                window
+                    .spawn(cx, async move |cx| {
+                        let result = rx.await;
+                        let paths = match result {
+                            Ok(Ok(Some(paths))) => paths,
+                            Ok(Ok(None)) => return,
+                            Ok(Err(_)) | Err(_) => return,
+                        };
+                        let Some(path) = paths.into_iter().next() else {
+                            return;
+                        };
+                        let _ = view.update(cx, |this, cx| {
+                            let next = path.display().to_string();
+                            this.git_custom_path_draft = next.clone();
+                            this.git_executable_input
+                                .update(cx, |input, cx| input.set_text(next, cx));
+                            this.apply_git_executable_settings(cx);
+                        });
+                    })
+                    .detach();
+            });
+
+            let use_path_button = components::Button::new(
+                "settings_window_git_executable_apply",
+                tr("settings.git_executable.use_path"),
+            )
+            .style(components::ButtonStyle::Filled)
+            .on_click(theme, cx, |this, _e, _window, cx| {
+                this.apply_git_executable_settings(cx);
+            });
+
+            git_executable_card = git_executable_card.child(
+                self.detail_container("settings_window_git_executable_custom_container", theme)
+                    .child(
+                        div()
+                            .px_2()
+                            .pt_1()
+                            .text_xs()
+                            .text_color(theme.colors.foreground.secondary)
+                            .child(tr_str("settings.git_executable.custom_label")),
+                    )
+                    .child(
+                        div()
+                            .px_2()
+                            .pb_1()
+                            .w_full()
+                            .min_w(px(0.0))
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w(px(0.0))
+                                    .child(self.git_executable_input.clone()),
+                            )
+                            .child(browse_button)
+                            .child(use_path_button),
+                    )
+                    .child(
+                        div()
+                            .px_2()
+                            .pb_1()
+                            .text_xs()
+                            .text_color(theme.colors.foreground.secondary)
+                            .child(tr_str("settings.git_executable.enter_hint")),
+                    ),
+            );
+        }
+
+        git_executable_card = git_executable_card.child(self.git_runtime_row(theme));
+
+        if let Some(detail) = self.runtime_info.git.detail.clone() {
+            git_executable_card = git_executable_card.child(
+                div()
+                    .id("settings_window_git_runtime_detail")
+                    .px_2()
+                    .pb_1()
+                    .text_xs()
+                    .text_color(theme.colors.foreground.secondary)
+                    .child(detail),
+            );
+        }
+        git_executable_card
+    }
 }
