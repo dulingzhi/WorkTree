@@ -396,7 +396,7 @@ mod canvas;
 #[cfg(test)]
 mod canvas_tests;
 mod conflict_canvas;
-mod conflict_resolver;
+mod conflict_resolver_rows;
 mod diff;
 mod diff_canvas;
 mod diff_text;
@@ -413,7 +413,7 @@ mod text_geometry;
 #[cfg(feature = "benchmarks")]
 pub(crate) mod benchmarks;
 
-pub(in crate::view) use self::conflict_resolver::{
+pub(in crate::view) use self::conflict_resolver_rows::{
     resolved_output_gutter_width, resolved_output_line_no_width,
 };
 pub(in crate::view) use self::diff::{
