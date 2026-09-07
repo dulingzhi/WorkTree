@@ -230,6 +230,57 @@ struct ConflictBootstrapInput {
     conflict_rev: u64,
 }
 
+/// The computed half of a text-conflict bootstrap: the values that move into
+/// [`ConflictResolverUiState`] at install time, plus [`ConflictBootstrapPost`]
+/// for everything the finish phase still needs afterwards (trace context,
+/// counters, the resolved output and the fresh-open guards). Field values are
+/// produced by exactly the statements the pre-split monolith ran, in order.
+struct ConflictBootstrap {
+    post: ConflictBootstrapPost,
+    marker_snapshot: Option<Arc<str>>,
+    output_is_protected: bool,
+    marker_segments: Vec<conflict_resolver::ConflictSegment>,
+    collapse_context: bool,
+    conflict_region_indices: Vec<usize>,
+    display_plan_block_indices: Vec<usize>,
+    conflict_region_marker_has_base: Vec<bool>,
+    active_conflict: Option<usize>,
+    nav_targets: Vec<conflict_resolver::ConflictNavTarget>,
+    original_region_aligned_ranges: Vec<Option<std::ops::Range<usize>>>,
+    mode_state: ConflictModeState,
+    view_mode: ConflictResolverViewMode,
+    three_way_text: ThreeWaySides<SharedString>,
+    three_way_line_starts: ThreeWaySides<DeferredLineStarts>,
+    three_way_len: usize,
+    three_way_aligned: conflict_resolver::ThreeWayAlignedMap,
+    merge_plan_aligned_conflict_ranges: Option<Vec<std::ops::Range<usize>>>,
+    three_way_word_highlights: ThreeWaySides<conflict_resolver::WordHighlights>,
+    two_way_aligned_word_highlights: FxHashMap<usize, conflict_resolver::TwoWayWordHighlightPair>,
+    nav_anchor: Option<conflict_resolver::ConflictNavAnchor>,
+    hide_resolved: bool,
+    last_autosolve_summary: Option<SharedString>,
+    open_summary_counts: Option<conflict_resolver::ConflictSummaryCounts>,
+    open_summary_announced: bool,
+    resolver_preview_mode: ConflictResolverPreviewMode,
+}
+
+/// See [`ConflictBootstrap`].
+struct ConflictBootstrapPost {
+    trace_ctx: MergetoolTraceContext,
+    trace_decisions: MergetoolBootstrapTraceDecisions,
+    bootstrap_started: Instant,
+    conflict_block_count: usize,
+    diff_row_count: usize,
+    inline_row_count: usize,
+    resolved_line_count: Option<usize>,
+    resolved_output_text: Option<conflict_resolver::ResolvedOutputText>,
+    streamed_output_projection: Option<conflict_resolver::ResolvedOutputProjection>,
+    is_same_conflict: bool,
+    needs_full_side_texts: bool,
+    full_text_plan_upgrade_expected: bool,
+    three_way_needs_background: ThreeWaySides<bool>,
+}
+
 impl MainPaneView {
     fn clear_conflict_resolver_state(&mut self) {
         self.conflict_resolver = ConflictResolverUiState::default();
@@ -321,116 +372,29 @@ impl MainPaneView {
         }
     }
 
-    pub(in crate::view::panes::main) fn sync_conflict_resolver(
+    /// Compute phase of the resolver bootstrap: parse the marker
+    /// projection, build the aligned row space and the word highlights,
+    /// derive the resolved output and collect the preserved per-open UI
+    /// state. Everything the install/finish phases need comes back in
+    /// [`ConflictBootstrap`]; the only `self` writes are the segment and
+    /// syntax caches, at the same statements and order as the pre-split
+    /// monolith. Returns `None` only on the unreachable repo-vanished
+    //  path (the gate found the repo; nothing mutates `self.state.repos`).
+    fn compute_conflict_bootstrap(
         &mut self,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let Some(target) = self.conflict_resolver_sync_target() else {
-            self.clear_conflict_resolver_state();
-            return;
-        };
-        let ConflictSyncTarget {
-            repo_id,
-            path,
-            conflict_kind,
-        } = target;
-        // The gate already established this repo exists; nothing between the
-        // gate and this lookup mutates `self.state.repos`, so the `else` is
-        // unreachable and simply skips the sync.
-        let Some(repo) = self.state.repos.iter().find(|r| r.id == repo_id) else {
-            return;
-        };
-        let trace_path = path.clone();
-
-        let should_load = repo.conflict_state.conflict_file_path.as_ref() != Some(&path)
-            && !matches!(repo.conflict_state.conflict_file, Loadable::Loading);
-        if should_load {
-            self.begin_conflict_file_current_only_load(repo_id, path, cx);
-            return;
-        }
-
-        let Loadable::Ready(Some(file)) = &repo.conflict_state.conflict_file else {
-            return;
-        };
-        if file.path != path {
-            return;
-        }
-
-        let source_hash = conflict_file_source_fingerprint(file);
-
-        let needs_rebuild = self.conflict_resolver.repo_id != Some(repo_id)
-            || self.conflict_resolver.path.as_ref() != Some(&path)
-            || self.conflict_resolver.source_hash != Some(source_hash);
-
-        // When the file content hasn't changed but state-side conflict data has
-        // been updated (e.g. hide_resolved toggled externally, bulk picks, or
-        // autosolve applied from state), do a lightweight re-sync that re-applies
-        // session resolutions and rebuilds visible maps without recomputing the
-        // expensive diff/highlight data.
-        if !needs_rebuild {
-            if self.conflict_resolver.conflict_rev != repo.conflict_state.conflict_rev {
-                self.resync_conflict_resolver_from_state(cx);
-            }
-            return;
-        }
-
-        self.conflict_diff_segments_cache_split.clear();
-        self.conflict_diff_query_segments_cache_split.clear();
-        self.conflict_three_way_query_segments_cache.clear();
-        self.conflict_diff_query_cache_query = SharedString::default();
-
-        // A CurrentOnly load intentionally omits all three immutable conflict
-        // sides. Specialized resolvers need those exact bytes before their
-        // completion actions can be enabled.
-        let needs_full_side_payloads =
-            file.base_bytes.is_none() && file.ours_bytes.is_none() && file.theirs_bytes.is_none();
-
-        // Use the ConflictSession from state for strategy if available,
-        // otherwise fall back to local computation.
-        let (conflict_strategy, is_binary) = if let Some(session) =
-            &repo.conflict_state.conflict_session
-        {
-            let binary =
-                session.base.is_binary() || session.ours.is_binary() || session.theirs.is_binary();
-            (Some(session.strategy), binary)
-        } else {
-            let binary = conflict_file_is_binary(file);
-            (
-                Self::conflict_resolver_strategy(conflict_kind, binary),
-                binary,
-            )
-        };
-        let conflict_syntax_language = rows::diff_syntax_language_for_path(&path);
-        let shared_path = worktree_state::msg::RepoPath::from(path.clone());
-
-        // For binary conflicts, populate minimal state and return early.
-        if is_binary {
-            // Cloning detaches the file (and `conflict_rev` below) from the
-            // `self.state.repos` borrow so the phase call can take `&mut self`.
-            let file = file.clone();
-            self.apply_binary_conflict_bootstrap(
-                ConflictBootstrapInput {
-                    repo_id,
-                    path,
-                    shared_path,
-                    conflict_syntax_language,
-                    source_hash,
-                    conflict_strategy,
-                    conflict_kind,
-                    needs_full_side_payloads,
-                    conflict_rev: repo.conflict_state.conflict_rev,
-                },
-                &file,
-            );
-            return;
-        }
-
+        input: &ConflictBootstrapInput,
+        file: &worktree_state::model::ConflictFile,
+    ) -> Option<ConflictBootstrap> {
         let bootstrap_started = Instant::now();
+        // The gate already established this repo exists; nothing before
+        // this lookup mutates `self.state.repos`, so the `?` never fires and
+        // only keeps the borrowck-honest shape.
+        let repo = self.state.repos.iter().find(|r| r.id == input.repo_id)?;
         let session = repo
             .conflict_state
             .conflict_session
             .as_ref()
-            .filter(|session| session.path == path);
+            .filter(|session| session.path == input.path);
         let current_text = session
             .and_then(|session| match session.current.as_ref() {
                 Some(worktree_core::conflict_session::ConflictPayload::Text(text)) => {
@@ -459,14 +423,14 @@ impl MainPaneView {
         let ours_text = file.ours.as_deref().unwrap_or("");
         let theirs_text = file.theirs.as_deref().unwrap_or("");
         let trace_ctx = MergetoolTraceContext::new(
-            trace_path,
+            input.path.clone(),
             base_text,
             ours_text,
             theirs_text,
             current_text_ref,
         );
-        let is_same_conflict = self.conflict_resolver.repo_id == Some(repo_id)
-            && self.conflict_resolver.path.as_ref() == Some(&path);
+        let is_same_conflict = self.conflict_resolver.repo_id == Some(input.repo_id)
+            && self.conflict_resolver.path.as_ref() == Some(&input.path);
         // True when the fast CurrentOnly first paint is showing: no side text
         // has been loaded yet (a Full load provides at least one stage for
         // real conflicts).
@@ -475,7 +439,7 @@ impl MainPaneView {
         const FULL_LOAD_UPGRADE_MAX_CURRENT_LINES: usize = 100_000;
         let full_text_plan_upgrade_expected = needs_full_side_texts
             && matches!(
-                conflict_strategy,
+                input.conflict_strategy,
                 Some(worktree_core::conflict_session::ConflictResolverStrategy::FullTextResolver)
             )
             && current_text
@@ -568,7 +532,7 @@ impl MainPaneView {
         } else {
             three_way_aligned.aligned_len()
         };
-        let full_syntax_parse_requested = conflict_syntax_language.is_some()
+        let full_syntax_parse_requested = input.conflict_syntax_language.is_some()
             && [base_text, ours_text, theirs_text]
                 .into_iter()
                 .any(|text| !text.is_empty());
@@ -823,13 +787,13 @@ impl MainPaneView {
         let three_way_source_available = file.base.is_some()
             || (needs_full_side_texts
                 && matches!(
-                    conflict_kind,
+                    input.conflict_kind,
                     Some(worktree_core::domain::FileConflictKind::BothModified)
                 ));
         let view_mode = if is_same_conflict {
             self.conflict_resolver.view_mode
         } else if matches!(
-            conflict_strategy,
+            input.conflict_strategy,
             Some(worktree_core::conflict_session::ConflictResolverStrategy::FullTextResolver)
         ) && three_way_source_available
             && self.mergetool_view_three_way
@@ -887,7 +851,7 @@ impl MainPaneView {
             .conflict_state
             .conflict_session
             .as_ref()
-            .filter(|session| session.path.as_path() == path.as_path())
+            .filter(|session| session.path.as_path() == input.path.as_path())
             // CurrentOnly is a provisional marker-only session. Wait for its
             // Full upgrade so the open snapshot uses the plan-backed KDiff3
             // denominator and exact whitespace classification.
@@ -906,7 +870,7 @@ impl MainPaneView {
             && self.conflict_resolver.open_summary_announced)
             || self
                 .conflict_open_summary_toasted_files
-                .contains(&(repo_id, path.clone()));
+                .contains(&(input.repo_id, input.path.clone()));
 
         self.conflict_three_way_segments_cache.clear();
         self.conflict_three_way_query_segments_cache.clear();
@@ -917,7 +881,7 @@ impl MainPaneView {
         let mut three_way_prepared_docs =
             ThreeWaySides::<Option<rows::PreparedDiffSyntaxDocument>>::default();
         let mut three_way_needs_background = ThreeWaySides::<bool>::default();
-        if let Some(language) = conflict_syntax_language {
+        if let Some(language) = input.conflict_syntax_language {
             for side in ThreeWayColumn::ALL {
                 let text = &three_way_text[side];
                 let doc_slot = &mut three_way_prepared_docs[side];
@@ -947,6 +911,220 @@ impl MainPaneView {
         }
         self.conflict_three_way_prepared_syntax_documents = three_way_prepared_docs;
         self.conflict_three_way_syntax_inflight = ThreeWaySides::default();
+        Some(ConflictBootstrap {
+            post: ConflictBootstrapPost {
+                trace_ctx,
+                trace_decisions,
+                bootstrap_started,
+                conflict_block_count,
+                diff_row_count,
+                inline_row_count,
+                resolved_line_count,
+                resolved_output_text,
+                streamed_output_projection,
+                is_same_conflict,
+                needs_full_side_texts,
+                full_text_plan_upgrade_expected,
+                three_way_needs_background,
+            },
+            marker_snapshot,
+            output_is_protected,
+            marker_segments,
+            collapse_context,
+            conflict_region_indices,
+            display_plan_block_indices,
+            conflict_region_marker_has_base,
+            active_conflict,
+            nav_targets,
+            original_region_aligned_ranges,
+            mode_state,
+            view_mode,
+            three_way_text,
+            three_way_line_starts,
+            three_way_len,
+            three_way_aligned,
+            merge_plan_aligned_conflict_ranges,
+            three_way_word_highlights,
+            two_way_aligned_word_highlights,
+            nav_anchor,
+            hide_resolved,
+            last_autosolve_summary,
+            open_summary_counts,
+            open_summary_announced,
+            resolver_preview_mode,
+        })
+    }
+
+    pub(in crate::view::panes::main) fn sync_conflict_resolver(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(target) = self.conflict_resolver_sync_target() else {
+            self.clear_conflict_resolver_state();
+            return;
+        };
+        let ConflictSyncTarget {
+            repo_id,
+            path,
+            conflict_kind,
+        } = target;
+        // The gate already established this repo exists; nothing between the
+        // gate and this lookup mutates `self.state.repos`, so the `else` is
+        // unreachable and simply skips the sync.
+        let Some(repo) = self.state.repos.iter().find(|r| r.id == repo_id) else {
+            return;
+        };
+
+        let should_load = repo.conflict_state.conflict_file_path.as_ref() != Some(&path)
+            && !matches!(repo.conflict_state.conflict_file, Loadable::Loading);
+        if should_load {
+            self.begin_conflict_file_current_only_load(repo_id, path, cx);
+            return;
+        }
+
+        let Loadable::Ready(Some(file)) = &repo.conflict_state.conflict_file else {
+            return;
+        };
+        if file.path != path {
+            return;
+        }
+
+        let source_hash = conflict_file_source_fingerprint(file);
+
+        let needs_rebuild = self.conflict_resolver.repo_id != Some(repo_id)
+            || self.conflict_resolver.path.as_ref() != Some(&path)
+            || self.conflict_resolver.source_hash != Some(source_hash);
+
+        // When the file content hasn't changed but state-side conflict data has
+        // been updated (e.g. hide_resolved toggled externally, bulk picks, or
+        // autosolve applied from state), do a lightweight re-sync that re-applies
+        // session resolutions and rebuilds visible maps without recomputing the
+        // expensive diff/highlight data.
+        if !needs_rebuild {
+            if self.conflict_resolver.conflict_rev != repo.conflict_state.conflict_rev {
+                self.resync_conflict_resolver_from_state(cx);
+            }
+            return;
+        }
+
+        self.conflict_diff_segments_cache_split.clear();
+        self.conflict_diff_query_segments_cache_split.clear();
+        self.conflict_three_way_query_segments_cache.clear();
+        self.conflict_diff_query_cache_query = SharedString::default();
+
+        // A CurrentOnly load intentionally omits all three immutable conflict
+        // sides. Specialized resolvers need those exact bytes before their
+        // completion actions can be enabled.
+        let needs_full_side_payloads =
+            file.base_bytes.is_none() && file.ours_bytes.is_none() && file.theirs_bytes.is_none();
+
+        // Use the ConflictSession from state for strategy if available,
+        // otherwise fall back to local computation.
+        let (conflict_strategy, is_binary) = if let Some(session) =
+            &repo.conflict_state.conflict_session
+        {
+            let binary =
+                session.base.is_binary() || session.ours.is_binary() || session.theirs.is_binary();
+            (Some(session.strategy), binary)
+        } else {
+            let binary = conflict_file_is_binary(file);
+            (
+                Self::conflict_resolver_strategy(conflict_kind, binary),
+                binary,
+            )
+        };
+        let conflict_syntax_language = rows::diff_syntax_language_for_path(&path);
+        let shared_path = worktree_state::msg::RepoPath::from(path.clone());
+
+        // For binary conflicts, populate minimal state and return early.
+        if is_binary {
+            // Cloning detaches the file (and `conflict_rev` below) from the
+            // `self.state.repos` borrow so the phase call can take `&mut self`.
+            let file = file.clone();
+            self.apply_binary_conflict_bootstrap(
+                ConflictBootstrapInput {
+                    repo_id,
+                    path,
+                    shared_path,
+                    conflict_syntax_language,
+                    source_hash,
+                    conflict_strategy,
+                    conflict_kind,
+                    needs_full_side_payloads,
+                    conflict_rev: repo.conflict_state.conflict_rev,
+                },
+                &file,
+            );
+            return;
+        }
+
+        // Detach the file from the `self.state.repos` borrow so the
+        // compute phase can take `&mut self`. `conflict_rev` joins the
+        // pack here: no `self.state.repos` write can intervene before the
+        // install phase consumes it, so the value matches the monolith's
+        // read inside the state literal.
+        let file = file.clone();
+        let input = ConflictBootstrapInput {
+            repo_id,
+            path: path.clone(),
+            shared_path: shared_path.clone(),
+            conflict_syntax_language,
+            source_hash,
+            conflict_strategy,
+            conflict_kind,
+            needs_full_side_payloads,
+            conflict_rev: repo.conflict_state.conflict_rev,
+        };
+        let Some(bootstrap) = self.compute_conflict_bootstrap(&input, &file) else {
+            // Unreachable: the gate found this repo and nothing mutated
+            // `self.state.repos` since.
+            return;
+        };
+        // Restore the monolith's locals so the install/finish code below
+        // stays verbatim until those phases are extracted.
+        let ConflictBootstrap {
+            post,
+            marker_snapshot,
+            output_is_protected,
+            marker_segments,
+            collapse_context,
+            conflict_region_indices,
+            display_plan_block_indices,
+            conflict_region_marker_has_base,
+            active_conflict,
+            nav_targets,
+            original_region_aligned_ranges,
+            mode_state,
+            view_mode,
+            three_way_text,
+            three_way_line_starts,
+            three_way_len,
+            three_way_aligned,
+            merge_plan_aligned_conflict_ranges,
+            three_way_word_highlights,
+            two_way_aligned_word_highlights,
+            nav_anchor,
+            hide_resolved,
+            last_autosolve_summary,
+            open_summary_counts,
+            open_summary_announced,
+            resolver_preview_mode,
+        } = bootstrap;
+        let ConflictBootstrapPost {
+            trace_ctx,
+            trace_decisions,
+            bootstrap_started,
+            conflict_block_count,
+            diff_row_count,
+            inline_row_count,
+            resolved_line_count,
+            resolved_output_text,
+            streamed_output_projection,
+            is_same_conflict,
+            needs_full_side_texts,
+            full_text_plan_upgrade_expected,
+            three_way_needs_background,
+        } = post;
         let shared_path = worktree_state::msg::RepoPath::from(path.clone());
 
         // Build state with core/shared fields; mode-dependent visible state
@@ -1017,7 +1195,7 @@ impl MainPaneView {
             last_autosolve_summary,
             open_summary_counts,
             open_summary_announced,
-            conflict_rev: repo.conflict_state.conflict_rev,
+            conflict_rev: input.conflict_rev,
             resolver_pending_recompute_seq: 0,
             resolved_outline: ResolvedOutlineData::default(),
             resolved_outline_gutter_rows: Vec::new(),
