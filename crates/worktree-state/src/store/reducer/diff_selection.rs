@@ -420,7 +420,8 @@ pub(super) fn global_nav(
     // Restore the selected commit (history-log selection / commit details).
     match snapshot.selected_commit {
         Some(commit_id) => {
-            let sel_effects = super::effects::select_commit(state, repo_id, commit_id.clone());
+            let sel_effects =
+                super::loaded_results::select_commit(state, repo_id, commit_id.clone());
             // `select_commit` no-ops when this commit is already selected, but a
             // prior nav step or a cancelled load may have left its details
             // unloaded. Reload unless the details already shown are for this
@@ -467,7 +468,9 @@ pub(super) fn global_nav(
                 repo_state.set_commit_details(Loadable::NotLoaded);
                 // Only the selected worktree's changed files are carried in
                 // state, so the restored row needs a scan to fetch its own.
-                effects.extend(super::effects::request_worktree_dirty_effect(repo_state));
+                effects.extend(super::loaded_results::request_worktree_dirty_effect(
+                    repo_state,
+                ));
             }
         }
     }
@@ -488,14 +491,14 @@ pub(super) fn global_nav(
     };
     if restore_range {
         match snapshot.range_selection {
-            Some(range) => effects.extend(super::effects::compare_range(
+            Some(range) => effects.extend(super::loaded_results::compare_range(
                 state,
                 repo_id,
                 range.from,
                 range.to,
                 range.from_label,
                 range.to_label,
-                super::effects::ComparisonSource::Explicit,
+                super::loaded_results::ComparisonSource::Explicit,
             )),
             None => {
                 if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {

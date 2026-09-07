@@ -1,5 +1,5 @@
 use super::actions_emit_effects::invalidate_loaded_blame;
-use super::effects::{append_ensure_sidebar_data_effects, select_commit_and_load_details};
+use super::loaded_results::{append_ensure_sidebar_data_effects, select_commit_and_load_details};
 use super::repo_management::{
     append_cancel_repo_loads_effect_for_repo, append_selected_history_reload_effects,
     selected_history_reloads_for_activation,
@@ -112,7 +112,7 @@ pub(super) fn reload_repo(state: &mut AppState, repo_id: crate::model::RepoId) -
     // refreshed along with everything else. The monitor only flushes for this
     // repo's own `.git`, so a commit or stash made inside a linked worktree
     // reaches us no other way, and Reload is exactly how a user asks for it.
-    if let Some(effect) = super::effects::request_worktree_dirty_effect(repo_state) {
+    if let Some(effect) = super::loaded_results::request_worktree_dirty_effect(repo_state) {
         effects.push(effect);
     }
     effects
@@ -138,7 +138,7 @@ fn file_browser_refresh_for_external_change(
     }
     // Deliberately no `entries = Loading` and no `expanded_dirs.clear()`: the rows
     // stay put, expansion included, until the new listing replaces them.
-    super::effects::request_file_browser_load(repo_state)
+    super::loaded_results::request_file_browser_load(repo_state)
 }
 
 pub(super) fn repo_externally_changed(
@@ -175,7 +175,7 @@ pub(super) fn repo_externally_changed(
         {
             effects.push(Effect::LoadRemoteBranches { repo_id });
         }
-        if let Some(effect) = super::effects::request_worktree_dirty_effect(repo_state) {
+        if let Some(effect) = super::loaded_results::request_worktree_dirty_effect(repo_state) {
             effects.push(effect);
         }
         effects

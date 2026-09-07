@@ -1,8 +1,8 @@
 mod actions_emit_effects;
 mod conflict_interactions;
 mod diff_selection;
-mod effects;
 mod external_and_history;
+mod loaded_results;
 mod repo_management;
 mod util;
 
@@ -804,7 +804,7 @@ pub(super) fn reduce(
 
     // Enforced here rather than at each of the four places a worktree selection
     // can end; see the helper.
-    effects::retire_orphaned_worktree_diffs(state);
+    loaded_results::retire_orphaned_worktree_diffs(state);
 
     if reconcile {
         reconcile_active_nav_history(state, push);
@@ -991,7 +991,7 @@ fn reduce_inner(
         }
         Msg::LoadMoreHistory { repo_id } => external_and_history::load_more_history(state, repo_id),
         Msg::SelectCommit { repo_id, commit_id } => {
-            effects::select_commit(state, repo_id, commit_id)
+            loaded_results::select_commit(state, repo_id, commit_id)
         }
         Msg::SelectCommitMulti {
             repo_id,
@@ -999,7 +999,7 @@ fn reduce_inner(
             mode,
             clicked_index,
             visible_order,
-        } => effects::select_commit_multi(
+        } => loaded_results::select_commit_multi(
             state,
             repo_id,
             commit_id,
@@ -1007,47 +1007,51 @@ fn reduce_inner(
             clicked_index,
             visible_order,
         ),
-        Msg::ClearCommitSelection { repo_id } => effects::clear_commit_selection(state, repo_id),
+        Msg::ClearCommitSelection { repo_id } => {
+            loaded_results::clear_commit_selection(state, repo_id)
+        }
         Msg::CompareCommitRange {
             repo_id,
             from,
             to,
             from_label,
             to_label,
-        } => effects::compare_range(
+        } => loaded_results::compare_range(
             state,
             repo_id,
             from,
             Some(to),
             from_label,
             to_label,
-            effects::ComparisonSource::Explicit,
+            loaded_results::ComparisonSource::Explicit,
         ),
         Msg::CompareWithWorkingTree {
             repo_id,
             from,
             from_label,
-        } => effects::compare_range(
+        } => loaded_results::compare_range(
             state,
             repo_id,
             from,
             None,
             from_label,
             rust_i18n::t!("store.reducer.label_working_tree").to_string(),
-            effects::ComparisonSource::Explicit,
+            loaded_results::ComparisonSource::Explicit,
         ),
-        Msg::ClearComparison { repo_id } => effects::clear_comparison(state, repo_id),
+        Msg::ClearComparison { repo_id } => loaded_results::clear_comparison(state, repo_id),
         Msg::MarkForComparison {
             repo_id,
             commit_id,
             label,
-        } => effects::mark_for_comparison(state, repo_id, commit_id, label),
+        } => loaded_results::mark_for_comparison(state, repo_id, commit_id, label),
         Msg::CompareWithMarked {
             repo_id,
             commit_id,
             label,
-        } => effects::compare_with_marked(state, repo_id, commit_id, label),
-        Msg::ClearComparisonMark { repo_id } => effects::clear_comparison_mark(state, repo_id),
+        } => loaded_results::compare_with_marked(state, repo_id, commit_id, label),
+        Msg::ClearComparisonMark { repo_id } => {
+            loaded_results::clear_comparison_mark(state, repo_id)
+        }
         Msg::SelectDiff { repo_id, target } => diff_selection::select_diff(state, repo_id, target),
         Msg::OpenInlineSubmoduleDiff {
             repo_id,
@@ -1077,43 +1081,47 @@ fn reduce_inner(
         }
         Msg::ClearDiffSelection { repo_id } => diff_selection::clear_diff_selection(state, repo_id),
         Msg::EnsureSidebarData { repo_id, request } => {
-            effects::ensure_sidebar_data(state, repo_id, request)
+            loaded_results::ensure_sidebar_data(state, repo_id, request)
         }
-        Msg::LoadStashes { repo_id } => effects::load_stashes(state, repo_id),
+        Msg::LoadStashes { repo_id } => loaded_results::load_stashes(state, repo_id),
         Msg::LoadConflictFile {
             repo_id,
             path,
             mode,
-        } => effects::load_conflict_file(state, repo_id, path, mode),
-        Msg::LoadReflog { repo_id } => effects::load_reflog(state, repo_id),
+        } => loaded_results::load_conflict_file(state, repo_id, path, mode),
+        Msg::LoadReflog { repo_id } => loaded_results::load_reflog(state, repo_id),
         Msg::LoadHoverCommitMessage { repo_id, commit_id } => {
-            effects::load_hover_commit_message(state, repo_id, commit_id)
+            loaded_results::load_hover_commit_message(state, repo_id, commit_id)
         }
         Msg::LoadRecentCommitMessages { repo_id, limit } => {
-            effects::load_recent_commit_messages(state, repo_id, limit)
+            loaded_results::load_recent_commit_messages(state, repo_id, limit)
         }
-        Msg::SearchCommits { repo_id, query } => effects::search_commits(state, repo_id, query),
-        Msg::LoadAiCommitContext { repo_id } => effects::load_ai_commit_context(state, repo_id),
+        Msg::SearchCommits { repo_id, query } => {
+            loaded_results::search_commits(state, repo_id, query)
+        }
+        Msg::LoadAiCommitContext { repo_id } => {
+            loaded_results::load_ai_commit_context(state, repo_id)
+        }
         Msg::LoadFileHistory {
             repo_id,
             path,
             limit,
-        } => effects::load_file_history(state, repo_id, path, limit),
+        } => loaded_results::load_file_history(state, repo_id, path, limit),
         Msg::LoadBlame {
             repo_id,
             path,
             source,
-        } => effects::load_blame(state, repo_id, path, source),
-        Msg::LoadWorktrees { repo_id } => effects::load_worktrees(state, repo_id),
-        Msg::LoadWorktreeDirty { repo_id } => effects::load_worktree_dirty(state, repo_id),
+        } => loaded_results::load_blame(state, repo_id, path, source),
+        Msg::LoadWorktrees { repo_id } => loaded_results::load_worktrees(state, repo_id),
+        Msg::LoadWorktreeDirty { repo_id } => loaded_results::load_worktree_dirty(state, repo_id),
         Msg::SelectWorktreeUncommitted { repo_id, path } => {
-            effects::select_worktree_uncommitted(state, repo_id, path)
+            loaded_results::select_worktree_uncommitted(state, repo_id, path)
         }
         Msg::SelectWorkingTreeSummary { repo_id } => {
-            effects::select_working_tree_summary(state, repo_id)
+            loaded_results::select_working_tree_summary(state, repo_id)
         }
-        Msg::LoadRefMetadata { repo_id } => effects::load_ref_metadata(state, repo_id),
-        Msg::LoadSubmodules { repo_id } => effects::load_submodules(state, repo_id),
+        Msg::LoadRefMetadata { repo_id } => loaded_results::load_ref_metadata(state, repo_id),
+        Msg::LoadSubmodules { repo_id } => loaded_results::load_submodules(state, repo_id),
         // The GitHub API call itself is spawned by the UI (the store has no
         // HTTP); this arm only flips the loadable so the section renders its
         // loading state and re-loads are not double-spawned.
@@ -1127,28 +1135,30 @@ fn reduce_inner(
             }
             Vec::new()
         }
-        Msg::LoadTags { repo_id } => effects::load_tags(state, repo_id),
-        Msg::LoadRemoteTags { repo_id } => effects::load_remote_tags(state, repo_id),
-        Msg::RefreshBranches { repo_id } => effects::refresh_branches(state, repo_id),
+        Msg::LoadTags { repo_id } => loaded_results::load_tags(state, repo_id),
+        Msg::LoadRemoteTags { repo_id } => loaded_results::load_remote_tags(state, repo_id),
+        Msg::RefreshBranches { repo_id } => loaded_results::refresh_branches(state, repo_id),
         Msg::LoadFileBrowser { repo_id, source } => {
-            effects::load_file_browser(state, repo_id, source)
+            loaded_results::load_file_browser(state, repo_id, source)
         }
         Msg::ToggleFileBrowserDir { repo_id, path } => {
-            effects::toggle_file_browser_dir(state, repo_id, path)
+            loaded_results::toggle_file_browser_dir(state, repo_id, path)
         }
         Msg::SetFileBrowserDirExpandedRecursive {
             repo_id,
             path,
             expanded,
-        } => effects::set_file_browser_dir_expanded_recursive(state, repo_id, path, expanded),
+        } => {
+            loaded_results::set_file_browser_dir_expanded_recursive(state, repo_id, path, expanded)
+        }
         Msg::SetFileBrowserSearch { repo_id, query } => {
-            effects::set_file_browser_search(state, repo_id, query)
+            loaded_results::set_file_browser_search(state, repo_id, query)
         }
         Msg::RevealFileBrowserPath { repo_id, path } => {
-            effects::reveal_file_browser_path(state, repo_id, path)
+            loaded_results::reveal_file_browser_path(state, repo_id, path)
         }
         Msg::SetFileBrowserSource { repo_id, source } => {
-            effects::set_file_browser_source(state, repo_id, source)
+            loaded_results::set_file_browser_source(state, repo_id, source)
         }
         Msg::OpenFileContent {
             repo_id,
@@ -1178,13 +1188,13 @@ fn reduce_inner(
             path,
         }],
         Msg::BrowseRepositoryAtCommit { repo_id, commit_id } => {
-            effects::browse_repository_at_commit(state, repo_id, commit_id)
+            loaded_results::browse_repository_at_commit(state, repo_id, commit_id)
         }
         Msg::RevealCommit { repo_id, reference } => {
-            effects::reveal_commit(state, repo_id, reference)
+            loaded_results::reveal_commit(state, repo_id, reference)
         }
-        Msg::FinishCommitReveal { repo_id } => effects::finish_commit_reveal(state, repo_id),
-        Msg::ResetBrowseToLive { repo_id } => effects::reset_browse_to_live(state, repo_id),
+        Msg::FinishCommitReveal { repo_id } => loaded_results::finish_commit_reveal(state, repo_id),
+        Msg::ResetBrowseToLive { repo_id } => loaded_results::reset_browse_to_live(state, repo_id),
         Msg::ViewerNavBack { repo_id } => {
             diff_selection::viewer_nav(state, repo_id, crate::model::ViewNavDir::Back)
         }
@@ -1197,7 +1207,7 @@ fn reduce_inner(
         Msg::GlobalNavForward { repo_id } => {
             diff_selection::global_nav(state, repo_id, crate::model::ViewNavDir::Forward)
         }
-        Msg::SetSidebarMode { mode } => effects::set_sidebar_mode(state, mode),
+        Msg::SetSidebarMode { mode } => loaded_results::set_sidebar_mode(state, mode),
         Msg::StageHunk { repo_id, patch } => {
             begin_local_action(state, repo_id);
             diff_selection::stage_hunk(repo_id, patch)
@@ -1687,7 +1697,7 @@ fn reduce_inner(
             begin_local_action(state, repo_id);
             actions_emit_effects::reset(repo_id, target, mode)
         }
-        Msg::PrepareSquash { repo_id } => effects::prepare_squash(state, repo_id),
+        Msg::PrepareSquash { repo_id } => loaded_results::prepare_squash(state, repo_id),
         Msg::SquashCommits {
             repo_id,
             oldest,
@@ -2037,7 +2047,7 @@ fn reduce_inner(
         Msg::LoadAssumeUnchanged { repo_id } => {
             actions_emit_effects::load_assume_unchanged(repo_id)
         }
-        Msg::LoadRepoStatistics { repo_id } => effects::load_repo_statistics(state, repo_id),
+        Msg::LoadRepoStatistics { repo_id } => loaded_results::load_repo_statistics(state, repo_id),
         Msg::StashBranch {
             repo_id,
             index,
@@ -2086,33 +2096,33 @@ fn reduce_inner(
             error,
         }) => repo_management::repo_opened_err(repos, state, repo_id, spec, error),
         Msg::Internal(crate::msg::InternalMsg::BranchesLoaded { repo_id, result }) => {
-            effects::branches_loaded(state, repo_id, result)
+            loaded_results::branches_loaded(state, repo_id, result)
         }
         Msg::Internal(crate::msg::InternalMsg::RemotesLoaded { repo_id, result }) => {
-            effects::remotes_loaded(state, repo_id, result)
+            loaded_results::remotes_loaded(state, repo_id, result)
         }
         Msg::Internal(crate::msg::InternalMsg::RemoteBranchesLoaded { repo_id, result }) => {
-            effects::remote_branches_loaded(state, repo_id, result)
+            loaded_results::remote_branches_loaded(state, repo_id, result)
         }
         Msg::Internal(crate::msg::InternalMsg::WorktreeStatusLoaded { repo_id, result }) => {
-            effects::worktree_status_loaded(state, repo_id, result)
+            loaded_results::worktree_status_loaded(state, repo_id, result)
         }
         Msg::Internal(crate::msg::InternalMsg::StagedStatusLoaded { repo_id, result }) => {
-            effects::staged_status_loaded(state, repo_id, result)
+            loaded_results::staged_status_loaded(state, repo_id, result)
         }
         Msg::Internal(crate::msg::InternalMsg::StatusLoaded { repo_id, result }) => {
-            effects::status_loaded(state, repo_id, result)
+            loaded_results::status_loaded(state, repo_id, result)
         }
         Msg::Internal(crate::msg::InternalMsg::StatusForPathsLoaded {
             repo_id,
             paths,
             result,
-        }) => effects::status_for_paths_loaded(state, repo_id, paths, result),
+        }) => loaded_results::status_for_paths_loaded(state, repo_id, paths, result),
         Msg::Internal(crate::msg::InternalMsg::HeadBranchLoaded { repo_id, result }) => {
-            effects::head_branch_loaded(state, repo_id, result)
+            loaded_results::head_branch_loaded(state, repo_id, result)
         }
         Msg::Internal(crate::msg::InternalMsg::UpstreamDivergenceLoaded { repo_id, result }) => {
-            effects::upstream_divergence_loaded(state, repo_id, result)
+            loaded_results::upstream_divergence_loaded(state, repo_id, result)
         }
         Msg::Internal(crate::msg::InternalMsg::LogLoaded {
             repo_id,
@@ -2128,22 +2138,22 @@ fn reduce_inner(
             scanned,
         }) => external_and_history::log_chunk_loaded(state, repo_id, seq, commits, scanned),
         Msg::Internal(crate::msg::InternalMsg::TagsLoaded { repo_id, result }) => {
-            effects::tags_loaded(state, repo_id, result)
+            loaded_results::tags_loaded(state, repo_id, result)
         }
         Msg::Internal(crate::msg::InternalMsg::RemoteTagsLoaded { repo_id, result }) => {
-            effects::remote_tags_loaded(state, repo_id, result)
+            loaded_results::remote_tags_loaded(state, repo_id, result)
         }
         Msg::Internal(crate::msg::InternalMsg::StashesLoaded { repo_id, result }) => {
-            effects::stashes_loaded(state, repo_id, result)
+            loaded_results::stashes_loaded(state, repo_id, result)
         }
         Msg::Internal(crate::msg::InternalMsg::AssumeUnchangedListLoaded { repo_id, result }) => {
-            effects::assume_unchanged_list_loaded(state, repo_id, result)
+            loaded_results::assume_unchanged_list_loaded(state, repo_id, result)
         }
         Msg::Internal(crate::msg::InternalMsg::RepoStatisticsLoaded { repo_id, result }) => {
-            effects::repo_statistics_loaded(state, repo_id, result)
+            loaded_results::repo_statistics_loaded(state, repo_id, result)
         }
         Msg::Internal(crate::msg::InternalMsg::ReflogLoaded { repo_id, result }) => {
-            effects::reflog_loaded(state, repo_id, result)
+            loaded_results::reflog_loaded(state, repo_id, result)
         }
         Msg::Internal(crate::msg::InternalMsg::RebaseStateLoaded { repo_id, result }) => {
             external_and_history::rebase_state_loaded(state, repo_id, result)
@@ -2173,44 +2183,44 @@ fn reduce_inner(
             repo_id,
             commit_id,
             result,
-        }) => effects::hover_commit_message_loaded(state, repo_id, commit_id, result),
+        }) => loaded_results::hover_commit_message_loaded(state, repo_id, commit_id, result),
         Msg::Internal(crate::msg::InternalMsg::FileHistoryLoaded {
             repo_id,
             path,
             result,
-        }) => effects::file_history_loaded(state, repo_id, path, result),
+        }) => loaded_results::file_history_loaded(state, repo_id, path, result),
         Msg::Internal(crate::msg::InternalMsg::AuthorEmailsLoaded { repo_id, result }) => {
-            effects::author_emails_loaded(state, repo_id, result)
+            loaded_results::author_emails_loaded(state, repo_id, result)
         }
         Msg::Internal(crate::msg::InternalMsg::BlameLoaded {
             repo_id,
             path,
             source,
             result,
-        }) => effects::blame_loaded(state, repo_id, path, source, result),
+        }) => loaded_results::blame_loaded(state, repo_id, path, source, result),
         Msg::Internal(crate::msg::InternalMsg::ConflictFileLoaded {
             repo_id,
             path,
             result,
             conflict_session,
-        }) => effects::conflict_file_loaded(state, repo_id, path, *result, conflict_session),
+        }) => loaded_results::conflict_file_loaded(state, repo_id, path, *result, conflict_session),
         Msg::Internal(crate::msg::InternalMsg::WorktreesLoaded { repo_id, result }) => {
-            effects::worktrees_loaded(state, repo_id, result)
+            loaded_results::worktrees_loaded(state, repo_id, result)
         }
         Msg::Internal(crate::msg::InternalMsg::WorktreeDirtyLoaded { repo_id, result }) => {
-            effects::worktree_dirty_loaded(state, repo_id, result)
+            loaded_results::worktree_dirty_loaded(state, repo_id, result)
         }
         Msg::Internal(crate::msg::InternalMsg::RefMetadataLoaded { repo_id, result }) => {
-            effects::ref_metadata_loaded(state, repo_id, result)
+            loaded_results::ref_metadata_loaded(state, repo_id, result)
         }
         Msg::Internal(crate::msg::InternalMsg::SubmodulesLoaded { repo_id, result }) => {
-            effects::submodules_loaded(state, repo_id, result)
+            loaded_results::submodules_loaded(state, repo_id, result)
         }
         Msg::Internal(crate::msg::InternalMsg::FileBrowserLoaded {
             repo_id,
             source,
             result,
-        }) => effects::file_browser_loaded(state, repo_id, source, result),
+        }) => loaded_results::file_browser_loaded(state, repo_id, source, result),
         Msg::Internal(crate::msg::InternalMsg::SubmoduleAddTrustChecked {
             repo_id,
             url,
@@ -2323,25 +2333,25 @@ fn reduce_inner(
             repo_id,
             commit_id,
             result,
-        }) => effects::commit_details_loaded(state, repo_id, commit_id, result),
+        }) => loaded_results::commit_details_loaded(state, repo_id, commit_id, result),
         Msg::Internal(crate::msg::InternalMsg::CommitRevealResolved {
             repo_id,
             reference,
             result,
-        }) => effects::commit_reveal_resolved(state, repo_id, reference, result),
+        }) => loaded_results::commit_reveal_resolved(state, repo_id, reference, result),
         Msg::Internal(crate::msg::InternalMsg::RangeFilesLoaded {
             repo_id,
             from,
             to,
             request,
             result,
-        }) => effects::range_files_loaded(state, repo_id, from, to, request, result),
+        }) => loaded_results::range_files_loaded(state, repo_id, from, to, request, result),
         Msg::Internal(crate::msg::InternalMsg::SquashMessagePreviewLoaded {
             repo_id,
             oldest,
             head,
             result,
-        }) => effects::squash_message_preview_loaded(state, repo_id, oldest, head, result),
+        }) => loaded_results::squash_message_preview_loaded(state, repo_id, oldest, head, result),
         Msg::Internal(crate::msg::InternalMsg::SquashRebaseSetupLoaded {
             repo_id,
             base,
@@ -2351,7 +2361,7 @@ fn reduce_inner(
             message,
             count,
             result,
-        }) => effects::squash_rebase_setup_loaded(
+        }) => loaded_results::squash_rebase_setup_loaded(
             state,
             repo_id,
             base,
@@ -2366,17 +2376,17 @@ fn reduce_inner(
             repo_id,
             request_rev,
             result,
-        }) => effects::recent_commit_messages_loaded(state, repo_id, request_rev, result),
+        }) => loaded_results::recent_commit_messages_loaded(state, repo_id, request_rev, result),
         Msg::Internal(crate::msg::InternalMsg::CommitsSearched {
             repo_id,
             request_rev,
             result,
-        }) => effects::commits_searched(state, repo_id, request_rev, result),
+        }) => loaded_results::commits_searched(state, repo_id, request_rev, result),
         Msg::Internal(crate::msg::InternalMsg::AiCommitContextLoaded {
             repo_id,
             request_rev,
             result,
-        }) => effects::ai_commit_context_loaded(state, repo_id, request_rev, result),
+        }) => loaded_results::ai_commit_context_loaded(state, repo_id, request_rev, result),
         Msg::Internal(crate::msg::InternalMsg::DiffLoaded {
             repo_id,
             target,

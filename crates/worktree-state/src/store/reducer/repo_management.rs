@@ -1,4 +1,4 @@
-use super::effects::append_ensure_sidebar_data_effects;
+use super::loaded_results::append_ensure_sidebar_data_effects;
 use super::util::{
     EffectAccumulator, SelectedConflictTarget, append_auto_background_metadata_effects,
     append_refresh_full_effects, append_refresh_primary_effects,
@@ -117,7 +117,7 @@ fn append_repo_switch_worktree_refresh_effect(
             repo_id: repo_state.id,
         });
     }
-    if let Some(effect) = super::effects::request_worktree_dirty_effect(repo_state) {
+    if let Some(effect) = super::loaded_results::request_worktree_dirty_effect(repo_state) {
         effects.push(effect);
     }
 }
@@ -1230,7 +1230,7 @@ pub(super) fn repo_opened_ok(
         // The history rows want this from the moment the repo opens, and the
         // switch-time trigger fires before the handle exists, so this is the
         // first point where the scan can actually run.
-        if let Some(effect) = super::effects::request_worktree_dirty_effect(repo_state) {
+        if let Some(effect) = super::loaded_results::request_worktree_dirty_effect(repo_state) {
             effects.push(effect);
         }
         if should_refresh_worktrees {

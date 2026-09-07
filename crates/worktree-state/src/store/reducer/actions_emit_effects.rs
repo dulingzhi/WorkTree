@@ -683,7 +683,7 @@ pub(super) fn squash_commits(
         .repos
         .iter()
         .find(|r| r.id == repo_id)
-        .and_then(super::effects::squash_plan_for_repo);
+        .and_then(super::loaded_results::squash_plan_for_repo);
     let still_valid = plan
         .as_ref()
         .is_some_and(|p| p.oldest == oldest && p.head == expected_head);
