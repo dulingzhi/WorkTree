@@ -3,7 +3,7 @@
 //! Facade over the five domain modules: conflict navigation in
 //! `conflict_nav`, bootstrap/session sync in `bootstrap`, picks in `pick`,
 //! resolved-output editing in `output_edit` and row selection/manual
-//! alignment in `alignment`. Extracted from `actions_impl.rs`: mergetool
+//! alignment in `alignment`. Extracted from `diff_interaction.rs`: mergetool
 //! bootstrap tracing, conflict navigation, pick/choice application, output
 //! editing ops, session resolution sync, and autosolve dispatch. See
 //! UI_DESIGN.md section 30.

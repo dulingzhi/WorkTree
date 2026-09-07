@@ -1,4 +1,4 @@
-mod render_impl;
+mod render;
 
 use super::super::path_display;
 use super::super::*;
@@ -9,9 +9,7 @@ use std::hash::{Hash, Hasher};
 use worktree_state::model::{AuthRetryOperation, CommandLogEntry};
 
 #[cfg(test)]
-pub(in crate::view) use render_impl::{
-    StatusSectionActionSelection, status_section_action_selection,
-};
+pub(in crate::view) use render::{StatusSectionActionSelection, status_section_action_selection};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct PendingCommitAmend {

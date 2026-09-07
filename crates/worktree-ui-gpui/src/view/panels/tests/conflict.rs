@@ -2312,7 +2312,7 @@ fn whole_file_conflict_stage_anyway_serializes_the_materialized_output(
                         &pane.conflict_resolver.marker_segments,
                     );
                     let input_before = pane.conflict_resolver_input.read(cx).text().to_string();
-                    // Mirrors the production save path in conflict_resolver_render.
+                    // Mirrors the production save path in conflict_resolver_pane.
                     let output_text = pane.current_conflict_resolved_output_text(cx);
                     let actual = pane.conflict_resolver_save_contents_from_text(output_text);
                     let input_after = pane.conflict_resolver_input.read(cx).text().to_string();
