@@ -955,133 +955,16 @@ impl MainPaneView {
         })
     }
 
-    pub(in crate::view::panes::main) fn sync_conflict_resolver(
+    /// Install phase: move the computed bootstrap into
+    /// [`ConflictResolverUiState`]. The field values are exactly the
+    /// monolith's state literal; `shared_path` comes from the pack
+    /// (the monolith recomputed the identical expression here).
+    fn install_conflict_bootstrap_state(
         &mut self,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let Some(target) = self.conflict_resolver_sync_target() else {
-            self.clear_conflict_resolver_state();
-            return;
-        };
-        let ConflictSyncTarget {
-            repo_id,
-            path,
-            conflict_kind,
-        } = target;
-        // The gate already established this repo exists; nothing between the
-        // gate and this lookup mutates `self.state.repos`, so the `else` is
-        // unreachable and simply skips the sync.
-        let Some(repo) = self.state.repos.iter().find(|r| r.id == repo_id) else {
-            return;
-        };
-
-        let should_load = repo.conflict_state.conflict_file_path.as_ref() != Some(&path)
-            && !matches!(repo.conflict_state.conflict_file, Loadable::Loading);
-        if should_load {
-            self.begin_conflict_file_current_only_load(repo_id, path, cx);
-            return;
-        }
-
-        let Loadable::Ready(Some(file)) = &repo.conflict_state.conflict_file else {
-            return;
-        };
-        if file.path != path {
-            return;
-        }
-
-        let source_hash = conflict_file_source_fingerprint(file);
-
-        let needs_rebuild = self.conflict_resolver.repo_id != Some(repo_id)
-            || self.conflict_resolver.path.as_ref() != Some(&path)
-            || self.conflict_resolver.source_hash != Some(source_hash);
-
-        // When the file content hasn't changed but state-side conflict data has
-        // been updated (e.g. hide_resolved toggled externally, bulk picks, or
-        // autosolve applied from state), do a lightweight re-sync that re-applies
-        // session resolutions and rebuilds visible maps without recomputing the
-        // expensive diff/highlight data.
-        if !needs_rebuild {
-            if self.conflict_resolver.conflict_rev != repo.conflict_state.conflict_rev {
-                self.resync_conflict_resolver_from_state(cx);
-            }
-            return;
-        }
-
-        self.conflict_diff_segments_cache_split.clear();
-        self.conflict_diff_query_segments_cache_split.clear();
-        self.conflict_three_way_query_segments_cache.clear();
-        self.conflict_diff_query_cache_query = SharedString::default();
-
-        // A CurrentOnly load intentionally omits all three immutable conflict
-        // sides. Specialized resolvers need those exact bytes before their
-        // completion actions can be enabled.
-        let needs_full_side_payloads =
-            file.base_bytes.is_none() && file.ours_bytes.is_none() && file.theirs_bytes.is_none();
-
-        // Use the ConflictSession from state for strategy if available,
-        // otherwise fall back to local computation.
-        let (conflict_strategy, is_binary) = if let Some(session) =
-            &repo.conflict_state.conflict_session
-        {
-            let binary =
-                session.base.is_binary() || session.ours.is_binary() || session.theirs.is_binary();
-            (Some(session.strategy), binary)
-        } else {
-            let binary = conflict_file_is_binary(file);
-            (
-                Self::conflict_resolver_strategy(conflict_kind, binary),
-                binary,
-            )
-        };
-        let conflict_syntax_language = rows::diff_syntax_language_for_path(&path);
-        let shared_path = worktree_state::msg::RepoPath::from(path.clone());
-
-        // For binary conflicts, populate minimal state and return early.
-        if is_binary {
-            // Cloning detaches the file (and `conflict_rev` below) from the
-            // `self.state.repos` borrow so the phase call can take `&mut self`.
-            let file = file.clone();
-            self.apply_binary_conflict_bootstrap(
-                ConflictBootstrapInput {
-                    repo_id,
-                    path,
-                    shared_path,
-                    conflict_syntax_language,
-                    source_hash,
-                    conflict_strategy,
-                    conflict_kind,
-                    needs_full_side_payloads,
-                    conflict_rev: repo.conflict_state.conflict_rev,
-                },
-                &file,
-            );
-            return;
-        }
-
-        // Detach the file from the `self.state.repos` borrow so the
-        // compute phase can take `&mut self`. `conflict_rev` joins the
-        // pack here: no `self.state.repos` write can intervene before the
-        // install phase consumes it, so the value matches the monolith's
-        // read inside the state literal.
-        let file = file.clone();
-        let input = ConflictBootstrapInput {
-            repo_id,
-            path: path.clone(),
-            shared_path: shared_path.clone(),
-            conflict_syntax_language,
-            source_hash,
-            conflict_strategy,
-            conflict_kind,
-            needs_full_side_payloads,
-            conflict_rev: repo.conflict_state.conflict_rev,
-        };
-        let Some(bootstrap) = self.compute_conflict_bootstrap(&input, &file) else {
-            // Unreachable: the gate found this repo and nothing mutated
-            // `self.state.repos` since.
-            return;
-        };
-        // Restore the monolith's locals so the install/finish code below
-        // stays verbatim until those phases are extracted.
+        bootstrap: ConflictBootstrap,
+        input: ConflictBootstrapInput,
+        file: &worktree_state::model::ConflictFile,
+    ) -> ConflictBootstrapPost {
         let ConflictBootstrap {
             post,
             marker_snapshot,
@@ -1110,32 +993,13 @@ impl MainPaneView {
             open_summary_announced,
             resolver_preview_mode,
         } = bootstrap;
-        let ConflictBootstrapPost {
-            trace_ctx,
-            trace_decisions,
-            bootstrap_started,
-            conflict_block_count,
-            diff_row_count,
-            inline_row_count,
-            resolved_line_count,
-            resolved_output_text,
-            streamed_output_projection,
-            is_same_conflict,
-            needs_full_side_texts,
-            full_text_plan_upgrade_expected,
-            three_way_needs_background,
-        } = post;
-        let shared_path = worktree_state::msg::RepoPath::from(path.clone());
-
-        // Build state with core/shared fields; mode-dependent visible state
-        // is populated by the rebuild methods below.
         self.conflict_resolver = ConflictResolverUiState {
-            repo_id: Some(repo_id),
-            path: Some(path),
-            shared_path: Some(shared_path),
+            repo_id: Some(input.repo_id),
+            path: Some(input.path),
+            shared_path: Some(input.shared_path),
             loaded_file: Some(file.clone()),
-            conflict_syntax_language,
-            source_hash: Some(source_hash),
+            conflict_syntax_language: input.conflict_syntax_language,
+            source_hash: Some(input.source_hash),
             output_is_protected,
             // A re-bootstrap means a different conflict or different file
             // content, so an earlier waiver no longer speaks for it.
@@ -1143,14 +1007,14 @@ impl MainPaneView {
             current: marker_snapshot,
             marker_segments,
             collapse_context,
-            context_fold_reveals: if is_same_conflict {
+            context_fold_reveals: if post.is_same_conflict {
                 std::mem::take(&mut self.conflict_resolver.context_fold_reveals)
             } else {
                 FxHashMap::default()
             },
             resolved_output_visible: None,
             resolved_output_visible_dirty: true,
-            output_context_fold_reveals: if is_same_conflict {
+            output_context_fold_reveals: if post.is_same_conflict {
                 std::mem::take(&mut self.conflict_resolver.output_context_fold_reveals)
             } else {
                 FxHashMap::default()
@@ -1190,8 +1054,8 @@ impl MainPaneView {
             hide_resolved,
             is_binary_conflict: false,
             binary_side_sizes: [None; 3],
-            strategy: conflict_strategy,
-            conflict_kind,
+            strategy: input.conflict_strategy,
+            conflict_kind: input.conflict_kind,
             last_autosolve_summary,
             open_summary_counts,
             open_summary_announced,
@@ -1203,6 +1067,37 @@ impl MainPaneView {
             image_preview: ConflictResolverImagePreviewState::default(),
             resolver_preview_mode,
         };
+        post
+    }
+
+    /// Finish phase: rebuild the visible state, fill and materialize
+    /// the resolved output, run the fresh-open navigation and open
+    /// summary toast, request the Full side payload upgrade, emit the
+    /// total trace event and schedule the background syntax prepares.
+    /// Statements are the monolith's, in order; the `post` destructure
+    /// restores their locals.
+    fn finish_conflict_bootstrap(
+        &mut self,
+        post: ConflictBootstrapPost,
+        conflict_syntax_language: Option<rows::DiffSyntaxLanguage>,
+        conflict_strategy: Option<worktree_core::conflict_session::ConflictResolverStrategy>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let ConflictBootstrapPost {
+            trace_ctx,
+            trace_decisions,
+            bootstrap_started,
+            conflict_block_count,
+            diff_row_count,
+            inline_row_count,
+            resolved_line_count,
+            resolved_output_text,
+            streamed_output_projection,
+            is_same_conflict,
+            needs_full_side_texts,
+            full_text_plan_upgrade_expected,
+            three_way_needs_background,
+        } = post;
         // Populate mode-dependent visible state using the same code path as
         // later rebuilds (hide-resolved toggle, conflict picks, etc.). The
         // aligned two-way view shares the three-way projection, so it needs
@@ -1364,6 +1259,135 @@ impl MainPaneView {
         if self.diff_search_has_query() {
             self.diff_search_recompute_matches_preserving_current();
         }
+    }
+
+    pub(in crate::view::panes::main) fn sync_conflict_resolver(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(target) = self.conflict_resolver_sync_target() else {
+            self.clear_conflict_resolver_state();
+            return;
+        };
+        let ConflictSyncTarget {
+            repo_id,
+            path,
+            conflict_kind,
+        } = target;
+        // The gate already established this repo exists; nothing between the
+        // gate and this lookup mutates `self.state.repos`, so the `else` is
+        // unreachable and simply skips the sync.
+        let Some(repo) = self.state.repos.iter().find(|r| r.id == repo_id) else {
+            return;
+        };
+
+        let should_load = repo.conflict_state.conflict_file_path.as_ref() != Some(&path)
+            && !matches!(repo.conflict_state.conflict_file, Loadable::Loading);
+        if should_load {
+            self.begin_conflict_file_current_only_load(repo_id, path, cx);
+            return;
+        }
+
+        let Loadable::Ready(Some(file)) = &repo.conflict_state.conflict_file else {
+            return;
+        };
+        if file.path != path {
+            return;
+        }
+
+        let source_hash = conflict_file_source_fingerprint(file);
+
+        let needs_rebuild = self.conflict_resolver.repo_id != Some(repo_id)
+            || self.conflict_resolver.path.as_ref() != Some(&path)
+            || self.conflict_resolver.source_hash != Some(source_hash);
+
+        // When the file content hasn't changed but state-side conflict data has
+        // been updated (e.g. hide_resolved toggled externally, bulk picks, or
+        // autosolve applied from state), do a lightweight re-sync that re-applies
+        // session resolutions and rebuilds visible maps without recomputing the
+        // expensive diff/highlight data.
+        if !needs_rebuild {
+            if self.conflict_resolver.conflict_rev != repo.conflict_state.conflict_rev {
+                self.resync_conflict_resolver_from_state(cx);
+            }
+            return;
+        }
+
+        self.conflict_diff_segments_cache_split.clear();
+        self.conflict_diff_query_segments_cache_split.clear();
+        self.conflict_three_way_query_segments_cache.clear();
+        self.conflict_diff_query_cache_query = SharedString::default();
+
+        // A CurrentOnly load intentionally omits all three immutable conflict
+        // sides. Specialized resolvers need those exact bytes before their
+        // completion actions can be enabled.
+        let needs_full_side_payloads =
+            file.base_bytes.is_none() && file.ours_bytes.is_none() && file.theirs_bytes.is_none();
+
+        // Use the ConflictSession from state for strategy if available,
+        // otherwise fall back to local computation.
+        let (conflict_strategy, is_binary) = if let Some(session) =
+            &repo.conflict_state.conflict_session
+        {
+            let binary =
+                session.base.is_binary() || session.ours.is_binary() || session.theirs.is_binary();
+            (Some(session.strategy), binary)
+        } else {
+            let binary = conflict_file_is_binary(file);
+            (
+                Self::conflict_resolver_strategy(conflict_kind, binary),
+                binary,
+            )
+        };
+        let conflict_syntax_language = rows::diff_syntax_language_for_path(&path);
+        let shared_path = worktree_state::msg::RepoPath::from(path.clone());
+
+        // For binary conflicts, populate minimal state and return early.
+        if is_binary {
+            // Cloning detaches the file (and `conflict_rev` below) from the
+            // `self.state.repos` borrow so the phase call can take `&mut self`.
+            let file = file.clone();
+            self.apply_binary_conflict_bootstrap(
+                ConflictBootstrapInput {
+                    repo_id,
+                    path,
+                    shared_path,
+                    conflict_syntax_language,
+                    source_hash,
+                    conflict_strategy,
+                    conflict_kind,
+                    needs_full_side_payloads,
+                    conflict_rev: repo.conflict_state.conflict_rev,
+                },
+                &file,
+            );
+            return;
+        }
+
+        // Detach the file from the `self.state.repos` borrow so the
+        // compute phase can take `&mut self`. `conflict_rev` joins the
+        // pack here: no `self.state.repos` write can intervene before the
+        // install phase consumes it, so the value matches the monolith's
+        // read inside the state literal.
+        let file = file.clone();
+        let input = ConflictBootstrapInput {
+            repo_id,
+            path,
+            shared_path,
+            conflict_syntax_language,
+            source_hash,
+            conflict_strategy,
+            conflict_kind,
+            needs_full_side_payloads,
+            conflict_rev: repo.conflict_state.conflict_rev,
+        };
+        let Some(bootstrap) = self.compute_conflict_bootstrap(&input, &file) else {
+            // Unreachable: the gate found this repo and nothing mutated
+            // `self.state.repos` since.
+            return;
+        };
+        let post = self.install_conflict_bootstrap_state(bootstrap, input, &file);
+        self.finish_conflict_bootstrap(post, conflict_syntax_language, conflict_strategy, cx);
     }
 
     /// Lightweight re-sync when `conflict_rev` changed but file content is the
