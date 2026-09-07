@@ -205,6 +205,31 @@ fn conflict_file_source_fingerprint(file: &worktree_state::model::ConflictFile) 
     acc
 }
 
+/// The conflicted working-tree entry [`MainPaneView::sync_conflict_resolver`]
+/// binds to: the repo, the file path and the conflict kind, resolved by the
+/// gate phase before any resolver state is touched.
+struct ConflictSyncTarget {
+    repo_id: RepoId,
+    path: PathBuf,
+    conflict_kind: Option<worktree_core::domain::FileConflictKind>,
+}
+
+/// Argument pack for the bootstrap phases, bundling the values the gate and
+/// strategy selection produce so the phase functions stay small in arity.
+/// Every field is read at the same program point the pre-split monolith read
+/// it; the pack only carries the values across the call boundary.
+struct ConflictBootstrapInput {
+    repo_id: RepoId,
+    path: PathBuf,
+    shared_path: worktree_state::msg::RepoPath,
+    conflict_syntax_language: Option<rows::DiffSyntaxLanguage>,
+    source_hash: u64,
+    conflict_strategy: Option<worktree_core::conflict_session::ConflictResolverStrategy>,
+    conflict_kind: Option<worktree_core::domain::FileConflictKind>,
+    needs_full_side_payloads: bool,
+    conflict_rev: u64,
+}
+
 impl MainPaneView {
     fn clear_conflict_resolver_state(&mut self) {
         self.conflict_resolver = ConflictResolverUiState::default();
@@ -215,56 +240,112 @@ impl MainPaneView {
         self.conflict_resolver_invalidate_resolved_outline();
     }
 
+    /// Gate phase: resolve the conflicted working-tree entry the resolver
+    /// binds to. `None` covers every "not a conflict target" case the
+    /// pre-split monolith answered by clearing the resolver state; the caller
+    /// performs that clear.
+    fn conflict_resolver_sync_target(&self) -> Option<ConflictSyncTarget> {
+        let repo_id = self.active_repo_id()?;
+        let repo = self.state.repos.iter().find(|r| r.id == repo_id)?;
+        let Some(DiffTarget::WorkingTree { path, area }) = repo.diff_state.diff_target.as_ref()
+        else {
+            return None;
+        };
+        if *area != DiffArea::Unstaged {
+            return None;
+        }
+        let conflict_entry = repo
+            .status_entry_for_path(DiffArea::Unstaged, path.as_path())
+            .filter(|entry| entry.kind == worktree_core::domain::FileStatusKind::Conflicted)?;
+        Some(ConflictSyncTarget {
+            repo_id,
+            path: path.clone(),
+            conflict_kind: conflict_entry.conflict,
+        })
+    }
+
+    /// CurrentOnly first load: reset the resolver and the output input, then
+    /// dispatch the load request. The caller returns immediately afterwards.
+    fn begin_conflict_file_current_only_load(
+        &mut self,
+        repo_id: RepoId,
+        path: PathBuf,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.clear_conflict_resolver_state();
+        let theme = self.theme;
+        self.conflict_resolver_input.update(cx, |input, cx| {
+            input.set_theme(theme, cx);
+            input.set_text("", cx);
+        });
+        self.store.dispatch(Msg::LoadConflictFile {
+            repo_id,
+            path,
+            mode: worktree_state::model::ConflictFileLoadMode::CurrentOnly,
+        });
+    }
+
+    /// Binary conflicts carry no marker geometry: populate the minimal state
+    /// (side sizes for the UI) and request the Full payload upgrade when the
+    /// CurrentOnly first load omitted the side bytes.
+    fn apply_binary_conflict_bootstrap(
+        &mut self,
+        input: ConflictBootstrapInput,
+        file: &worktree_state::model::ConflictFile,
+    ) {
+        let binary_side_sizes = [
+            file.base_bytes.as_ref().map(|b| b.len()),
+            file.ours_bytes.as_ref().map(|b| b.len()),
+            file.theirs_bytes.as_ref().map(|b| b.len()),
+        ];
+        self.conflict_resolver = ConflictResolverUiState {
+            repo_id: Some(input.repo_id),
+            path: Some(input.path),
+            shared_path: Some(input.shared_path),
+            loaded_file: Some(file.clone()),
+            conflict_syntax_language: input.conflict_syntax_language,
+            source_hash: Some(input.source_hash),
+            is_binary_conflict: true,
+            binary_side_sizes,
+            strategy: input.conflict_strategy,
+            conflict_kind: input.conflict_kind,
+            last_autosolve_summary: None,
+            open_summary_counts: None,
+            conflict_rev: input.conflict_rev,
+            ..ConflictResolverUiState::default()
+        };
+        self.conflict_resolver_invalidate_resolved_outline();
+        if input.needs_full_side_payloads {
+            let _ = self
+                .request_conflict_file_load_mode(worktree_state::model::ConflictFileLoadMode::Full);
+        }
+    }
+
     pub(in crate::view::panes::main) fn sync_conflict_resolver(
         &mut self,
         cx: &mut gpui::Context<Self>,
     ) {
-        let Some(repo_id) = self.active_repo_id() else {
+        let Some(target) = self.conflict_resolver_sync_target() else {
             self.clear_conflict_resolver_state();
             return;
         };
-
+        let ConflictSyncTarget {
+            repo_id,
+            path,
+            conflict_kind,
+        } = target;
+        // The gate already established this repo exists; nothing between the
+        // gate and this lookup mutates `self.state.repos`, so the `else` is
+        // unreachable and simply skips the sync.
         let Some(repo) = self.state.repos.iter().find(|r| r.id == repo_id) else {
-            self.clear_conflict_resolver_state();
             return;
         };
-
-        let Some(DiffTarget::WorkingTree { path, area }) = repo.diff_state.diff_target.as_ref()
-        else {
-            self.clear_conflict_resolver_state();
-            return;
-        };
-        if *area != DiffArea::Unstaged {
-            self.clear_conflict_resolver_state();
-            return;
-        }
-
-        let conflict_entry = repo
-            .status_entry_for_path(DiffArea::Unstaged, path.as_path())
-            .filter(|entry| entry.kind == worktree_core::domain::FileStatusKind::Conflicted);
-        let Some(conflict_entry) = conflict_entry else {
-            self.clear_conflict_resolver_state();
-            return;
-        };
-        let conflict_kind = conflict_entry.conflict;
-
-        let path = path.clone();
         let trace_path = path.clone();
 
         let should_load = repo.conflict_state.conflict_file_path.as_ref() != Some(&path)
             && !matches!(repo.conflict_state.conflict_file, Loadable::Loading);
         if should_load {
-            self.clear_conflict_resolver_state();
-            let theme = self.theme;
-            self.conflict_resolver_input.update(cx, |input, cx| {
-                input.set_theme(theme, cx);
-                input.set_text("", cx);
-            });
-            self.store.dispatch(Msg::LoadConflictFile {
-                repo_id,
-                path,
-                mode: worktree_state::model::ConflictFileLoadMode::CurrentOnly,
-            });
+            self.begin_conflict_file_current_only_load(repo_id, path, cx);
             return;
         }
 
@@ -324,33 +405,23 @@ impl MainPaneView {
 
         // For binary conflicts, populate minimal state and return early.
         if is_binary {
-            let binary_side_sizes = [
-                file.base_bytes.as_ref().map(|b| b.len()),
-                file.ours_bytes.as_ref().map(|b| b.len()),
-                file.theirs_bytes.as_ref().map(|b| b.len()),
-            ];
-            self.conflict_resolver = ConflictResolverUiState {
-                repo_id: Some(repo_id),
-                path: Some(path),
-                shared_path: Some(shared_path),
-                loaded_file: Some(file.clone()),
-                conflict_syntax_language,
-                source_hash: Some(source_hash),
-                is_binary_conflict: true,
-                binary_side_sizes,
-                strategy: conflict_strategy,
-                conflict_kind,
-                last_autosolve_summary: None,
-                open_summary_counts: None,
-                conflict_rev: repo.conflict_state.conflict_rev,
-                ..ConflictResolverUiState::default()
-            };
-            self.conflict_resolver_invalidate_resolved_outline();
-            if needs_full_side_payloads {
-                let _ = self.request_conflict_file_load_mode(
-                    worktree_state::model::ConflictFileLoadMode::Full,
-                );
-            }
+            // Cloning detaches the file (and `conflict_rev` below) from the
+            // `self.state.repos` borrow so the phase call can take `&mut self`.
+            let file = file.clone();
+            self.apply_binary_conflict_bootstrap(
+                ConflictBootstrapInput {
+                    repo_id,
+                    path,
+                    shared_path,
+                    conflict_syntax_language,
+                    source_hash,
+                    conflict_strategy,
+                    conflict_kind,
+                    needs_full_side_payloads,
+                    conflict_rev: repo.conflict_state.conflict_rev,
+                },
+                &file,
+            );
             return;
         }
 
