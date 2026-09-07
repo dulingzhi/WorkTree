@@ -609,6 +609,8 @@ fn print_startup_crash_report_hint(report: &crashlog::StartupCrashReport) {
 
 #[cfg(feature = "ui-gpui-runtime")]
 fn build_backend() -> std::sync::Arc<dyn worktree_core::services::GitBackend> {
+    use worktree_core::noop::default_backend;
+
     if cfg!(feature = "gix") {
         #[cfg(feature = "gix")]
         {
@@ -617,10 +619,10 @@ fn build_backend() -> std::sync::Arc<dyn worktree_core::services::GitBackend> {
 
         #[cfg(not(feature = "gix"))]
         {
-            worktree_git::default_backend()
+            default_backend()
         }
     } else {
-        worktree_git::default_backend()
+        default_backend()
     }
 }
 

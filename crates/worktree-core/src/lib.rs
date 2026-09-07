@@ -15,6 +15,7 @@ pub mod gitignore;
 pub mod merge;
 pub mod merge_extraction;
 pub mod mergetool_trace;
+pub mod noop;
 pub mod path_utils;
 pub mod process;
 pub mod services;

@@ -24,7 +24,6 @@ gix = ["dep:worktree-git-gix"]
 [dependencies]
 clap = { workspace = true }
 worktree-core = { workspace = true }
-worktree-git = { workspace = true }
 worktree-git-gix = { workspace = true, optional = true }
 worktree-state = { workspace = true }
 worktree-ui-gpui = { workspace = true, optional = true }

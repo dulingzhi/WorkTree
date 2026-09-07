@@ -14,6 +14,7 @@ use std::sync::mpsc::TryRecvError;
 use std::thread;
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
+use worktree_core::noop::default_backend;
 use worktree_core::services::GitBackend;
 use worktree_ui_gpui::perf_alloc::{PerfAllocMetrics, TRACKING_MIMALLOC};
 use worktree_ui_gpui::perf_ram_guard::{
@@ -690,10 +691,10 @@ fn build_backend() -> Arc<dyn GitBackend> {
 
         #[cfg(not(feature = "gix"))]
         {
-            worktree_git::default_backend()
+            default_backend()
         }
     } else {
-        worktree_git::default_backend()
+        default_backend()
     }
 }
 

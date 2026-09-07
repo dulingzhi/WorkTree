@@ -8854,7 +8854,6 @@ dependencies = [
  "tempfile",
  "wayland-client",
  "worktree-core",
- "worktree-git",
  "worktree-git-gix",
  "worktree-state",
  "worktree-ui-gpui",
