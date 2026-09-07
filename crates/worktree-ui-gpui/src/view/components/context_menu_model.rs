@@ -1,5 +1,5 @@
+use super::context_menu_action::ContextMenuAction;
 use super::*;
-use crate::view::panels::ContextMenuAction;
 use gpui::SharedString;
 use rustc_hash::{FxHashMap, FxHashSet};
 

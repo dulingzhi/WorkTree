@@ -3,6 +3,7 @@ mod button;
 mod commit_link_menu;
 mod containers;
 mod context_menu;
+mod context_menu_action;
 mod context_menu_model;
 mod diff_stat;
 mod interactive_row;
@@ -32,6 +33,9 @@ pub use containers::{panel, pill};
 pub use context_menu::{
     ContextMenuEntry, ContextMenuIconSlot, ContextMenuText, context_menu, context_menu_description,
     context_menu_header, context_menu_label, context_menu_separator,
+};
+pub(in crate::view) use context_menu_action::{
+    AddRepoMenuAction, AppMenuAction, ContextMenuAction,
 };
 pub(in crate::view) use context_menu_model::{
     ContextMenuItem, ContextMenuModel, ContextMenuRows, ContextMenuSegment,
