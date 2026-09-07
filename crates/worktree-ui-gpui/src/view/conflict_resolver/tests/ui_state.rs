@@ -4,7 +4,7 @@ mod conflict_resolver_ui_state_tests {
     use crate::view::caches::DeferredLineStarts;
     use crate::view::conflict_resolver::ui_state::{ConflictResolverUiState, ConflictRowSelection};
     use crate::view::conflict_resolver::{
-        self, ConflictBlock, ConflictChoice, ConflictNavTarget, ConflictNavTargetId,
+        ConflictBlock, ConflictChoice, ConflictNavTarget, ConflictNavTargetId,
         ConflictResolverViewMode, ConflictSegment, ConflictSplitRowIndex, ResolvedLineMeta,
         ResolvedLineSource, ThreeWayVisibleItem, TwoWaySplitProjection,
     };
