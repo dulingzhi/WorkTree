@@ -874,8 +874,8 @@ pub(super) fn repo_action_finished(
     // non-active repo's in-flight views were reset to `NotLoaded` and reload when it is next
     // activated; the primary panes above are still refreshed so they are current on return.
     if is_active {
-        // Re-issue branch lists when one was in flight before (refresh_primary_effects does not
-        // cover them); request() returns true now that the flag was cleared.
+        // Re-issue branch lists when one was in flight before (append_refresh_primary_effects does
+        // not cover them); request() returns true now that the flag was cleared.
         if repo_state
             .loads_in_flight
             .request(RepoLoadsInFlight::BRANCHES)

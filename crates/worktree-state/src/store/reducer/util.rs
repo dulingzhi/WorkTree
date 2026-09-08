@@ -622,7 +622,7 @@ pub(super) fn append_requested_status_refresh_effects(
 /// panel back by that much longer.
 ///
 /// Takes both lane flags, because the merge patches both lanes and finishes
-/// both; a caller that runs `refresh_primary_effects` afterwards gets its
+/// both; a caller that runs `append_refresh_primary_effects` afterwards gets its
 /// status leg coalesced away by them, while the head/log legs still run.
 /// Does nothing unless the flags are free and a settled snapshot exists to
 /// merge onto — the merge requires one, and a stranded flag would coalesce
@@ -2326,19 +2326,19 @@ mod tests {
             !full_effects
                 .iter()
                 .any(|effect| matches!(effect, Effect::LoadTags { .. })),
-            "tags should lazy-load by default instead of refresh_full_effects"
+            "tags should lazy-load by default instead of append_refresh_full_effects"
         );
         assert!(
             !full_effects
                 .iter()
                 .any(|effect| matches!(effect, Effect::LoadRemoteTags { .. })),
-            "remote tags should lazy-load from tag-specific UI instead of refresh_full_effects"
+            "remote tags should lazy-load from tag-specific UI instead of append_refresh_full_effects"
         );
         assert!(
             !full_effects
                 .iter()
                 .any(|effect| matches!(effect, Effect::LoadStashes { .. })),
-            "stashes should now lazy-load from the sidebar instead of refresh_full_effects"
+            "stashes should now lazy-load from the sidebar instead of append_refresh_full_effects"
         );
         assert!(
             full_effects
