@@ -1,4 +1,4 @@
-use super::file_browser_query_filters;
+use super::sidebar_browser::file_browser_query_filters;
 
 /// The same table the view asserts in
 /// `file_browser_search_predicate_agrees_with_the_renderers_matchers`.
