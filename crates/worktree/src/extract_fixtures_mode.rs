@@ -73,22 +73,7 @@ mod tests {
     use std::fs;
     use std::path::Path;
     use std::process::Command as ProcessCommand;
-
-    fn run_git(repo: &Path, args: &[&str]) {
-        let output = ProcessCommand::new("git")
-            .arg("-c")
-            .arg("commit.gpgsign=false")
-            .args(args)
-            .current_dir(repo)
-            .output()
-            .unwrap_or_else(|e| panic!("failed to run git {:?}: {e}", args));
-        assert!(
-            output.status.success(),
-            "git {:?} failed: {}",
-            args,
-            String::from_utf8(output.stderr).unwrap_or_else(|_| "<non-utf8 stderr>".to_string())
-        );
-    }
+    use worktree_test_support::run_git;
 
     fn configure_git_user(repo: &Path) {
         run_git(repo, &["config", "user.email", "test@example.com"]);

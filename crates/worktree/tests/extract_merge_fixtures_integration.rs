@@ -1,5 +1,6 @@
 use worktree_core::path_utils::canonicalize_or_original;
 use worktree_core::process::background_command as no_window_command;
+use worktree_test_support::run_git_command;
 #[path = "support/test_git_env.rs"]
 mod test_git_env;
 use std::ffi::{OsStr, OsString};
@@ -72,14 +73,9 @@ fn run_git_capture(repo: &Path, args: &[&str]) -> Output {
 }
 
 fn run_git(repo: &Path, args: &[&str]) {
-    let output = run_git_capture(repo, args);
-    assert!(
-        output.status.success(),
-        "git {:?} failed:\nstdout:\n{}\nstderr:\n{}",
-        args,
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
+    let mut cmd = no_window_command("git");
+    apply_isolated_git_config_env(&mut cmd);
+    run_git_command(&mut cmd, repo, args);
 }
 
 fn output_text(output: &Output) -> String {

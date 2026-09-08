@@ -6,6 +6,8 @@ use std::process::{Command, Output};
 use std::sync::OnceLock;
 use worktree_core::path_utils::canonicalize_or_original;
 use worktree_core::process::background_command as no_window_command;
+#[cfg(windows)]
+use worktree_test_support::is_git_shell_startup_failure;
 
 fn worktree_bin() -> PathBuf {
     for env_key in ["CARGO_BIN_EXE_worktree"] {
@@ -145,11 +147,6 @@ fn output_text(output: &Output) -> String {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     )
-}
-#[cfg(windows)]
-fn is_git_shell_startup_failure(text: &str) -> bool {
-    text.contains("sh.exe: *** fatal error -")
-        && (text.contains("couldn't create signal pipe") || text.contains("CreateFileMapping"))
 }
 
 #[cfg(windows)]

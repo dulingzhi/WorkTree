@@ -1,5 +1,8 @@
 use worktree_core::path_utils::canonicalize_or_original;
 use worktree_core::process::background_command as no_window_command;
+#[cfg(windows)]
+use worktree_test_support::is_git_shell_startup_failure;
+use worktree_test_support::run_git_command;
 #[path = "support/test_git_env.rs"]
 mod test_git_env;
 use std::fs;
@@ -14,11 +17,6 @@ fn apply_isolated_git_config_env(cmd: &mut Command) {
     // Force deterministic git output for string assertions in tests.
     cmd.env("LC_ALL", "C");
     cmd.env("LANG", "C");
-}
-#[cfg(windows)]
-fn is_git_shell_startup_failure(text: &str) -> bool {
-    text.contains("sh.exe: *** fatal error -")
-        && (text.contains("couldn't create signal pipe") || text.contains("CreateFileMapping"))
 }
 
 #[cfg(windows)]
@@ -98,19 +96,7 @@ fn shell_quote(value: &str) -> String {
 fn run_git(repo: &Path, args: &[&str]) {
     let mut cmd = no_window_command("git");
     apply_isolated_git_config_env(&mut cmd);
-    let output = cmd
-        .arg("-C")
-        .arg(repo)
-        .args(args)
-        .output()
-        .expect("git command to run");
-    assert!(
-        output.status.success(),
-        "git {:?} failed\nstdout:\n{}\nstderr:\n{}",
-        args,
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
+    run_git_command(&mut cmd, repo, args);
 }
 
 fn run_git_capture(repo: &Path, args: &[&str]) -> Output {
