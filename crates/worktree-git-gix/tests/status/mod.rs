@@ -1,0 +1,9 @@
+mod branches_tags;
+mod conflicts;
+mod diffs;
+mod history_ops;
+mod mergetool;
+mod remotes;
+mod stash_archive;
+mod status_states;
+mod support;
