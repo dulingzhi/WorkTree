@@ -6,33 +6,48 @@
 //! may leak into production dependency graphs.
 
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Output};
 
 /// Run `git -c commit.gpgsign=false -C <repo> <args>` on a pre-configured
-/// command, panicking with the captured stdout/stderr unless git exits
-/// successfully.
+/// command and return the captured [`Output`] with no status assertion.
 ///
 /// Signing is disabled explicitly so commits stay portable on hosts with
 /// `commit.gpgsign=true` in the ambient git configuration.
 ///
-/// This is the shared core behind [`run_git`] and [`run_git_with`]; call it
+/// This is the shared core behind every runner in this crate; call it
 /// directly when the command must be built by the caller first (e.g. via a
-/// no-window command constructor).
-pub fn run_git_command(cmd: &mut Command, repo: &Path, args: &[&str]) {
-    let output = cmd
-        .arg("-c")
+/// no-window command constructor) and the caller wants to inspect the exit
+/// status itself.
+pub fn run_git_capture_command(cmd: &mut Command, repo: &Path, args: &[&str]) -> Output {
+    cmd.arg("-c")
         .arg("commit.gpgsign=false")
         .arg("-C")
         .arg(repo)
         .args(args)
         .output()
-        .unwrap_or_else(|e| panic!("failed to run git {args:?}: {e}"));
+        .unwrap_or_else(|e| panic!("failed to run git {args:?}: {e}"))
+}
+
+/// Panic with the captured stdout/stderr unless `output` is a success.
+fn assert_git_success(output: &Output, args: &[&str]) {
     assert!(
         output.status.success(),
         "git {args:?} failed\nstdout:\n{}\nstderr:\n{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+}
+
+/// Run `git -c commit.gpgsign=false -C <repo> <args>` on a pre-configured
+/// command, panicking with the captured stdout/stderr unless git exits
+/// successfully.
+///
+/// This is the shared core behind [`run_git`] and [`run_git_with`]; call it
+/// directly when the command must be built by the caller first (e.g. via a
+/// no-window command constructor).
+pub fn run_git_command(cmd: &mut Command, repo: &Path, args: &[&str]) {
+    let output = run_git_capture_command(cmd, repo, args);
+    assert_git_success(&output, args);
 }
 
 /// Canonical `run_git`: run `git -c commit.gpgsign=false -C <repo> <args>`
@@ -50,6 +65,45 @@ pub fn run_git_with(repo: &Path, args: &[&str], configure: impl FnOnce(&mut Comm
     let mut cmd = Command::new("git");
     configure(&mut cmd);
     run_git_command(&mut cmd, repo, args);
+}
+
+/// Run `git -c commit.gpgsign=false -C <repo> <args>` on a pre-configured
+/// command, panicking with the captured stdout/stderr unless git exits
+/// successfully, and return the captured stdout as a lossy string.
+///
+/// The string is NOT trimmed; callers that compare against expected output
+/// should `.trim()` it themselves.
+pub fn run_git_stdout_command(cmd: &mut Command, repo: &Path, args: &[&str]) -> String {
+    let output = run_git_capture_command(cmd, repo, args);
+    assert_git_success(&output, args);
+    String::from_utf8_lossy(&output.stdout).into_owned()
+}
+
+/// `run_git_stdout_command` on a plain `git` command first adjusted by
+/// `configure`.
+pub fn run_git_stdout_with(
+    repo: &Path,
+    args: &[&str],
+    configure: impl FnOnce(&mut Command),
+) -> String {
+    let mut cmd = Command::new("git");
+    configure(&mut cmd);
+    run_git_stdout_command(&mut cmd, repo, args)
+}
+
+/// Run `git -c commit.gpgsign=false -C <repo> <args>` on a pre-configured
+/// command, panicking with the captured stdout/stderr if git exits
+/// SUCCESSFULLY, and return the captured [`Output`] so the caller can assert
+/// on the failure text.
+pub fn run_git_expect_failure_command(cmd: &mut Command, repo: &Path, args: &[&str]) -> Output {
+    let output = run_git_capture_command(cmd, repo, args);
+    assert!(
+        !output.status.success(),
+        "git {args:?} unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    output
 }
 
 /// Detect the Git-for-Windows MSYS shell startup failure signature in
