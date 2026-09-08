@@ -2,7 +2,9 @@ use worktree_core::path_utils::canonicalize_or_original;
 use worktree_core::process::background_command as no_window_command;
 #[cfg(windows)]
 use worktree_test_support::is_git_shell_startup_failure;
-use worktree_test_support::run_git_command;
+use worktree_test_support::{
+    run_git_capture_command, run_git_command, run_git_expect_failure_command,
+};
 #[path = "support/test_git_env.rs"]
 mod test_git_env;
 use std::fs;
@@ -121,54 +123,39 @@ fn run_git(repo: &Path, args: &[&str]) {
 fn run_git_capture(repo: &Path, args: &[&str]) -> Output {
     let mut cmd = no_window_command("git");
     apply_isolated_git_config_env(&mut cmd);
-    cmd.arg("-C")
-        .arg(repo)
-        .args(args)
-        .output()
-        .expect("git command to run")
+    run_git_capture_command(&mut cmd, repo, args)
 }
 
 fn run_git_capture_with_env(repo: &Path, args: &[&str], env_vars: &[(&str, &str)]) -> Output {
     let mut cmd = no_window_command("git");
     apply_isolated_git_config_env(&mut cmd);
-    cmd.arg("-C").arg(repo).args(args);
     for (key, value) in env_vars {
         cmd.env(key, value);
     }
-    cmd.output().expect("git command to run")
+    run_git_capture_command(&mut cmd, repo, args)
 }
 
 fn run_git_capture_in(cwd: &Path, args: &[&str]) -> Output {
     let mut cmd = no_window_command("git");
     apply_isolated_git_config_env(&mut cmd);
-    cmd.current_dir(cwd)
-        .args(args)
-        .output()
-        .expect("git command to run")
+    run_git_capture_command(&mut cmd, cwd, args)
 }
 
 fn run_git_expect_failure(repo: &Path, args: &[&str]) -> Output {
-    let output = run_git_capture(repo, args);
-    assert!(
-        !output.status.success(),
-        "git {:?} unexpectedly succeeded\nstdout:\n{}\nstderr:\n{}",
-        args,
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    output
+    let mut cmd = no_window_command("git");
+    apply_isolated_git_config_env(&mut cmd);
+    run_git_expect_failure_command(&mut cmd, repo, args)
 }
 
 fn run_git_capture_with_display(repo: &Path, args: &[&str], display: Option<&str>) -> Output {
     let mut cmd = no_window_command("git");
     apply_isolated_git_config_env(&mut cmd);
-    cmd.arg("-C").arg(repo).args(args);
     if let Some(display) = display {
         cmd.env("DISPLAY", display);
     } else {
         cmd.env_remove("DISPLAY");
     }
-    cmd.output().expect("git command to run")
+    run_git_capture_command(&mut cmd, repo, args)
 }
 
 fn run_git_with_stdin(repo: &Path, args: &[&str], stdin_text: &str) -> Output {
