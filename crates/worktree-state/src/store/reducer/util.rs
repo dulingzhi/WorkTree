@@ -18,7 +18,7 @@ use worktree_core::services::CommandOutput;
 
 /// Default page size for log fetches.
 pub(super) const DEFAULT_LOG_PAGE_SIZE: usize = 200;
-const CONFLICT_RELOAD_EFFECT_COUNT: usize = 1;
+pub(super) const CONFLICT_RELOAD_EFFECT_COUNT: usize = 1;
 const DIFF_RELOAD_MAX_EFFECTS: usize = 3;
 const PRIMARY_REFRESH_MAX_EFFECTS: usize = 6;
 const FULL_REFRESH_MAX_EFFECTS: usize = 9;
@@ -455,24 +455,12 @@ pub(super) fn current_conflict_load_mode(repo_state: &RepoState) -> ConflictFile
     repo_state.conflict_state.conflict_file_load_mode
 }
 
-pub(super) fn start_current_conflict_target_reload(repo_state: &mut RepoState) -> Vec<Effect> {
-    let mode = current_conflict_load_mode(repo_state);
-    let mut effects = Vec::with_capacity(CONFLICT_RELOAD_EFFECT_COUNT);
-    append_start_current_conflict_target_reload_with_mode(&mut effects, repo_state, mode);
-    effects
-}
-
 pub(super) fn append_start_current_conflict_target_reload(
     effects: &mut impl EffectAccumulator,
     repo_state: &mut RepoState,
 ) {
     let mode = current_conflict_load_mode(repo_state);
     append_start_current_conflict_target_reload_with_mode(effects, repo_state, mode);
-}
-
-pub(super) fn start_conflict_target_reload(repo_state: &mut RepoState, path: &Path) -> Vec<Effect> {
-    let mode = current_conflict_load_mode(repo_state);
-    start_conflict_target_reload_with_mode(repo_state, path, mode)
 }
 
 pub(super) fn append_start_conflict_target_reload(
@@ -482,16 +470,6 @@ pub(super) fn append_start_conflict_target_reload(
 ) {
     let mode = current_conflict_load_mode(repo_state);
     append_start_conflict_target_reload_with_mode(effects, repo_state, path, mode);
-}
-
-pub(super) fn start_conflict_target_reload_with_mode(
-    repo_state: &mut RepoState,
-    path: &Path,
-    mode: ConflictFileLoadMode,
-) -> Vec<Effect> {
-    let mut effects = Vec::with_capacity(CONFLICT_RELOAD_EFFECT_COUNT);
-    append_start_conflict_target_reload_with_mode(&mut effects, repo_state, path, mode);
-    effects
 }
 
 pub(super) fn reset_conflict_target_reload_state(
@@ -530,7 +508,7 @@ fn append_start_current_conflict_target_reload_with_mode(
     });
 }
 
-fn append_start_conflict_target_reload_with_mode(
+pub(super) fn append_start_conflict_target_reload_with_mode(
     effects: &mut impl EffectAccumulator,
     repo_state: &mut RepoState,
     path: &Path,

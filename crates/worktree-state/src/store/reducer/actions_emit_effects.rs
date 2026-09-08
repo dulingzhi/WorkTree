@@ -1,11 +1,11 @@
 use super::repo_management::append_cancel_repo_loads_effect_for_repo;
 use super::util::{
-    DiffReloadMode, SelectedConflictTarget, append_targeted_status_refresh,
+    DiffReloadMode, SelectedConflictTarget, append_start_conflict_target_reload,
+    append_start_current_conflict_target_reload, append_targeted_status_refresh,
     apply_selected_diff_load_plan_state, apply_selected_diff_load_plan_state_with_reload_mode,
     clear_banner_error_for_repo, diff_reload_effects, format_failure_summary, push_action_log,
     push_command_log, push_failure_needs_pull_retry, refresh_full_effects, refresh_primary_effects,
-    selected_conflict_target, selected_diff_load_plan, start_conflict_target_reload,
-    start_current_conflict_target_reload,
+    selected_conflict_target, selected_diff_load_plan,
 };
 use crate::model::{
     AppState, InteractiveCherryPickSetup, InteractiveRebaseSetup, Loadable, RepoId,
@@ -1534,10 +1534,10 @@ pub(super) fn repo_command_finished(
             repo_state.bump_diff_state_rev();
             match conflict_target {
                 SelectedConflictTarget::Current => {
-                    extra_effects.extend(start_current_conflict_target_reload(repo_state));
+                    append_start_current_conflict_target_reload(&mut extra_effects, repo_state);
                 }
                 SelectedConflictTarget::Path(path) => {
-                    extra_effects.extend(start_conflict_target_reload(repo_state, path));
+                    append_start_conflict_target_reload(&mut extra_effects, repo_state, path);
                 }
             }
         } else {

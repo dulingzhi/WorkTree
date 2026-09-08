@@ -1,9 +1,9 @@
 use super::actions_emit_effects::invalidate_loaded_blame;
 use super::util::{
-    SelectedConflictTarget, SelectedDiffLoadPlan, apply_selected_diff_load_plan_state,
+    CONFLICT_RELOAD_EFFECT_COUNT, SelectedConflictTarget, SelectedDiffLoadPlan,
+    append_start_conflict_target_reload, append_start_conflict_target_reload_with_mode,
+    append_start_current_conflict_target_reload, apply_selected_diff_load_plan_state,
     diff_target_preview_flags, selected_conflict_target, selected_diff_load_plan,
-    start_conflict_target_reload, start_conflict_target_reload_with_mode,
-    start_current_conflict_target_reload,
 };
 use crate::model::{
     AppState, ConflictFileLoadMode, DiagnosticKind, FileEditReturnView, InlineSubmoduleDiffEntry,
@@ -573,12 +573,16 @@ pub(super) fn fill_select_diff_inline(
         repo_state.diff_state.submodule_summary = Loadable::NotLoaded;
         repo_state.diff_state.diff_file_image = Loadable::NotLoaded;
         repo_state.bump_diff_state_rev();
-        let conflict_effects = match conflict_target {
-            SelectedConflictTarget::Current => start_current_conflict_target_reload(repo_state),
-            SelectedConflictTarget::Path(path) => start_conflict_target_reload(repo_state, path),
-        };
-        debug_assert!(conflict_effects.len() <= SELECT_DIFF_INLINE_EFFECT_CAPACITY);
-        effects.extend(conflict_effects);
+        let effects_before = effects.len();
+        match conflict_target {
+            SelectedConflictTarget::Current => {
+                append_start_current_conflict_target_reload(effects, repo_state);
+            }
+            SelectedConflictTarget::Path(path) => {
+                append_start_conflict_target_reload(effects, repo_state, path);
+            }
+        }
+        debug_assert!(effects.len() - effects_before <= SELECT_DIFF_INLINE_EFFECT_CAPACITY);
         return;
     }
 
@@ -632,7 +636,14 @@ pub(super) fn select_conflict_diff(
     repo_state.diff_state.diff_file_image = Loadable::NotLoaded;
     repo_state.bump_diff_state_rev();
 
-    start_conflict_target_reload_with_mode(repo_state, &path, ConflictFileLoadMode::CurrentOnly)
+    let mut effects = Vec::with_capacity(CONFLICT_RELOAD_EFFECT_COUNT);
+    append_start_conflict_target_reload_with_mode(
+        &mut effects,
+        repo_state,
+        &path,
+        ConflictFileLoadMode::CurrentOnly,
+    );
+    effects
 }
 
 pub(super) fn clear_diff_selection(state: &mut AppState, repo_id: RepoId) -> Vec<Effect> {

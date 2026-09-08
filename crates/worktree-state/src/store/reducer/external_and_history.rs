@@ -6,10 +6,10 @@ use super::repo_management::{
 };
 use super::util::{
     SelectedConflictTarget, append_auto_background_metadata_effects,
-    append_requested_status_refresh_effects, append_targeted_status_refresh,
+    append_requested_status_refresh_effects, append_start_conflict_target_reload,
+    append_start_current_conflict_target_reload, append_targeted_status_refresh,
     clear_banner_error_for_repo, diff_reload_effects, push_diagnostic, refresh_full_effects,
-    refresh_primary_effects, selected_conflict_target, start_conflict_target_reload,
-    start_current_conflict_target_reload,
+    refresh_primary_effects, selected_conflict_target,
 };
 use crate::model::{
     AppState, DiagnosticKind, InteractiveRebaseSetup, Loadable, RepoLoadsInFlight, SidebarMode,
@@ -282,10 +282,10 @@ pub(super) fn repo_externally_changed(
         if let Some(conflict_target) = selected_conflict_target(repo_state, &target) {
             match conflict_target {
                 SelectedConflictTarget::Current => {
-                    effects.extend(start_current_conflict_target_reload(repo_state));
+                    append_start_current_conflict_target_reload(&mut effects, repo_state);
                 }
                 SelectedConflictTarget::Path(path) => {
-                    effects.extend(start_conflict_target_reload(repo_state, path));
+                    append_start_conflict_target_reload(&mut effects, repo_state, path);
                 }
             }
         } else {
@@ -906,10 +906,10 @@ pub(super) fn repo_action_finished(
             if let Some(conflict_target) = selected_conflict_target(repo_state, &target) {
                 match conflict_target {
                     SelectedConflictTarget::Current => {
-                        effects.extend(start_current_conflict_target_reload(repo_state));
+                        append_start_current_conflict_target_reload(&mut effects, repo_state);
                     }
                     SelectedConflictTarget::Path(path) => {
-                        effects.extend(start_conflict_target_reload(repo_state, path));
+                        append_start_conflict_target_reload(&mut effects, repo_state, path);
                     }
                 }
             } else {
