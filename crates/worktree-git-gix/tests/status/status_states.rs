@@ -1103,6 +1103,10 @@ fn unstage_hunk_reverts_only_that_part_in_index() {
     assert!(unstaged_after_unstage.contains("+L25-mod"));
 }
 
+/// A line-level unstage applies its patch in reverse, so the side it has to
+/// match is the index. The patch therefore keeps the additions it is *not*
+/// unstaging as context and drops the removals, which the index does not have.
+/// Built the staging way instead, git rejects it with "patch does not apply".
 #[test]
 fn unstage_line_patch_must_describe_the_index_side() {
     if !require_git_shell_for_status_integration_tests() {
@@ -1182,6 +1186,10 @@ fn unstage_line_patch_must_describe_the_index_side() {
     );
 }
 
+/// A space in a path makes the `diff --git` line ambiguous, so git disambiguates
+/// by repeating the name on the `---`/`+++` lines and terminating it with a TAB.
+/// Both the diff we hand to the UI and the patch that comes back have to carry
+/// that shape for a line-level stage to work at all.
 #[test]
 fn line_level_staging_round_trips_a_path_containing_spaces() {
     if !require_git_shell_for_status_integration_tests() {

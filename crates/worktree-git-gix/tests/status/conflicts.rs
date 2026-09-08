@@ -1050,6 +1050,9 @@ fn commit_finishes_merge_when_resolved_tree_matches_head() {
     assert_eq!(parent_count, 2, "expected merge commit");
 }
 
+/// Unstaging must not disturb a merge in progress: a bare `git reset` collapses
+/// unmerged index entries and clears MERGE_HEAD, which turns conflicted files
+/// into ordinary modifications still full of conflict markers.
 #[test]
 fn unstage_all_leaves_conflicted_paths_and_the_merge_alone() {
     if !require_git_shell_for_status_integration_tests() {
@@ -1130,6 +1133,10 @@ fn unstage_all_leaves_conflicted_paths_and_the_merge_alone() {
     );
 }
 
+/// The conflict-safe unstage-all resets named paths rather than everything, so
+/// it has to name *both* sides of a staged rename. The status list reports only
+/// the destination, and resetting that alone leaves the source path staged as
+/// deleted — half a rename in the index.
 #[test]
 fn unstage_all_during_a_merge_resets_both_sides_of_a_staged_rename() {
     if !require_git_shell_for_status_integration_tests() {
@@ -1209,6 +1216,13 @@ fn unstage_all_during_a_merge_resets_both_sides_of_a_staged_rename() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// End-to-end conflict resolution workflow tests
+// ---------------------------------------------------------------------------
+
+/// End-to-end test: create a merge conflict, load the conflict session,
+/// resolve all regions manually, generate resolved text, write it to disk,
+/// stage the file, and verify the conflict is fully resolved.
 #[test]
 fn resolve_conflict_write_and_stage_clears_conflict() {
     if !require_git_shell_for_status_integration_tests() {
@@ -1396,6 +1410,8 @@ fn resolve_both_added_conflict_write_and_stage_clears_conflict() {
     assert_eq!(fs::read_to_string(repo.join("new.txt")).unwrap(), resolved);
 }
 
+/// End-to-end test: the stage-backed merge plan materializes trivial changes
+/// as automatic context and exposes only genuine conflicts as regions.
 #[test]
 fn autosolve_safe_resolves_trivial_conflict_regions_end_to_end() {
     if !require_git_shell_for_status_integration_tests() {
@@ -1490,6 +1506,9 @@ fn autosolve_safe_resolves_trivial_conflict_regions_end_to_end() {
     assert_eq!(session.prev_unresolved_before(0), Some(0));
 }
 
+/// End-to-end test: conflict session for a modify/delete conflict
+/// produces correct strategy and payloads, and the "keep" side can be
+/// staged to resolve the conflict.
 #[test]
 fn conflict_session_modify_delete_keep_resolves_conflict() {
     if !require_git_shell_for_status_integration_tests() {
@@ -1581,6 +1600,8 @@ fn conflict_session_modify_delete_keep_resolves_conflict() {
     );
 }
 
+/// Validates the safety gate: `validate_conflict_resolution_text` correctly
+/// detects remaining markers in partially-resolved text.
 #[test]
 fn validate_conflict_resolution_detects_partial_resolution() {
     if !require_git_shell_for_status_integration_tests() {
@@ -1621,6 +1642,9 @@ fn validate_conflict_resolution_detects_partial_resolution() {
     assert_eq!(v3.marker_lines, 4); // <<<<<<<, |||||||, =======, >>>>>>>
 }
 
+/// End-to-end test: BothDeleted text conflict session uses DecisionOnly
+/// strategy, and restoring from base via `checkout_conflict_side(Base)`
+/// resolves the conflict.
 #[test]
 fn conflict_session_both_deleted_restore_from_base_resolves_conflict() {
     if !require_git_shell_for_status_integration_tests() {
@@ -1686,6 +1710,9 @@ fn conflict_session_both_deleted_restore_from_base_resolves_conflict() {
     );
 }
 
+/// End-to-end test: AddedByUs conflict session uses TwoWayKeepDelete
+/// strategy, and keeping the file via `checkout_conflict_side(Ours)`
+/// resolves the conflict.
 #[test]
 fn conflict_session_added_by_us_keep_resolves_conflict() {
     if !require_git_shell_for_status_integration_tests() {
@@ -1766,6 +1793,9 @@ fn conflict_session_added_by_us_keep_resolves_conflict() {
     );
 }
 
+/// End-to-end test: AddedByThem conflict session uses TwoWayKeepDelete
+/// strategy, and keeping the file via `checkout_conflict_side(Theirs)`
+/// resolves the conflict.
 #[test]
 fn conflict_session_added_by_them_keep_resolves_conflict() {
     if !require_git_shell_for_status_integration_tests() {
@@ -1854,6 +1884,9 @@ fn conflict_session_added_by_them_keep_resolves_conflict() {
     );
 }
 
+/// End-to-end test: DeletedByThem conflict session uses TwoWayKeepDelete
+/// strategy (base+ours present, theirs absent), and keeping ours
+/// via `checkout_conflict_side(Ours)` resolves the conflict.
 #[test]
 fn conflict_session_deleted_by_them_keep_ours_resolves_conflict() {
     if !require_git_shell_for_status_integration_tests() {
