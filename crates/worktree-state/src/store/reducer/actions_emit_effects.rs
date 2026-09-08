@@ -1,11 +1,12 @@
 use super::repo_management::append_cancel_repo_loads_effect_for_repo;
 use super::util::{
-    DiffReloadMode, SelectedConflictTarget, append_start_conflict_target_reload,
-    append_start_current_conflict_target_reload, append_targeted_status_refresh,
-    apply_selected_diff_load_plan_state, apply_selected_diff_load_plan_state_with_reload_mode,
-    clear_banner_error_for_repo, diff_reload_effects, format_failure_summary, push_action_log,
-    push_command_log, push_failure_needs_pull_retry, refresh_full_effects, refresh_primary_effects,
-    selected_conflict_target, selected_diff_load_plan,
+    DiffReloadMode, SelectedConflictTarget, append_diff_reload_effects,
+    append_start_conflict_target_reload, append_start_current_conflict_target_reload,
+    append_targeted_status_refresh, apply_selected_diff_load_plan_state,
+    apply_selected_diff_load_plan_state_with_reload_mode, clear_banner_error_for_repo,
+    format_failure_summary, push_action_log, push_command_log, push_failure_needs_pull_retry,
+    refresh_full_effects, refresh_primary_effects, selected_conflict_target,
+    selected_diff_load_plan,
 };
 use crate::model::{
     AppState, InteractiveCherryPickSetup, InteractiveRebaseSetup, Loadable, RepoId,
@@ -1494,7 +1495,7 @@ pub(super) fn repo_command_finished(
         apply_selected_diff_load_plan_state(repo_state, load_plan);
         repo_state.diff_state.inline_submodule_diff = None;
         repo_state.bump_diff_state_rev();
-        extra_effects.extend(diff_reload_effects(repo_state, repo_id, target));
+        append_diff_reload_effects(&mut extra_effects, repo_state, repo_id, target);
     }
     if refresh_submodules {
         repo_state.set_submodules(Loadable::Loading);
@@ -1551,7 +1552,7 @@ pub(super) fn repo_command_finished(
                 DiffReloadMode::KeepLoaded,
             );
             repo_state.bump_diff_state_rev();
-            extra_effects.extend(diff_reload_effects(repo_state, repo_id, target));
+            append_diff_reload_effects(&mut extra_effects, repo_state, repo_id, target);
         }
     }
     let mut effects = refresh_full_effects(repo_state, state.git_log_settings);

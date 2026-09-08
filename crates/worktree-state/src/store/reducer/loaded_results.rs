@@ -1,6 +1,6 @@
 use super::util::{
-    EffectAccumulator, apply_selected_diff_load_plan_state, diff_reload_effects, push_diagnostic,
-    push_notification, selected_diff_load_plan,
+    EffectAccumulator, append_diff_reload_effects, apply_selected_diff_load_plan_state,
+    diff_reload_effect_count, push_diagnostic, push_notification, selected_diff_load_plan,
 };
 use crate::model::{
     AiCommitContext, AppNotificationKind, AppState, CommitMultiSelection, ConflictFileLoadMode,
@@ -3103,7 +3103,9 @@ pub(super) fn commit_details_loaded(
             if previous_plan != Some(next_plan) {
                 apply_selected_diff_load_plan_state(repo_state, next_plan);
                 repo_state.bump_diff_state_rev();
-                return diff_reload_effects(repo_state, repo_id, target);
+                let mut effects = Vec::with_capacity(diff_reload_effect_count(repo_state, &target));
+                append_diff_reload_effects(&mut effects, repo_state, repo_id, target);
+                return effects;
             }
         }
     }

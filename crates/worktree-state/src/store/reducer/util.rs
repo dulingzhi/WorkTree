@@ -548,16 +548,6 @@ pub(super) fn diff_reload_effect_count(repo_state: &RepoState, target: &DiffTarg
     count
 }
 
-pub(super) fn diff_reload_effects(
-    repo_state: &RepoState,
-    repo_id: RepoId,
-    target: DiffTarget,
-) -> Vec<Effect> {
-    let mut effects = Vec::with_capacity(diff_reload_effect_count(repo_state, &target));
-    append_diff_reload_effects(&mut effects, repo_state, repo_id, target);
-    effects
-}
-
 pub(super) fn append_diff_reload_effects(
     effects: &mut impl EffectAccumulator,
     repo_state: &RepoState,
@@ -2122,7 +2112,8 @@ mod tests {
             path: PathBuf::from("img.PNG"),
             area: DiffArea::Unstaged,
         };
-        let png_effects = diff_reload_effects(&repo_state, repo_id, png.clone());
+        let mut png_effects = Vec::with_capacity(diff_reload_effect_count(&repo_state, &png));
+        append_diff_reload_effects(&mut png_effects, &repo_state, repo_id, png.clone());
         assert!(diff_target_wants_image_preview(&png));
         assert!(!diff_target_is_svg(&png));
         assert_eq!(png_effects.len(), 2);
@@ -2133,7 +2124,8 @@ mod tests {
             path: PathBuf::from("diagram.svg"),
             area: DiffArea::Unstaged,
         };
-        let svg_effects = diff_reload_effects(&repo_state, repo_id, svg.clone());
+        let mut svg_effects = Vec::with_capacity(diff_reload_effect_count(&repo_state, &svg));
+        append_diff_reload_effects(&mut svg_effects, &repo_state, repo_id, svg.clone());
         assert!(diff_target_wants_image_preview(&svg));
         assert!(diff_target_is_svg(&svg));
         assert_eq!(svg_effects.len(), 3);
@@ -2144,10 +2136,10 @@ mod tests {
             area: DiffArea::Unstaged,
         };
         assert!(!diff_target_wants_image_preview(&text_no_ext));
-        assert_eq!(
-            diff_reload_effects(&repo_state, repo_id, text_no_ext).len(),
-            2
-        );
+        let mut text_effects =
+            Vec::with_capacity(diff_reload_effect_count(&repo_state, &text_no_ext));
+        append_diff_reload_effects(&mut text_effects, &repo_state, repo_id, text_no_ext);
+        assert_eq!(text_effects.len(), 2);
 
         let commit_without_path = DiffTarget::Commit {
             commit_id: CommitId("abc123".into()),
@@ -2155,10 +2147,15 @@ mod tests {
         };
         assert!(!diff_target_wants_image_preview(&commit_without_path));
         assert!(!diff_target_is_svg(&commit_without_path));
-        assert_eq!(
-            diff_reload_effects(&repo_state, repo_id, commit_without_path).len(),
-            1
+        let mut commit_effects =
+            Vec::with_capacity(diff_reload_effect_count(&repo_state, &commit_without_path));
+        append_diff_reload_effects(
+            &mut commit_effects,
+            &repo_state,
+            repo_id,
+            commit_without_path,
         );
+        assert_eq!(commit_effects.len(), 1);
     }
 
     #[test]

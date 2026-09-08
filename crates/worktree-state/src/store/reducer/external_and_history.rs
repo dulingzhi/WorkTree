@@ -5,11 +5,11 @@ use super::repo_management::{
     selected_history_reloads_for_activation,
 };
 use super::util::{
-    SelectedConflictTarget, append_auto_background_metadata_effects,
+    SelectedConflictTarget, append_auto_background_metadata_effects, append_diff_reload_effects,
     append_requested_status_refresh_effects, append_start_conflict_target_reload,
     append_start_current_conflict_target_reload, append_targeted_status_refresh,
-    clear_banner_error_for_repo, diff_reload_effects, push_diagnostic, refresh_full_effects,
-    refresh_primary_effects, selected_conflict_target,
+    clear_banner_error_for_repo, push_diagnostic, refresh_full_effects, refresh_primary_effects,
+    selected_conflict_target,
 };
 use crate::model::{
     AppState, DiagnosticKind, InteractiveRebaseSetup, Loadable, RepoLoadsInFlight, SidebarMode,
@@ -289,7 +289,7 @@ pub(super) fn repo_externally_changed(
                 }
             }
         } else {
-            effects.extend(diff_reload_effects(repo_state, repo_id, target));
+            append_diff_reload_effects(&mut effects, repo_state, repo_id, target);
         }
     }
 
@@ -913,7 +913,7 @@ pub(super) fn repo_action_finished(
                     }
                 }
             } else {
-                effects.extend(diff_reload_effects(repo_state, repo_id, target));
+                append_diff_reload_effects(&mut effects, repo_state, repo_id, target);
             }
         }
     }
