@@ -1,11 +1,12 @@
 use super::repo_management::append_cancel_repo_loads_effect_for_repo;
 use super::util::{
     DiffReloadMode, SelectedConflictTarget, append_diff_reload_effects,
+    append_refresh_full_effects, append_refresh_primary_effects,
     append_start_conflict_target_reload, append_start_current_conflict_target_reload,
     append_targeted_status_refresh, apply_selected_diff_load_plan_state,
     apply_selected_diff_load_plan_state_with_reload_mode, clear_banner_error_for_repo,
     format_failure_summary, push_action_log, push_command_log, push_failure_needs_pull_retry,
-    refresh_full_effects, refresh_primary_effects, selected_conflict_target,
+    refresh_full_effect_capacity, refresh_primary_effect_capacity, selected_conflict_target,
     selected_diff_load_plan,
 };
 use crate::model::{
@@ -1092,7 +1093,9 @@ pub(super) fn commit_finished(
         let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
             return Vec::new();
         };
-        return refresh_primary_effects(repo_state);
+        let mut effects = Vec::with_capacity(refresh_primary_effect_capacity());
+        append_refresh_primary_effects(repo_state, &mut effects);
+        return effects;
     }
     // A finished commit mutated the repo like any other action, so the loads
     // issued before it are stale (the file watcher usually has a full status
@@ -1105,7 +1108,7 @@ pub(super) fn commit_finished(
         return effects;
     };
     append_targeted_status_refresh(repo_state, &mut effects, &committed_paths);
-    effects.extend(refresh_primary_effects(repo_state));
+    append_refresh_primary_effects(repo_state, &mut effects);
     clear_banner_error_for_repo(state, repo_id);
     effects
 }
@@ -1167,7 +1170,9 @@ pub(super) fn commit_amend_finished(
         let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
             return Vec::new();
         };
-        return refresh_primary_effects(repo_state);
+        let mut effects = Vec::with_capacity(refresh_primary_effect_capacity());
+        append_refresh_primary_effects(repo_state, &mut effects);
+        return effects;
     }
     // Same shape as a plain commit: cancel the now-stale loads, answer the
     // committed paths through the targeted scan, and let the primary refresh
@@ -1178,7 +1183,7 @@ pub(super) fn commit_amend_finished(
         return effects;
     };
     append_targeted_status_refresh(repo_state, &mut effects, &committed_paths);
-    effects.extend(refresh_primary_effects(repo_state));
+    append_refresh_primary_effects(repo_state, &mut effects);
     clear_banner_error_for_repo(state, repo_id);
     effects
 }
@@ -1220,7 +1225,9 @@ pub(super) fn safe_push_after_commit_finished(
                 full_summary,
                 None,
             );
-            refresh_full_effects(repo_state, git_log_settings)
+            let mut effects = Vec::with_capacity(refresh_full_effect_capacity());
+            append_refresh_full_effects(repo_state, git_log_settings, &mut effects);
+            effects
         }
         Err(e) => {
             let git_log_settings = state.git_log_settings;
@@ -1238,7 +1245,9 @@ pub(super) fn safe_push_after_commit_finished(
                 summary,
                 Some(&e),
             );
-            refresh_full_effects(repo_state, git_log_settings)
+            let mut effects = Vec::with_capacity(refresh_full_effect_capacity());
+            append_refresh_full_effects(repo_state, git_log_settings, &mut effects);
+            effects
         }
     }
 }
@@ -1555,7 +1564,8 @@ pub(super) fn repo_command_finished(
             append_diff_reload_effects(&mut extra_effects, repo_state, repo_id, target);
         }
     }
-    let mut effects = refresh_full_effects(repo_state, state.git_log_settings);
+    let mut effects = Vec::with_capacity(refresh_full_effect_capacity());
+    append_refresh_full_effects(repo_state, state.git_log_settings, &mut effects);
     effects.extend(extra_effects);
     if clear_banner {
         clear_banner_error_for_repo(state, repo_id);

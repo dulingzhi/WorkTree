@@ -5,8 +5,8 @@ use super::util::{
     append_start_conflict_target_reload, append_start_current_conflict_target_reload,
     background_metadata_effect_capacity, clear_banner_error_for_repo, dedup_paths_in_order,
     format_failure_summary, handle_session_persist_result, normalize_repo_path, push_diagnostic,
-    push_notification, refresh_full_effect_capacity, refresh_full_effects,
-    refresh_primary_effect_capacity, selected_conflict_target, selected_diff_load_plan,
+    push_notification, refresh_full_effect_capacity, refresh_primary_effect_capacity,
+    selected_conflict_target, selected_diff_load_plan,
 };
 use crate::model::{
     AppNotificationKind, AppState, CloneOpState, CloneOpStatus, CloneProgressMeter,
@@ -1218,7 +1218,8 @@ pub(super) fn repo_opened_ok(
     }
     let sidebar_mode = state.sidebar_mode;
     if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
-        let mut effects = refresh_full_effects(repo_state, git_log_settings);
+        let mut effects = Vec::with_capacity(refresh_full_effect_capacity());
+        append_refresh_full_effects(repo_state, git_log_settings, &mut effects);
         if should_refresh_worktrees
             && repo_state
                 .loads_in_flight

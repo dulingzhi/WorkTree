@@ -6,10 +6,11 @@ use super::repo_management::{
 };
 use super::util::{
     SelectedConflictTarget, append_auto_background_metadata_effects, append_diff_reload_effects,
+    append_refresh_full_effects, append_refresh_primary_effects,
     append_requested_status_refresh_effects, append_start_conflict_target_reload,
     append_start_current_conflict_target_reload, append_targeted_status_refresh,
-    clear_banner_error_for_repo, push_diagnostic, refresh_full_effects, refresh_primary_effects,
-    selected_conflict_target,
+    clear_banner_error_for_repo, push_diagnostic, refresh_full_effect_capacity,
+    refresh_primary_effect_capacity, selected_conflict_target,
 };
 use crate::model::{
     AppState, DiagnosticKind, InteractiveRebaseSetup, Loadable, RepoLoadsInFlight, SidebarMode,
@@ -106,7 +107,8 @@ pub(super) fn reload_repo(state: &mut AppState, repo_id: crate::model::RepoId) -
     repo_state.nav_history.clear();
     repo_state.view_history.clear();
 
-    let mut effects = refresh_full_effects(repo_state, git_log_settings);
+    let mut effects = Vec::with_capacity(refresh_full_effect_capacity());
+    append_refresh_full_effects(repo_state, git_log_settings, &mut effects);
     append_auto_background_metadata_effects(repo_state, git_log_settings, &mut effects);
     // Linked-worktree rows survive a reload, so their dirty counts have to be
     // refreshed along with everything else. The monitor only flushes for this
@@ -162,7 +164,8 @@ pub(super) fn repo_externally_changed(
         // prepared a pending force-push lease. Preserve that offer; the force
         // push command validates the branch and HEAD again before pushing.
         repo_state.set_recent_commit_messages(Loadable::NotLoaded);
-        let mut effects = refresh_primary_effects(repo_state);
+        let mut effects = Vec::with_capacity(refresh_primary_effect_capacity());
+        append_refresh_primary_effects(repo_state, &mut effects);
         if repo_state
             .loads_in_flight
             .request(RepoLoadsInFlight::BRANCHES)
@@ -865,7 +868,7 @@ pub(super) fn repo_action_finished(
 
     // Re-issue the primary panes (head branch, ahead/behind, rebase/merge, status, log). The flags
     // were just cleared, so request_* dispatches fresh loads under the new epoch.
-    effects.extend(refresh_primary_effects(repo_state));
+    append_refresh_primary_effects(repo_state, &mut effects);
 
     // Selected views (branch lists, history, diff) only matter for the repo the user is viewing. A
     // non-active repo's in-flight views were reset to `NotLoaded` and reload when it is next

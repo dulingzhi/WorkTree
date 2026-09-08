@@ -689,12 +689,6 @@ fn append_requested_rebase_and_merge_refresh_effects(
     }
 }
 
-pub(super) fn refresh_primary_effects(repo_state: &mut RepoState) -> Vec<Effect> {
-    let mut effects = Vec::with_capacity(refresh_primary_effect_capacity());
-    append_refresh_primary_effects(repo_state, &mut effects);
-    effects
-}
-
 /// The request for a fresh first page of `repo_state`'s history, under whatever
 /// scope and author filter it currently has.
 pub(super) fn first_page_log_request(repo_state: &RepoState) -> crate::model::PendingLogLoad {
@@ -802,15 +796,6 @@ pub(super) fn refresh_full_effect_capacity() -> usize {
 
 pub(super) fn background_metadata_effect_capacity() -> usize {
     BACKGROUND_METADATA_MAX_EFFECTS
-}
-
-pub(super) fn refresh_full_effects(
-    repo_state: &mut RepoState,
-    git_log_settings: GitLogSettings,
-) -> Vec<Effect> {
-    let mut effects = Vec::with_capacity(refresh_full_effect_capacity());
-    append_refresh_full_effects(repo_state, git_log_settings, &mut effects);
-    effects
 }
 
 pub(super) fn append_refresh_full_effects(
@@ -2259,7 +2244,8 @@ mod tests {
     fn refresh_effects_request_expected_loads_and_reset_log_loading_more() {
         let mut primary = repo_state(1);
         primary.set_log_loading_more(true);
-        let primary_effects = refresh_primary_effects(&mut primary);
+        let mut primary_effects = Vec::with_capacity(refresh_primary_effect_capacity());
+        append_refresh_primary_effects(&mut primary, &mut primary_effects);
         assert_eq!(primary_effects.len(), 7);
         assert!(!primary.log_loading_more);
         assert!(matches!(primary_effects[0], Effect::LoadHeadBranch { .. }));
@@ -2304,7 +2290,8 @@ mod tests {
 
         let mut full = repo_state(2);
         full.set_log_loading_more(true);
-        let full_effects = refresh_full_effects(&mut full, GitLogSettings::default());
+        let mut full_effects = Vec::with_capacity(refresh_full_effect_capacity());
+        append_refresh_full_effects(&mut full, GitLogSettings::default(), &mut full_effects);
         assert_eq!(full_effects.len(), 10);
         assert!(!full.log_loading_more);
         assert!(
