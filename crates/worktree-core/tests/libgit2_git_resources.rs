@@ -61,18 +61,7 @@ fn rehydrate_worktree_repo(name: &str) -> RehydratedRepo {
 }
 
 fn run_git_in_worktree(repo: &Path, args: &[&str]) -> String {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(repo)
-        .output()
-        .unwrap_or_else(|e| panic!("failed to run git {:?}: {e}", args));
-    assert!(
-        output.status.success(),
-        "git {:?} failed: {}",
-        args,
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8_lossy(&output.stdout).into_owned()
+    worktree_test_support::run_git_stdout_with(repo, args, |_| {})
 }
 
 fn run_git_with_git_dir(git_dir: &Path, args: &[&str]) -> String {

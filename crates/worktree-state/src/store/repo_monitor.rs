@@ -1855,7 +1855,6 @@ mod tests {
     use notify::EventKind;
     use notify::event::{AccessKind, AccessMode, CreateKind, DataChange, ModifyKind, RemoveKind};
     use std::fs;
-    use std::process::Command;
     use std::sync::{OnceLock, atomic::AtomicBool, mpsc};
     struct IsolatedGitConfigEnv {
         _root: tempfile::TempDir,
@@ -1892,26 +1891,15 @@ mod tests {
 
     fn run_git(repo: &Path, args: &[&str]) {
         let env = isolated_git_config_env();
-        let output = Command::new("git")
-            .env("GIT_CONFIG_NOSYSTEM", "1")
-            .env("GIT_CONFIG_GLOBAL", &env.global_config)
-            .env("HOME", &env.home_dir)
-            .env("XDG_CONFIG_HOME", &env.xdg_config_home)
-            .env_remove("GIT_CONFIG_SYSTEM")
-            .env("GIT_TERMINAL_PROMPT", "0")
-            .env("GCM_INTERACTIVE", "Never")
-            .arg("-C")
-            .arg(repo)
-            .args(args)
-            .output()
-            .expect("run git command");
-        assert!(
-            output.status.success(),
-            "git {:?} failed: stdout={} stderr={}",
-            args,
-            String::from_utf8(output.stdout).unwrap_or_else(|_| "<non-utf8 stdout>".to_string()),
-            String::from_utf8(output.stderr).unwrap_or_else(|_| "<non-utf8 stderr>".to_string())
-        );
+        worktree_test_support::run_git_with(repo, args, |cmd| {
+            cmd.env("GIT_CONFIG_NOSYSTEM", "1")
+                .env("GIT_CONFIG_GLOBAL", &env.global_config)
+                .env("HOME", &env.home_dir)
+                .env("XDG_CONFIG_HOME", &env.xdg_config_home)
+                .env_remove("GIT_CONFIG_SYSTEM")
+                .env("GIT_TERMINAL_PROMPT", "0")
+                .env("GCM_INTERACTIVE", "Never");
+        });
     }
 
     fn init_repo_for_ignore_tests(workdir: &Path) {
