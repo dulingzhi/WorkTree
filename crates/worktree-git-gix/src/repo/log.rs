@@ -20,7 +20,7 @@ use worktree_core::error::{Error, ErrorKind, GitFailure, GitFailureId};
 use worktree_core::services::{CancellationToken, LogChunk, Result};
 
 const RECENT_COMMIT_MESSAGES_MAX_LIMIT: usize = 100;
-/// How much history [`GixRepo::author_email_map_impl`] walks — enough that
+/// How much history [`GixRepo::author_email_map`] walks — enough that
 /// every author the history list can show has an entry, while staying one
 /// cheap format-only git invocation.
 const AUTHOR_EMAIL_HISTORY_LIMIT: usize = 5000;
@@ -1199,7 +1199,7 @@ impl GixRepo {
         token
     }
 
-    pub(super) fn resolve_file_path_at_commit_impl(
+    pub(super) fn resolve_file_path_at_commit(
         &self,
         path: &Path,
         commit: &CommitId,
@@ -1384,7 +1384,7 @@ impl GixRepo {
     /// avatars. See
     /// [`worktree_core::services::GitRepository::author_email_map`] for the
     /// first-seen-wins semantics.
-    pub(super) fn author_email_map_impl(&self) -> Result<FxHashMap<String, String>> {
+    pub(super) fn author_email_map(&self) -> Result<FxHashMap<String, String>> {
         let mut cmd = self.git_workdir_cmd();
         cmd.arg("log")
             .arg("--all")
@@ -1408,9 +1408,9 @@ impl GixRepo {
 
     /// Every commit no older than `since` across local branches and remotes,
     /// as bare (author, time) pairs. One format-only git invocation — the
-    /// same shape [`Self::author_email_map_impl`] uses — bounded by
+    /// same shape [`Self::author_email_map`] uses — bounded by
     /// `--since` so the pipe stays as short as the window.
-    pub(super) fn contributor_commits_since_impl(
+    pub(super) fn contributor_commits_since(
         &self,
         since: SystemTime,
     ) -> Result<Vec<ContributorCommit>> {
@@ -1455,21 +1455,21 @@ impl GixRepo {
         Ok(commits)
     }
 
-    pub(super) fn log_head_page_impl(
+    pub(super) fn log_head_page(
         &self,
         limit: usize,
         cursor: Option<&LogCursor>,
     ) -> Result<LogPage> {
-        self.log_history_mode_page_impl(HistoryMode::FirstParent, limit, cursor)
+        self.log_history_mode_page(HistoryMode::FirstParent, limit, cursor)
     }
 
-    pub(super) fn log_head_page_cancellable_impl(
+    pub(super) fn log_head_page_cancellable(
         &self,
         limit: usize,
         cursor: Option<&LogCursor>,
         cancellation: &CancellationToken,
     ) -> Result<LogPage> {
-        self.log_history_mode_page_cancellable_impl(
+        self.log_history_mode_page_cancellable(
             HistoryMode::FirstParent,
             limit,
             cursor,
@@ -1477,30 +1477,30 @@ impl GixRepo {
         )
     }
 
-    pub(super) fn log_history_mode_page_impl(
+    pub(super) fn log_history_mode_page(
         &self,
         mode: HistoryMode,
         limit: usize,
         cursor: Option<&LogCursor>,
     ) -> Result<LogPage> {
-        self.log_history_mode_page_impl_inner(mode, None, limit, cursor, None, None)
+        self.log_history_mode_page_inner(mode, None, limit, cursor, None, None)
     }
 
-    pub(super) fn log_history_mode_page_cancellable_impl(
+    pub(super) fn log_history_mode_page_cancellable(
         &self,
         mode: HistoryMode,
         limit: usize,
         cursor: Option<&LogCursor>,
         cancellation: &CancellationToken,
     ) -> Result<LogPage> {
-        self.log_history_mode_page_impl_inner(mode, None, limit, cursor, Some(cancellation), None)
+        self.log_history_mode_page_inner(mode, None, limit, cursor, Some(cancellation), None)
     }
 
     /// Filtered, cancellable, streaming variant: `on_chunk` sees the page as it
     /// fills in. The one entry point the app uses — the plain variants above
     /// exist for callers with no filter and nothing to cancel. See
     /// [`worktree_core::services::GitRepository::log_history_mode_page_streaming`].
-    pub(super) fn log_history_mode_page_streaming_impl(
+    pub(super) fn log_history_mode_page_streaming(
         &self,
         mode: HistoryMode,
         author: Option<&str>,
@@ -1510,7 +1510,7 @@ impl GixRepo {
         on_chunk: &mut dyn FnMut(LogChunk),
     ) -> Result<LogPage> {
         let mut chunks = ChunkEmitter::new(on_chunk);
-        self.log_history_mode_page_impl_inner(
+        self.log_history_mode_page_inner(
             mode,
             author,
             limit,
@@ -1520,14 +1520,14 @@ impl GixRepo {
         )
     }
 
-    /// The ref-filtered variant of [`Self::log_history_mode_page_streaming_impl`]:
+    /// The ref-filtered variant of [`Self::log_history_mode_page_streaming`]:
     /// the walk is seeded from the commits `refs` point at, so the history
     /// list shows a branch's (or tag's, or several refs' union) past without
     /// a checkout. Refs must be full names; an unresolvable one fails the
     /// whole walk — like `git log <ref>`, which also refuses — rather than
     /// quietly showing a subset. The resume-token cache already keys on the
     /// tips, so pagination of a filtered walk stays O(page).
-    pub(super) fn log_history_mode_refs_page_streaming_impl(
+    pub(super) fn log_history_mode_refs_page_streaming(
         &self,
         mode: HistoryMode,
         refs: &[String],
@@ -1649,7 +1649,7 @@ impl GixRepo {
         Ok(page)
     }
 
-    fn log_history_mode_page_impl_inner(
+    fn log_history_mode_page_inner(
         &self,
         mode: HistoryMode,
         author: Option<&str>,
@@ -1671,7 +1671,7 @@ impl GixRepo {
         let author = author.as_ref();
 
         if mode == HistoryMode::AllBranches {
-            return self.log_all_branches_page_impl_inner(
+            return self.log_all_branches_page_inner(
                 limit,
                 cursor,
                 cancellation,
@@ -1707,24 +1707,24 @@ impl GixRepo {
         Ok(page)
     }
 
-    pub(super) fn log_all_branches_page_impl(
+    pub(super) fn log_all_branches_page(
         &self,
         limit: usize,
         cursor: Option<&LogCursor>,
     ) -> Result<LogPage> {
-        self.log_all_branches_page_impl_inner(limit, cursor, None, None, None)
+        self.log_all_branches_page_inner(limit, cursor, None, None, None)
     }
 
-    pub(super) fn log_all_branches_page_cancellable_impl(
+    pub(super) fn log_all_branches_page_cancellable(
         &self,
         limit: usize,
         cursor: Option<&LogCursor>,
         cancellation: &CancellationToken,
     ) -> Result<LogPage> {
-        self.log_all_branches_page_impl_inner(limit, cursor, Some(cancellation), None, None)
+        self.log_all_branches_page_inner(limit, cursor, Some(cancellation), None, None)
     }
 
-    fn log_all_branches_page_impl_inner(
+    fn log_all_branches_page_inner(
         &self,
         limit: usize,
         cursor: Option<&LogCursor>,
@@ -1806,7 +1806,7 @@ impl GixRepo {
         )
     }
 
-    pub(super) fn log_file_page_impl(
+    pub(super) fn log_file_page(
         &self,
         path: &Path,
         limit: usize,
@@ -1837,7 +1837,7 @@ impl GixRepo {
         paginate_commits(commits.iter().cloned().map(Ok), limit, cursor)
     }
 
-    pub(super) fn commit_details_impl(&self, id: &CommitId) -> Result<CommitDetails> {
+    pub(super) fn commit_details(&self, id: &CommitId) -> Result<CommitDetails> {
         let repo = self._repo.to_thread_local();
         let spec = id.as_ref();
         let commit = repo
@@ -1894,7 +1894,7 @@ impl GixRepo {
         })
     }
 
-    pub(super) fn diff_range_files_impl(
+    pub(super) fn diff_range_files(
         &self,
         from: &CommitId,
         to: Option<&CommitId>,
@@ -1911,7 +1911,7 @@ impl GixRepo {
         }
     }
 
-    pub(super) fn commit_messages_impl(&self, ids: &[CommitId]) -> Result<Vec<String>> {
+    pub(super) fn commit_messages(&self, ids: &[CommitId]) -> Result<Vec<String>> {
         let repo = self._repo.to_thread_local();
         ids.iter()
             .map(|id| {
@@ -1938,10 +1938,7 @@ impl GixRepo {
             .collect()
     }
 
-    pub(super) fn topologically_order_commits_impl(
-        &self,
-        ids: &[CommitId],
-    ) -> Result<Vec<CommitId>> {
+    pub(super) fn topologically_order_commits(&self, ids: &[CommitId]) -> Result<Vec<CommitId>> {
         let repo = self._repo.to_thread_local();
         let mut object_ids = Vec::with_capacity(ids.len());
         let mut selected = FxHashMap::with_capacity_and_hasher(ids.len(), Default::default());
@@ -2026,15 +2023,12 @@ impl GixRepo {
         Ok(ordered)
     }
 
-    pub(super) fn recent_commit_messages_impl(
-        &self,
-        limit: usize,
-    ) -> Result<Vec<RecentCommitMessage>> {
+    pub(super) fn recent_commit_messages(&self, limit: usize) -> Result<Vec<RecentCommitMessage>> {
         let Some((limit, scan_limit)) = recent_commit_message_limits(limit) else {
             return Ok(Vec::new());
         };
 
-        let page = self.log_history_mode_page_impl(HistoryMode::FirstParent, scan_limit, None)?;
+        let page = self.log_history_mode_page(HistoryMode::FirstParent, scan_limit, None)?;
         let repo = self._repo.to_thread_local();
         let mut seen = FxHashSet::default();
         let mut messages = Vec::with_capacity(limit);
@@ -2086,7 +2080,7 @@ impl GixRepo {
     /// a pasted hash finds its commit. The needle stays a git regex
     /// (`--regexp-ignore-case` only lowers case), same as the C# service it
     /// replaces.
-    pub(super) fn search_commits_impl(&self, query: &str, limit: usize) -> Result<Vec<Commit>> {
+    pub(super) fn search_commits(&self, query: &str, limit: usize) -> Result<Vec<Commit>> {
         let query = query.trim();
         if query.is_empty() || limit == 0 {
             return Ok(Vec::new());
@@ -2146,7 +2140,7 @@ impl GixRepo {
         Ok(commits)
     }
 
-    pub(super) fn reflog_head_impl(&self, limit: usize) -> Result<Vec<ReflogEntry>> {
+    pub(super) fn reflog_head(&self, limit: usize) -> Result<Vec<ReflogEntry>> {
         if limit == 0 {
             return Ok(Vec::new());
         }
@@ -2553,7 +2547,7 @@ mod tests {
 
         let repo = open_repo(workdir);
         let messages = repo
-            .recent_commit_messages_impl(usize::MAX)
+            .recent_commit_messages(usize::MAX)
             .expect("recent commit messages");
 
         assert_eq!(messages.len(), 3);
@@ -2590,7 +2584,7 @@ mod tests {
         // Message pass, case-insensitive. The widget commit is the root, so
         // its parent list is the empty %P field.
         let hits = repo
-            .search_commits_impl("WIDGET", 10)
+            .search_commits("WIDGET", 10)
             .expect("search by message");
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].summary.as_ref(), "fix: the widget");
@@ -2598,16 +2592,14 @@ mod tests {
         assert!(hits[0].parent_ids.is_empty());
 
         // A non-root commit parses its %P parents.
-        let hits = repo
-            .search_commits_impl("feature", 10)
-            .expect("second search");
+        let hits = repo.search_commits("feature", 10).expect("second search");
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].summary.as_ref(), "add feature");
         assert_eq!(hits[0].parent_ids.len(), 1);
 
         // Author pass: the query is in no message, only in one author name.
         let hits = repo
-            .search_commits_impl("other author", 10)
+            .search_commits("other author", 10)
             .expect("search by author");
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].summary.as_ref(), "unrelated words");
@@ -2616,18 +2608,16 @@ mod tests {
 
         // A needle every commit matches through either pass — including the
         // first two through author *and* message — yields each commit once.
-        let hits = repo
-            .search_commits_impl("e", 10)
-            .expect("search both passes");
+        let hits = repo.search_commits("e", 10).expect("search both passes");
         assert_eq!(hits.len(), 3);
 
         // The limit caps the merged list, message pass first.
-        let hits = repo.search_commits_impl("e", 2).expect("capped search");
+        let hits = repo.search_commits("e", 2).expect("capped search");
         assert_eq!(hits.len(), 2);
 
         // Blank queries search nothing.
         assert!(
-            repo.search_commits_impl("   ", 10)
+            repo.search_commits("   ", 10)
                 .expect("blank query")
                 .is_empty()
         );
@@ -2658,7 +2648,7 @@ mod tests {
         // A pasted 8-character prefix resolves the commit it names, ranked
         // ahead of the message that merely quotes it.
         let hits = repo
-            .search_commits_impl(&feature_hash[..8], 10)
+            .search_commits(&feature_hash[..8], 10)
             .expect("search by hash prefix");
         assert_eq!(hits.len(), 2);
         assert_eq!(hits[0].id.as_ref(), feature_hash);
@@ -2670,7 +2660,7 @@ mod tests {
 
         // The full hash resolves the same commit, unambiguously.
         let hits = repo
-            .search_commits_impl(feature_hash, 10)
+            .search_commits(feature_hash, 10)
             .expect("search by full hash");
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].id.as_ref(), feature_hash);
@@ -2679,7 +2669,7 @@ mod tests {
         // message and author passes instead of failing — hex-shaped words
         // are common.
         let hits = repo
-            .search_commits_impl("00000000", 10)
+            .search_commits("00000000", 10)
             .expect("hex query naming no object");
         assert!(hits.is_empty());
     }
@@ -2794,7 +2784,7 @@ mod tests {
 
         let repo = open_repo(workdir);
         let page1 = repo
-            .log_file_page_impl(Path::new("renamed.txt"), 1, None)
+            .log_file_page(Path::new("renamed.txt"), 1, None)
             .expect("first file log page");
         assert_eq!(page1.commits.len(), 1);
         assert!(page1.next_cursor.is_some());
@@ -2807,7 +2797,7 @@ mod tests {
         );
 
         let page2 = repo
-            .log_file_page_impl(Path::new("renamed.txt"), 1, page1.next_cursor.as_ref())
+            .log_file_page(Path::new("renamed.txt"), 1, page1.next_cursor.as_ref())
             .expect("second file log page");
         assert_eq!(page2.commits.len(), 1);
         assert!(page2.next_cursor.is_some());
@@ -2824,7 +2814,7 @@ mod tests {
         };
 
         let page3 = repo
-            .log_file_page_impl(Path::new("renamed.txt"), 1, page2.next_cursor.as_ref())
+            .log_file_page(Path::new("renamed.txt"), 1, page2.next_cursor.as_ref())
             .expect("third file log page");
         assert_eq!(page3.commits.len(), 1);
 
@@ -2852,7 +2842,7 @@ mod tests {
 
         let repo = open_repo(workdir);
         let page = repo
-            .log_file_page_impl(Path::new("src"), 10, None)
+            .log_file_page(Path::new("src"), 10, None)
             .expect("directory log page");
 
         let summaries: Vec<&str> = page
@@ -2876,7 +2866,7 @@ mod tests {
         commit_file(workdir, "a.txt", "two\n", "second");
 
         let repo = open_repo(workdir);
-        let entries = repo.reflog_head_impl(10).expect("reflog_head_impl");
+        let entries = repo.reflog_head(10).expect("reflog_head");
 
         assert_eq!(entries.len(), 2);
         // Newest first: the reflog is read in reverse, matching `HEAD@{0}`
@@ -2899,7 +2889,7 @@ mod tests {
 
         let repo = open_repo(workdir);
         // `usize::MAX` reads as "every entry": it must not be reserved up front.
-        let entries = repo.reflog_head_impl(usize::MAX).expect("reflog_head_impl");
+        let entries = repo.reflog_head(usize::MAX).expect("reflog_head");
         assert_eq!(entries.len(), 1);
     }
 
@@ -2911,7 +2901,7 @@ mod tests {
         commit_file(workdir, "a.txt", "one\n", "first");
 
         let repo = open_repo(workdir);
-        let entries = repo.reflog_head_impl(0).expect("reflog_head_impl");
+        let entries = repo.reflog_head(0).expect("reflog_head");
         assert!(entries.is_empty());
     }
 }

@@ -263,157 +263,132 @@ pub(crate) fn allow_test_repo_local_mergetool_command(workdir: &Path, tool_name:
     mergetool::allow_test_repo_local_mergetool_command(workdir, tool_name);
 }
 
+/// Generate `GitRepository` delegate shells for [`GixRepo`].
+///
+/// Each entry expands to the trait method whose entire body forwards to the
+/// inherent `GixRepo` method of the same name (defined in the per-domain
+/// submodule). A leading `@trace(Kind)` emits the
+/// `git_ops_trace::scope(GitOpTraceKind::Kind)` scope guard before the forward.
+/// Shells that do more than forward (cancellation sandwiches, injected
+/// arguments, cross-name aliases) stay hand-written and are not accepted here.
+macro_rules! delegate_git_repository {
+    (
+        $(
+            $(@trace($kind:ident))?
+            fn $name:ident(&self $(, $param:ident : $param_ty:ty)* $(,)?) -> $ret:ty;
+        )*
+    ) => {
+        $(
+            fn $name(&self $(, $param: $param_ty)*) -> $ret {
+                $(let _scope = git_ops_trace::scope(GitOpTraceKind::$kind);)?
+                self.$name($($param),*)
+            }
+        )*
+    };
+}
+
 impl GitRepository for GixRepo {
     fn spec(&self) -> &RepoSpec {
         &self.spec
     }
 
-    fn log_history_mode_page(
-        &self,
-        mode: HistoryMode,
-        limit: usize,
-        cursor: Option<&LogCursor>,
-    ) -> Result<LogPage> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::LogWalk);
-        self.log_history_mode_page_impl(mode, limit, cursor)
-    }
+    delegate_git_repository! {
+        @trace(LogWalk)
+        fn log_history_mode_page(
+            &self,
+            mode: HistoryMode,
+            limit: usize,
+            cursor: Option<&LogCursor>,
+        ) -> Result<LogPage>;
 
-    fn log_history_mode_page_cancellable(
-        &self,
-        mode: HistoryMode,
-        limit: usize,
-        cursor: Option<&LogCursor>,
-        cancellation: &CancellationToken,
-    ) -> Result<LogPage> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::LogWalk);
-        self.log_history_mode_page_cancellable_impl(mode, limit, cursor, cancellation)
-    }
+        @trace(LogWalk)
+        fn log_history_mode_page_cancellable(
+            &self,
+            mode: HistoryMode,
+            limit: usize,
+            cursor: Option<&LogCursor>,
+            cancellation: &CancellationToken,
+        ) -> Result<LogPage>;
 
-    fn log_history_mode_page_streaming(
-        &self,
-        mode: HistoryMode,
-        author: Option<&str>,
-        limit: usize,
-        cursor: Option<&LogCursor>,
-        cancellation: &CancellationToken,
-        on_chunk: &mut dyn FnMut(worktree_core::services::LogChunk),
-    ) -> Result<LogPage> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::LogWalk);
-        self.log_history_mode_page_streaming_impl(
-            mode,
-            author,
-            limit,
-            cursor,
-            cancellation,
-            on_chunk,
-        )
-    }
+        @trace(LogWalk)
+        fn log_history_mode_page_streaming(
+            &self,
+            mode: HistoryMode,
+            author: Option<&str>,
+            limit: usize,
+            cursor: Option<&LogCursor>,
+            cancellation: &CancellationToken,
+            on_chunk: &mut dyn FnMut(worktree_core::services::LogChunk),
+        ) -> Result<LogPage>;
 
-    fn log_history_mode_refs_page_streaming(
-        &self,
-        mode: HistoryMode,
-        refs: &[String],
-        author: Option<&str>,
-        limit: usize,
-        cursor: Option<&LogCursor>,
-        cancellation: &CancellationToken,
-        on_chunk: &mut dyn FnMut(worktree_core::services::LogChunk),
-    ) -> Result<LogPage> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::LogWalk);
-        self.log_history_mode_refs_page_streaming_impl(
-            mode,
-            refs,
-            author,
-            limit,
-            cursor,
-            cancellation,
-            on_chunk,
-        )
-    }
+        @trace(LogWalk)
+        fn log_history_mode_refs_page_streaming(
+            &self,
+            mode: HistoryMode,
+            refs: &[String],
+            author: Option<&str>,
+            limit: usize,
+            cursor: Option<&LogCursor>,
+            cancellation: &CancellationToken,
+            on_chunk: &mut dyn FnMut(worktree_core::services::LogChunk),
+        ) -> Result<LogPage>;
 
-    fn log_head_page(&self, limit: usize, cursor: Option<&LogCursor>) -> Result<LogPage> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::LogWalk);
-        self.log_head_page_impl(limit, cursor)
-    }
+        @trace(LogWalk)
+        fn log_head_page(&self, limit: usize, cursor: Option<&LogCursor>) -> Result<LogPage>;
 
-    fn log_head_page_cancellable(
-        &self,
-        limit: usize,
-        cursor: Option<&LogCursor>,
-        cancellation: &CancellationToken,
-    ) -> Result<LogPage> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::LogWalk);
-        self.log_head_page_cancellable_impl(limit, cursor, cancellation)
-    }
+        @trace(LogWalk)
+        fn log_head_page_cancellable(
+            &self,
+            limit: usize,
+            cursor: Option<&LogCursor>,
+            cancellation: &CancellationToken,
+        ) -> Result<LogPage>;
 
-    fn log_all_branches_page(&self, limit: usize, cursor: Option<&LogCursor>) -> Result<LogPage> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::LogWalk);
-        self.log_all_branches_page_impl(limit, cursor)
-    }
+        @trace(LogWalk)
+        fn log_all_branches_page(&self, limit: usize, cursor: Option<&LogCursor>) -> Result<LogPage>;
 
-    fn log_all_branches_page_cancellable(
-        &self,
-        limit: usize,
-        cursor: Option<&LogCursor>,
-        cancellation: &CancellationToken,
-    ) -> Result<LogPage> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::LogWalk);
-        self.log_all_branches_page_cancellable_impl(limit, cursor, cancellation)
-    }
+        @trace(LogWalk)
+        fn log_all_branches_page_cancellable(
+            &self,
+            limit: usize,
+            cursor: Option<&LogCursor>,
+            cancellation: &CancellationToken,
+        ) -> Result<LogPage>;
 
-    fn log_file_page(
-        &self,
-        path: &Path,
-        limit: usize,
-        cursor: Option<&LogCursor>,
-    ) -> Result<LogPage> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::LogWalk);
-        self.log_file_page_impl(path, limit, cursor)
-    }
+        @trace(LogWalk)
+        fn log_file_page(
+            &self,
+            path: &Path,
+            limit: usize,
+            cursor: Option<&LogCursor>,
+        ) -> Result<LogPage>;
 
-    fn author_email_map(&self) -> Result<FxHashMap<String, String>> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::LogWalk);
-        self.author_email_map_impl()
-    }
+        @trace(LogWalk)
+        fn author_email_map(&self) -> Result<FxHashMap<String, String>>;
 
-    fn contributor_commits_since(
-        &self,
-        since: std::time::SystemTime,
-    ) -> Result<Vec<ContributorCommit>> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::LogWalk);
-        self.contributor_commits_since_impl(since)
-    }
+        @trace(LogWalk)
+        fn contributor_commits_since(
+            &self,
+            since: std::time::SystemTime,
+        ) -> Result<Vec<ContributorCommit>>;
 
-    fn commit_details(&self, id: &CommitId) -> Result<CommitDetails> {
-        self.commit_details_impl(id)
-    }
+        fn commit_details(&self, id: &CommitId) -> Result<CommitDetails>;
 
-    fn diff_range_files(
-        &self,
-        from: &CommitId,
-        to: Option<&CommitId>,
-    ) -> Result<Vec<CommitFileChange>> {
-        self.diff_range_files_impl(from, to)
-    }
+        fn diff_range_files(
+            &self,
+            from: &CommitId,
+            to: Option<&CommitId>,
+        ) -> Result<Vec<CommitFileChange>>;
 
-    fn commit_messages(&self, ids: &[CommitId]) -> Result<Vec<String>> {
-        self.commit_messages_impl(ids)
-    }
+        fn commit_messages(&self, ids: &[CommitId]) -> Result<Vec<String>>;
 
-    fn topologically_order_commits(&self, ids: &[CommitId]) -> Result<Vec<CommitId>> {
-        self.topologically_order_commits_impl(ids)
-    }
+        fn topologically_order_commits(&self, ids: &[CommitId]) -> Result<Vec<CommitId>>;
 
-    fn recent_commit_messages(&self, limit: usize) -> Result<Vec<RecentCommitMessage>> {
-        self.recent_commit_messages_impl(limit)
-    }
+        fn recent_commit_messages(&self, limit: usize) -> Result<Vec<RecentCommitMessage>>;
 
-    fn search_commits(&self, query: &str, limit: usize) -> Result<Vec<Commit>> {
-        self.search_commits_impl(query, limit)
-    }
+        fn search_commits(&self, query: &str, limit: usize) -> Result<Vec<Commit>>;
 
-    fn reflog_head(&self, limit: usize) -> Result<Vec<ReflogEntry>> {
-        self.reflog_head_impl(limit)
+        fn reflog_head(&self, limit: usize) -> Result<Vec<ReflogEntry>>;
     }
 
     fn current_branch(&self) -> Result<String> {
@@ -444,27 +419,21 @@ impl GitRepository for GixRepo {
         Ok(branches)
     }
 
-    fn list_tags(&self) -> Result<Vec<Tag>> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::RefEnumerate);
-        self.list_tags_impl()
-    }
+    delegate_git_repository! {
+        @trace(RefEnumerate)
+        fn list_tags(&self) -> Result<Vec<Tag>>;
 
-    fn list_tags_cancellable(&self, cancellation: &CancellationToken) -> Result<Vec<Tag>> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::RefEnumerate);
-        self.list_tags_cancellable_impl(cancellation)
-    }
+        @trace(RefEnumerate)
+        fn list_tags_cancellable(&self, cancellation: &CancellationToken) -> Result<Vec<Tag>>;
 
-    fn list_remote_tags(&self) -> Result<Vec<RemoteTag>> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::RefEnumerate);
-        self.list_remote_tags_impl()
-    }
+        @trace(RefEnumerate)
+        fn list_remote_tags(&self) -> Result<Vec<RemoteTag>>;
 
-    fn list_remote_tags_cancellable(
-        &self,
-        cancellation: &CancellationToken,
-    ) -> Result<Vec<RemoteTag>> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::RefEnumerate);
-        self.list_remote_tags_cancellable_impl(cancellation)
+        @trace(RefEnumerate)
+        fn list_remote_tags_cancellable(
+            &self,
+            cancellation: &CancellationToken,
+        ) -> Result<Vec<RemoteTag>>;
     }
 
     fn list_remotes(&self) -> Result<Vec<Remote>> {
@@ -913,34 +882,28 @@ impl GitRepository for GixRepo {
         Ok(message)
     }
 
-    fn create_tag_with_output(
-        &self,
-        name: &str,
-        target: &str,
-        message: Option<&str>,
-        annotated: bool,
-    ) -> Result<CommandOutput> {
-        self.create_tag_with_output_impl(name, target, message, annotated)
-    }
+    delegate_git_repository! {
+        fn create_tag_with_output(
+            &self,
+            name: &str,
+            target: &str,
+            message: Option<&str>,
+            annotated: bool,
+        ) -> Result<CommandOutput>;
 
-    fn delete_tag_with_output(&self, name: &str) -> Result<CommandOutput> {
-        self.delete_tag_with_output_impl(name)
+        fn delete_tag_with_output(&self, name: &str) -> Result<CommandOutput>;
     }
 
     fn prune_merged_branches_with_output(&self) -> Result<CommandOutput> {
         self.prune_merged_branches_with_output_impl()
     }
 
-    fn prune_local_tags_with_output(&self) -> Result<CommandOutput> {
-        self.prune_local_tags_with_output_impl()
-    }
+    delegate_git_repository! {
+        fn prune_local_tags_with_output(&self) -> Result<CommandOutput>;
 
-    fn push_tag_with_output(&self, remote: &str, name: &str) -> Result<CommandOutput> {
-        self.push_tag_with_output_impl(remote, name)
-    }
+        fn push_tag_with_output(&self, remote: &str, name: &str) -> Result<CommandOutput>;
 
-    fn delete_remote_tag_with_output(&self, remote: &str, name: &str) -> Result<CommandOutput> {
-        self.delete_remote_tag_with_output_impl(remote, name)
+        fn delete_remote_tag_with_output(&self, remote: &str, name: &str) -> Result<CommandOutput>;
     }
 
     fn add_remote_with_output(&self, name: &str, url: &str) -> Result<CommandOutput> {
@@ -1018,12 +981,12 @@ impl GitRepository for GixRepo {
         self.blame_worktree_file_impl(path, area)
     }
 
-    fn resolve_file_path_at_commit(
-        &self,
-        path: &Path,
-        commit: &CommitId,
-    ) -> Result<Option<PathBuf>> {
-        self.resolve_file_path_at_commit_impl(path, commit)
+    delegate_git_repository! {
+        fn resolve_file_path_at_commit(
+            &self,
+            path: &Path,
+            commit: &CommitId,
+        ) -> Result<Option<PathBuf>>;
     }
 
     fn checkout_conflict_side(&self, path: &Path, side: ConflictSide) -> Result<CommandOutput> {
@@ -1038,12 +1001,12 @@ impl GitRepository for GixRepo {
         self.checkout_conflict_base_impl(path)
     }
 
-    fn launch_mergetool(
-        &self,
-        path: &Path,
-        preference: &ExternalMergeToolSelection,
-    ) -> Result<MergetoolResult> {
-        self.launch_mergetool_impl(path, preference)
+    delegate_git_repository! {
+        fn launch_mergetool(
+            &self,
+            path: &Path,
+            preference: &ExternalMergeToolSelection,
+        ) -> Result<MergetoolResult>;
     }
 
     fn export_patch_with_output(&self, commit_id: &CommitId, dest: &Path) -> Result<CommandOutput> {

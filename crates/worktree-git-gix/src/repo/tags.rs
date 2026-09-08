@@ -83,11 +83,11 @@ fn delete_local_tag(repo: &gix::Repository, name: &str) -> Result<()> {
 }
 
 impl GixRepo {
-    pub(super) fn list_tags_impl(&self) -> Result<Vec<Tag>> {
-        self.list_tags_cancellable_impl(&CancellationToken::new())
+    pub(super) fn list_tags(&self) -> Result<Vec<Tag>> {
+        self.list_tags_cancellable(&CancellationToken::new())
     }
 
-    pub(super) fn list_tags_cancellable_impl(
+    pub(super) fn list_tags_cancellable(
         &self,
         cancellation: &CancellationToken,
     ) -> Result<Vec<Tag>> {
@@ -113,11 +113,11 @@ impl GixRepo {
         Ok(tags)
     }
 
-    pub(super) fn list_remote_tags_impl(&self) -> Result<Vec<RemoteTag>> {
-        self.list_remote_tags_cancellable_impl(&CancellationToken::new())
+    pub(super) fn list_remote_tags(&self) -> Result<Vec<RemoteTag>> {
+        self.list_remote_tags_cancellable(&CancellationToken::new())
     }
 
-    pub(super) fn list_remote_tags_cancellable_impl(
+    pub(super) fn list_remote_tags_cancellable(
         &self,
         cancellation: &CancellationToken,
     ) -> Result<Vec<RemoteTag>> {
@@ -187,7 +187,7 @@ impl GixRepo {
         Ok(remote_tags)
     }
 
-    pub(super) fn create_tag_with_output_impl(
+    pub(super) fn create_tag_with_output(
         &self,
         name: &str,
         target: &str,
@@ -215,7 +215,7 @@ impl GixRepo {
         run_git_with_output(cmd, &label)
     }
 
-    pub(super) fn delete_tag_with_output_impl(&self, name: &str) -> Result<CommandOutput> {
+    pub(super) fn delete_tag_with_output(&self, name: &str) -> Result<CommandOutput> {
         validate_ref_like_arg(name, "tag name")?;
 
         let repo = self._repo.to_thread_local();
@@ -223,11 +223,7 @@ impl GixRepo {
         Ok(CommandOutput::empty_success(format!("git tag -d {name}")))
     }
 
-    pub(super) fn push_tag_with_output_impl(
-        &self,
-        remote: &str,
-        name: &str,
-    ) -> Result<CommandOutput> {
+    pub(super) fn push_tag_with_output(&self, remote: &str, name: &str) -> Result<CommandOutput> {
         validate_ref_like_arg(remote, "remote name")?;
         validate_ref_like_arg(name, "tag name")?;
 
@@ -239,7 +235,7 @@ impl GixRepo {
         run_git_with_output(cmd, &format!("git push {remote} refs/tags/{name}"))
     }
 
-    pub(super) fn delete_remote_tag_with_output_impl(
+    pub(super) fn delete_remote_tag_with_output(
         &self,
         remote: &str,
         name: &str,
@@ -256,7 +252,7 @@ impl GixRepo {
         run_git_with_output(cmd, &format!("git push {remote} --delete refs/tags/{name}"))
     }
 
-    pub(super) fn prune_local_tags_with_output_impl(&self) -> Result<CommandOutput> {
+    pub(super) fn prune_local_tags_with_output(&self) -> Result<CommandOutput> {
         let remotes = self.list_remotes_impl()?;
         if remotes.is_empty() {
             return Ok(CommandOutput {
@@ -399,7 +395,7 @@ bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\trefs/tags/hotfix\n";
         cancellation.cancel();
 
         let error = repo
-            .list_tags_cancellable_impl(&cancellation)
+            .list_tags_cancellable(&cancellation)
             .expect_err("cancelled tag listing should fail");
         assert!(matches!(error.kind(), ErrorKind::Cancelled));
     }
@@ -449,7 +445,7 @@ bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\trefs/tags/hotfix\n";
             workdir.to_path_buf(),
             gix::open(workdir).expect("open repo").into_sync(),
         );
-        let mut tags = repo.list_tags_impl().expect("list tags");
+        let mut tags = repo.list_tags().expect("list tags");
         tags.sort_by(|a, b| a.name.cmp(&b.name));
         assert_eq!(
             tags.iter().map(|tag| tag.name.as_str()).collect::<Vec<_>>(),
@@ -475,7 +471,7 @@ bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\trefs/tags/hotfix\n";
         cancellation.cancel();
 
         let error = repo
-            .list_remote_tags_cancellable_impl(&cancellation)
+            .list_remote_tags_cancellable(&cancellation)
             .expect_err("cancelled remote tag listing should fail");
         assert!(matches!(error.kind(), ErrorKind::Cancelled));
     }

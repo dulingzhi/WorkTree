@@ -34,7 +34,7 @@ impl GixRepo {
     /// 4. Reads trust-exit config to decide success semantics:
     ///    `mergetool.<tool>.trustExitCode`, then `mergetool.trustExitCode`.
     /// 5. Reads back the merged file and stages it on success.
-    pub(super) fn launch_mergetool_impl(
+    pub(super) fn launch_mergetool(
         &self,
         path: &Path,
         preference: &ExternalMergeToolSelection,
