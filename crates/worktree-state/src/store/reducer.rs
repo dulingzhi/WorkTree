@@ -887,6 +887,11 @@ fn reduce_inner(
         return Vec::new();
     }
 
+    let msg = match external_and_history::reduce_external_and_history(msg, state) {
+        ReduceOutcome::Handled(effects) => return effects,
+        ReduceOutcome::NotHandled(msg) => msg,
+    };
+
     let msg = match loaded_results::reduce_loaded_results(msg, state) {
         ReduceOutcome::Handled(effects) => return effects,
         ReduceOutcome::NotHandled(msg) => msg,
@@ -972,46 +977,11 @@ fn reduce_inner(
             );
             Vec::new()
         }
-        Msg::ReloadRepo { repo_id } => external_and_history::reload_repo(state, repo_id),
-        Msg::RepoActivated { .. } => Vec::new(),
-        Msg::RepoExternallyChanged {
-            repo_id,
-            change,
-            worktree_paths,
-        } => external_and_history::repo_externally_changed(state, repo_id, change, worktree_paths),
-        Msg::RepoWatchDegraded { repo_id: _, reason } => {
-            let message = match reason {
-                crate::msg::RepoWatchDegradedReason::TooManyFolders { dir_count } => rust_i18n::t!(
-                    "store.reducer.repo_watch_too_many_folders",
-                    dir_count = dir_count
-                )
-                .to_string(),
-                crate::msg::RepoWatchDegradedReason::WatchLimitReached { unwatched_dirs } => {
-                    rust_i18n::t!(
-                        "store.reducer.repo_watch_watch_limit_reached",
-                        unwatched_dirs = unwatched_dirs
-                    )
-                    .to_string()
-                }
-            };
-            util::push_notification(state, crate::model::AppNotificationKind::Warning, message);
-            Vec::new()
-        }
-        Msg::SetHistoryScope { repo_id, scope } => {
-            external_and_history::set_history_scope(state, repo_id, scope)
-        }
-        Msg::SetHistoryAuthorFilter { repo_id, author } => {
-            external_and_history::set_history_author_filter(state, repo_id, author)
-        }
-        Msg::SetHistoryRefFilters { repo_id, refs } => {
-            external_and_history::set_history_ref_filters(state, repo_id, refs)
-        }
         Msg::SetFetchPruneDeletedRemoteTrackingBranches { repo_id, enabled } => {
             repo_management::set_fetch_prune_deleted_remote_tracking_branches(
                 state, repo_id, enabled,
             )
         }
-        Msg::LoadMoreHistory { repo_id } => external_and_history::load_more_history(state, repo_id),
         Msg::CloneRepo { url, dest, ssh_key } => {
             repo_management::clone_repo(state, url, dest, ssh_key)
         }
@@ -1228,49 +1198,6 @@ fn reduce_inner(
             spec,
             error,
         }) => repo_management::repo_opened_err(repos, state, repo_id, spec, error),
-        Msg::Internal(crate::msg::InternalMsg::LogLoaded {
-            repo_id,
-            seq,
-            scope,
-            cursor,
-            result,
-        }) => external_and_history::log_loaded(state, repo_id, seq, scope, cursor, result),
-        Msg::Internal(crate::msg::InternalMsg::LogChunkLoaded {
-            repo_id,
-            seq,
-            commits,
-            scanned,
-        }) => external_and_history::log_chunk_loaded(state, repo_id, seq, commits, scanned),
-        Msg::Internal(crate::msg::InternalMsg::RebaseStateLoaded { repo_id, result }) => {
-            external_and_history::rebase_state_loaded(state, repo_id, result)
-        }
-        Msg::Internal(crate::msg::InternalMsg::BisectStateLoaded { repo_id, result }) => {
-            external_and_history::bisect_state_loaded(state, repo_id, result)
-        }
-        Msg::Internal(crate::msg::InternalMsg::InteractiveRebaseSetupLoaded {
-            repo_id,
-            base,
-            result,
-        }) => external_and_history::interactive_rebase_setup_loaded(state, repo_id, base, result),
-        Msg::Internal(crate::msg::InternalMsg::InteractiveCherryPickMessagesLoaded {
-            repo_id,
-            requested_ids,
-            result,
-        }) => external_and_history::interactive_cherry_pick_messages_loaded(
-            state,
-            repo_id,
-            requested_ids,
-            result,
-        ),
-        Msg::Internal(crate::msg::InternalMsg::MergeCommitMessageLoaded { repo_id, result }) => {
-            external_and_history::merge_commit_message_loaded(state, repo_id, result)
-        }
-        Msg::Internal(crate::msg::InternalMsg::RepoActionFinished {
-            repo_id,
-            action,
-            result,
-            paths,
-        }) => external_and_history::repo_action_finished(state, repo_id, action, result, paths),
         other => unreachable!("reduce_inner dispatch chain covers every Msg variant: {other:?}"),
     }
 }

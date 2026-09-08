@@ -5,17 +5,18 @@ use super::repo_management::{
     selected_history_reloads_for_activation,
 };
 use super::util::{
-    SelectedConflictTarget, append_auto_background_metadata_effects, append_diff_reload_effects,
-    append_refresh_full_effects, append_refresh_primary_effects,
+    self, SelectedConflictTarget, append_auto_background_metadata_effects,
+    append_diff_reload_effects, append_refresh_full_effects, append_refresh_primary_effects,
     append_requested_status_refresh_effects, append_start_conflict_target_reload,
     append_start_current_conflict_target_reload, append_targeted_status_refresh,
     clear_banner_error_for_repo, push_diagnostic, refresh_full_effect_capacity,
     refresh_primary_effect_capacity, selected_conflict_target,
 };
+use super::{ReduceOutcome, external_and_history};
 use crate::model::{
     AppState, DiagnosticKind, InteractiveRebaseSetup, Loadable, RepoLoadsInFlight, SidebarMode,
 };
-use crate::msg::{Effect, RepoActionKind, RepoExternalChange};
+use crate::msg::{Effect, Msg, RepoActionKind, RepoExternalChange};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::sync::Arc;
 use worktree_core::domain::{DiffArea, DiffTarget, LogCursor, LogPage, LogScope};
@@ -935,6 +936,91 @@ fn repo_action_clears_head_dependent_state(action: RepoActionKind) -> bool {
             | RepoActionKind::RevertCommit
             | RepoActionKind::CreateBranchAndCheckout
     )
+}
+
+pub(super) fn reduce_external_and_history(msg: Msg, state: &mut AppState) -> ReduceOutcome {
+    let effects = match msg {
+        Msg::ReloadRepo { repo_id } => external_and_history::reload_repo(state, repo_id),
+        Msg::RepoActivated { .. } => Vec::new(),
+        Msg::RepoExternallyChanged {
+            repo_id,
+            change,
+            worktree_paths,
+        } => external_and_history::repo_externally_changed(state, repo_id, change, worktree_paths),
+        Msg::RepoWatchDegraded { repo_id: _, reason } => {
+            let message = match reason {
+                crate::msg::RepoWatchDegradedReason::TooManyFolders { dir_count } => rust_i18n::t!(
+                    "store.reducer.repo_watch_too_many_folders",
+                    dir_count = dir_count
+                )
+                .to_string(),
+                crate::msg::RepoWatchDegradedReason::WatchLimitReached { unwatched_dirs } => {
+                    rust_i18n::t!(
+                        "store.reducer.repo_watch_watch_limit_reached",
+                        unwatched_dirs = unwatched_dirs
+                    )
+                    .to_string()
+                }
+            };
+            util::push_notification(state, crate::model::AppNotificationKind::Warning, message);
+            Vec::new()
+        }
+        Msg::SetHistoryScope { repo_id, scope } => {
+            external_and_history::set_history_scope(state, repo_id, scope)
+        }
+        Msg::SetHistoryAuthorFilter { repo_id, author } => {
+            external_and_history::set_history_author_filter(state, repo_id, author)
+        }
+        Msg::SetHistoryRefFilters { repo_id, refs } => {
+            external_and_history::set_history_ref_filters(state, repo_id, refs)
+        }
+        Msg::LoadMoreHistory { repo_id } => external_and_history::load_more_history(state, repo_id),
+        Msg::Internal(crate::msg::InternalMsg::LogLoaded {
+            repo_id,
+            seq,
+            scope,
+            cursor,
+            result,
+        }) => external_and_history::log_loaded(state, repo_id, seq, scope, cursor, result),
+        Msg::Internal(crate::msg::InternalMsg::LogChunkLoaded {
+            repo_id,
+            seq,
+            commits,
+            scanned,
+        }) => external_and_history::log_chunk_loaded(state, repo_id, seq, commits, scanned),
+        Msg::Internal(crate::msg::InternalMsg::RebaseStateLoaded { repo_id, result }) => {
+            external_and_history::rebase_state_loaded(state, repo_id, result)
+        }
+        Msg::Internal(crate::msg::InternalMsg::BisectStateLoaded { repo_id, result }) => {
+            external_and_history::bisect_state_loaded(state, repo_id, result)
+        }
+        Msg::Internal(crate::msg::InternalMsg::InteractiveRebaseSetupLoaded {
+            repo_id,
+            base,
+            result,
+        }) => external_and_history::interactive_rebase_setup_loaded(state, repo_id, base, result),
+        Msg::Internal(crate::msg::InternalMsg::InteractiveCherryPickMessagesLoaded {
+            repo_id,
+            requested_ids,
+            result,
+        }) => external_and_history::interactive_cherry_pick_messages_loaded(
+            state,
+            repo_id,
+            requested_ids,
+            result,
+        ),
+        Msg::Internal(crate::msg::InternalMsg::MergeCommitMessageLoaded { repo_id, result }) => {
+            external_and_history::merge_commit_message_loaded(state, repo_id, result)
+        }
+        Msg::Internal(crate::msg::InternalMsg::RepoActionFinished {
+            repo_id,
+            action,
+            result,
+            paths,
+        }) => external_and_history::repo_action_finished(state, repo_id, action, result, paths),
+        other => return ReduceOutcome::NotHandled(other),
+    };
+    ReduceOutcome::Handled(effects)
 }
 
 #[cfg(test)]
