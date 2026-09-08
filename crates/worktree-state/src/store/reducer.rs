@@ -911,6 +911,11 @@ fn reduce_inner(
         ReduceOutcome::NotHandled(msg) => msg,
     };
 
+    let msg = match conflict_interactions::reduce_conflict_interactions(msg, state) {
+        ReduceOutcome::Handled(effects) => return effects,
+        ReduceOutcome::NotHandled(msg) => msg,
+    };
+
     match msg {
         Msg::ShowBannerError { repo_id, message } => {
             if !message.trim().is_empty() {
@@ -952,164 +957,6 @@ fn reduce_inner(
         Msg::SetDefaultTagType(tag_type) => {
             state.default_tag_type = tag_type;
             Vec::new()
-        }
-        Msg::RecordConflictAutosolveTelemetry {
-            repo_id,
-            path,
-            mode,
-            total_conflicts_before,
-            total_conflicts_after,
-            unresolved_before,
-            unresolved_after,
-            stats,
-        } => {
-            if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
-                util::push_action_log(
-                    repo_state,
-                    true,
-                    util::conflict_autosolve_telemetry_command(mode, path.as_deref()),
-                    util::conflict_autosolve_telemetry_summary(
-                        mode,
-                        path.as_deref(),
-                        total_conflicts_before,
-                        total_conflicts_after,
-                        unresolved_before,
-                        unresolved_after,
-                        stats,
-                    ),
-                    None,
-                );
-            }
-            Vec::new()
-        }
-        Msg::ConflictSetHideResolved {
-            repo_id,
-            path,
-            hide_resolved,
-        } => conflict_interactions::set_hide_resolved(state, repo_id, path, hide_resolved),
-        Msg::ConflictApplyBulkChoice {
-            repo_id,
-            path,
-            choice,
-            scope,
-        } => conflict_interactions::apply_bulk_choice(state, repo_id, path, choice, scope),
-        Msg::ConflictSetRegionChoice {
-            repo_id,
-            path,
-            region_index,
-            choice,
-        } => conflict_interactions::set_region_choice(state, repo_id, path, region_index, choice),
-        Msg::ConflictToggleRegionSource {
-            repo_id,
-            path,
-            region_index,
-            source,
-        } => {
-            conflict_interactions::toggle_region_source(state, repo_id, path, region_index, source)
-        }
-        Msg::ConflictReplaceRegionSelection {
-            repo_id,
-            path,
-            region_index,
-            selection,
-        } => conflict_interactions::replace_region_selection(
-            state,
-            repo_id,
-            path,
-            region_index,
-            selection,
-        ),
-        Msg::ConflictTogglePlanBlockSource {
-            repo_id,
-            path,
-            block_id,
-            source,
-        } => {
-            conflict_interactions::toggle_plan_block_source(state, repo_id, path, block_id, source)
-        }
-        Msg::ConflictReplacePlanBlockSelection {
-            repo_id,
-            path,
-            block_id,
-            selection,
-        } => conflict_interactions::replace_plan_block_selection(
-            state, repo_id, path, block_id, selection,
-        ),
-        Msg::ConflictSyncRegionResolutions {
-            repo_id,
-            path,
-            updates,
-        } => conflict_interactions::sync_region_resolutions(state, repo_id, path, updates),
-        Msg::ConflictApplyAutosolve {
-            repo_id,
-            path,
-            mode,
-            whitespace_normalize,
-        } => {
-            conflict_interactions::apply_autosolve(state, repo_id, path, mode, whitespace_normalize)
-        }
-        Msg::ConflictResetResolutions { repo_id, path } => {
-            conflict_interactions::reset_resolutions(state, repo_id, path)
-        }
-        Msg::ConflictSplitRegion {
-            repo_id,
-            path,
-            region_index,
-            boundaries,
-            expected_conflict_rev,
-        } => {
-            let effects = conflict_interactions::split_region(
-                state,
-                repo_id,
-                path,
-                region_index,
-                boundaries,
-                expected_conflict_rev,
-            );
-            if !effects.is_empty() {
-                begin_local_action(state, repo_id);
-            }
-            effects
-        }
-        Msg::ConflictAddManualAlignment {
-            repo_id,
-            path,
-            alignment,
-            expected_conflict_rev,
-        } => conflict_interactions::add_manual_alignment(
-            state,
-            repo_id,
-            path,
-            alignment,
-            expected_conflict_rev,
-        ),
-        Msg::ConflictClearManualAlignments {
-            repo_id,
-            path,
-            expected_conflict_rev,
-        } => conflict_interactions::clear_manual_alignments(
-            state,
-            repo_id,
-            path,
-            expected_conflict_rev,
-        ),
-        Msg::ConflictJoinRegions {
-            repo_id,
-            path,
-            region_index,
-            expected_conflict_rev,
-        } => {
-            let effects = conflict_interactions::join_regions(
-                state,
-                repo_id,
-                path,
-                region_index,
-                expected_conflict_rev,
-            );
-            if !effects.is_empty() {
-                begin_local_action(state, repo_id);
-            }
-            effects
         }
         other => unreachable!("reduce_inner dispatch chain covers every Msg variant: {other:?}"),
     }
