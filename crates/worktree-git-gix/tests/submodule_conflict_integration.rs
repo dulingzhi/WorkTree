@@ -20,18 +20,7 @@ fn git_command() -> Command {
 }
 
 fn run_git(repo: &Path, args: &[&str]) {
-    let output = git_command()
-        .arg("-C")
-        .arg(repo)
-        .args(args)
-        .output()
-        .expect("git command to run");
-    assert!(
-        output.status.success(),
-        "git {:?} failed\nstderr: {}",
-        args,
-        String::from_utf8_lossy(&output.stderr)
-    );
+    worktree_test_support::run_git_with(repo, args, test_git_env::apply);
 }
 
 fn git_stdout(repo: &Path, args: &[&str]) -> String {

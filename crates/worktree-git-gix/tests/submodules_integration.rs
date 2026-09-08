@@ -9,6 +9,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::{Mutex, MutexGuard, OnceLock};
+#[cfg(windows)]
+use worktree_test_support::is_git_shell_startup_failure;
 
 fn git_command() -> Command {
     let mut cmd = Command::new("git");
@@ -17,18 +19,7 @@ fn git_command() -> Command {
 }
 
 fn run_git(repo: &Path, args: &[&str]) {
-    let output = git_command()
-        .arg("-C")
-        .arg(repo)
-        .args(args)
-        .output()
-        .expect("git command to run");
-    assert!(
-        output.status.success(),
-        "git {:?} failed\nstderr: {}",
-        args,
-        String::from_utf8_lossy(&output.stderr)
-    );
+    worktree_test_support::run_git_with(repo, args, test_git_env::apply);
 }
 
 fn git_output(repo: &Path, args: &[&str]) -> Output {
@@ -149,12 +140,6 @@ fn init_repo_with_seed(repo: &Path, file: &str, contents: &str, message: &str) {
         repo,
         &["-c", "commit.gpgsign=false", "commit", "-m", message],
     );
-}
-
-#[cfg(windows)]
-fn is_git_shell_startup_failure(text: &str) -> bool {
-    text.contains("sh.exe: *** fatal error -")
-        && (text.contains("couldn't create signal pipe") || text.contains("CreateFileMapping"))
 }
 
 #[cfg(windows)]

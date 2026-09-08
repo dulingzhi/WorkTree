@@ -5,22 +5,9 @@ use worktree_git_gix::GixBackend;
 mod test_git_env;
 use std::fs;
 use std::path::Path;
-use std::process::Command;
-
-fn git_command() -> Command {
-    let mut cmd = Command::new("git");
-    test_git_env::apply(&mut cmd);
-    cmd
-}
 
 fn run_git(repo: &Path, args: &[&str]) {
-    let status = git_command()
-        .arg("-C")
-        .arg(repo)
-        .args(args)
-        .status()
-        .expect("git command to run");
-    assert!(status.success(), "git {:?} failed", args);
+    worktree_test_support::run_git_with(repo, args, test_git_env::apply);
 }
 
 fn same_path(lhs: &Path, rhs: &Path) -> bool {

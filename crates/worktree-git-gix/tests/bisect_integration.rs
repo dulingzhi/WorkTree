@@ -9,19 +9,12 @@ use std::process::Command;
 use std::sync::Arc;
 
 fn run_git(repo: &Path, args: &[&str]) {
-    let mut cmd = Command::new("git");
-    test_git_env::apply(&mut cmd);
-    let status = cmd
-        .arg("-C")
-        .arg(repo)
-        .args(args)
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .env("GIT_EDITOR", "true")
-        .env("EDITOR", "true")
-        .env("VISUAL", "true")
-        .status()
-        .expect("git command to run");
-    assert!(status.success(), "git {:?} failed", args);
+    worktree_test_support::run_git_with(repo, args, |cmd| {
+        test_git_env::apply(cmd);
+        cmd.env("GIT_EDITOR", "true")
+            .env("EDITOR", "true")
+            .env("VISUAL", "true");
+    });
 }
 
 fn git_stdout(repo: &Path, args: &[&str]) -> String {

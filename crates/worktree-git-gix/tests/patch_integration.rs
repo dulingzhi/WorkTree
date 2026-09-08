@@ -15,13 +15,7 @@ fn git_command() -> Command {
 }
 
 fn run_git(repo: &Path, args: &[&str]) {
-    let status = git_command()
-        .arg("-C")
-        .arg(repo)
-        .args(args)
-        .status()
-        .expect("git command to run");
-    assert!(status.success(), "git {:?} failed", args);
+    worktree_test_support::run_git_with(repo, args, test_git_env::apply);
 }
 
 fn run_git_capture(repo: &Path, args: &[&str]) -> String {

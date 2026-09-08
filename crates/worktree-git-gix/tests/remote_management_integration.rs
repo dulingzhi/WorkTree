@@ -6,6 +6,8 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 use std::sync::{Mutex, MutexGuard, OnceLock};
+#[cfg(windows)]
+use worktree_test_support::is_git_shell_startup_failure;
 
 fn git_command() -> Command {
     let mut cmd = Command::new("git");
@@ -17,13 +19,7 @@ fn git_command() -> Command {
 }
 
 fn run_git(repo: &Path, args: &[&str]) {
-    let status = git_command()
-        .arg("-C")
-        .arg(repo)
-        .args(args)
-        .status()
-        .expect("git command to run");
-    assert!(status.success(), "git {:?} failed", args);
+    worktree_test_support::run_git_with(repo, args, test_git_env::apply);
 }
 
 fn run_git_capture(repo: &Path, args: &[&str]) -> String {
@@ -66,12 +62,6 @@ fn remote_management_test_lock() -> MutexGuard<'static, ()> {
     LOCK.get_or_init(|| Mutex::new(()))
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
-}
-
-#[cfg(windows)]
-fn is_git_shell_startup_failure(text: &str) -> bool {
-    text.contains("sh.exe: *** fatal error -")
-        && (text.contains("couldn't create signal pipe") || text.contains("CreateFileMapping"))
 }
 
 #[cfg(windows)]

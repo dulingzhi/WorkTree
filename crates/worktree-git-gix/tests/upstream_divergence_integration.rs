@@ -6,16 +6,9 @@ use std::sync::OnceLock;
 use worktree_core::domain::UpstreamDivergence;
 use worktree_core::services::GitBackend;
 use worktree_git_gix::GixBackend;
-
-fn run_git(repo: &Path, args: &[&str]) {
-    let status = Command::new("git")
-        .arg("-C")
-        .arg(repo)
-        .args(args)
-        .status()
-        .expect("git command to run");
-    assert!(status.success(), "git {:?} failed", args);
-}
+#[cfg(windows)]
+use worktree_test_support::is_git_shell_startup_failure;
+use worktree_test_support::run_git;
 
 fn git_remote_url(path: &Path) -> String {
     if cfg!(windows) {
@@ -25,12 +18,6 @@ fn git_remote_url(path: &Path) -> String {
     } else {
         path.to_string_lossy().into_owned()
     }
-}
-
-#[cfg(windows)]
-fn is_git_shell_startup_failure(text: &str) -> bool {
-    text.contains("sh.exe: *** fatal error -")
-        && (text.contains("couldn't create signal pipe") || text.contains("CreateFileMapping"))
 }
 
 #[cfg(windows)]

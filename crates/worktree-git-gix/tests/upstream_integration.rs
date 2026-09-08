@@ -10,6 +10,8 @@ use std::path::Path;
 use std::process::Command;
 #[cfg(windows)]
 use std::sync::OnceLock;
+#[cfg(windows)]
+use worktree_test_support::is_git_shell_startup_failure;
 
 fn git_command() -> Command {
     let mut cmd = Command::new("git");
@@ -73,12 +75,6 @@ fn run_git_capture(repo: &Path, args: &[&str]) -> String {
 
 fn commit_id(repo: &Path, rev: &str) -> CommitId {
     CommitId(run_git_capture(repo, &["rev-parse", rev]).trim().into())
-}
-
-#[cfg(windows)]
-fn is_git_shell_startup_failure(text: &str) -> bool {
-    text.contains("sh.exe: *** fatal error -")
-        && (text.contains("couldn't create signal pipe") || text.contains("CreateFileMapping"))
 }
 
 #[cfg(windows)]

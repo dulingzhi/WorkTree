@@ -5,47 +5,7 @@ use std::process::{Command, Stdio};
 use worktree_core::domain::FileStatusKind;
 use worktree_core::services::GitBackend;
 use worktree_git_gix::GixBackend;
-
-fn run_git(repo: &Path, args: &[&str]) {
-    let status = Command::new("git")
-        .arg("-C")
-        .arg(repo)
-        .args(args)
-        .status()
-        .expect("git command to run");
-    assert!(status.success(), "git {:?} failed", args);
-}
-
-fn hash_blob(repo: &Path, contents: &[u8]) -> String {
-    let mut child = Command::new("git")
-        .arg("-C")
-        .arg(repo)
-        .args(["hash-object", "-w", "--stdin"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("git hash-object to run");
-
-    child
-        .stdin
-        .as_mut()
-        .expect("stdin pipe")
-        .write_all(contents)
-        .expect("write blob contents");
-
-    let output = child.wait_with_output().expect("wait for hash-object");
-    assert!(
-        output.status.success(),
-        "git hash-object failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    String::from_utf8(output.stdout)
-        .expect("hash-object stdout utf8")
-        .trim()
-        .to_owned()
-}
+use worktree_test_support::{hash_blob, run_git};
 
 fn set_unmerged_stages(
     repo: &Path,

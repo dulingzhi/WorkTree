@@ -9,7 +9,6 @@
 //! CWD must never race another test's `gix::open` in the same binary.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use worktree_core::services::GitBackend;
@@ -18,25 +17,8 @@ use worktree_git_gix::GixBackend;
 #[path = "support/test_git_env.rs"]
 mod test_git_env;
 
-fn git_command() -> Command {
-    let mut cmd = Command::new("git");
-    test_git_env::apply(&mut cmd);
-    cmd
-}
-
 fn run_git(repo: &Path, args: &[&str]) {
-    let output = git_command()
-        .arg("-C")
-        .arg(repo)
-        .args(args)
-        .output()
-        .expect("git command to run");
-    assert!(
-        output.status.success(),
-        "git {:?} failed\nstderr: {}",
-        args,
-        String::from_utf8_lossy(&output.stderr)
-    );
+    worktree_test_support::run_git_with(repo, args, test_git_env::apply);
 }
 
 fn fixture_repo() -> PathBuf {

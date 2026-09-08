@@ -1568,25 +1568,9 @@ fn unified_body_line_count(text: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::process::Command;
     use worktree_core::domain::{DiffArea, DiffTarget};
     use worktree_core::error::ErrorKind;
-
-    fn run_git(workdir: &Path, args: &[&str]) {
-        let output = Command::new("git")
-            .arg("-C")
-            .arg(workdir)
-            .args(args)
-            .output()
-            .expect("git command to run");
-        assert!(
-            output.status.success(),
-            "git {:?} failed\nstdout:\n{}\nstderr:\n{}",
-            args,
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
+    use worktree_test_support::run_git;
 
     fn init_test_repo(workdir: &Path) {
         run_git(workdir, &["init"]);

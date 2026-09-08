@@ -9,6 +9,8 @@ use std::process::Command;
 use std::sync::Arc;
 #[cfg(windows)]
 use std::sync::OnceLock;
+#[cfg(windows)]
+use worktree_test_support::is_git_shell_startup_failure;
 
 fn run_git(repo: &Path, args: &[&str]) {
     run_git_with_env(repo, args, &[]);
@@ -47,12 +49,6 @@ fn git_stdout(repo: &Path, args: &[&str]) -> String {
         .expect("git command to run");
     assert!(output.status.success(), "git {:?} failed", args);
     String::from_utf8(output.stdout).unwrap().trim().to_string()
-}
-
-#[cfg(windows)]
-fn is_git_shell_startup_failure(text: &str) -> bool {
-    text.contains("sh.exe: *** fatal error -")
-        && (text.contains("couldn't create signal pipe") || text.contains("CreateFileMapping"))
 }
 
 #[cfg(windows)]

@@ -1,20 +1,10 @@
 use std::fs;
 use std::path::Path;
-use std::process::Command;
 use worktree_core::error::ErrorKind;
 use worktree_core::path_utils::canonicalize_or_original;
 use worktree_core::services::GitBackend;
 use worktree_git_gix::GixBackend;
-
-fn run_git(repo: &Path, args: &[&str]) {
-    let status = Command::new("git")
-        .arg("-C")
-        .arg(repo)
-        .args(args)
-        .status()
-        .expect("run git command");
-    assert!(status.success(), "git {:?} failed", args);
-}
+use worktree_test_support::run_git;
 
 /// `git init` a non-bare repo at `path` with one commit, using an inline
 /// identity so the test does not depend on ambient git config.
