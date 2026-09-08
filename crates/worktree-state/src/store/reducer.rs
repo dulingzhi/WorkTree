@@ -7,8 +7,8 @@ mod repo_management;
 mod util;
 
 use crate::model::{
-    AppState, AuthPromptState, AuthRetryOperation, BannerErrorState, Loadable, PendingCommitRetry,
-    RepoId, SubmoduleAddProgressState,
+    AppState, AuthPromptState, AuthRetryOperation, BannerErrorState, PendingCommitRetry, RepoId,
+    SubmoduleAddProgressState,
 };
 use crate::msg::{ConflictRegionChoice, Effect, Msg, RepoCommandKind, RepoPath, RepoPathList};
 use crate::store::repo_load_trace;
@@ -892,6 +892,11 @@ fn reduce_inner(
         ReduceOutcome::NotHandled(msg) => msg,
     };
 
+    let msg = match diff_selection::reduce_diff_selection(msg, state) {
+        ReduceOutcome::Handled(effects) => return effects,
+        ReduceOutcome::NotHandled(msg) => msg,
+    };
+
     let msg = match actions_emit_effects::reduce_actions_emit_effects(msg, repos, state) {
         ReduceOutcome::Handled(effects) => return effects,
         ReduceOutcome::NotHandled(msg) => msg,
@@ -1007,89 +1012,6 @@ fn reduce_inner(
             )
         }
         Msg::LoadMoreHistory { repo_id } => external_and_history::load_more_history(state, repo_id),
-        Msg::SelectDiff { repo_id, target } => diff_selection::select_diff(state, repo_id, target),
-        Msg::OpenInlineSubmoduleDiff {
-            repo_id,
-            origin,
-            submodule_repo_path,
-            parent_submodule_path,
-            entries,
-            selected_ix,
-        } => diff_selection::open_inline_submodule_diff(
-            state,
-            repo_id,
-            origin,
-            submodule_repo_path,
-            parent_submodule_path,
-            entries,
-            selected_ix,
-        ),
-        Msg::SelectInlineSubmoduleDiff {
-            repo_id,
-            selected_ix,
-        } => diff_selection::select_inline_submodule_diff(state, repo_id, selected_ix),
-        Msg::CloseInlineSubmoduleDiff { repo_id } => {
-            diff_selection::close_inline_submodule_diff(state, repo_id)
-        }
-        Msg::SelectConflictDiff { repo_id, path } => {
-            diff_selection::select_conflict_diff(state, repo_id, path)
-        }
-        Msg::ClearDiffSelection { repo_id } => diff_selection::clear_diff_selection(state, repo_id),
-        Msg::OpenFileContent {
-            repo_id,
-            source,
-            path,
-        } => diff_selection::open_file_content(state, repo_id, source, path),
-        Msg::OpenFileEditor { repo_id, path } => {
-            diff_selection::open_file_editor(state, repo_id, path)
-        }
-        Msg::ExitDiffEditMode { repo_id } => diff_selection::exit_diff_edit_mode(state, repo_id),
-        Msg::OpenFileAtCommitParent {
-            repo_id,
-            commit_id,
-            path,
-        } => vec![Effect::OpenFileAtCommitParent {
-            repo_id,
-            commit_id,
-            path,
-        }],
-        Msg::OpenFileAtCommit {
-            repo_id,
-            commit_id,
-            path,
-        } => vec![Effect::OpenFileAtCommit {
-            repo_id,
-            commit_id,
-            path,
-        }],
-        Msg::ViewerNavBack { repo_id } => {
-            diff_selection::viewer_nav(state, repo_id, crate::model::ViewNavDir::Back)
-        }
-        Msg::ViewerNavForward { repo_id } => {
-            diff_selection::viewer_nav(state, repo_id, crate::model::ViewNavDir::Forward)
-        }
-        Msg::GlobalNavBack { repo_id } => {
-            diff_selection::global_nav(state, repo_id, crate::model::ViewNavDir::Back)
-        }
-        Msg::GlobalNavForward { repo_id } => {
-            diff_selection::global_nav(state, repo_id, crate::model::ViewNavDir::Forward)
-        }
-        Msg::StageHunk { repo_id, patch } => {
-            begin_local_action(state, repo_id);
-            diff_selection::stage_hunk(repo_id, patch)
-        }
-        Msg::UnstageHunk { repo_id, patch } => {
-            begin_local_action(state, repo_id);
-            diff_selection::unstage_hunk(repo_id, patch)
-        }
-        Msg::ApplyWorktreePatch {
-            repo_id,
-            patch,
-            reverse,
-        } => {
-            begin_local_action(state, repo_id);
-            diff_selection::apply_worktree_patch(repo_id, patch, reverse)
-        }
         Msg::CloneRepo { url, dest, ssh_key } => {
             repo_management::clone_repo(state, url, dest, ssh_key)
         }
@@ -1108,17 +1030,6 @@ fn reduce_inner(
                 state.auth_prompt = Some(prompt);
             }
             effects
-        }
-        Msg::LoadLfsImagePreview { repo_id, target } => {
-            if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id)
-                && repo_state.diff_state.diff_target.as_ref() == Some(&target)
-                && !matches!(repo_state.diff_state.lfs_image_preview, Loadable::Loading)
-            {
-                repo_state.diff_state.lfs_image_preview = Loadable::Loading;
-                repo_state.bump_diff_state_rev();
-                return vec![Effect::LoadLfsImagePreview { repo_id, target }];
-            }
-            Vec::new()
         }
         Msg::RecordConflictAutosolveTelemetry {
             repo_id,
@@ -1354,66 +1265,6 @@ fn reduce_inner(
         Msg::Internal(crate::msg::InternalMsg::MergeCommitMessageLoaded { repo_id, result }) => {
             external_and_history::merge_commit_message_loaded(state, repo_id, result)
         }
-        Msg::Internal(crate::msg::InternalMsg::DiffLoaded {
-            repo_id,
-            target,
-            result,
-        }) => diff_selection::diff_loaded(state, repo_id, target, result),
-        Msg::Internal(crate::msg::InternalMsg::DiffFileLoaded {
-            repo_id,
-            target,
-            result,
-        }) => diff_selection::diff_file_loaded(state, repo_id, target, result),
-        Msg::Internal(crate::msg::InternalMsg::DiffFileLfsLoaded {
-            repo_id,
-            target,
-            result,
-        }) => diff_selection::diff_file_lfs_loaded(state, repo_id, target, result),
-        Msg::Internal(crate::msg::InternalMsg::LfsImagePreviewLoaded {
-            repo_id,
-            target,
-            result,
-        }) => diff_selection::lfs_image_preview_loaded(state, repo_id, target, result),
-        Msg::Internal(crate::msg::InternalMsg::DiffPreviewTextFileLoaded {
-            repo_id,
-            target,
-            side,
-            result,
-        }) => diff_selection::diff_preview_text_file_loaded(state, repo_id, target, side, result),
-        Msg::Internal(crate::msg::InternalMsg::SubmoduleSummaryLoaded {
-            repo_id,
-            target,
-            result,
-        }) => diff_selection::submodule_summary_loaded(state, repo_id, target, result),
-        Msg::Internal(crate::msg::InternalMsg::InlineSubmoduleDiffLoaded {
-            repo_id,
-            inline_rev,
-            target,
-            result,
-        }) => {
-            diff_selection::inline_submodule_diff_loaded(state, repo_id, inline_rev, target, result)
-        }
-        Msg::Internal(crate::msg::InternalMsg::InlineSubmoduleDiffFileLoaded {
-            repo_id,
-            inline_rev,
-            target,
-            result,
-        }) => diff_selection::inline_submodule_diff_file_loaded(
-            state, repo_id, inline_rev, target, result,
-        ),
-        Msg::Internal(crate::msg::InternalMsg::InlineSubmoduleDiffFileImageLoaded {
-            repo_id,
-            inline_rev,
-            target,
-            result,
-        }) => diff_selection::inline_submodule_diff_file_image_loaded(
-            state, repo_id, inline_rev, target, result,
-        ),
-        Msg::Internal(crate::msg::InternalMsg::DiffFileImageLoaded {
-            repo_id,
-            target,
-            result,
-        }) => diff_selection::diff_file_image_loaded(state, repo_id, target, result),
         Msg::Internal(crate::msg::InternalMsg::RepoActionFinished {
             repo_id,
             action,
