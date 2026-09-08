@@ -1,6 +1,6 @@
-use super::repo_management::append_cancel_repo_loads_effect_for_repo;
+use super::repo_management::{self, append_cancel_repo_loads_effect_for_repo};
 use super::util::{
-    DiffReloadMode, SelectedConflictTarget, append_diff_reload_effects,
+    self, DiffReloadMode, SelectedConflictTarget, append_diff_reload_effects,
     append_refresh_full_effects, append_refresh_primary_effects,
     append_start_conflict_target_reload, append_start_current_conflict_target_reload,
     append_targeted_status_refresh, apply_selected_diff_load_plan_state,
@@ -9,11 +9,17 @@ use super::util::{
     refresh_full_effect_capacity, refresh_primary_effect_capacity, selected_conflict_target,
     selected_diff_load_plan,
 };
-use crate::model::{
-    AppState, InteractiveCherryPickSetup, InteractiveRebaseSetup, Loadable, RepoId,
-    RepoLoadsInFlight, RepoState,
+use super::{
+    ReduceOutcome, actions_emit_effects, auth_prompt_for_commit, auth_prompt_for_repo_command,
+    auth_prompt_for_safe_push_after_commit, begin_commit_action, begin_head_changing_local_action,
+    begin_local_action, normalize_repo_relative_path, start_submodule_add_progress,
 };
-use crate::msg::{Effect, RepoCommandKind, RepoPathList};
+use crate::model::{
+    AppState, BannerErrorState, InteractiveCherryPickSetup, InteractiveRebaseSetup, Loadable,
+    PendingCommitRetry, RepoId, RepoLoadsInFlight, RepoState, SubmoduleTrustCheckOperation,
+    SubmoduleTrustCheckState, SubmoduleTrustPromptOperation, SubmoduleTrustPromptState,
+};
+use crate::msg::{Effect, Msg, RepoCommandKind, RepoPathList};
 use rustc_hash::FxHashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -24,7 +30,7 @@ use worktree_core::error::Error;
 use worktree_core::external_merge_tool::ExternalMergeToolSelection;
 use worktree_core::services::{
     CommandOutput, GitRepository, InteractiveRebaseEntry, PullMode, RemoteUrlKind, ResetMode,
-    SafePushAfterCommitTarget,
+    SafePushAfterCommitContext, SafePushAfterCommitTarget,
 };
 
 pub(super) fn checkout_branch(repo_id: RepoId, name: String) -> Vec<Effect> {
@@ -1677,4 +1683,916 @@ fn apply_resolution_to_all_regions(
         }
     }
     changed
+}
+
+pub(super) fn reduce_actions_emit_effects(
+    msg: Msg,
+    repos: &mut FxHashMap<RepoId, Arc<dyn GitRepository>>,
+    state: &mut AppState,
+) -> ReduceOutcome {
+    let effects = match msg {
+        Msg::CheckoutBranch { repo_id, name } => {
+            if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+                repo_state.set_detached_head_commit(None);
+            }
+            begin_head_changing_local_action(state, repo_id);
+            actions_emit_effects::checkout_branch(repo_id, name)
+        }
+        Msg::CheckoutRemoteBranch {
+            repo_id,
+            remote,
+            branch,
+            local_branch,
+        } => {
+            if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+                repo_state.set_detached_head_commit(None);
+            }
+            begin_head_changing_local_action(state, repo_id);
+            actions_emit_effects::checkout_remote_branch(repo_id, remote, branch, local_branch)
+        }
+        Msg::CheckoutPullRequest {
+            repo_id,
+            remote,
+            number,
+        } => {
+            if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+                repo_state.set_detached_head_commit(None);
+            }
+            begin_head_changing_local_action(state, repo_id);
+            actions_emit_effects::checkout_pull_request(repo_id, remote, number)
+        }
+        Msg::CheckoutCommit { repo_id, commit_id } => {
+            if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+                repo_state.set_detached_head_commit(Some(commit_id.clone()));
+            }
+            begin_head_changing_local_action(state, repo_id);
+            actions_emit_effects::checkout_commit(repo_id, commit_id)
+        }
+        Msg::CherryPickCommit {
+            repo_id,
+            commit_id,
+            commit,
+            mainline,
+            summary,
+        } => {
+            begin_head_changing_local_action(state, repo_id);
+            actions_emit_effects::cherry_pick_commit(repo_id, commit_id, commit, mainline, summary)
+        }
+        Msg::RevertCommit { repo_id, commit_id } => {
+            begin_head_changing_local_action(state, repo_id);
+            actions_emit_effects::revert_commit(repo_id, commit_id)
+        }
+        Msg::CreateBranch {
+            repo_id,
+            name,
+            target,
+        } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::create_branch(repo_id, name, target)
+        }
+        Msg::CreateBranchAndCheckout {
+            repo_id,
+            name,
+            target,
+        } => {
+            if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+                repo_state.set_detached_head_commit(None);
+            }
+            begin_head_changing_local_action(state, repo_id);
+            actions_emit_effects::create_branch_and_checkout(repo_id, name, target)
+        }
+        Msg::RenameBranch {
+            repo_id,
+            old_name,
+            new_name,
+        } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::rename_branch(repo_id, old_name, new_name)
+        }
+        Msg::DeleteBranch { repo_id, name } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::delete_branch(repo_id, name)
+        }
+        Msg::ForceDeleteBranch { repo_id, name } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::force_delete_branch(repo_id, name)
+        }
+        Msg::DeleteBranches {
+            repo_id,
+            names,
+            force,
+        } => {
+            if names.is_empty() {
+                return ReduceOutcome::Handled(Vec::new());
+            }
+            begin_local_action(state, repo_id);
+            actions_emit_effects::delete_branches(repo_id, names, force)
+        }
+        Msg::ExportPatch {
+            repo_id,
+            commit_id,
+            dest,
+        } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::export_patch(repo_id, commit_id, dest)
+        }
+        Msg::ArchiveZip {
+            repo_id,
+            revision,
+            dest,
+        } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::archive_zip(repo_id, revision, dest)
+        }
+        Msg::CleanupRepo { repo_id } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::cleanup_repo(repo_id)
+        }
+        Msg::ApplyPatch { repo_id, patch } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::apply_patch(repo_id, patch)
+        }
+        Msg::AddWorktree {
+            repo_id,
+            path,
+            reference,
+        } => {
+            if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+                repo_state.worktrees_in_flight = repo_state.worktrees_in_flight.saturating_add(1);
+            }
+            actions_emit_effects::add_worktree(repo_id, path, reference)
+        }
+        Msg::RemoveWorktree { repo_id, path } => {
+            let normalized_path = if let Some(repo_state) =
+                state.repos.iter_mut().find(|r| r.id == repo_id)
+            {
+                repo_state.worktrees_in_flight = repo_state.worktrees_in_flight.saturating_add(1);
+                normalize_repo_relative_path(&repo_state.spec.workdir, path)
+            } else {
+                path
+            };
+            actions_emit_effects::remove_worktree(repo_id, normalized_path)
+        }
+        Msg::ForceRemoveWorktree { repo_id, path } => {
+            let normalized_path = if let Some(repo_state) =
+                state.repos.iter_mut().find(|r| r.id == repo_id)
+            {
+                repo_state.worktrees_in_flight = repo_state.worktrees_in_flight.saturating_add(1);
+                normalize_repo_relative_path(&repo_state.spec.workdir, path)
+            } else {
+                path
+            };
+            actions_emit_effects::force_remove_worktree(repo_id, normalized_path)
+        }
+        Msg::AddSubmodule {
+            repo_id,
+            url,
+            path,
+            branch,
+            name,
+            force,
+        } => {
+            state.submodule_trust_prompt = None;
+            state.submodule_trust_check_pending = Some(SubmoduleTrustCheckState {
+                repo_id,
+                operation: SubmoduleTrustCheckOperation::Add,
+            });
+            vec![Effect::CheckSubmoduleAddTrust {
+                repo_id,
+                url,
+                path,
+                branch,
+                name,
+                force,
+            }]
+        }
+        Msg::AddSubmoduleTrusted {
+            repo_id,
+            url,
+            path,
+            branch,
+            name,
+            force,
+            approved_sources,
+        } => {
+            begin_local_action(state, repo_id);
+            start_submodule_add_progress(state, repo_id, &url, &path);
+            actions_emit_effects::add_submodule(
+                repo_id,
+                url,
+                path,
+                branch,
+                name,
+                force,
+                approved_sources,
+            )
+        }
+        Msg::UpdateSubmodules { repo_id } => {
+            state.submodule_trust_prompt = None;
+            state.submodule_trust_check_pending = Some(SubmoduleTrustCheckState {
+                repo_id,
+                operation: SubmoduleTrustCheckOperation::Update,
+            });
+            vec![Effect::CheckSubmoduleUpdateTrust { repo_id }]
+        }
+        Msg::UpdateSubmodulesTrusted {
+            repo_id,
+            approved_sources,
+        } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::update_submodules(repo_id, approved_sources)
+        }
+        Msg::LoadSubmodule { repo_id, path } => {
+            state.submodule_trust_prompt = None;
+            state.submodule_trust_check_pending = Some(SubmoduleTrustCheckState {
+                repo_id,
+                operation: SubmoduleTrustCheckOperation::Load,
+            });
+            vec![Effect::CheckSubmoduleLoadTrust { repo_id, path }]
+        }
+        Msg::LoadSubmoduleTrusted {
+            repo_id,
+            path,
+            approved_sources,
+        } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::load_submodule(repo_id, path, approved_sources)
+        }
+        Msg::ConfirmSubmoduleTrustPrompt => {
+            let Some(prompt) = state.submodule_trust_prompt.take() else {
+                return ReduceOutcome::Handled(Vec::new());
+            };
+            match prompt.operation {
+                SubmoduleTrustPromptOperation::Add {
+                    url,
+                    path,
+                    branch,
+                    name,
+                    force,
+                } => {
+                    begin_local_action(state, prompt.repo_id);
+                    start_submodule_add_progress(state, prompt.repo_id, &url, &path);
+                    actions_emit_effects::add_submodule(
+                        prompt.repo_id,
+                        url,
+                        path,
+                        branch,
+                        name,
+                        force,
+                        prompt.sources,
+                    )
+                }
+                SubmoduleTrustPromptOperation::Update => {
+                    begin_local_action(state, prompt.repo_id);
+                    actions_emit_effects::update_submodules(prompt.repo_id, prompt.sources)
+                }
+                SubmoduleTrustPromptOperation::Load { path } => {
+                    begin_local_action(state, prompt.repo_id);
+                    actions_emit_effects::load_submodule(prompt.repo_id, path, prompt.sources)
+                }
+            }
+        }
+        Msg::CancelSubmoduleTrustPrompt => {
+            state.submodule_trust_prompt = None;
+            Vec::new()
+        }
+        Msg::ChangeSubmodulePointer {
+            repo_id,
+            path,
+            reference,
+        } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::change_submodule_pointer(repo_id, path, reference)
+        }
+        Msg::RemoveSubmodule { repo_id, path } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::remove_submodule(repo_id, path)
+        }
+        Msg::StagePath { repo_id, path } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::stage_path(repo_id, path)
+        }
+        Msg::StagePaths { repo_id, paths } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::stage_paths(repo_id, paths)
+        }
+        Msg::UnstagePath { repo_id, path } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::unstage_path(repo_id, path)
+        }
+        Msg::UnstagePaths { repo_id, paths } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::unstage_paths(repo_id, paths)
+        }
+        Msg::DiscardWorktreeChangesPath { repo_id, path } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::discard_worktree_changes_path(repo_id, path)
+        }
+        Msg::DiscardWorktreeChangesPaths { repo_id, paths } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::discard_worktree_changes_paths(repo_id, paths)
+        }
+        Msg::SaveWorktreeFile {
+            repo_id,
+            path,
+            contents,
+            stage,
+        } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::save_worktree_file(repo_id, path, contents, stage)
+        }
+        Msg::AppendGitignorePatterns { repo_id, patterns } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::append_gitignore_patterns(repo_id, patterns)
+        }
+        Msg::Commit {
+            repo_id,
+            message,
+            push_after_commit,
+        } => {
+            begin_commit_action(state, repo_id);
+            if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+                repo_state.pending_commit_retry = Some(PendingCommitRetry {
+                    message: message.clone(),
+                    amend: false,
+                    push_after_commit,
+                });
+            }
+            actions_emit_effects::commit(repo_id, message)
+        }
+        Msg::CommitAmend {
+            repo_id,
+            message,
+            push_after_commit,
+        } => {
+            begin_commit_action(state, repo_id);
+            if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+                repo_state.pending_commit_retry = Some(PendingCommitRetry {
+                    message: message.clone(),
+                    amend: true,
+                    push_after_commit,
+                });
+            }
+            actions_emit_effects::commit_amend(repo_id, message)
+        }
+        Msg::SafePushAfterCommit { repo_id, context } => {
+            actions_emit_effects::safe_push_after_commit(repo_id, context)
+        }
+        Msg::FetchAll { repo_id } => actions_emit_effects::fetch_all(repos, state, repo_id),
+        Msg::AutoFetchAll { repo_id } => {
+            actions_emit_effects::auto_fetch_all(repos, state, repo_id)
+        }
+        Msg::PruneMergedBranches { repo_id } => {
+            actions_emit_effects::prune_merged_branches(repos, state, repo_id)
+        }
+        Msg::PruneLocalTags { repo_id } => {
+            actions_emit_effects::prune_local_tags(repos, state, repo_id)
+        }
+        Msg::Pull { repo_id, mode } => actions_emit_effects::pull(repos, state, repo_id, mode),
+        Msg::PullBranch {
+            repo_id,
+            remote,
+            branch,
+        } => actions_emit_effects::pull_branch(repos, state, repo_id, remote, branch),
+        Msg::MergeRef { repo_id, reference } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::merge_ref(repo_id, reference)
+        }
+        Msg::SquashRef { repo_id, reference } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::squash_ref(repo_id, reference)
+        }
+        Msg::Push {
+            repo_id,
+            pull_retry,
+        } => actions_emit_effects::push(repos, state, repo_id, pull_retry),
+        Msg::PushAfterCommit {
+            repo_id,
+            target,
+            set_upstream,
+        } => actions_emit_effects::push_after_commit(repos, state, repo_id, target, set_upstream),
+        Msg::ForcePush { repo_id } => actions_emit_effects::force_push(repos, state, repo_id),
+        Msg::ForcePushWithLease { repo_id, lease } => {
+            actions_emit_effects::force_push_with_lease(repos, state, repo_id, lease)
+        }
+        Msg::PushMergeRequest { repo_id, options } => {
+            actions_emit_effects::push_merge_request(repos, state, repo_id, options)
+        }
+        Msg::PushSetUpstream {
+            repo_id,
+            remote,
+            branch,
+        } => actions_emit_effects::push_set_upstream(repos, state, repo_id, remote, branch),
+        Msg::SetUpstreamBranch {
+            repo_id,
+            branch,
+            upstream,
+        } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::set_upstream_branch(repo_id, branch, upstream)
+        }
+        Msg::UnsetUpstreamBranch { repo_id, branch } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::unset_upstream_branch(repo_id, branch)
+        }
+        Msg::FastForwardBranch { repo_id, branch } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::fast_forward_branch(repo_id, branch)
+        }
+        Msg::DeleteRemoteBranch {
+            repo_id,
+            remote,
+            branch,
+        } => actions_emit_effects::delete_remote_branch(repos, state, repo_id, remote, branch),
+        Msg::DeleteRemoteBranches {
+            repo_id,
+            remote,
+            branches,
+        } => {
+            if branches.is_empty() {
+                return ReduceOutcome::Handled(Vec::new());
+            }
+            actions_emit_effects::delete_remote_branches(repos, state, repo_id, remote, branches)
+        }
+        Msg::Reset {
+            repo_id,
+            target,
+            mode,
+        } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::reset(repo_id, target, mode)
+        }
+        Msg::SquashCommits {
+            repo_id,
+            oldest,
+            expected_head,
+            message,
+            count,
+        } => actions_emit_effects::squash_commits(
+            state,
+            repo_id,
+            oldest,
+            expected_head,
+            message,
+            count,
+        ),
+        Msg::Rebase { repo_id, onto } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::rebase(repo_id, onto)
+        }
+        Msg::RebaseContinue { repo_id } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::rebase_continue(repo_id)
+        }
+        Msg::RebaseAbort { repo_id } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::rebase_abort(repo_id)
+        }
+        Msg::BisectStart {
+            repo_id,
+            bad,
+            goods,
+        } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::bisect_start(repo_id, bad, goods)
+        }
+        Msg::BisectMark {
+            repo_id,
+            verdict,
+            commit,
+        } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::bisect_mark(repo_id, verdict, commit)
+        }
+        Msg::BisectReset { repo_id } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::bisect_reset(repo_id)
+        }
+        Msg::LoadInteractiveRebaseSetup { repo_id, base } => {
+            actions_emit_effects::load_interactive_rebase_setup(state, repo_id, base)
+        }
+        Msg::OpenInteractiveCherryPickSetup {
+            repo_id,
+            entries,
+            source_colors,
+        } => actions_emit_effects::open_interactive_cherry_pick_setup(
+            state,
+            repo_id,
+            entries,
+            source_colors,
+        ),
+        Msg::InteractiveRebase {
+            repo_id,
+            base,
+            entries,
+        } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::interactive_rebase(repo_id, base, entries)
+        }
+        Msg::InteractiveCherryPick { repo_id, entries } => {
+            // A multi-pick can land some commits and then fail (a hook or
+            // signer on a later step), so HEAD-dependent caches must be
+            // invalidated up front like the single-pick path — the error
+            // completion path does not clear them.
+            begin_head_changing_local_action(state, repo_id);
+            actions_emit_effects::interactive_cherry_pick(repo_id, entries)
+        }
+        Msg::CancelInteractiveRebaseSetup { repo_id } => {
+            actions_emit_effects::cancel_interactive_rebase_setup(state, repo_id)
+        }
+        Msg::CancelInteractiveCherryPickSetup { repo_id } => {
+            actions_emit_effects::cancel_interactive_cherry_pick_setup(state, repo_id)
+        }
+        Msg::MergeAbort { repo_id } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::merge_abort(repo_id)
+        }
+        Msg::CreateTag {
+            repo_id,
+            name,
+            target,
+            message,
+            annotated,
+        } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::create_tag(repo_id, name, target, message, annotated)
+        }
+        Msg::DeleteTag { repo_id, name } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::delete_tag(repo_id, name)
+        }
+        Msg::PushTag {
+            repo_id,
+            remote,
+            name,
+        } => actions_emit_effects::push_tag(repos, state, repo_id, remote, name),
+        Msg::DeleteRemoteTag {
+            repo_id,
+            remote,
+            name,
+        } => actions_emit_effects::delete_remote_tag(repos, state, repo_id, remote, name),
+        Msg::AddRemote { repo_id, name, url } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::add_remote(repo_id, name, url)
+        }
+        Msg::RemoveRemote { repo_id, name } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::remove_remote(repo_id, name)
+        }
+        Msg::SetRemoteUrl {
+            repo_id,
+            name,
+            url,
+            kind,
+        } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::set_remote_url(repo_id, name, url, kind)
+        }
+        Msg::SetRemoteSshKey {
+            repo_id,
+            remote,
+            key,
+        } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::set_remote_ssh_key(repo_id, remote, key)
+        }
+        Msg::CheckoutConflictSide {
+            repo_id,
+            path,
+            side,
+        } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::checkout_conflict_side(repo_id, path, side)
+        }
+        Msg::AcceptConflictDeletion { repo_id, path } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::accept_conflict_deletion(repo_id, path)
+        }
+        Msg::CheckoutConflictBase { repo_id, path } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::checkout_conflict_base(repo_id, path)
+        }
+        Msg::LaunchMergetool {
+            repo_id,
+            path,
+            preference,
+        } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::launch_mergetool(repo_id, path, preference)
+        }
+        Msg::Stash {
+            repo_id,
+            message,
+            include_untracked,
+            keep_index,
+            paths,
+        } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::stash(repo_id, message, include_untracked, keep_index, paths)
+        }
+        Msg::ApplyStash { repo_id, index } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::apply_stash(repo_id, index)
+        }
+        Msg::PopStash { repo_id, index } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::pop_stash(repo_id, index)
+        }
+        Msg::DropStash { repo_id, index } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::drop_stash(repo_id, index)
+        }
+        Msg::SetAssumeUnchanged {
+            repo_id,
+            path,
+            enable,
+        } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::set_assume_unchanged(repo_id, path, enable)
+        }
+        Msg::LoadAssumeUnchanged { repo_id } => {
+            actions_emit_effects::load_assume_unchanged(repo_id)
+        }
+        Msg::StashBranch {
+            repo_id,
+            index,
+            branch,
+        } => {
+            begin_local_action(state, repo_id);
+            actions_emit_effects::stash_branch(repo_id, index, branch)
+        }
+        Msg::Internal(crate::msg::InternalMsg::SubmoduleAddTrustChecked {
+            repo_id,
+            url,
+            path,
+            branch,
+            name,
+            force,
+            result,
+        }) => {
+            state.submodule_trust_check_pending = None;
+            match result {
+                Ok(worktree_core::services::SubmoduleTrustDecision::Proceed) => {
+                    begin_local_action(state, repo_id);
+                    start_submodule_add_progress(state, repo_id, &url, &path);
+                    actions_emit_effects::add_submodule(
+                        repo_id,
+                        url,
+                        path,
+                        branch,
+                        name,
+                        force,
+                        Vec::new(),
+                    )
+                }
+                Ok(worktree_core::services::SubmoduleTrustDecision::Prompt { sources }) => {
+                    state.submodule_trust_prompt = Some(SubmoduleTrustPromptState {
+                        repo_id,
+                        operation: SubmoduleTrustPromptOperation::Add {
+                            url,
+                            path,
+                            branch,
+                            name,
+                            force,
+                        },
+                        sources,
+                    });
+                    Vec::new()
+                }
+                Err(error) => {
+                    state.banner_error = Some(BannerErrorState {
+                        repo_id: Some(repo_id),
+                        message: util::format_failure_summary(
+                            &rust_i18n::t!("store.reducer.label_submodule_trust_check"),
+                            &error,
+                        ),
+                    });
+                    Vec::new()
+                }
+            }
+        }
+        Msg::Internal(crate::msg::InternalMsg::SubmoduleUpdateTrustChecked { repo_id, result }) => {
+            state.submodule_trust_check_pending = None;
+            match result {
+                Ok(worktree_core::services::SubmoduleTrustDecision::Proceed) => {
+                    begin_local_action(state, repo_id);
+                    actions_emit_effects::update_submodules(repo_id, Vec::new())
+                }
+                Ok(worktree_core::services::SubmoduleTrustDecision::Prompt { sources }) => {
+                    state.submodule_trust_prompt = Some(SubmoduleTrustPromptState {
+                        repo_id,
+                        operation: SubmoduleTrustPromptOperation::Update,
+                        sources,
+                    });
+                    Vec::new()
+                }
+                Err(error) => {
+                    state.banner_error = Some(BannerErrorState {
+                        repo_id: Some(repo_id),
+                        message: util::format_failure_summary(
+                            &rust_i18n::t!("store.reducer.label_submodule_trust_check"),
+                            &error,
+                        ),
+                    });
+                    Vec::new()
+                }
+            }
+        }
+        Msg::Internal(crate::msg::InternalMsg::SubmoduleLoadTrustChecked {
+            repo_id,
+            path,
+            result,
+        }) => {
+            state.submodule_trust_check_pending = None;
+            match result {
+                Ok(worktree_core::services::SubmoduleTrustDecision::Proceed) => {
+                    begin_local_action(state, repo_id);
+                    actions_emit_effects::load_submodule(repo_id, path, Vec::new())
+                }
+                Ok(worktree_core::services::SubmoduleTrustDecision::Prompt { sources }) => {
+                    state.submodule_trust_prompt = Some(SubmoduleTrustPromptState {
+                        repo_id,
+                        operation: SubmoduleTrustPromptOperation::Load { path },
+                        sources,
+                    });
+                    Vec::new()
+                }
+                Err(error) => {
+                    state.banner_error = Some(BannerErrorState {
+                        repo_id: Some(repo_id),
+                        message: util::format_failure_summary(
+                            &rust_i18n::t!("store.reducer.label_submodule_trust_check"),
+                            &error,
+                        ),
+                    });
+                    Vec::new()
+                }
+            }
+        }
+        Msg::Internal(crate::msg::InternalMsg::CommitFinished { repo_id, result }) => {
+            let pending_commit = state
+                .repos
+                .iter()
+                .find(|r| r.id == repo_id)
+                .and_then(|r| r.pending_commit_retry.clone());
+            let outcome = result.as_ref().ok().cloned();
+            let push_after_commit = outcome.is_some()
+                && pending_commit
+                    .as_ref()
+                    .is_some_and(|pending| pending.push_after_commit);
+            let auth_prompt = result
+                .as_ref()
+                .err()
+                .and_then(|error| auth_prompt_for_commit(repo_id, pending_commit.clone(), error));
+            let commit_result = result.map(|_| ());
+            let mut effects = actions_emit_effects::commit_finished(state, repo_id, commit_result);
+            if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+                repo_state.pending_commit_retry = None;
+            }
+            if let Some(prompt) = auth_prompt {
+                util::clear_staged_git_auth_env();
+                state.auth_prompt = Some(prompt);
+            }
+            if push_after_commit
+                && let (Some(outcome), Some(pending_commit)) = (outcome, pending_commit)
+            {
+                effects.extend(actions_emit_effects::safe_push_after_commit(
+                    repo_id,
+                    SafePushAfterCommitContext {
+                        amend: pending_commit.amend,
+                        local_branch: outcome.local_branch,
+                        pre_head: outcome.pre_head,
+                        post_head: outcome.post_head,
+                    },
+                ));
+            }
+            effects
+        }
+        Msg::Internal(crate::msg::InternalMsg::CommitAmendFinished { repo_id, result }) => {
+            let pending_commit = state
+                .repos
+                .iter()
+                .find(|r| r.id == repo_id)
+                .and_then(|r| r.pending_commit_retry.clone());
+            let outcome = result.as_ref().ok().cloned();
+            let push_after_commit = outcome.is_some()
+                && pending_commit
+                    .as_ref()
+                    .is_some_and(|pending| pending.push_after_commit);
+            let auth_prompt = result
+                .as_ref()
+                .err()
+                .and_then(|error| auth_prompt_for_commit(repo_id, pending_commit.clone(), error));
+            let commit_result = result.map(|_| ());
+            let mut effects =
+                actions_emit_effects::commit_amend_finished(state, repo_id, commit_result);
+            if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+                repo_state.pending_commit_retry = None;
+            }
+            if let Some(prompt) = auth_prompt {
+                util::clear_staged_git_auth_env();
+                state.auth_prompt = Some(prompt);
+            }
+            if push_after_commit
+                && let (Some(outcome), Some(pending_commit)) = (outcome, pending_commit)
+            {
+                effects.extend(actions_emit_effects::safe_push_after_commit(
+                    repo_id,
+                    SafePushAfterCommitContext {
+                        amend: pending_commit.amend,
+                        local_branch: outcome.local_branch,
+                        pre_head: outcome.pre_head,
+                        post_head: outcome.post_head,
+                    },
+                ));
+            }
+            effects
+        }
+        Msg::Internal(crate::msg::InternalMsg::SafePushAfterCommitFinished {
+            repo_id,
+            context,
+            auth,
+            result,
+        }) => {
+            let auth_prompt = result.as_ref().err().and_then(|error| {
+                auth_prompt_for_safe_push_after_commit(repo_id, context.clone(), error)
+            });
+            let effects = actions_emit_effects::safe_push_after_commit_finished(
+                repos, state, repo_id, auth, result,
+            );
+            if let Some(prompt) = auth_prompt {
+                util::clear_staged_git_auth_env();
+                state.auth_prompt = Some(prompt);
+            }
+            effects
+        }
+        Msg::Internal(crate::msg::InternalMsg::RepoCommandFinished {
+            repo_id,
+            command,
+            result,
+        }) => {
+            // Logged before `repo_command_finished` consumes the result:
+            // every git write the app performs lands here exactly once, so
+            // the daily log can answer "what did the app do" end to end.
+            match &result {
+                Ok(_) => worktree_core::applog_info!(
+                    "git command finished: {command:?} (repo_id={})",
+                    repo_id.0
+                ),
+                Err(error) => worktree_core::applog_warn!(
+                    "git command failed: {command:?} (repo_id={}): {error}",
+                    repo_id.0
+                ),
+            }
+            let auth_prompt = result
+                .as_ref()
+                .err()
+                .and_then(|error| auth_prompt_for_repo_command(repo_id, &command, error));
+            let removed_worktree_path = match (&command, &result) {
+                (RepoCommandKind::RemoveWorktree { path }, Ok(_)) => Some(path.clone()),
+                (RepoCommandKind::ForceRemoveWorktree { path }, Ok(_)) => Some(path.clone()),
+                _ => None,
+            };
+
+            // Planned before `repo_command_finished` consumes `result`
+            // (errors are not cloneable), applied after it so a rejected
+            // push's log entry can be rewritten as a retry-in-progress.
+            let push_pull_retry_plan =
+                actions_emit_effects::push_pull_retry_plan(state, repo_id, &command, &result);
+            let mut effects = actions_emit_effects::repo_command_finished(
+                state,
+                repo_id,
+                command.clone(),
+                result,
+            );
+            effects.extend(actions_emit_effects::apply_push_pull_retry(
+                repos,
+                state,
+                repo_id,
+                &command,
+                push_pull_retry_plan,
+            ));
+
+            if let Some(path) = removed_worktree_path {
+                let repo_ids_to_close = state
+                    .repos
+                    .iter()
+                    .filter(|repo| repo.spec.workdir == path)
+                    .map(|repo| repo.id)
+                    .collect::<Vec<_>>();
+                for repo_id in repo_ids_to_close {
+                    let _ = repo_management::close_repo(repos, state, repo_id);
+                }
+            }
+
+            if let Some(prompt) = auth_prompt {
+                util::clear_staged_git_auth_env();
+                state.auth_prompt = Some(prompt);
+            }
+
+            effects
+        }
+        other => return ReduceOutcome::NotHandled(other),
+    };
+    ReduceOutcome::Handled(effects)
 }
