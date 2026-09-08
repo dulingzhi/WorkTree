@@ -1452,7 +1452,7 @@ impl RepoState {
         }
     }
 
-    pub(crate) fn set_spec(&mut self, spec: RepoSpec) {
+    pub fn set_spec(&mut self, spec: RepoSpec) {
         self.session_workdir_key = session::path_storage_key_shared(&spec.workdir);
         self.spec = spec;
     }
