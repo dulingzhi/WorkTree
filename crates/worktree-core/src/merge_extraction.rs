@@ -604,6 +604,9 @@ mod tests {
     };
     #[cfg(windows)]
     use std::sync::OnceLock;
+    #[cfg(windows)]
+    use worktree_test_support::is_git_shell_startup_failure;
+    use worktree_test_support::run_git;
 
     // Keep merge-extraction tests isolated from process::tests, which mutate
     // the shared git executable preference under this same mutex.
@@ -628,12 +631,6 @@ mod tests {
         fn drop(&mut self) {
             let _ = install_git_executable_preference(self.original.clone());
         }
-    }
-
-    #[cfg(windows)]
-    fn is_git_shell_startup_failure(text: &str) -> bool {
-        text.contains("sh.exe: *** fatal error -")
-            && (text.contains("couldn't create signal pipe") || text.contains("CreateFileMapping"))
     }
 
     #[cfg(windows)]
@@ -670,22 +667,6 @@ mod tests {
             }
         }
         true
-    }
-
-    fn run_git(repo: &Path, args: &[&str]) {
-        let output = Command::new("git")
-            .arg("-c")
-            .arg("commit.gpgsign=false")
-            .args(args)
-            .current_dir(repo)
-            .output()
-            .unwrap_or_else(|e| panic!("Failed to run git {:?}: {e}", args));
-        assert!(
-            output.status.success(),
-            "git {:?} failed: {}",
-            args,
-            bytes_to_text_preserving_utf8(&output.stderr)
-        );
     }
 
     fn configure_git_user(repo: &Path) {

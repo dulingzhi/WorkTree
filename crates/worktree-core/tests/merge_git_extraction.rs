@@ -24,6 +24,7 @@ use worktree_core::merge_extraction::{
     ExtractedMergeCase, MergeExtractionOptions, discover_merge_commits, extract_merge_cases,
     extract_merge_cases_from_repo, write_fixture_files,
 };
+use worktree_test_support::run_git;
 
 // ---------------------------------------------------------------------------
 // Invariant validation
@@ -802,24 +803,6 @@ fn generate_fixtures_from_repo() {
 // ---------------------------------------------------------------------------
 // Test helpers
 // ---------------------------------------------------------------------------
-
-fn run_git(repo: &Path, args: &[&str]) {
-    let output = Command::new("git")
-        // Keep fixture-driven tests portable even when the host has
-        // `commit.gpgsign=true` globally.
-        .arg("-c")
-        .arg("commit.gpgsign=false")
-        .args(args)
-        .current_dir(repo)
-        .output()
-        .unwrap_or_else(|e| panic!("Failed to run git {:?}: {}", args, e));
-    assert!(
-        output.status.success(),
-        "git {:?} failed: {}",
-        args,
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
 
 fn configure_git_user(repo: &Path) {
     run_git(repo, &["config", "user.email", "test@example.com"]);
