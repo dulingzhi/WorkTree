@@ -8,7 +8,7 @@
 ## 继承约束（含 2026-09-07 用户授权的节奏变更）
 
 - **验证节奏（新）**：**任务级四腿**——提交级便宜腿（`cargo check -p <触及包> --all-targets` + 定向包测试 + rustfmt，~1-3 分钟），任务边界完整四腿后评审。**例外：高风险批量语义变换保持提交级完整四腿**（T10 委托壳宏化、T8 reducer 分派化）。
-- **四腿矩阵**：(a) `cargo test --workspace --no-default-features --features gix`（基线 **47 行**/0/5,935——T2 归并 worktree-git 后由 49 行勘正）；(b) `cargo test --workspace`（**48**/0/6,020）；(c) live clippy（touch lib.rs + JSON + stderr 含 Checking；p3t9fix-extract.py first-arrow 提取 + `tr -d '\r'`；与 clippy-baseline.txt 逐字节 diff）；(d) `cargo test -p worktree-ui-gpui -- --list` 名单比对（P4 触及非 UI crate 时须同步对比对应包的 --list 快照）。
+- **四腿矩阵**：(a) `cargo test --workspace --no-default-features --features gix`（基线 **49 行**/0/5,935——T2 归并 worktree-git 曾降至 47，T5 新建 worktree-test-support 的两 0-测试目标 +2 回升）；(b) `cargo test --workspace`（**50**/0/6,020）；(c) live clippy（touch lib.rs + JSON + stderr 含 Checking；p3t9fix-extract.py first-arrow 提取 + `tr -d '\r'`；与 clippy-baseline.txt 逐字节 diff）；(d) `cargo test -p worktree-ui-gpui -- --list` 名单比对（P4 触及非 UI crate 时须同步对比对应包的 --list 快照）。
 - **W2**：具名 import；禁新增 `use xxx::*`（特许：迁移文件文件头 `use super::*;`）。
 - **G1**：末次验证后零源码改动。**受众保持**：可见性升级须编译器证据，逐名记录消费方。
 - **rustfmt**：`rustfmt --edition 2024 --config skip_children=true` 仅触及文件。
