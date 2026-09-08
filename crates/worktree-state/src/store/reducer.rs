@@ -11,7 +11,6 @@ use crate::model::{
     SubmoduleAddProgressState,
 };
 use crate::msg::{ConflictRegionChoice, Effect, Msg, RepoCommandKind, RepoPath, RepoPathList};
-use crate::store::repo_load_trace;
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 use std::sync::Arc;
@@ -887,6 +886,11 @@ fn reduce_inner(
         return Vec::new();
     }
 
+    let msg = match repo_management::reduce_repo_management(msg, repos, id_alloc, state) {
+        ReduceOutcome::Handled(effects) => return effects,
+        ReduceOutcome::NotHandled(msg) => msg,
+    };
+
     let msg = match external_and_history::reduce_external_and_history(msg, state) {
         ReduceOutcome::Handled(effects) => return effects,
         ReduceOutcome::NotHandled(msg) => msg,
@@ -908,16 +912,6 @@ fn reduce_inner(
     };
 
     match msg {
-        Msg::OpenRepo(path) => repo_management::open_repo(id_alloc, state, path),
-        Msg::RestoreSession {
-            open_repos,
-            active_repo,
-        } => repo_management::restore_session(repos, id_alloc, state, open_repos, active_repo),
-        Msg::CloseRepo { repo_id } => repo_management::close_repo(repos, state, repo_id),
-        Msg::CloseRepos {
-            repo_ids,
-            activate_after,
-        } => repo_management::close_repos(repos, state, repo_ids, activate_after),
         Msg::ShowBannerError { repo_id, message } => {
             if !message.trim().is_empty() {
                 state.banner_error = Some(BannerErrorState { repo_id, message });
@@ -958,48 +952,6 @@ fn reduce_inner(
         Msg::SetDefaultTagType(tag_type) => {
             state.default_tag_type = tag_type;
             Vec::new()
-        }
-        Msg::SetActiveRepo { repo_id } => repo_management::set_active_repo(state, repo_id),
-        Msg::ReorderRepoTabs {
-            repo_id,
-            insert_before,
-        } => repo_management::reorder_repo_tabs(state, repo_id, insert_before),
-        Msg::Internal(crate::msg::InternalMsg::SessionPersistFailed {
-            repo_id,
-            action,
-            error,
-        }) => {
-            util::handle_session_persist_result(
-                state,
-                repo_id,
-                action,
-                Err(std::io::Error::other(error)),
-            );
-            Vec::new()
-        }
-        Msg::SetFetchPruneDeletedRemoteTrackingBranches { repo_id, enabled } => {
-            repo_management::set_fetch_prune_deleted_remote_tracking_branches(
-                state, repo_id, enabled,
-            )
-        }
-        Msg::CloneRepo { url, dest, ssh_key } => {
-            repo_management::clone_repo(state, url, dest, ssh_key)
-        }
-        Msg::AbortCloneRepo { dest } => repo_management::abort_clone_repo(state, dest),
-        Msg::Internal(crate::msg::InternalMsg::CloneRepoProgress { dest, line }) => {
-            repo_management::clone_repo_progress(state, dest, line)
-        }
-        Msg::Internal(crate::msg::InternalMsg::CloneRepoFinished { url, dest, result }) => {
-            let auth_prompt = result.as_ref().err().and_then(|error| {
-                let ssh_key = state.clone.as_ref().and_then(|op| op.ssh_key.clone());
-                auth_prompt_for_clone(&url, &dest, ssh_key.as_deref(), error)
-            });
-            let effects = repo_management::clone_repo_finished(state, url, dest, result);
-            if let Some(prompt) = auth_prompt {
-                util::clear_staged_git_auth_env();
-                state.auth_prompt = Some(prompt);
-            }
-            effects
         }
         Msg::RecordConflictAutosolveTelemetry {
             repo_id,
@@ -1159,45 +1111,6 @@ fn reduce_inner(
             }
             effects
         }
-        Msg::Internal(crate::msg::InternalMsg::RepoOpenedOk {
-            repo_id,
-            spec,
-            repo,
-        }) => repo_management::repo_opened_ok(repos, state, repo_id, spec, repo),
-        Msg::Internal(crate::msg::InternalMsg::RepoLoadFinished {
-            repo_id,
-            load_epoch,
-            message,
-        }) => {
-            let current_load_epoch = state
-                .repos
-                .iter()
-                .find(|repo| repo.id == repo_id)
-                .map(|repo| repo.load_epoch);
-            if current_load_epoch == Some(load_epoch) {
-                repo_load_trace::trace!(
-                    "apply_repo_load_finished repo_id={:?} load_epoch={} inner={}",
-                    repo_id,
-                    load_epoch,
-                    repo_load_trace::internal_msg_name(&message)
-                );
-                reduce(repos, id_alloc, state, Msg::Internal(*message))
-            } else {
-                repo_load_trace::trace!(
-                    "drop_stale_repo_load_finished repo_id={:?} load_epoch={} current_load_epoch={:?} inner={}",
-                    repo_id,
-                    load_epoch,
-                    current_load_epoch,
-                    repo_load_trace::internal_msg_name(&message)
-                );
-                Vec::new()
-            }
-        }
-        Msg::Internal(crate::msg::InternalMsg::RepoOpenedErr {
-            repo_id,
-            spec,
-            error,
-        }) => repo_management::repo_opened_err(repos, state, repo_id, spec, error),
         other => unreachable!("reduce_inner dispatch chain covers every Msg variant: {other:?}"),
     }
 }
