@@ -345,29 +345,15 @@ fn run_git(repo: &Path, args: &[&str]) {
 }
 
 fn run_git_expect_failure(repo: &Path, args: &[&str]) {
-    let status = git_command()
-        .arg("-C")
-        .arg(repo)
-        .args(args)
-        .status()
-        .expect("git command to run");
-    assert!(!status.success(), "expected git {:?} to fail", args);
+    let mut cmd = git_command();
+    worktree_test_support::run_git_expect_failure_command(&mut cmd, repo, args);
 }
 
 fn run_git_output(repo: &Path, args: &[&str]) -> String {
-    let output = git_command()
-        .arg("-C")
-        .arg(repo)
-        .args(args)
-        .output()
-        .expect("git command to run");
-    assert!(
-        output.status.success(),
-        "git {:?} failed: {}",
-        args,
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8_lossy(&output.stdout).trim().to_string()
+    let mut cmd = git_command();
+    worktree_test_support::run_git_stdout_command(&mut cmd, repo, args)
+        .trim()
+        .to_string()
 }
 
 fn assert_git_failure(error: &Error, expected_command: &str, expected_id: GitFailureId) {

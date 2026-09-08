@@ -11,19 +11,7 @@ use worktree_test_support::is_git_shell_startup_failure;
 use worktree_test_support::run_git;
 
 fn run_git_capture(repo: &Path, args: &[&str]) -> String {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(repo)
-        .args(args)
-        .output()
-        .expect("git command to run");
-    assert!(
-        output.status.success(),
-        "git {:?} failed: {}",
-        args,
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8_lossy(&output.stdout).to_string()
+    worktree_test_support::run_git_stdout_with(repo, args, |_| {})
 }
 
 fn git_remote_url(path: &Path) -> String {

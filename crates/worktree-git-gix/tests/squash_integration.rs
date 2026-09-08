@@ -13,21 +13,15 @@ fn run_git(repo: &Path, args: &[&str]) {
 }
 
 fn run_git_with_env(repo: &Path, args: &[&str], envs: &[(&str, &str)]) {
-    let mut cmd = Command::new("git");
-    test_git_env::apply(&mut cmd);
-    let cmd = cmd
-        .arg("-C")
-        .arg(repo)
-        .args(args)
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .env("GIT_EDITOR", "true")
-        .env("EDITOR", "true")
-        .env("VISUAL", "true");
-    for (key, value) in envs {
-        cmd.env(key, value);
-    }
-    let status = cmd.status().expect("git command to run");
-    assert!(status.success(), "git {:?} failed", args);
+    worktree_test_support::run_git_with(repo, args, |cmd| {
+        test_git_env::apply(cmd);
+        cmd.env("GIT_EDITOR", "true")
+            .env("EDITOR", "true")
+            .env("VISUAL", "true");
+        for (key, value) in envs {
+            cmd.env(key, value);
+        }
+    });
 }
 
 fn git_stdout(repo: &Path, args: &[&str]) -> String {
@@ -722,18 +716,14 @@ fn interactive_rebase_reword_works_in_repo_path_with_spaces() {
 }
 
 /// Runs git allowing a non-zero exit (a rebase pausing at a conflict).
+#[cfg(unix)]
 fn run_git_allow_fail(repo: &Path, args: &[&str], envs: &[(&str, &str)]) {
     let mut cmd = Command::new("git");
     test_git_env::apply(&mut cmd);
-    let cmd = cmd
-        .arg("-C")
-        .arg(repo)
-        .args(args)
-        .env("GIT_TERMINAL_PROMPT", "0");
     for (key, value) in envs {
         cmd.env(key, value);
     }
-    cmd.status().expect("git command to run");
+    let _ = worktree_test_support::run_git_capture_command(&mut cmd, repo, args);
 }
 
 /// Writes a GIT_SEQUENCE_EDITOR script that installs `todo` verbatim,

@@ -1,25 +1,19 @@
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use worktree_core::domain::{DiffArea, DiffTarget};
 use worktree_core::git_ops_trace::{self, GitOpTraceKind};
 use worktree_core::services::GitBackend;
 use worktree_git_gix::GixBackend;
 
 fn run_git(repo: &Path, args: &[&str], empty_config: &Path) {
-    let status = Command::new("git")
-        .arg("-C")
-        .arg(repo)
-        .args(args)
-        .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env("GIT_CONFIG_GLOBAL", empty_config)
-        .env("GIT_CONFIG_SYSTEM", empty_config)
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .env("GIT_EDITOR", "true")
-        .env("EDITOR", "true")
-        .env("VISUAL", "true")
-        .status()
-        .expect("git command to run");
-    assert!(status.success(), "git {:?} failed", args);
+    worktree_test_support::run_git_with(repo, args, |cmd| {
+        cmd.env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("GIT_CONFIG_GLOBAL", empty_config)
+            .env("GIT_CONFIG_SYSTEM", empty_config)
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .env("GIT_EDITOR", "true")
+            .env("EDITOR", "true")
+            .env("VISUAL", "true");
+    });
 }
 
 #[test]

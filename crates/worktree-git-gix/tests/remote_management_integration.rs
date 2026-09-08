@@ -23,28 +23,16 @@ fn run_git(repo: &Path, args: &[&str]) {
 }
 
 fn run_git_capture(repo: &Path, args: &[&str]) -> String {
-    let output = git_command()
-        .arg("-C")
-        .arg(repo)
-        .args(args)
-        .output()
-        .expect("git command to run");
-    assert!(
-        output.status.success(),
-        "git {:?} failed: {}",
-        args,
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8_lossy(&output.stdout).to_string()
+    worktree_test_support::run_git_stdout_with(repo, args, |cmd| {
+        test_git_env::apply(cmd);
+        // Local bare remotes require file protocol to be permitted.
+        cmd.env("GIT_ALLOW_PROTOCOL", "file");
+    })
 }
 
 fn run_git_status(repo: &Path, args: &[&str]) -> std::process::ExitStatus {
-    git_command()
-        .arg("-C")
-        .arg(repo)
-        .args(args)
-        .status()
-        .expect("git command to run")
+    let mut cmd = git_command();
+    worktree_test_support::run_git_capture_command(&mut cmd, repo, args).status
 }
 
 fn git_remote_url(path: &Path) -> String {

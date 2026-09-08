@@ -17,21 +17,15 @@ fn run_git(repo: &Path, args: &[&str]) {
 }
 
 fn run_git_with_env(repo: &Path, args: &[&str], envs: &[(&str, &str)]) {
-    let mut cmd = Command::new("git");
-    test_git_env::apply(&mut cmd);
-    let cmd = cmd
-        .arg("-C")
-        .arg(repo)
-        .args(args)
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .env("GIT_EDITOR", "true")
-        .env("EDITOR", "true")
-        .env("VISUAL", "true");
-    for (key, value) in envs {
-        cmd.env(key, value);
-    }
-    let status = cmd.status().expect("git command to run");
-    assert!(status.success(), "git {:?} failed", args);
+    worktree_test_support::run_git_with(repo, args, |cmd| {
+        test_git_env::apply(cmd);
+        cmd.env("GIT_EDITOR", "true")
+            .env("EDITOR", "true")
+            .env("VISUAL", "true");
+        for (key, value) in envs {
+            cmd.env(key, value);
+        }
+    });
 }
 
 fn git_stdout(repo: &Path, args: &[&str]) -> String {

@@ -5,33 +5,13 @@ use worktree_git_gix::GixBackend;
 mod test_git_env;
 use std::fs;
 use std::path::Path;
-use std::process::Command;
-
-fn git_command() -> Command {
-    let mut cmd = Command::new("git");
-    // Keep tests deterministic by isolating from host git config.
-    test_git_env::apply(&mut cmd);
-    cmd
-}
 
 fn run_git(repo: &Path, args: &[&str]) {
     worktree_test_support::run_git_with(repo, args, test_git_env::apply);
 }
 
 fn run_git_capture(repo: &Path, args: &[&str]) -> String {
-    let output = git_command()
-        .arg("-C")
-        .arg(repo)
-        .args(args)
-        .output()
-        .expect("git command to run");
-    assert!(
-        output.status.success(),
-        "git {:?} failed: {}",
-        args,
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8_lossy(&output.stdout).to_string()
+    worktree_test_support::run_git_stdout_with(repo, args, test_git_env::apply)
 }
 
 #[test]
