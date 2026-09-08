@@ -572,11 +572,14 @@ pub fn persist_from_state(state: &AppState) -> io::Result<()> {
         return Ok(());
     };
 
-    let snapshot = snapshot_repos_from_state(state);
-    persist_repos_snapshot_to_path(&snapshot, &path)
+    persist_from_state_to_path(state, &path)
 }
 
 pub fn persist_from_state_to_path(state: &AppState, path: &Path) -> io::Result<()> {
+    persist_from_state_impl(state, path)
+}
+
+fn persist_from_state_impl(state: &AppState, path: &Path) -> io::Result<()> {
     let snapshot = snapshot_repos_from_state(state);
     persist_repos_snapshot_to_path(&snapshot, path)
 }
@@ -592,6 +595,10 @@ pub fn persist_repos_snapshot_to_path(
     snapshot: &SessionReposSnapshot,
     path: &Path,
 ) -> io::Result<()> {
+    persist_repos_snapshot_impl(snapshot, path)
+}
+
+fn persist_repos_snapshot_impl(snapshot: &SessionReposSnapshot, path: &Path) -> io::Result<()> {
     with_session_file_persist_lock(|| {
         let mut file = load_file(path).unwrap_or_default();
         file.version = CURRENT_SESSION_FILE_VERSION;
@@ -657,6 +664,10 @@ fn recent_repo_storage_key(workdir: &Path) -> String {
 }
 
 pub fn persist_recent_repo_to_path(workdir: &Path, session_file_path: &Path) -> io::Result<()> {
+    persist_recent_repo_impl(workdir, session_file_path)
+}
+
+fn persist_recent_repo_impl(workdir: &Path, session_file_path: &Path) -> io::Result<()> {
     with_session_file_persist_lock(|| {
         let mut file = load_file(session_file_path).unwrap_or_default();
         file.version = CURRENT_SESSION_FILE_VERSION;
@@ -745,6 +756,10 @@ pub fn persist_pinned_repo(workdir: &Path) -> io::Result<()> {
 /// only when the user unpins them. Pinning something already pinned therefore
 /// leaves it where it is rather than moving it to the end.
 pub fn persist_pinned_repo_to_path(workdir: &Path, session_file_path: &Path) -> io::Result<()> {
+    persist_pinned_repo_impl(workdir, session_file_path)
+}
+
+fn persist_pinned_repo_impl(workdir: &Path, session_file_path: &Path) -> io::Result<()> {
     with_session_file_persist_lock(|| {
         let mut file = load_file(session_file_path).unwrap_or_default();
         file.version = CURRENT_SESSION_FILE_VERSION;
@@ -860,6 +875,10 @@ pub fn persist_ui_settings(settings: UiSettings) -> io::Result<()> {
 }
 
 pub fn persist_ui_settings_to_path(settings: UiSettings, path: &Path) -> io::Result<()> {
+    persist_ui_settings_impl(settings, path)
+}
+
+fn persist_ui_settings_impl(settings: UiSettings, path: &Path) -> io::Result<()> {
     with_session_file_persist_lock(|| {
         let mut file = load_file(path).unwrap_or_default();
         file.version = CURRENT_SESSION_FILE_VERSION;
@@ -1145,6 +1164,14 @@ pub fn persist_repo_history_mode_to_path(
     mode: HistoryMode,
     session_file_path: &Path,
 ) -> io::Result<()> {
+    persist_repo_history_mode_impl(workdir, mode, session_file_path)
+}
+
+fn persist_repo_history_mode_impl(
+    workdir: &Path,
+    mode: HistoryMode,
+    session_file_path: &Path,
+) -> io::Result<()> {
     with_session_file_persist_lock(|| {
         let mut file = load_file(session_file_path).unwrap_or_default();
         let mode = HistoryModeSetting::from(mode);
@@ -1242,6 +1269,14 @@ pub fn persist_repo_history_scope(workdir: &Path, scope: LogScope) -> io::Result
 }
 
 pub fn persist_repo_history_scope_to_path(
+    workdir: &Path,
+    scope: LogScope,
+    session_file_path: &Path,
+) -> io::Result<()> {
+    persist_repo_history_scope_impl(workdir, scope, session_file_path)
+}
+
+fn persist_repo_history_scope_impl(
     workdir: &Path,
     scope: LogScope,
     session_file_path: &Path,
@@ -1378,6 +1413,18 @@ pub fn persist_repo_fetch_prune_deleted_remote_tracking_branches_to_path(
     enabled: bool,
     session_file_path: &Path,
 ) -> io::Result<()> {
+    persist_repo_fetch_prune_deleted_remote_tracking_branches_impl(
+        workdir,
+        enabled,
+        session_file_path,
+    )
+}
+
+fn persist_repo_fetch_prune_deleted_remote_tracking_branches_impl(
+    workdir: &Path,
+    enabled: bool,
+    session_file_path: &Path,
+) -> io::Result<()> {
     with_session_file_persist_lock(|| {
         let mut file = load_file(session_file_path).unwrap_or_default();
         file.version = CURRENT_SESSION_FILE_VERSION;
@@ -1436,6 +1483,14 @@ pub fn persist_survey_prompt_opened_to_path(
     survey_id: &str,
     now_unix_seconds: u64,
 ) -> io::Result<()> {
+    persist_survey_prompt_opened_impl(session_file_path, survey_id, now_unix_seconds)
+}
+
+fn persist_survey_prompt_opened_impl(
+    session_file_path: &Path,
+    survey_id: &str,
+    now_unix_seconds: u64,
+) -> io::Result<()> {
     with_session_file_persist_lock(|| {
         let mut file = load_file(session_file_path).unwrap_or_default();
         file.version = CURRENT_SESSION_FILE_VERSION;
@@ -1462,6 +1517,20 @@ pub fn persist_survey_prompt_postponed(survey_id: &str, postpone_seconds: u64) -
 }
 
 pub fn persist_survey_prompt_postponed_to_path(
+    session_file_path: &Path,
+    survey_id: &str,
+    postpone_seconds: u64,
+    now_unix_seconds: u64,
+) -> io::Result<()> {
+    persist_survey_prompt_postponed_impl(
+        session_file_path,
+        survey_id,
+        postpone_seconds,
+        now_unix_seconds,
+    )
+}
+
+fn persist_survey_prompt_postponed_impl(
     session_file_path: &Path,
     survey_id: &str,
     postpone_seconds: u64,
