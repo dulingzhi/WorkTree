@@ -9,7 +9,7 @@ impl GixRepo {
     /// assume-unchanged bit is set, so `h <path>` marks an unchanged-assumed
     /// regular file. (`S` — skip-worktree — is a different mechanism and is
     /// deliberately not mixed in.)
-    pub(super) fn assume_unchanged_list_impl(&self) -> Result<Vec<PathBuf>> {
+    pub(super) fn assume_unchanged_list(&self) -> Result<Vec<PathBuf>> {
         let mut cmd = self.git_workdir_cmd();
         cmd.arg("ls-files").arg("-v");
         let output = run_git_raw_output(cmd, "git ls-files")?;
@@ -20,7 +20,7 @@ impl GixRepo {
 
     /// Mark or unmark `path` assume-unchanged. The flag lives in the index
     /// only, so the worktree file itself is never touched.
-    pub(super) fn set_assume_unchanged_impl(&self, path: &Path, enable: bool) -> Result<()> {
+    pub(super) fn set_assume_unchanged(&self, path: &Path, enable: bool) -> Result<()> {
         let mut cmd = self.git_workdir_cmd();
         cmd.arg("update-index");
         if enable {

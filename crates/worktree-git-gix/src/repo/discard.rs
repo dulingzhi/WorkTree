@@ -7,7 +7,7 @@ use worktree_core::error::{Error, ErrorKind};
 use worktree_core::services::Result;
 
 impl GixRepo {
-    pub(super) fn discard_worktree_changes_impl(&self, paths: &[&Path]) -> Result<()> {
+    pub(super) fn discard_worktree_changes(&self, paths: &[&Path]) -> Result<()> {
         if paths.is_empty() {
             return Ok(());
         }

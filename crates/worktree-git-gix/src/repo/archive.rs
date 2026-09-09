@@ -4,7 +4,7 @@ use std::path::Path;
 use worktree_core::services::{CommandOutput, Result};
 
 impl GixRepo {
-    pub(super) fn archive_zip_with_output_impl(
+    pub(super) fn archive_zip_with_output(
         &self,
         revision: &str,
         dest: &Path,

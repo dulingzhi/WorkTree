@@ -1013,8 +1013,8 @@ impl GitRepository for GixRepo {
         self.export_patch_with_output_impl(commit_id, dest)
     }
 
-    fn archive_zip_with_output(&self, revision: &str, dest: &Path) -> Result<CommandOutput> {
-        self.archive_zip_with_output_impl(revision, dest)
+    delegate_git_repository! {
+        fn archive_zip_with_output(&self, revision: &str, dest: &Path) -> Result<CommandOutput>;
     }
 
     fn lfs_enabled(&self) -> Result<bool> {
@@ -1037,12 +1037,10 @@ impl GitRepository for GixRepo {
         self.cleanup_with_output_impl()
     }
 
-    fn assume_unchanged_list(&self) -> Result<Vec<PathBuf>> {
-        self.assume_unchanged_list_impl()
-    }
+    delegate_git_repository! {
+        fn assume_unchanged_list(&self) -> Result<Vec<PathBuf>>;
 
-    fn set_assume_unchanged(&self, path: &Path, enable: bool) -> Result<()> {
-        self.set_assume_unchanged_impl(path, enable)
+        fn set_assume_unchanged(&self, path: &Path, enable: bool) -> Result<()>;
     }
 
     fn apply_patch_with_output(&self, patch: &Path) -> Result<CommandOutput> {
@@ -1120,12 +1118,10 @@ impl GitRepository for GixRepo {
         self.list_submodules_cancellable_impl(cancellation)
     }
 
-    fn list_worktree_files(&self) -> Result<Vec<FileEntry>> {
-        self.list_worktree_files_impl()
-    }
+    delegate_git_repository! {
+        fn list_worktree_files(&self) -> Result<Vec<FileEntry>>;
 
-    fn list_tree_files_at_commit(&self, commit_id: &CommitId) -> Result<Vec<FileEntry>> {
-        self.list_tree_files_at_commit_impl(commit_id)
+        fn list_tree_files_at_commit(&self, commit_id: &CommitId) -> Result<Vec<FileEntry>>;
     }
 
     fn submodule_diff_summary(&self, target: &DiffTarget) -> Result<SubmoduleDiffSummary> {
@@ -1183,8 +1179,8 @@ impl GitRepository for GixRepo {
         self.remove_submodule_with_output_impl(path)
     }
 
-    fn discard_worktree_changes(&self, paths: &[&Path]) -> Result<()> {
-        self.discard_worktree_changes_impl(paths)
+    delegate_git_repository! {
+        fn discard_worktree_changes(&self, paths: &[&Path]) -> Result<()>;
     }
 }
 

@@ -9,7 +9,7 @@ use worktree_core::services::Result;
 use super::GixRepo;
 
 impl GixRepo {
-    pub(super) fn list_worktree_files_impl(&self) -> Result<Vec<FileEntry>> {
+    pub(super) fn list_worktree_files(&self) -> Result<Vec<FileEntry>> {
         let repo = self._repo.to_thread_local();
         let index = repo
             .index_or_empty()
@@ -44,10 +44,7 @@ impl GixRepo {
         Ok(flatten_worktree_paths(delegate.paths))
     }
 
-    pub(super) fn list_tree_files_at_commit_impl(
-        &self,
-        commit_id: &CommitId,
-    ) -> Result<Vec<FileEntry>> {
+    pub(super) fn list_tree_files_at_commit(&self, commit_id: &CommitId) -> Result<Vec<FileEntry>> {
         let repo = self._repo.to_thread_local();
         let oid = gix::ObjectId::from_hex(commit_id.0.as_bytes())
             .map_err(|e| Error::new(ErrorKind::Backend(format!("invalid commit id: {e}"))))?;
@@ -309,7 +306,7 @@ mod tests {
         commit_file(workdir, "main.rs", "fn main() {}", "second");
 
         let repo = open_repo(workdir);
-        let entries = repo.list_worktree_files_impl().expect("list tree files");
+        let entries = repo.list_worktree_files().expect("list tree files");
 
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].name, "README.md");
@@ -330,7 +327,7 @@ mod tests {
         commit_file(workdir, "a_dir/nested.txt", "nested", "second");
 
         let repo = open_repo(workdir);
-        let entries = repo.list_worktree_files_impl().expect("list tree files");
+        let entries = repo.list_worktree_files().expect("list tree files");
 
         assert_eq!(entries.len(), 3);
         assert_eq!(entries[0].name, "a_dir");
@@ -359,7 +356,7 @@ mod tests {
         );
 
         let repo = open_repo(workdir);
-        let entries = repo.list_worktree_files_impl().expect("list tree files");
+        let entries = repo.list_worktree_files().expect("list tree files");
 
         assert_eq!(entries.len(), 4);
 
@@ -394,7 +391,7 @@ mod tests {
 
         let repo = open_repo(workdir);
 
-        let head_entries = repo.list_worktree_files_impl().expect("head tree");
+        let head_entries = repo.list_worktree_files().expect("head tree");
 
         let output = Command::new("git")
             .arg("-C")
@@ -409,7 +406,7 @@ mod tests {
         let commit_id = CommitId(head_sha.into());
 
         let commit_entries = repo
-            .list_tree_files_at_commit_impl(&commit_id)
+            .list_tree_files_at_commit(&commit_id)
             .expect("commit tree");
 
         assert_eq!(head_entries.len(), commit_entries.len());
@@ -446,7 +443,7 @@ mod tests {
         let repo = open_repo(workdir);
 
         let first_entries = repo
-            .list_tree_files_at_commit_impl(&first_commit_id)
+            .list_tree_files_at_commit(&first_commit_id)
             .expect("first commit tree");
 
         assert_eq!(first_entries.len(), 1);
@@ -467,9 +464,7 @@ mod tests {
         write_file(workdir, "newfolder/c.txt", "c");
 
         let repo = open_repo(workdir);
-        let entries = repo
-            .list_worktree_files_impl()
-            .expect("list worktree files");
+        let entries = repo.list_worktree_files().expect("list worktree files");
 
         assert_eq!(
             paths_of(&entries),
@@ -498,9 +493,7 @@ mod tests {
         git_success(workdir, &["add", "staged/new.txt"]);
 
         let repo = open_repo(workdir);
-        let entries = repo
-            .list_worktree_files_impl()
-            .expect("list worktree files");
+        let entries = repo.list_worktree_files().expect("list worktree files");
 
         assert_eq!(
             paths_of(&entries),
@@ -519,9 +512,7 @@ mod tests {
         fs::remove_file(workdir.join("removed.txt")).expect("remove file");
 
         let repo = open_repo(workdir);
-        let entries = repo
-            .list_worktree_files_impl()
-            .expect("list worktree files");
+        let entries = repo.list_worktree_files().expect("list worktree files");
 
         assert_eq!(paths_of(&entries), vec!["kept.txt"]);
     }
@@ -538,9 +529,7 @@ mod tests {
         write_file(workdir, "kept.txt", "kept");
 
         let repo = open_repo(workdir);
-        let entries = repo
-            .list_worktree_files_impl()
-            .expect("list worktree files");
+        let entries = repo.list_worktree_files().expect("list worktree files");
 
         assert_eq!(paths_of(&entries), vec![".gitignore", "kept.txt"]);
     }
@@ -555,9 +544,7 @@ mod tests {
         fs::create_dir_all(workdir.join("empty_dir")).expect("create dir");
 
         let repo = open_repo(workdir);
-        let entries = repo
-            .list_worktree_files_impl()
-            .expect("list worktree files");
+        let entries = repo.list_worktree_files().expect("list worktree files");
 
         assert_eq!(paths_of(&entries), vec!["empty_dir", "file.txt"]);
         assert_eq!(entries[0].kind, FileEntryKind::Directory);
@@ -574,9 +561,7 @@ mod tests {
         write_file(workdir, "src/main.rs", "fn main() {}");
 
         let repo = open_repo(workdir);
-        let entries = repo
-            .list_worktree_files_impl()
-            .expect("list worktree files");
+        let entries = repo.list_worktree_files().expect("list worktree files");
 
         assert_eq!(paths_of(&entries), vec!["src", "src/main.rs"]);
     }
@@ -593,9 +578,7 @@ mod tests {
         write_file(workdir, "a_dir/inner.txt", "inner");
 
         let repo = open_repo(workdir);
-        let entries = repo
-            .list_worktree_files_impl()
-            .expect("list worktree files");
+        let entries = repo.list_worktree_files().expect("list worktree files");
 
         assert_eq!(
             paths_of(&entries),
@@ -638,9 +621,7 @@ mod tests {
         );
 
         let repo = open_repo(&outer);
-        let entries = repo
-            .list_worktree_files_impl()
-            .expect("list worktree files");
+        let entries = repo.list_worktree_files().expect("list worktree files");
 
         let sub = entries
             .iter()
