@@ -940,7 +940,7 @@ impl GixRepo {
         run_git_with_output(cmd, &command_label)
     }
 
-    pub(super) fn pull_branch_with_output_impl(
+    pub(super) fn pull_branch_with_output(
         &self,
         remote: &str,
         branch: &str,
@@ -962,7 +962,7 @@ impl GixRepo {
         run_git_with_output(cmd, &command_str)
     }
 
-    pub(super) fn merge_ref_with_output_impl(&self, reference: &str) -> Result<CommandOutput> {
+    pub(super) fn merge_ref_with_output(&self, reference: &str) -> Result<CommandOutput> {
         validate_ref_like_arg(reference, "reference")?;
 
         let command_str = format!("git merge --ff --no-edit {reference}");
@@ -978,7 +978,7 @@ impl GixRepo {
         run_git_with_output(cmd, &command_str)
     }
 
-    pub(super) fn squash_ref_with_output_impl(&self, reference: &str) -> Result<CommandOutput> {
+    pub(super) fn squash_ref_with_output(&self, reference: &str) -> Result<CommandOutput> {
         validate_ref_like_arg(reference, "reference")?;
 
         let command_str = format!("git merge --squash --no-commit {reference}");
@@ -994,11 +994,7 @@ impl GixRepo {
         run_git_with_output(cmd, &command_str)
     }
 
-    pub(super) fn add_remote_with_output_impl(
-        &self,
-        name: &str,
-        url: &str,
-    ) -> Result<CommandOutput> {
+    pub(super) fn add_remote_with_output(&self, name: &str, url: &str) -> Result<CommandOutput> {
         validate_ref_like_arg(name, "remote name")?;
 
         let mut cmd = self.git_workdir_cmd();
@@ -1006,7 +1002,7 @@ impl GixRepo {
         run_git_with_output(cmd, &format!("git remote add {name} {url}"))
     }
 
-    pub(super) fn remove_remote_with_output_impl(&self, name: &str) -> Result<CommandOutput> {
+    pub(super) fn remove_remote_with_output(&self, name: &str) -> Result<CommandOutput> {
         validate_ref_like_arg(name, "remote name")?;
 
         let mut cmd = self.git_workdir_cmd();
@@ -1014,7 +1010,7 @@ impl GixRepo {
         run_git_with_output(cmd, &format!("git remote remove {name}"))
     }
 
-    pub(super) fn set_remote_url_with_output_impl(
+    pub(super) fn set_remote_url_with_output(
         &self,
         name: &str,
         url: &str,
@@ -1100,7 +1096,7 @@ impl GixRepo {
         }
     }
 
-    pub(super) fn set_remote_ssh_key_with_output_impl(
+    pub(super) fn set_remote_ssh_key_with_output(
         &self,
         name: &str,
         key: Option<&str>,
@@ -1133,12 +1129,12 @@ impl GixRepo {
         run_git_with_output(cmd, &label)
     }
 
-    pub(super) fn push_set_upstream_impl(&self, remote: &str, branch: &str) -> Result<()> {
+    pub(super) fn push_set_upstream(&self, remote: &str, branch: &str) -> Result<()> {
         self.push_set_upstream_with_optional_output(remote, branch, false)
             .map(|_| ())
     }
 
-    pub(super) fn push_set_upstream_with_output_impl(
+    pub(super) fn push_set_upstream_with_output(
         &self,
         remote: &str,
         branch: &str,
@@ -1146,7 +1142,7 @@ impl GixRepo {
         self.push_set_upstream_with_optional_output(remote, branch, true)
     }
 
-    pub(super) fn set_upstream_branch_with_output_impl(
+    pub(super) fn set_upstream_branch_with_output(
         &self,
         branch: &str,
         upstream: &str,
@@ -1170,10 +1166,7 @@ impl GixRepo {
         run_git_with_output(cmd, &label)
     }
 
-    pub(super) fn unset_upstream_branch_with_output_impl(
-        &self,
-        branch: &str,
-    ) -> Result<CommandOutput> {
+    pub(super) fn unset_upstream_branch_with_output(&self, branch: &str) -> Result<CommandOutput> {
         validate_ref_like_arg(branch, "branch name")?;
 
         let label = format!("git branch --unset-upstream {branch}");
@@ -1192,7 +1185,7 @@ impl GixRepo {
     /// takes a fetch refspec into itself — without a leading `+` git refuses a
     /// non-fast-forward update, and it always refuses to fetch into the
     /// checked-out branch, so both paths stay honest to the promise.
-    pub(super) fn fast_forward_branch_to_upstream_with_output_impl(
+    pub(super) fn fast_forward_branch_to_upstream_with_output(
         &self,
         branch: &str,
     ) -> Result<CommandOutput> {
@@ -1218,7 +1211,7 @@ impl GixRepo {
         }
     }
 
-    pub(super) fn delete_remote_branch_with_output_impl(
+    pub(super) fn delete_remote_branch_with_output(
         &self,
         remote: &str,
         branch: &str,
@@ -1246,7 +1239,7 @@ impl GixRepo {
     ///
     /// `git push --delete` accepts any number of refspecs, so the whole batch
     /// costs a single network round trip instead of one per branch.
-    pub(super) fn delete_remote_branches_with_output_impl(
+    pub(super) fn delete_remote_branches_with_output(
         &self,
         remote: &str,
         branches: &[String],
@@ -1315,7 +1308,7 @@ impl GixRepo {
         }
     }
 
-    pub(super) fn prune_merged_branches_with_output_impl(&self) -> Result<CommandOutput> {
+    pub(super) fn prune_merged_branches_with_output(&self) -> Result<CommandOutput> {
         let fetch_output = self.fetch_all_with_output(true)?;
 
         let mut merged_cmd = self.git_workdir_cmd();

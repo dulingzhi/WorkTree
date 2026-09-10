@@ -493,16 +493,12 @@ impl GitRepository for GixRepo {
         ) -> Result<Option<UpstreamDivergence>>;
     }
 
-    fn pull_branch_with_output(&self, remote: &str, branch: &str) -> Result<CommandOutput> {
-        self.pull_branch_with_output_impl(remote, branch)
-    }
+    delegate_git_repository! {
+        fn pull_branch_with_output(&self, remote: &str, branch: &str) -> Result<CommandOutput>;
 
-    fn merge_ref_with_output(&self, reference: &str) -> Result<CommandOutput> {
-        self.merge_ref_with_output_impl(reference)
-    }
+        fn merge_ref_with_output(&self, reference: &str) -> Result<CommandOutput>;
 
-    fn squash_ref_with_output(&self, reference: &str) -> Result<CommandOutput> {
-        self.squash_ref_with_output_impl(reference)
+        fn squash_ref_with_output(&self, reference: &str) -> Result<CommandOutput>;
     }
 
     delegate_git_repository! {
@@ -784,8 +780,8 @@ impl GitRepository for GixRepo {
         fn delete_tag_with_output(&self, name: &str) -> Result<CommandOutput>;
     }
 
-    fn prune_merged_branches_with_output(&self) -> Result<CommandOutput> {
-        self.prune_merged_branches_with_output_impl()
+    delegate_git_repository! {
+        fn prune_merged_branches_with_output(&self) -> Result<CommandOutput>;
     }
 
     delegate_git_repository! {
@@ -796,69 +792,49 @@ impl GitRepository for GixRepo {
         fn delete_remote_tag_with_output(&self, remote: &str, name: &str) -> Result<CommandOutput>;
     }
 
-    fn add_remote_with_output(&self, name: &str, url: &str) -> Result<CommandOutput> {
-        self.add_remote_with_output_impl(name, url)
-    }
+    delegate_git_repository! {
+        fn add_remote_with_output(&self, name: &str, url: &str) -> Result<CommandOutput>;
 
-    fn remove_remote_with_output(&self, name: &str) -> Result<CommandOutput> {
-        self.remove_remote_with_output_impl(name)
-    }
+        fn remove_remote_with_output(&self, name: &str) -> Result<CommandOutput>;
 
-    fn set_remote_url_with_output(
-        &self,
-        name: &str,
-        url: &str,
-        kind: RemoteUrlKind,
-    ) -> Result<CommandOutput> {
-        self.set_remote_url_with_output_impl(name, url, kind)
-    }
+        fn set_remote_url_with_output(
+            &self,
+            name: &str,
+            url: &str,
+            kind: RemoteUrlKind,
+        ) -> Result<CommandOutput>;
 
-    fn set_remote_ssh_key_with_output(
-        &self,
-        remote: &str,
-        key: Option<&str>,
-    ) -> Result<CommandOutput> {
-        self.set_remote_ssh_key_with_output_impl(remote, key)
-    }
+        fn set_remote_ssh_key_with_output(
+            &self,
+            remote: &str,
+            key: Option<&str>,
+        ) -> Result<CommandOutput>;
 
-    fn push_set_upstream(&self, remote: &str, branch: &str) -> Result<()> {
-        self.push_set_upstream_impl(remote, branch)
-    }
+        fn push_set_upstream(&self, remote: &str, branch: &str) -> Result<()>;
 
-    fn push_set_upstream_with_output(&self, remote: &str, branch: &str) -> Result<CommandOutput> {
-        self.push_set_upstream_with_output_impl(remote, branch)
-    }
+        fn push_set_upstream_with_output(&self, remote: &str, branch: &str) -> Result<CommandOutput>;
 
-    fn set_upstream_branch_with_output(
-        &self,
-        branch: &str,
-        upstream: &str,
-    ) -> Result<CommandOutput> {
-        self.set_upstream_branch_with_output_impl(branch, upstream)
-    }
+        fn set_upstream_branch_with_output(
+            &self,
+            branch: &str,
+            upstream: &str,
+        ) -> Result<CommandOutput>;
 
-    fn unset_upstream_branch_with_output(&self, branch: &str) -> Result<CommandOutput> {
-        self.unset_upstream_branch_with_output_impl(branch)
-    }
+        fn unset_upstream_branch_with_output(&self, branch: &str) -> Result<CommandOutput>;
 
-    fn fast_forward_branch_to_upstream_with_output(&self, branch: &str) -> Result<CommandOutput> {
-        self.fast_forward_branch_to_upstream_with_output_impl(branch)
-    }
+        fn fast_forward_branch_to_upstream_with_output(&self, branch: &str) -> Result<CommandOutput>;
 
-    fn delete_remote_branch_with_output(
-        &self,
-        remote: &str,
-        branch: &str,
-    ) -> Result<CommandOutput> {
-        self.delete_remote_branch_with_output_impl(remote, branch)
-    }
+        fn delete_remote_branch_with_output(
+            &self,
+            remote: &str,
+            branch: &str,
+        ) -> Result<CommandOutput>;
 
-    fn delete_remote_branches_with_output(
-        &self,
-        remote: &str,
-        branches: &[String],
-    ) -> Result<CommandOutput> {
-        self.delete_remote_branches_with_output_impl(remote, branches)
+        fn delete_remote_branches_with_output(
+            &self,
+            remote: &str,
+            branches: &[String],
+        ) -> Result<CommandOutput>;
     }
 
     delegate_git_repository! {
