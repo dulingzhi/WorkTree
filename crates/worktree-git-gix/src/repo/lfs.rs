@@ -12,7 +12,7 @@ impl GixRepo {
     /// the cheapest reliable repo-level signal. Hooks resolve from the
     /// common dir so linked worktrees see the main repository's hooks, which
     /// is also how git itself resolves them.
-    pub(super) fn lfs_enabled_impl(&self) -> Result<bool> {
+    pub(super) fn lfs_enabled(&self) -> Result<bool> {
         let common_dir = self._repo.to_thread_local().common_dir().to_path_buf();
         let hook = common_dir.join("hooks").join("pre-push");
         let Ok(text) = std::fs::read_to_string(hook) else {
@@ -25,7 +25,7 @@ impl GixRepo {
     /// `git check-attr -z filter -- <path>` prints one
     /// `<path>\0<attr>\0<value>\0` triplet; the attribute is in effect only
     /// when the value is exactly `lfs` (not `unspecified`/`set`/`unset`).
-    pub(super) fn lfs_is_filtered_impl(&self, path: &Path) -> Result<bool> {
+    pub(super) fn lfs_is_filtered(&self, path: &Path) -> Result<bool> {
         let mut cmd = self.git_workdir_cmd();
         cmd.arg("check-attr")
             .arg("-z")
@@ -40,7 +40,7 @@ impl GixRepo {
     /// LFS-tracked path shows pointer-file hunks (git cleans the worktree
     /// side through the filter before comparing), so the same diff command
     /// the text view runs is reused here and only the parsing differs.
-    pub(super) fn lfs_pointer_change_impl(
+    pub(super) fn lfs_pointer_change(
         &self,
         target: &DiffTarget,
     ) -> Result<Option<LfsPointerChange>> {
@@ -52,7 +52,7 @@ impl GixRepo {
     /// `git lfs smudge`. The smudge filter reads a pointer on stdin and
     /// writes the content (or a pass-through copy for non-pointer input) to
     /// stdout.
-    pub(super) fn lfs_smudge_bytes_impl(&self, input: &[u8]) -> Result<Vec<u8>> {
+    pub(super) fn lfs_smudge_bytes(&self, input: &[u8]) -> Result<Vec<u8>> {
         let mut cmd = self.git_workdir_cmd();
         cmd.arg("lfs").arg("smudge");
         run_git_with_stdin_capture(
@@ -69,12 +69,12 @@ impl GixRepo {
     /// is folded into the output instead of failing the command: pruning
     /// wants the LFS storage reachable, and an offline machine must not lose
     /// the successful gc along with it.
-    pub(super) fn cleanup_with_output_impl(&self) -> Result<CommandOutput> {
+    pub(super) fn cleanup_with_output(&self) -> Result<CommandOutput> {
         let mut cmd = self.git_workdir_cmd();
         cmd.arg("gc");
         let mut output = run_git_with_output(cmd, "git gc")?;
 
-        if self.lfs_enabled_impl().unwrap_or(false) {
+        if self.lfs_enabled().unwrap_or(false) {
             let mut cmd = self.git_workdir_cmd();
             cmd.arg("lfs").arg("prune");
             match run_git_with_output(cmd, "git lfs prune") {

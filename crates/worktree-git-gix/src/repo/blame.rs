@@ -377,7 +377,7 @@ fn parse_blame_porcelain(output: &[u8], blamed_path: &Path) -> Vec<BlameLine> {
 }
 
 impl GixRepo {
-    pub(super) fn blame_file_impl(&self, path: &Path, rev: Option<&str>) -> Result<Vec<BlameLine>> {
+    pub(super) fn blame_file(&self, path: &Path, rev: Option<&str>) -> Result<Vec<BlameLine>> {
         const BLOB_LINE_MISMATCH: &str = "gix blame blob line count did not match blame entries";
 
         let repo = self._repo.to_thread_local();
@@ -464,7 +464,7 @@ impl GixRepo {
     /// directly; staged feeds the index blob to `--contents -` so attribution
     /// matches the index content shown in the diff. Lines that do not (yet) exist
     /// in committed history come back as "Not Committed Yet" entries.
-    pub(super) fn blame_worktree_file_impl(
+    pub(super) fn blame_worktree_file(
         &self,
         path: &Path,
         area: DiffArea,
@@ -514,7 +514,7 @@ impl GixRepo {
         Ok(parse_blame_porcelain(&output, path))
     }
 
-    pub(super) fn checkout_conflict_side_impl(
+    pub(super) fn checkout_conflict_side(
         &self,
         path: &Path,
         side: ConflictSide,
@@ -565,13 +565,13 @@ impl GixRepo {
         })
     }
 
-    pub(super) fn accept_conflict_deletion_impl(&self, path: &Path) -> Result<CommandOutput> {
+    pub(super) fn accept_conflict_deletion(&self, path: &Path) -> Result<CommandOutput> {
         let mut rm = self.git_workdir_cmd();
         rm.arg("rm").arg("--").arg(path);
         run_git_with_output(rm, "git rm --")
     }
 
-    pub(super) fn checkout_conflict_base_impl(&self, path: &Path) -> Result<CommandOutput> {
+    pub(super) fn checkout_conflict_base(&self, path: &Path) -> Result<CommandOutput> {
         let repo = self._repo.to_thread_local();
         let base_bytes = gix_index_stage_blob_bytes_optional(&repo, path, 1)?.ok_or_else(|| {
             Error::new(ErrorKind::Backend(format!(

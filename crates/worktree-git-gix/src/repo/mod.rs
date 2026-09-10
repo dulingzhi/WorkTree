@@ -971,14 +971,12 @@ impl GitRepository for GixRepo {
         self.delete_remote_branches_with_output_impl(remote, branches)
     }
 
-    fn blame_file(&self, path: &Path, rev: Option<&str>) -> Result<Vec<BlameLine>> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::Blame);
-        self.blame_file_impl(path, rev)
-    }
+    delegate_git_repository! {
+        @trace(Blame)
+        fn blame_file(&self, path: &Path, rev: Option<&str>) -> Result<Vec<BlameLine>>;
 
-    fn blame_worktree_file(&self, path: &Path, area: DiffArea) -> Result<Vec<BlameLine>> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::Blame);
-        self.blame_worktree_file_impl(path, area)
+        @trace(Blame)
+        fn blame_worktree_file(&self, path: &Path, area: DiffArea) -> Result<Vec<BlameLine>>;
     }
 
     delegate_git_repository! {
@@ -989,16 +987,12 @@ impl GitRepository for GixRepo {
         ) -> Result<Option<PathBuf>>;
     }
 
-    fn checkout_conflict_side(&self, path: &Path, side: ConflictSide) -> Result<CommandOutput> {
-        self.checkout_conflict_side_impl(path, side)
-    }
+    delegate_git_repository! {
+        fn checkout_conflict_side(&self, path: &Path, side: ConflictSide) -> Result<CommandOutput>;
 
-    fn accept_conflict_deletion(&self, path: &Path) -> Result<CommandOutput> {
-        self.accept_conflict_deletion_impl(path)
-    }
+        fn accept_conflict_deletion(&self, path: &Path) -> Result<CommandOutput>;
 
-    fn checkout_conflict_base(&self, path: &Path) -> Result<CommandOutput> {
-        self.checkout_conflict_base_impl(path)
+        fn checkout_conflict_base(&self, path: &Path) -> Result<CommandOutput>;
     }
 
     delegate_git_repository! {
@@ -1017,24 +1011,16 @@ impl GitRepository for GixRepo {
         fn archive_zip_with_output(&self, revision: &str, dest: &Path) -> Result<CommandOutput>;
     }
 
-    fn lfs_enabled(&self) -> Result<bool> {
-        self.lfs_enabled_impl()
-    }
+    delegate_git_repository! {
+        fn lfs_enabled(&self) -> Result<bool>;
 
-    fn lfs_is_filtered(&self, path: &Path) -> Result<bool> {
-        self.lfs_is_filtered_impl(path)
-    }
+        fn lfs_is_filtered(&self, path: &Path) -> Result<bool>;
 
-    fn lfs_pointer_change(&self, target: &DiffTarget) -> Result<Option<LfsPointerChange>> {
-        self.lfs_pointer_change_impl(target)
-    }
+        fn lfs_pointer_change(&self, target: &DiffTarget) -> Result<Option<LfsPointerChange>>;
 
-    fn lfs_smudge_bytes(&self, input: &[u8]) -> Result<Vec<u8>> {
-        self.lfs_smudge_bytes_impl(input)
-    }
+        fn lfs_smudge_bytes(&self, input: &[u8]) -> Result<Vec<u8>>;
 
-    fn cleanup_with_output(&self) -> Result<CommandOutput> {
-        self.cleanup_with_output_impl()
+        fn cleanup_with_output(&self) -> Result<CommandOutput>;
     }
 
     delegate_git_repository! {

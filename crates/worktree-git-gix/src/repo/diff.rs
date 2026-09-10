@@ -579,7 +579,7 @@ impl GixRepo {
     }
 
     pub(super) fn lfs_new_side_smudged_impl(&self, target: &DiffTarget) -> Result<Option<Vec<u8>>> {
-        let Some(change) = self.lfs_pointer_change_impl(target)? else {
+        let Some(change) = self.lfs_pointer_change(target)? else {
             return Ok(None);
         };
         let Some(new) = change.new.as_ref() else {
@@ -589,7 +589,7 @@ impl GixRepo {
             return Ok(None);
         };
         let pointer = lfs_pointer_text(oid, new.size.unwrap_or(0));
-        let bytes = self.lfs_smudge_bytes_impl(pointer.as_bytes())?;
+        let bytes = self.lfs_smudge_bytes(pointer.as_bytes())?;
         Ok(Some(bytes))
     }
 
