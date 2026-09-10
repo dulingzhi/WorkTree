@@ -158,11 +158,7 @@ impl CherryPickProgress {
 const CHERRY_PICK_ALREADY_APPLIED_SENTINEL: &str = "WORKTREE_CHERRY_PICK_ALREADY_APPLIED";
 
 impl GixRepo {
-    pub(super) fn reset_with_output_impl(
-        &self,
-        target: &str,
-        mode: ResetMode,
-    ) -> Result<CommandOutput> {
+    pub(super) fn reset_with_output(&self, target: &str, mode: ResetMode) -> Result<CommandOutput> {
         validate_ref_like_arg(target, "reset target")?;
 
         let mut cmd = self.git_workdir_cmd();
@@ -177,7 +173,7 @@ impl GixRepo {
         run_git_with_output(cmd, &label)
     }
 
-    pub(super) fn squash_message_preview_impl(
+    pub(super) fn squash_message_preview(
         &self,
         oldest: &CommitId,
         head: &CommitId,
@@ -200,7 +196,7 @@ impl GixRepo {
         Ok(worktree_core::squash::build_squash_message(&messages))
     }
 
-    pub(super) fn squash_commits_with_output_impl(
+    pub(super) fn squash_commits_with_output(
         &self,
         oldest: &CommitId,
         expected_head: &CommitId,
@@ -279,7 +275,7 @@ impl GixRepo {
         run_git_with_output(cmd, &format!("git update-ref HEAD {new_sha}"))
     }
 
-    pub(super) fn rebase_with_output_impl(&self, onto: &str) -> Result<CommandOutput> {
+    pub(super) fn rebase_with_output(&self, onto: &str) -> Result<CommandOutput> {
         validate_ref_like_arg(onto, "rebase target")?;
 
         let mut cmd = self.git_workdir_cmd();
@@ -287,7 +283,7 @@ impl GixRepo {
         run_git_with_output(cmd, &format!("git rebase {onto}"))
     }
 
-    pub(super) fn cherry_pick_with_output_impl(
+    pub(super) fn cherry_pick_with_output(
         &self,
         id: &CommitId,
         commit: bool,
@@ -332,7 +328,7 @@ impl GixRepo {
         // the selected mainline. Never overwrite metadata belonging to an
         // operation that was already in progress; the command below will
         // report that collision itself.
-        let started_with_sequencer = self.rebase_in_progress_impl()?;
+        let started_with_sequencer = self.rebase_in_progress()?;
         if !started_with_sequencer {
             self.clear_persisted_cherry_pick_mainline();
             if let Some(parent) = mainline.and_then(|number| parent_ids.get(number - 1)) {
@@ -380,7 +376,7 @@ impl GixRepo {
         }
 
         if self.cherry_pick_stopped_became_empty()? {
-            if self.rebase_in_progress_impl()? {
+            if self.rebase_in_progress()? {
                 let mut abort = self.git_workdir_cmd();
                 abort.arg("cherry-pick").arg("--abort");
                 run_git_with_output(abort, "git cherry-pick --abort")?;
@@ -396,13 +392,13 @@ impl GixRepo {
             });
         }
 
-        if !started_with_sequencer && !self.cherry_pick_in_progress_impl()? {
+        if !started_with_sequencer && !self.cherry_pick_in_progress()? {
             self.clear_persisted_cherry_pick_mainline();
         }
         Err(git_command_failed_error(&label, output))
     }
 
-    pub(super) fn rebase_continue_with_output_impl(&self) -> Result<CommandOutput> {
+    pub(super) fn rebase_continue_with_output(&self) -> Result<CommandOutput> {
         let mut cmd = self.git_workdir_cmd();
         let repo = self._repo.to_thread_local();
         match persisted_reword_state(repo.path()) {
@@ -465,7 +461,7 @@ impl GixRepo {
                     // A cherry-pick genuinely in progress owns this continue:
                     // its failure (unresolved files, a failed hook) is the
                     // actionable one, not "no rebase in progress".
-                    Err(cherry_pick_error) if self.cherry_pick_in_progress_impl()? => {
+                    Err(cherry_pick_error) if self.cherry_pick_in_progress()? => {
                         Err(cherry_pick_error)
                     }
                     Err(_) => Err(rebase_error),
@@ -490,7 +486,7 @@ impl GixRepo {
         let steps_before = self.rebase_progress_marker();
         let output = run_git_raw_output(cmd, label)?;
         let paused_after_progress = !output.status.success()
-            && self.rebase_in_progress_impl()?
+            && self.rebase_in_progress()?
             && match (steps_before, self.rebase_progress_marker()) {
                 // The command started the rebase and paused at a conflict.
                 (None, Some(_)) => self.index_has_conflicts(),
@@ -522,7 +518,7 @@ impl GixRepo {
     fn run_cherry_pick_step_output(&self, cmd: Command, label: &str) -> Result<CommandOutput> {
         let marker_before = self.cherry_pick_progress_marker();
         let (output, last) = self.run_cherry_pick_auto_skip(cmd, label)?;
-        let still_in_progress = self.cherry_pick_in_progress_impl()?;
+        let still_in_progress = self.cherry_pick_in_progress()?;
         if !still_in_progress {
             self.clear_persisted_cherry_pick_mainline();
         }
@@ -591,7 +587,7 @@ impl GixRepo {
     /// creation fails (for example in a hook or signer), so checking only
     /// repository cleanliness would silently skip that real failure.
     fn cherry_pick_stopped_became_empty(&self) -> Result<bool> {
-        if !self.cherry_pick_in_progress_impl()? || self.index_has_conflicts() {
+        if !self.cherry_pick_in_progress()? || self.index_has_conflicts() {
             return Ok(false);
         }
         let Some(stopped_on) = self
@@ -748,7 +744,7 @@ impl GixRepo {
             .ok()
     }
 
-    pub(super) fn rebase_abort_with_output_impl(&self) -> Result<CommandOutput> {
+    pub(super) fn rebase_abort_with_output(&self) -> Result<CommandOutput> {
         let mut cmd = self.git_workdir_cmd();
         cmd.arg("rebase").arg("--abort");
         match run_git_with_output(cmd, "git rebase --abort") {
@@ -769,7 +765,7 @@ impl GixRepo {
                     // its actionable error instead of replacing it with the
                     // earlier "no rebase" failure after the `git am`
                     // fallback also fails.
-                    Err(cherry_pick_error) if self.cherry_pick_in_progress_impl()? => {
+                    Err(cherry_pick_error) if self.cherry_pick_in_progress()? => {
                         return Err(cherry_pick_error);
                     }
                     Err(_) => {}
@@ -787,13 +783,13 @@ impl GixRepo {
         }
     }
 
-    pub(super) fn merge_abort_with_output_impl(&self) -> Result<CommandOutput> {
+    pub(super) fn merge_abort_with_output(&self) -> Result<CommandOutput> {
         let mut cmd = self.git_workdir_cmd();
         cmd.arg("merge").arg("--abort");
         run_git_with_output(cmd, "git merge --abort")
     }
 
-    pub(super) fn sequencer_state_impl(&self) -> Result<SequencerState> {
+    pub(super) fn sequencer_state(&self) -> Result<SequencerState> {
         let repo = self._repo.to_thread_local();
         let state = match repo.state() {
             Some(
@@ -813,11 +809,11 @@ impl GixRepo {
         Ok(state)
     }
 
-    pub(super) fn rebase_in_progress_impl(&self) -> Result<bool> {
-        Ok(self.sequencer_state_impl()? != SequencerState::None)
+    pub(super) fn rebase_in_progress(&self) -> Result<bool> {
+        Ok(self.sequencer_state()? != SequencerState::None)
     }
 
-    pub(super) fn bisect_state_impl(&self) -> Result<Option<BisectState>> {
+    pub(super) fn bisect_state(&self) -> Result<Option<BisectState>> {
         let (in_bisect, git_dir) = {
             let repo = self._repo.to_thread_local();
             (
@@ -878,7 +874,7 @@ impl GixRepo {
         Ok(Some(state))
     }
 
-    pub(super) fn bisect_start_with_output_impl(
+    pub(super) fn bisect_start_with_output(
         &self,
         bad: Option<&str>,
         goods: &[String],
@@ -903,7 +899,7 @@ impl GixRepo {
         run_git_with_output(cmd, &label)
     }
 
-    pub(super) fn bisect_mark_with_output_impl(
+    pub(super) fn bisect_mark_with_output(
         &self,
         verdict: BisectVerdict,
         commit: Option<&str>,
@@ -924,13 +920,13 @@ impl GixRepo {
         run_git_with_output(cmd, &label)
     }
 
-    pub(super) fn bisect_reset_with_output_impl(&self) -> Result<CommandOutput> {
+    pub(super) fn bisect_reset_with_output(&self) -> Result<CommandOutput> {
         let mut cmd = self.git_workdir_cmd();
         cmd.arg("bisect").arg("reset");
         run_git_with_output(cmd, "git bisect reset")
     }
 
-    fn cherry_pick_in_progress_impl(&self) -> Result<bool> {
+    fn cherry_pick_in_progress(&self) -> Result<bool> {
         let repo = self._repo.to_thread_local();
         Ok(matches!(
             repo.state(),
@@ -938,7 +934,7 @@ impl GixRepo {
         ))
     }
 
-    pub(super) fn list_commits_for_interactive_rebase_impl(
+    pub(super) fn list_commits_for_interactive_rebase(
         &self,
         base: &str,
     ) -> Result<Vec<InteractiveRebaseEntry>> {
@@ -970,7 +966,7 @@ impl GixRepo {
         parse_interactive_rebase_log(&output)
     }
 
-    pub(super) fn interactive_rebase_with_output_impl(
+    pub(super) fn interactive_rebase_with_output(
         &self,
         base: &str,
         entries: &[InteractiveRebaseEntry],
@@ -982,7 +978,7 @@ impl GixRepo {
         // so a commit added (or history rewritten) since setup would
         // otherwise be silently dropped from the branch. Order is not
         // compared — reordering entries is part of the feature.
-        let live = self.list_commits_for_interactive_rebase_impl(base)?;
+        let live = self.list_commits_for_interactive_rebase(base)?;
         let mut live_ids: Vec<&str> = live.iter().map(|e| e.commit_id.as_str()).collect();
         let mut planned_ids: Vec<&str> = entries.iter().map(|e| e.commit_id.as_str()).collect();
         live_ids.sort_unstable();
@@ -1049,7 +1045,7 @@ impl GixRepo {
         cmd.arg("--").arg(upstream);
 
         let mut result = self.run_rebase_step_output(cmd, label);
-        if self.rebase_in_progress_impl()? {
+        if self.rebase_in_progress()? {
             let repo = self._repo.to_thread_local();
             // The rebase started and git's state is still on disk — whether
             // paused at a conflict (Ok) or stopped by a non-conflict failure
@@ -1072,7 +1068,7 @@ impl GixRepo {
         result
     }
 
-    pub(super) fn interactive_cherry_pick_with_output_impl(
+    pub(super) fn interactive_cherry_pick_with_output(
         &self,
         entries: &[InteractiveRebaseEntry],
     ) -> Result<CommandOutput> {
@@ -1183,7 +1179,7 @@ impl GixRepo {
         self.run_planned_rebase(entries, "HEAD", &label)
     }
 
-    pub(super) fn merge_commit_message_impl(&self) -> Result<Option<String>> {
+    pub(super) fn merge_commit_message(&self) -> Result<Option<String>> {
         let repo = self._repo.to_thread_local();
         if repo.state() != Some(gix::state::InProgress::Merge) {
             return Ok(None);

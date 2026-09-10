@@ -507,17 +507,15 @@ impl GitRepository for GixRepo {
         self.squash_ref_with_output_impl(reference)
     }
 
-    fn squash_message_preview(&self, oldest: &CommitId, head: &CommitId) -> Result<String> {
-        self.squash_message_preview_impl(oldest, head)
-    }
+    delegate_git_repository! {
+        fn squash_message_preview(&self, oldest: &CommitId, head: &CommitId) -> Result<String>;
 
-    fn squash_commits_with_output(
-        &self,
-        oldest: &CommitId,
-        expected_head: &CommitId,
-        message: &str,
-    ) -> Result<CommandOutput> {
-        self.squash_commits_with_output_impl(oldest, expected_head, message)
+        fn squash_commits_with_output(
+            &self,
+            oldest: &CommitId,
+            expected_head: &CommitId,
+            message: &str,
+        ) -> Result<CommandOutput>;
     }
 
     delegate_git_repository! {
@@ -599,13 +597,13 @@ impl GitRepository for GixRepo {
         self.cherry_pick_impl(id)
     }
 
-    fn cherry_pick_with_output(
-        &self,
-        id: &CommitId,
-        commit: bool,
-        mainline: Option<usize>,
-    ) -> Result<CommandOutput> {
-        self.cherry_pick_with_output_impl(id, commit, mainline)
+    delegate_git_repository! {
+        fn cherry_pick_with_output(
+            &self,
+            id: &CommitId,
+            commit: bool,
+            mainline: Option<usize>,
+        ) -> Result<CommandOutput>;
     }
 
     fn revert(&self, id: &CommitId) -> Result<()> {
@@ -737,61 +735,45 @@ impl GitRepository for GixRepo {
         self.push_merge_request_with_output_impl(options)
     }
 
-    fn reset_with_output(&self, target: &str, mode: ResetMode) -> Result<CommandOutput> {
-        self.reset_with_output_impl(target, mode)
-    }
+    delegate_git_repository! {
+        fn reset_with_output(&self, target: &str, mode: ResetMode) -> Result<CommandOutput>;
 
-    fn rebase_with_output(&self, onto: &str) -> Result<CommandOutput> {
-        self.rebase_with_output_impl(onto)
-    }
+        fn rebase_with_output(&self, onto: &str) -> Result<CommandOutput>;
 
-    fn rebase_continue_with_output(&self) -> Result<CommandOutput> {
-        self.rebase_continue_with_output_impl()
-    }
+        fn rebase_continue_with_output(&self) -> Result<CommandOutput>;
 
-    fn rebase_abort_with_output(&self) -> Result<CommandOutput> {
-        self.rebase_abort_with_output_impl()
-    }
+        fn rebase_abort_with_output(&self) -> Result<CommandOutput>;
 
-    fn list_commits_for_interactive_rebase(
-        &self,
-        base: &str,
-    ) -> Result<Vec<InteractiveRebaseEntry>> {
-        self.list_commits_for_interactive_rebase_impl(base)
-    }
+        fn list_commits_for_interactive_rebase(
+            &self,
+            base: &str,
+        ) -> Result<Vec<InteractiveRebaseEntry>>;
 
-    fn interactive_rebase_with_output(
-        &self,
-        base: &str,
-        entries: &[InteractiveRebaseEntry],
-    ) -> Result<CommandOutput> {
-        self.interactive_rebase_with_output_impl(base, entries)
-    }
+        fn interactive_rebase_with_output(
+            &self,
+            base: &str,
+            entries: &[InteractiveRebaseEntry],
+        ) -> Result<CommandOutput>;
 
-    fn interactive_cherry_pick_with_output(
-        &self,
-        entries: &[InteractiveRebaseEntry],
-    ) -> Result<CommandOutput> {
-        self.interactive_cherry_pick_with_output_impl(entries)
-    }
+        fn interactive_cherry_pick_with_output(
+            &self,
+            entries: &[InteractiveRebaseEntry],
+        ) -> Result<CommandOutput>;
 
-    fn merge_abort_with_output(&self) -> Result<CommandOutput> {
-        self.merge_abort_with_output_impl()
-    }
+        fn merge_abort_with_output(&self) -> Result<CommandOutput>;
 
-    fn rebase_in_progress(&self) -> Result<bool> {
-        self.rebase_in_progress_impl()
+        fn rebase_in_progress(&self) -> Result<bool>;
     }
 
     fn rebase_in_progress_cancellable(&self, cancellation: &CancellationToken) -> Result<bool> {
         cancellation.check_cancelled()?;
-        let in_progress = self.rebase_in_progress_impl()?;
+        let in_progress = self.rebase_in_progress()?;
         cancellation.check_cancelled()?;
         Ok(in_progress)
     }
 
-    fn sequencer_state(&self) -> Result<SequencerState> {
-        self.sequencer_state_impl()
+    delegate_git_repository! {
+        fn sequencer_state(&self) -> Result<SequencerState>;
     }
 
     fn sequencer_state_cancellable(
@@ -799,13 +781,13 @@ impl GitRepository for GixRepo {
         cancellation: &CancellationToken,
     ) -> Result<SequencerState> {
         cancellation.check_cancelled()?;
-        let state = self.sequencer_state_impl()?;
+        let state = self.sequencer_state()?;
         cancellation.check_cancelled()?;
         Ok(state)
     }
 
-    fn bisect_state(&self) -> Result<Option<BisectState>> {
-        self.bisect_state_impl()
+    delegate_git_repository! {
+        fn bisect_state(&self) -> Result<Option<BisectState>>;
     }
 
     fn bisect_state_cancellable(
@@ -813,33 +795,27 @@ impl GitRepository for GixRepo {
         cancellation: &CancellationToken,
     ) -> Result<Option<BisectState>> {
         cancellation.check_cancelled()?;
-        let state = self.bisect_state_impl()?;
+        let state = self.bisect_state()?;
         cancellation.check_cancelled()?;
         Ok(state)
     }
 
-    fn bisect_start_with_output(
-        &self,
-        bad: Option<&str>,
-        goods: &[String],
-    ) -> Result<CommandOutput> {
-        self.bisect_start_with_output_impl(bad, goods)
-    }
+    delegate_git_repository! {
+        fn bisect_start_with_output(
+            &self,
+            bad: Option<&str>,
+            goods: &[String],
+        ) -> Result<CommandOutput>;
 
-    fn bisect_mark_with_output(
-        &self,
-        verdict: BisectVerdict,
-        commit: Option<&str>,
-    ) -> Result<CommandOutput> {
-        self.bisect_mark_with_output_impl(verdict, commit)
-    }
+        fn bisect_mark_with_output(
+            &self,
+            verdict: BisectVerdict,
+            commit: Option<&str>,
+        ) -> Result<CommandOutput>;
 
-    fn bisect_reset_with_output(&self) -> Result<CommandOutput> {
-        self.bisect_reset_with_output_impl()
-    }
+        fn bisect_reset_with_output(&self) -> Result<CommandOutput>;
 
-    fn merge_commit_message(&self) -> Result<Option<String>> {
-        self.merge_commit_message_impl()
+        fn merge_commit_message(&self) -> Result<Option<String>>;
     }
 
     fn merge_commit_message_cancellable(
@@ -847,7 +823,7 @@ impl GitRepository for GixRepo {
         cancellation: &CancellationToken,
     ) -> Result<Option<String>> {
         cancellation.check_cancelled()?;
-        let message = self.merge_commit_message_impl()?;
+        let message = self.merge_commit_message()?;
         cancellation.check_cancelled()?;
         Ok(message)
     }
