@@ -550,28 +550,18 @@ impl GitRepository for GixRepo {
         fn conflict_session(&self, path: &Path) -> Result<Option<ConflictSession>>;
     }
 
-    fn create_branch(&self, name: &str, target: &CommitId) -> Result<()> {
-        self.create_branch_impl(name, target)
-    }
+    delegate_git_repository! {
+        fn create_branch(&self, name: &str, target: &CommitId) -> Result<()>;
 
-    fn rename_branch(&self, old_name: &str, new_name: &str) -> Result<()> {
-        self.rename_branch_impl(old_name, new_name)
-    }
+        fn rename_branch(&self, old_name: &str, new_name: &str) -> Result<()>;
 
-    fn delete_branch(&self, name: &str) -> Result<()> {
-        self.delete_branch_impl(name)
-    }
+        fn delete_branch(&self, name: &str) -> Result<()>;
 
-    fn delete_branch_force(&self, name: &str) -> Result<()> {
-        self.delete_branch_force_impl(name)
-    }
+        fn delete_branch_force(&self, name: &str) -> Result<()>;
 
-    fn checkout_branch(&self, name: &str) -> Result<()> {
-        self.checkout_branch_impl(name)
-    }
+        fn checkout_branch(&self, name: &str) -> Result<()>;
 
-    fn checkout_remote_branch(&self, remote: &str, branch: &str, local_branch: &str) -> Result<()> {
-        self.checkout_remote_branch_impl(remote, branch, local_branch)
+        fn checkout_remote_branch(&self, remote: &str, branch: &str, local_branch: &str) -> Result<()>;
     }
 
     delegate_git_repository! {
@@ -585,16 +575,12 @@ impl GitRepository for GixRepo {
         ) -> worktree_core::services::Result<worktree_core::services::StatusForPaths>;
     }
 
-    fn checkout_pull_request(&self, remote: &str, number: u64) -> Result<()> {
-        self.checkout_pull_request_impl(remote, number)
-    }
+    delegate_git_repository! {
+        fn checkout_pull_request(&self, remote: &str, number: u64) -> Result<()>;
 
-    fn checkout_commit(&self, id: &CommitId) -> Result<()> {
-        self.checkout_commit_impl(id)
-    }
+        fn checkout_commit(&self, id: &CommitId) -> Result<()>;
 
-    fn cherry_pick(&self, id: &CommitId) -> Result<()> {
-        self.cherry_pick_impl(id)
+        fn cherry_pick(&self, id: &CommitId) -> Result<()>;
     }
 
     delegate_git_repository! {
@@ -606,65 +592,45 @@ impl GitRepository for GixRepo {
         ) -> Result<CommandOutput>;
     }
 
-    fn revert(&self, id: &CommitId) -> Result<()> {
-        self.revert_impl(id)
-    }
+    delegate_git_repository! {
+        fn revert(&self, id: &CommitId) -> Result<()>;
 
-    fn stash_create(
-        &self,
-        message: &str,
-        include_untracked: bool,
-        keep_index: bool,
-        paths: &[PathBuf],
-    ) -> Result<()> {
-        self.stash_create_impl(message, include_untracked, keep_index, paths)
-    }
+        fn stash_create(
+            &self,
+            message: &str,
+            include_untracked: bool,
+            keep_index: bool,
+            paths: &[PathBuf],
+        ) -> Result<()>;
 
-    fn stash_list(&self) -> Result<Vec<StashEntry>> {
-        self.stash_list_impl()
+        fn stash_list(&self) -> Result<Vec<StashEntry>>;
     }
 
     fn stash_list_cancellable(&self, cancellation: &CancellationToken) -> Result<Vec<StashEntry>> {
         cancellation.check_cancelled()?;
-        let stashes = self.stash_list_impl()?;
+        let stashes = self.stash_list()?;
         cancellation.check_cancelled()?;
         Ok(stashes)
     }
 
-    fn stash_apply(&self, index: usize) -> Result<()> {
-        self.stash_apply_impl(index)
-    }
+    delegate_git_repository! {
+        fn stash_apply(&self, index: usize) -> Result<()>;
 
-    fn stash_drop(&self, index: usize) -> Result<()> {
-        self.stash_drop_impl(index)
-    }
+        fn stash_drop(&self, index: usize) -> Result<()>;
 
-    fn stash_branch(&self, branch: &str, index: usize) -> Result<()> {
-        self.stash_branch_impl(branch, index)
-    }
+        fn stash_branch(&self, branch: &str, index: usize) -> Result<()>;
 
-    fn stage(&self, paths: &[&Path]) -> Result<()> {
-        self.stage_impl(paths)
-    }
+        fn stage(&self, paths: &[&Path]) -> Result<()>;
 
-    fn unstage(&self, paths: &[&Path]) -> Result<()> {
-        self.unstage_impl(paths)
-    }
+        fn unstage(&self, paths: &[&Path]) -> Result<()>;
 
-    fn commit(&self, message: &str) -> Result<()> {
-        self.commit_impl(message)
-    }
+        fn commit(&self, message: &str) -> Result<()>;
 
-    fn commit_with_outcome(&self, message: &str) -> Result<CommitOperationOutcome> {
-        self.commit_with_outcome_impl(message)
-    }
+        fn commit_with_outcome(&self, message: &str) -> Result<CommitOperationOutcome>;
 
-    fn commit_amend(&self, message: &str) -> Result<()> {
-        self.commit_amend_impl(message)
-    }
+        fn commit_amend(&self, message: &str) -> Result<()>;
 
-    fn commit_amend_with_outcome(&self, message: &str) -> Result<CommitOperationOutcome> {
-        self.commit_amend_with_outcome_impl(message)
+        fn commit_amend_with_outcome(&self, message: &str) -> Result<CommitOperationOutcome>;
     }
 
     fn fetch_all(&self) -> Result<()> {

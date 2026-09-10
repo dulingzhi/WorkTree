@@ -458,13 +458,13 @@ impl GixRepo {
         run_git_simple(set_upstream, "git branch --set-upstream-to")
     }
 
-    pub(super) fn create_branch_impl(&self, name: &str, target: &CommitId) -> Result<()> {
+    pub(super) fn create_branch(&self, name: &str, target: &CommitId) -> Result<()> {
         validate_ref_like_arg(name, "branch name")?;
         validate_ref_like_arg(target.as_ref(), "branch target")?;
         self.create_local_branch_reference(name, target.as_ref())
     }
 
-    pub(super) fn rename_branch_impl(&self, old_name: &str, new_name: &str) -> Result<()> {
+    pub(super) fn rename_branch(&self, old_name: &str, new_name: &str) -> Result<()> {
         validate_ref_like_arg(old_name, "branch name")?;
         validate_ref_like_arg(new_name, "branch name")?;
 
@@ -477,7 +477,7 @@ impl GixRepo {
         run_git_simple(cmd, "git branch -m")
     }
 
-    pub(super) fn delete_branch_impl(&self, name: &str) -> Result<()> {
+    pub(super) fn delete_branch(&self, name: &str) -> Result<()> {
         validate_ref_like_arg(name, "branch name")?;
 
         let mut cmd = self.git_workdir_cmd();
@@ -485,7 +485,7 @@ impl GixRepo {
         run_git_simple(cmd, "git branch -d")
     }
 
-    pub(super) fn delete_branch_force_impl(&self, name: &str) -> Result<()> {
+    pub(super) fn delete_branch_force(&self, name: &str) -> Result<()> {
         validate_ref_like_arg(name, "branch name")?;
 
         let repo = self.reopen_repo()?;
@@ -512,7 +512,7 @@ impl GixRepo {
         delete_local_branch_config_section(&repo, name)
     }
 
-    pub(super) fn checkout_branch_impl(&self, name: &str) -> Result<()> {
+    pub(super) fn checkout_branch(&self, name: &str) -> Result<()> {
         validate_ref_like_arg(name, "branch name")?;
 
         let mut cmd = self.git_workdir_cmd();
@@ -520,7 +520,7 @@ impl GixRepo {
         run_git_simple(cmd, "git checkout")
     }
 
-    pub(super) fn checkout_remote_branch_impl(
+    pub(super) fn checkout_remote_branch(
         &self,
         remote: &str,
         branch: &str,
@@ -562,7 +562,7 @@ impl GixRepo {
 
     /// Checks out GitHub pull request `number`: fetches `refs/pull/<N>/head`
     /// from `remote` and checks it out as the local branch `pr/<N>`.
-    pub(super) fn checkout_pull_request_impl(&self, remote: &str, number: u64) -> Result<()> {
+    pub(super) fn checkout_pull_request(&self, remote: &str, number: u64) -> Result<()> {
         validate_ref_like_arg(remote, "remote name")?;
         let remote_ref = format!("refs/pull/{number}/head");
         let local_branch = format!("pr/{number}");
@@ -608,7 +608,7 @@ impl GixRepo {
         validate_hex_commit_id(&tip)?;
 
         // Create the local branch at the tip, tolerating a racing creator
-        // (the re-check below mirrors checkout_remote_branch_impl).
+        // (the re-check below mirrors checkout_remote_branch).
         let label = format!("git branch {local_branch} <pull request tip>");
         let mut cmd = self.git_workdir_cmd();
         cmd.arg("branch")
@@ -626,7 +626,7 @@ impl GixRepo {
         run_git_simple(cmd, "git checkout")
     }
 
-    pub(super) fn checkout_commit_impl(&self, id: &CommitId) -> Result<()> {
+    pub(super) fn checkout_commit(&self, id: &CommitId) -> Result<()> {
         validate_hex_commit_id(id)?;
 
         let mut cmd = self.git_workdir_cmd();
@@ -634,7 +634,7 @@ impl GixRepo {
         run_git_simple(cmd, "git checkout <commit>")
     }
 
-    pub(super) fn cherry_pick_impl(&self, id: &CommitId) -> Result<()> {
+    pub(super) fn cherry_pick(&self, id: &CommitId) -> Result<()> {
         validate_hex_commit_id(id)?;
 
         let mut cmd = self.git_workdir_cmd();
@@ -642,7 +642,7 @@ impl GixRepo {
         run_git_simple(cmd, "git cherry-pick")
     }
 
-    pub(super) fn revert_impl(&self, id: &CommitId) -> Result<()> {
+    pub(super) fn revert(&self, id: &CommitId) -> Result<()> {
         validate_hex_commit_id(id)?;
 
         let mut cmd = self.git_workdir_cmd();
@@ -653,7 +653,7 @@ impl GixRepo {
         run_git_simple(cmd, "git revert")
     }
 
-    pub(super) fn stash_create_impl(
+    pub(super) fn stash_create(
         &self,
         message: &str,
         include_untracked: bool,
@@ -680,12 +680,12 @@ impl GixRepo {
         run_git_simple(cmd, "git stash push")
     }
 
-    pub(super) fn stash_list_impl(&self) -> Result<Vec<StashEntry>> {
+    pub(super) fn stash_list(&self) -> Result<Vec<StashEntry>> {
         let repo = self._repo.to_thread_local();
         super::log::stash_reflog_entries(&repo)
     }
 
-    pub(super) fn stash_apply_impl(&self, index: usize) -> Result<()> {
+    pub(super) fn stash_apply(&self, index: usize) -> Result<()> {
         let preflight = self.stash_apply_preflight(index);
         let mut cmd = self.git_workdir_cmd();
         cmd.arg("-c")
@@ -734,13 +734,13 @@ impl GixRepo {
         ))))
     }
 
-    pub(super) fn stash_drop_impl(&self, index: usize) -> Result<()> {
+    pub(super) fn stash_drop(&self, index: usize) -> Result<()> {
         let mut cmd = self.git_workdir_cmd();
         cmd.arg("stash").arg("drop").arg(stash_spec(index));
         run_git_simple(cmd, "git stash drop")
     }
 
-    pub(super) fn stash_branch_impl(&self, branch: &str, index: usize) -> Result<()> {
+    pub(super) fn stash_branch(&self, branch: &str, index: usize) -> Result<()> {
         validate_ref_like_arg(branch, "branch name")?;
 
         let mut cmd = self.git_workdir_cmd();
@@ -751,7 +751,7 @@ impl GixRepo {
         run_git_simple(cmd, "git stash branch")
     }
 
-    pub(super) fn stage_impl(&self, paths: &[&Path]) -> Result<()> {
+    pub(super) fn stage(&self, paths: &[&Path]) -> Result<()> {
         run_git_simple_with_paths(&self.spec.workdir, "git add", &["add", "-A"], paths)
     }
 
@@ -902,7 +902,7 @@ impl GixRepo {
         })
     }
 
-    pub(super) fn unstage_impl(&self, paths: &[&Path]) -> Result<()> {
+    pub(super) fn unstage(&self, paths: &[&Path]) -> Result<()> {
         let repo = self._repo.to_thread_local();
         let has_commits = super::history::gix_head_id_or_none(&repo)?.is_some();
 
@@ -976,7 +976,7 @@ impl GixRepo {
         }
     }
 
-    pub(super) fn commit_impl(&self, message: &str) -> Result<()> {
+    pub(super) fn commit(&self, message: &str) -> Result<()> {
         let merge_in_progress = self.merge_in_progress_for_commit()?;
         let mut cmd = self.git_workdir_cmd();
         cmd.arg("commit");
@@ -992,10 +992,10 @@ impl GixRepo {
         run_git_simple(cmd, label)
     }
 
-    pub(super) fn commit_with_outcome_impl(&self, message: &str) -> Result<CommitOperationOutcome> {
+    pub(super) fn commit_with_outcome(&self, message: &str) -> Result<CommitOperationOutcome> {
         let local_branch = self.current_branch_name_for_outcome()?;
         let pre_head = self.head_commit_id_for_outcome()?;
-        self.commit_impl(message)?;
+        self.commit(message)?;
         let post_head = self.head_commit_id_for_outcome()?;
         Ok(CommitOperationOutcome {
             local_branch,
@@ -1009,19 +1009,19 @@ impl GixRepo {
         Ok(repo.state() == Some(gix::state::InProgress::Merge))
     }
 
-    pub(super) fn commit_amend_impl(&self, message: &str) -> Result<()> {
+    pub(super) fn commit_amend(&self, message: &str) -> Result<()> {
         let mut cmd = self.git_workdir_cmd();
         cmd.arg("commit").arg("--amend").arg("-m").arg(message);
         run_git_simple(cmd, "git commit --amend")
     }
 
-    pub(super) fn commit_amend_with_outcome_impl(
+    pub(super) fn commit_amend_with_outcome(
         &self,
         message: &str,
     ) -> Result<CommitOperationOutcome> {
         let local_branch = self.current_branch_name_for_outcome()?;
         let pre_head = self.head_commit_id_for_outcome()?;
-        self.commit_amend_impl(message)?;
+        self.commit_amend(message)?;
         let post_head = self.head_commit_id_for_outcome()?;
         Ok(CommitOperationOutcome {
             local_branch,
