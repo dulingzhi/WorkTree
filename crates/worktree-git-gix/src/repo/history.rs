@@ -870,7 +870,7 @@ impl GixRepo {
                 _ => {}
             }
         }
-        state.current = self.head_commit_id_impl()?;
+        state.current = self.head_commit_id()?;
         Ok(Some(state))
     }
 

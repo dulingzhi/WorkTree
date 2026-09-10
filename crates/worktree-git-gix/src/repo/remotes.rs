@@ -147,7 +147,7 @@ impl GixRepo {
     }
 
     fn preferred_remote_name(&self) -> Result<Option<String>> {
-        let remotes = self.list_remotes_impl()?;
+        let remotes = self.list_remotes()?;
         if remotes.is_empty() {
             return Ok(None);
         }
@@ -196,7 +196,7 @@ impl GixRepo {
         }))
     }
 
-    pub(super) fn list_remotes_impl(&self) -> Result<Vec<Remote>> {
+    pub(super) fn list_remotes(&self) -> Result<Vec<Remote>> {
         let repo = self.reopen_repo()?;
         let mut remotes = Vec::new();
 
@@ -225,11 +225,11 @@ impl GixRepo {
         Ok(remotes)
     }
 
-    pub(super) fn list_remote_branches_impl(&self) -> Result<Vec<RemoteBranch>> {
-        self.list_remote_branches_cancellable_impl(&CancellationToken::new())
+    pub(super) fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
+        self.list_remote_branches_cancellable(&CancellationToken::new())
     }
 
-    pub(super) fn list_remote_branches_cancellable_impl(
+    pub(super) fn list_remote_branches_cancellable(
         &self,
         cancellation: &CancellationToken,
     ) -> Result<Vec<RemoteBranch>> {
@@ -272,7 +272,7 @@ impl GixRepo {
         Ok(branches)
     }
 
-    fn fetch_all_with_optional_output_impl(
+    fn fetch_all_with_optional_output(
         &self,
         prune: bool,
         capture_output: bool,
@@ -296,16 +296,16 @@ impl GixRepo {
         )
     }
 
-    pub(super) fn fetch_all_impl(&self, prune: bool) -> Result<()> {
-        self.fetch_all_with_optional_output_impl(prune, false)
+    pub(super) fn fetch_all(&self, prune: bool) -> Result<()> {
+        self.fetch_all_with_optional_output(prune, false)
             .map(|_| ())
     }
 
-    pub(super) fn fetch_all_with_output_impl(&self, prune: bool) -> Result<CommandOutput> {
-        self.fetch_all_with_optional_output_impl(prune, true)
+    pub(super) fn fetch_all_with_output(&self, prune: bool) -> Result<CommandOutput> {
+        self.fetch_all_with_optional_output(prune, true)
     }
 
-    fn pull_with_optional_output_impl(
+    fn pull_with_optional_output(
         &self,
         mode: PullMode,
         capture_output: bool,
@@ -379,15 +379,15 @@ impl GixRepo {
         run_git_command_with_optional_output(cmd, "git pull", capture_output)
     }
 
-    pub(super) fn pull_impl(&self, mode: PullMode) -> Result<()> {
-        self.pull_with_optional_output_impl(mode, false).map(|_| ())
+    pub(super) fn pull(&self, mode: PullMode) -> Result<()> {
+        self.pull_with_optional_output(mode, false).map(|_| ())
     }
 
-    pub(super) fn pull_with_output_impl(&self, mode: PullMode) -> Result<CommandOutput> {
-        self.pull_with_optional_output_impl(mode, true)
+    pub(super) fn pull_with_output(&self, mode: PullMode) -> Result<CommandOutput> {
+        self.pull_with_optional_output(mode, true)
     }
 
-    fn push_set_upstream_with_optional_output_impl(
+    fn push_set_upstream_with_optional_output(
         &self,
         remote: &str,
         branch: &str,
@@ -407,7 +407,7 @@ impl GixRepo {
         run_git_command_with_optional_output(cmd, &command_label, capture_output)
     }
 
-    fn push_head_to_branch_with_optional_output_impl(
+    fn push_head_to_branch_with_optional_output(
         &self,
         remote: &str,
         branch: &str,
@@ -435,7 +435,7 @@ impl GixRepo {
         run_git_command_with_optional_output(cmd, &command_label, capture_output)
     }
 
-    fn push_head_to_branch_with_oid_lease_with_output_impl(
+    fn push_head_to_branch_with_oid_lease_with_output(
         &self,
         lease: &ForcePushLease,
     ) -> Result<CommandOutput> {
@@ -458,7 +458,7 @@ impl GixRepo {
             ))));
         }
 
-        let current_head = self.head_commit_id_impl()?.ok_or_else(|| {
+        let current_head = self.head_commit_id()?.ok_or_else(|| {
             Error::new(ErrorKind::Backend(
                 "stale force-push lease: current HEAD does not point to a commit".to_string(),
             ))
@@ -485,7 +485,7 @@ impl GixRepo {
         run_git_with_output(cmd, &command_label)
     }
 
-    pub(super) fn head_commit_id_impl(&self) -> Result<Option<CommitId>> {
+    pub(super) fn head_commit_id(&self) -> Result<Option<CommitId>> {
         let repo = self.reopen_repo()?;
         gix_head_id_or_none(&repo).map(|id| id.map(|id| CommitId(id.to_string().into())))
     }
@@ -509,7 +509,7 @@ impl GixRepo {
             ))));
         }
 
-        let current_head = self.head_commit_id_impl()?.ok_or_else(|| {
+        let current_head = self.head_commit_id()?.ok_or_else(|| {
             Error::new(ErrorKind::Backend(
                 "stale push-after-commit target: current HEAD does not point to a commit"
                     .to_string(),
@@ -525,7 +525,7 @@ impl GixRepo {
         Ok(())
     }
 
-    fn push_after_commit_target_with_optional_output_impl(
+    fn push_after_commit_target_with_optional_output(
         &self,
         target: &SafePushAfterCommitTarget,
         set_upstream: bool,
@@ -561,18 +561,18 @@ impl GixRepo {
         run_git_command_with_optional_output(cmd, &command_label, capture_output)
     }
 
-    pub(super) fn push_after_commit_with_output_impl(
+    pub(super) fn push_after_commit_with_output(
         &self,
         target: &SafePushAfterCommitTarget,
     ) -> Result<CommandOutput> {
-        self.push_after_commit_target_with_optional_output_impl(target, false, true)
+        self.push_after_commit_target_with_optional_output(target, false, true)
     }
 
-    pub(super) fn push_after_commit_set_upstream_with_output_impl(
+    pub(super) fn push_after_commit_set_upstream_with_output(
         &self,
         target: &SafePushAfterCommitTarget,
     ) -> Result<CommandOutput> {
-        self.push_after_commit_target_with_optional_output_impl(target, true, true)
+        self.push_after_commit_target_with_optional_output(target, true, true)
     }
 
     fn fetch_remote_branch_tip_for_safe_push(
@@ -731,7 +731,7 @@ impl GixRepo {
             }));
         }
 
-        let Some(current_head) = self.head_commit_id_impl()? else {
+        let Some(current_head) = self.head_commit_id()? else {
             return Ok(Some(SafePushAfterCommitDecision::Blocked {
                 summary: format!(
                     "Current HEAD no longer points to the commit created on {local_branch}. Push manually."
@@ -751,7 +751,7 @@ impl GixRepo {
         Ok(None)
     }
 
-    pub(super) fn safe_push_after_commit_impl(
+    pub(super) fn safe_push_after_commit(
         &self,
         context: &SafePushAfterCommitContext,
     ) -> Result<SafePushAfterCommitDecision> {
@@ -800,10 +800,10 @@ impl GixRepo {
         )
     }
 
-    fn push_with_optional_output_impl(&self, capture_output: bool) -> Result<CommandOutput> {
+    fn push_with_optional_output(&self, capture_output: bool) -> Result<CommandOutput> {
         if let Some(branch) = self.current_branch_name()? {
             if let Some(upstream) = self.branch_upstream(&branch)? {
-                return self.push_head_to_branch_with_optional_output_impl(
+                return self.push_head_to_branch_with_optional_output(
                     &upstream.remote,
                     &upstream.branch,
                     false,
@@ -812,7 +812,7 @@ impl GixRepo {
             }
 
             if let Some(remote) = self.preferred_remote_name()? {
-                return self.push_set_upstream_with_optional_output_impl(
+                return self.push_set_upstream_with_optional_output(
                     &remote,
                     &branch,
                     capture_output,
@@ -825,19 +825,19 @@ impl GixRepo {
         run_git_command_with_optional_output(cmd, "git push", capture_output)
     }
 
-    pub(super) fn push_impl(&self) -> Result<()> {
-        self.push_with_optional_output_impl(false).map(|_| ())
+    pub(super) fn push(&self) -> Result<()> {
+        self.push_with_optional_output(false).map(|_| ())
     }
 
-    pub(super) fn push_with_output_impl(&self) -> Result<CommandOutput> {
-        self.push_with_optional_output_impl(true)
+    pub(super) fn push_with_output(&self) -> Result<CommandOutput> {
+        self.push_with_optional_output(true)
     }
 
-    fn push_force_with_optional_output_impl(&self, capture_output: bool) -> Result<CommandOutput> {
+    fn push_force_with_optional_output(&self, capture_output: bool) -> Result<CommandOutput> {
         if let Some(branch) = self.current_branch_name()?
             && let Some(upstream) = self.branch_upstream(&branch)?
         {
-            return self.push_head_to_branch_with_optional_output_impl(
+            return self.push_head_to_branch_with_optional_output(
                 &upstream.remote,
                 &upstream.branch,
                 true,
@@ -850,26 +850,26 @@ impl GixRepo {
         run_git_command_with_optional_output(cmd, "git push --force-with-lease", capture_output)
     }
 
-    pub(super) fn push_force_impl(&self) -> Result<()> {
-        self.push_force_with_optional_output_impl(false).map(|_| ())
+    pub(super) fn push_force(&self) -> Result<()> {
+        self.push_force_with_optional_output(false).map(|_| ())
     }
 
-    pub(super) fn push_force_with_output_impl(&self) -> Result<CommandOutput> {
-        self.push_force_with_optional_output_impl(true)
+    pub(super) fn push_force_with_output(&self) -> Result<CommandOutput> {
+        self.push_force_with_optional_output(true)
     }
 
-    pub(super) fn push_force_with_lease_with_output_impl(
+    pub(super) fn push_force_with_lease_with_output(
         &self,
         lease: &ForcePushLease,
     ) -> Result<CommandOutput> {
-        self.push_head_to_branch_with_oid_lease_with_output_impl(lease)
+        self.push_head_to_branch_with_oid_lease_with_output(lease)
     }
 
     /// Push HEAD carrying `git push -o merge_request.*` options, so GitLab
     /// opens (or configures) the merge request from the push itself. The
     /// remote is resolved like a plain push (upstream remote, else preferred
     /// remote); `push_to_mr_branch` redirects the refspec to `MR/<branch>`.
-    pub(super) fn push_merge_request_with_output_impl(
+    pub(super) fn push_merge_request_with_output(
         &self,
         options: &MergeRequestPushOptions,
     ) -> Result<CommandOutput> {
@@ -1134,7 +1134,7 @@ impl GixRepo {
     }
 
     pub(super) fn push_set_upstream_impl(&self, remote: &str, branch: &str) -> Result<()> {
-        self.push_set_upstream_with_optional_output_impl(remote, branch, false)
+        self.push_set_upstream_with_optional_output(remote, branch, false)
             .map(|_| ())
     }
 
@@ -1143,7 +1143,7 @@ impl GixRepo {
         remote: &str,
         branch: &str,
     ) -> Result<CommandOutput> {
-        self.push_set_upstream_with_optional_output_impl(remote, branch, true)
+        self.push_set_upstream_with_optional_output(remote, branch, true)
     }
 
     pub(super) fn set_upstream_branch_with_output_impl(
@@ -1316,7 +1316,7 @@ impl GixRepo {
     }
 
     pub(super) fn prune_merged_branches_with_output_impl(&self) -> Result<CommandOutput> {
-        let fetch_output = self.fetch_all_with_output_impl(true)?;
+        let fetch_output = self.fetch_all_with_output(true)?;
 
         let mut merged_cmd = self.git_workdir_cmd();
         merged_cmd

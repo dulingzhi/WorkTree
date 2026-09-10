@@ -122,7 +122,7 @@ impl GixRepo {
         cancellation: &CancellationToken,
     ) -> Result<Vec<RemoteTag>> {
         cancellation.check_cancelled()?;
-        let remotes = self.list_remotes_impl()?;
+        let remotes = self.list_remotes()?;
         let workdir = self.spec.workdir.clone();
         let mut handles = Vec::new();
 
@@ -253,7 +253,7 @@ impl GixRepo {
     }
 
     pub(super) fn prune_local_tags_with_output(&self) -> Result<CommandOutput> {
-        let remotes = self.list_remotes_impl()?;
+        let remotes = self.list_remotes()?;
         if remotes.is_empty() {
             return Ok(CommandOutput {
                 command: "git prune local tags".to_string(),

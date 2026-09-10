@@ -402,8 +402,8 @@ impl GitRepository for GixRepo {
         Ok(branch)
     }
 
-    fn head_commit_id(&self) -> Result<Option<CommitId>> {
-        self.head_commit_id_impl()
+    delegate_git_repository! {
+        fn head_commit_id(&self) -> Result<Option<CommitId>>;
     }
 
     delegate_git_repository! {
@@ -436,30 +436,28 @@ impl GitRepository for GixRepo {
         ) -> Result<Vec<RemoteTag>>;
     }
 
-    fn list_remotes(&self) -> Result<Vec<Remote>> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::RefEnumerate);
-        self.list_remotes_impl()
+    delegate_git_repository! {
+        @trace(RefEnumerate)
+        fn list_remotes(&self) -> Result<Vec<Remote>>;
     }
 
     fn list_remotes_cancellable(&self, cancellation: &CancellationToken) -> Result<Vec<Remote>> {
         let _scope = git_ops_trace::scope(GitOpTraceKind::RefEnumerate);
         cancellation.check_cancelled()?;
-        let remotes = self.list_remotes_impl()?;
+        let remotes = self.list_remotes()?;
         cancellation.check_cancelled()?;
         Ok(remotes)
     }
 
-    fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::RefEnumerate);
-        self.list_remote_branches_impl()
-    }
+    delegate_git_repository! {
+        @trace(RefEnumerate)
+        fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>>;
 
-    fn list_remote_branches_cancellable(
-        &self,
-        cancellation: &CancellationToken,
-    ) -> Result<Vec<RemoteBranch>> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::RefEnumerate);
-        self.list_remote_branches_cancellable_impl(cancellation)
+        @trace(RefEnumerate)
+        fn list_remote_branches_cancellable(
+            &self,
+            cancellation: &CancellationToken,
+        ) -> Result<Vec<RemoteBranch>>;
     }
 
     delegate_git_repository! {
@@ -634,71 +632,51 @@ impl GitRepository for GixRepo {
     }
 
     fn fetch_all(&self) -> Result<()> {
-        self.fetch_all_impl(true)
+        self.fetch_all(true)
     }
 
     fn fetch_all_with_output(&self) -> Result<CommandOutput> {
-        self.fetch_all_with_output_impl(true)
+        self.fetch_all_with_output(true)
     }
 
     fn fetch_all_with_output_prune(&self, prune: bool) -> Result<CommandOutput> {
-        self.fetch_all_with_output_impl(prune)
+        self.fetch_all_with_output(prune)
     }
 
-    fn pull(&self, mode: PullMode) -> Result<()> {
-        self.pull_impl(mode)
-    }
+    delegate_git_repository! {
+        fn pull(&self, mode: PullMode) -> Result<()>;
 
-    fn pull_with_output(&self, mode: PullMode) -> Result<CommandOutput> {
-        self.pull_with_output_impl(mode)
-    }
+        fn pull_with_output(&self, mode: PullMode) -> Result<CommandOutput>;
 
-    fn push(&self) -> Result<()> {
-        self.push_impl()
-    }
+        fn push(&self) -> Result<()>;
 
-    fn push_with_output(&self) -> Result<CommandOutput> {
-        self.push_with_output_impl()
-    }
+        fn push_with_output(&self) -> Result<CommandOutput>;
 
-    fn push_force(&self) -> Result<()> {
-        self.push_force_impl()
-    }
+        fn push_force(&self) -> Result<()>;
 
-    fn push_force_with_output(&self) -> Result<CommandOutput> {
-        self.push_force_with_output_impl()
-    }
+        fn push_force_with_output(&self) -> Result<CommandOutput>;
 
-    fn safe_push_after_commit(
-        &self,
-        context: &SafePushAfterCommitContext,
-    ) -> Result<SafePushAfterCommitDecision> {
-        self.safe_push_after_commit_impl(context)
-    }
+        fn safe_push_after_commit(
+            &self,
+            context: &SafePushAfterCommitContext,
+        ) -> Result<SafePushAfterCommitDecision>;
 
-    fn push_after_commit_with_output(
-        &self,
-        target: &SafePushAfterCommitTarget,
-    ) -> Result<CommandOutput> {
-        self.push_after_commit_with_output_impl(target)
-    }
+        fn push_after_commit_with_output(
+            &self,
+            target: &SafePushAfterCommitTarget,
+        ) -> Result<CommandOutput>;
 
-    fn push_after_commit_set_upstream_with_output(
-        &self,
-        target: &SafePushAfterCommitTarget,
-    ) -> Result<CommandOutput> {
-        self.push_after_commit_set_upstream_with_output_impl(target)
-    }
+        fn push_after_commit_set_upstream_with_output(
+            &self,
+            target: &SafePushAfterCommitTarget,
+        ) -> Result<CommandOutput>;
 
-    fn push_force_with_lease_with_output(&self, lease: &ForcePushLease) -> Result<CommandOutput> {
-        self.push_force_with_lease_with_output_impl(lease)
-    }
+        fn push_force_with_lease_with_output(&self, lease: &ForcePushLease) -> Result<CommandOutput>;
 
-    fn push_merge_request_with_output(
-        &self,
-        options: &MergeRequestPushOptions,
-    ) -> Result<CommandOutput> {
-        self.push_merge_request_with_output_impl(options)
+        fn push_merge_request_with_output(
+            &self,
+            options: &MergeRequestPushOptions,
+        ) -> Result<CommandOutput>;
     }
 
     delegate_git_repository! {
