@@ -101,14 +101,14 @@ impl GixRepo {
         cmd
     }
 
-    pub(super) fn diff_unified_impl(&self, target: &DiffTarget) -> Result<String> {
+    pub(super) fn diff_unified(&self, target: &DiffTarget) -> Result<String> {
         self.run_unified_diff(self.build_unified_diff_command(target))
     }
 
     /// The whole staged area as one unified diff (`git diff --cached`), the
     /// payload AI commit-message generation summarizes. Unlike
-    /// [`Self::diff_unified_impl`] it is not filtered to a single path.
-    pub(super) fn staged_diff_unified_impl(&self) -> Result<String> {
+    /// [`Self::diff_unified`] it is not filtered to a single path.
+    pub(super) fn staged_diff_unified(&self) -> Result<String> {
         let mut cmd = self.unified_diff_config_command();
         cmd.arg("diff").arg("--no-ext-diff").arg("--cached");
         self.run_unified_diff(cmd)
@@ -134,7 +134,7 @@ impl GixRepo {
         })
     }
 
-    pub(super) fn diff_parsed_impl(&self, target: &DiffTarget) -> Result<Diff> {
+    pub(super) fn diff_parsed(&self, target: &DiffTarget) -> Result<Diff> {
         if let Some(diff) = self.synthetic_simple_commit_path_diff(target)? {
             return Ok(diff);
         }
@@ -154,7 +154,7 @@ impl GixRepo {
         )
     }
 
-    pub(super) fn diff_parsed_cancellable_impl(
+    pub(super) fn diff_parsed_cancellable(
         &self,
         target: &DiffTarget,
         cancellation: &CancellationToken,
@@ -292,7 +292,7 @@ impl GixRepo {
         )))
     }
 
-    pub(super) fn diff_file_text_impl(&self, target: &DiffTarget) -> Result<Option<FileDiffText>> {
+    pub(super) fn diff_file_text(&self, target: &DiffTarget) -> Result<Option<FileDiffText>> {
         match target {
             DiffTarget::WorkingTree { path, area } => {
                 let full_path = if path.is_absolute() {
@@ -398,7 +398,7 @@ impl GixRepo {
         }
     }
 
-    pub(super) fn diff_preview_text_file_impl(
+    pub(super) fn diff_preview_text_file(
         &self,
         target: &DiffTarget,
         side: DiffPreviewTextSide,
@@ -578,7 +578,7 @@ impl GixRepo {
         }
     }
 
-    pub(super) fn lfs_new_side_smudged_impl(&self, target: &DiffTarget) -> Result<Option<Vec<u8>>> {
+    pub(super) fn lfs_new_side_smudged(&self, target: &DiffTarget) -> Result<Option<Vec<u8>>> {
         let Some(change) = self.lfs_pointer_change(target)? else {
             return Ok(None);
         };
@@ -593,10 +593,7 @@ impl GixRepo {
         Ok(Some(bytes))
     }
 
-    pub(super) fn diff_file_image_impl(
-        &self,
-        target: &DiffTarget,
-    ) -> Result<Option<FileDiffImage>> {
+    pub(super) fn diff_file_image(&self, target: &DiffTarget) -> Result<Option<FileDiffImage>> {
         match target {
             DiffTarget::WorkingTree { path, area } => {
                 let full_path = if path.is_absolute() {
@@ -723,10 +720,7 @@ impl GixRepo {
         }
     }
 
-    pub(super) fn conflict_file_stages_impl(
-        &self,
-        path: &Path,
-    ) -> Result<Option<ConflictFileStages>> {
+    pub(super) fn conflict_file_stages(&self, path: &Path) -> Result<Option<ConflictFileStages>> {
         // No index conflict stages for this path means nothing to load.
         // That covers plain directories — and used to swallow submodule
         // conflicts, whose worktree path is a directory but whose index
@@ -742,7 +736,7 @@ impl GixRepo {
         )))
     }
 
-    pub(super) fn conflict_session_impl(&self, path: &Path) -> Result<Option<ConflictSession>> {
+    pub(super) fn conflict_session(&self, path: &Path) -> Result<Option<ConflictSession>> {
         let repo_path = to_repo_path(path, &self.spec.workdir)?;
         let repo = self._repo.to_thread_local();
         let stage_data = gix_index_conflict_stage_data(&repo, &repo_path)?;
@@ -1663,7 +1657,7 @@ mod tests {
 
         let repo = open_repo(tmp.path());
         let diff = repo
-            .diff_file_text_impl(&DiffTarget::WorkingTree {
+            .diff_file_text(&DiffTarget::WorkingTree {
                 path: "vendor/sub".into(),
                 area: DiffArea::Staged,
             })
@@ -1694,7 +1688,7 @@ mod tests {
         std::fs::write(tmp.path().join("legacy.cpp"), gbk_modified).expect("write modified GBK");
 
         let diff = repo
-            .diff_file_text_impl(&DiffTarget::WorkingTree {
+            .diff_file_text(&DiffTarget::WorkingTree {
                 path: "legacy.cpp".into(),
                 area: DiffArea::Unstaged,
             })

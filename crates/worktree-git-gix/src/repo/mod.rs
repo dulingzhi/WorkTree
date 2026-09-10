@@ -534,52 +534,36 @@ impl GitRepository for GixRepo {
         self.squash_commits_with_output_impl(oldest, expected_head, message)
     }
 
-    fn diff_unified(&self, target: &DiffTarget) -> Result<String> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::Diff);
-        self.diff_unified_impl(target)
-    }
+    delegate_git_repository! {
+        @trace(Diff)
+        fn diff_unified(&self, target: &DiffTarget) -> Result<String>;
 
-    fn staged_diff_unified(&self) -> Result<String> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::Diff);
-        self.staged_diff_unified_impl()
-    }
+        @trace(Diff)
+        fn staged_diff_unified(&self) -> Result<String>;
 
-    fn diff_parsed(&self, target: &DiffTarget) -> Result<Diff> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::Diff);
-        self.diff_parsed_impl(target)
-    }
+        @trace(Diff)
+        fn diff_parsed(&self, target: &DiffTarget) -> Result<Diff>;
 
-    fn diff_parsed_cancellable(
-        &self,
-        target: &DiffTarget,
-        cancellation: &CancellationToken,
-    ) -> Result<Diff> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::Diff);
-        self.diff_parsed_cancellable_impl(target, cancellation)
-    }
+        @trace(Diff)
+        fn diff_parsed_cancellable(
+            &self,
+            target: &DiffTarget,
+            cancellation: &CancellationToken,
+        ) -> Result<Diff>;
 
-    fn diff_file_text(&self, target: &DiffTarget) -> Result<Option<FileDiffText>> {
-        self.diff_file_text_impl(target)
-    }
+        fn diff_file_text(&self, target: &DiffTarget) -> Result<Option<FileDiffText>>;
 
-    fn diff_preview_text_file(
-        &self,
-        target: &DiffTarget,
-        side: DiffPreviewTextSide,
-    ) -> Result<Option<PathBuf>> {
-        self.diff_preview_text_file_impl(target, side)
-    }
+        fn diff_preview_text_file(
+            &self,
+            target: &DiffTarget,
+            side: DiffPreviewTextSide,
+        ) -> Result<Option<PathBuf>>;
 
-    fn diff_file_image(&self, target: &DiffTarget) -> Result<Option<FileDiffImage>> {
-        self.diff_file_image_impl(target)
-    }
+        fn diff_file_image(&self, target: &DiffTarget) -> Result<Option<FileDiffImage>>;
 
-    fn conflict_file_stages(&self, path: &Path) -> Result<Option<ConflictFileStages>> {
-        self.conflict_file_stages_impl(path)
-    }
+        fn conflict_file_stages(&self, path: &Path) -> Result<Option<ConflictFileStages>>;
 
-    fn conflict_session(&self, path: &Path) -> Result<Option<ConflictSession>> {
-        self.conflict_session_impl(path)
+        fn conflict_session(&self, path: &Path) -> Result<Option<ConflictSession>>;
     }
 
     fn create_branch(&self, name: &str, target: &CommitId) -> Result<()> {
@@ -606,8 +590,8 @@ impl GitRepository for GixRepo {
         self.checkout_remote_branch_impl(remote, branch, local_branch)
     }
 
-    fn lfs_new_side_smudged(&self, target: &DiffTarget) -> Result<Option<Vec<u8>>> {
-        self.lfs_new_side_smudged_impl(target)
+    delegate_git_repository! {
+        fn lfs_new_side_smudged(&self, target: &DiffTarget) -> Result<Option<Vec<u8>>>;
     }
 
     fn status_for_paths(
