@@ -64,11 +64,11 @@ impl GixRepo {
         may_have_gitlinks
     }
 
-    pub(super) fn status_impl(&self) -> Result<RepoStatus> {
-        self.status_cancellable_impl(&CancellationToken::new())
+    pub(super) fn status(&self) -> Result<RepoStatus> {
+        self.status_cancellable(&CancellationToken::new())
     }
 
-    pub(super) fn status_cancellable_impl(
+    pub(super) fn status_cancellable(
         &self,
         cancellation: &CancellationToken,
     ) -> Result<RepoStatus> {
@@ -187,7 +187,7 @@ impl GixRepo {
         )
     }
 
-    pub(super) fn status_for_paths_impl(
+    pub(super) fn status_for_paths(
         &self,
         paths: &[PathBuf],
     ) -> Result<worktree_core::services::StatusForPaths> {
@@ -230,11 +230,11 @@ impl GixRepo {
         Ok(parse_porcelain_v2_for_paths(&output.stdout))
     }
 
-    pub(super) fn worktree_status_impl(&self) -> Result<Vec<FileStatus>> {
-        self.worktree_status_cancellable_impl(&CancellationToken::new())
+    pub(super) fn worktree_status(&self) -> Result<Vec<FileStatus>> {
+        self.worktree_status_cancellable(&CancellationToken::new())
     }
 
-    pub(super) fn worktree_status_cancellable_impl(
+    pub(super) fn worktree_status_cancellable(
         &self,
         cancellation: &CancellationToken,
     ) -> Result<Vec<FileStatus>> {
@@ -267,11 +267,11 @@ impl GixRepo {
         Ok(unstaged)
     }
 
-    pub(super) fn staged_status_impl(&self) -> Result<Vec<FileStatus>> {
-        self.staged_status_cancellable_impl(&CancellationToken::new())
+    pub(super) fn staged_status(&self) -> Result<Vec<FileStatus>> {
+        self.staged_status_cancellable(&CancellationToken::new())
     }
 
-    pub(super) fn staged_status_cancellable_impl(
+    pub(super) fn staged_status_cancellable(
         &self,
         cancellation: &CancellationToken,
     ) -> Result<Vec<FileStatus>> {
@@ -287,7 +287,7 @@ impl GixRepo {
 
         let Some(head_oid) = head_oid else {
             return self
-                .status_cancellable_impl(cancellation)
+                .status_cancellable(cancellation)
                 .map(|status| status.staged);
         };
 
@@ -316,17 +316,17 @@ impl GixRepo {
     }
 
     /// Every index path a staged change occupies, both sides of a staged rename
-    /// included. `staged_status_impl` reports a rename as its destination alone,
+    /// included. `staged_status` reports a rename as its destination alone,
     /// which is all a status list needs but not enough to reset one: the source
     /// path still carries the staged deletion, and resetting only the
     /// destination leaves half a rename in the index.
     ///
-    /// Conflicted paths are excluded, as they are from `staged_status_impl`.
-    pub(super) fn staged_index_paths_impl(&self) -> Result<Vec<PathBuf>> {
+    /// Conflicted paths are excluded, as they are from `staged_status`.
+    pub(super) fn staged_index_paths(&self) -> Result<Vec<PathBuf>> {
         let repo = self._repo.to_thread_local();
         let Some(head_oid) = super::history::gix_head_id_or_none(&repo)? else {
             return Ok(self
-                .status_impl()?
+                .status()?
                 .staged
                 .into_iter()
                 .map(|entry| entry.path)
@@ -345,11 +345,11 @@ impl GixRepo {
         Ok(paths)
     }
 
-    pub(super) fn upstream_divergence_impl(&self) -> Result<Option<UpstreamDivergence>> {
-        self.upstream_divergence_cancellable_impl(&CancellationToken::new())
+    pub(super) fn upstream_divergence(&self) -> Result<Option<UpstreamDivergence>> {
+        self.upstream_divergence_cancellable(&CancellationToken::new())
     }
 
-    pub(super) fn upstream_divergence_cancellable_impl(
+    pub(super) fn upstream_divergence_cancellable(
         &self,
         cancellation: &CancellationToken,
     ) -> Result<Option<UpstreamDivergence>> {
@@ -2122,9 +2122,9 @@ mod tests {
         write_file(workdir, "untracked.txt", "untracked\n");
 
         let gix_repo = open_repo(workdir);
-        let combined = gix_repo.status_impl().expect("combined status");
-        let staged = gix_repo.staged_status_impl().expect("staged status");
-        let unstaged = gix_repo.worktree_status_impl().expect("worktree status");
+        let combined = gix_repo.status().expect("combined status");
+        let staged = gix_repo.staged_status().expect("staged status");
+        let unstaged = gix_repo.worktree_status().expect("worktree status");
 
         assert_eq!(combined.staged, staged);
         assert_eq!(combined.unstaged, unstaged);
@@ -2161,7 +2161,7 @@ mod tests {
         write_file(workdir, "foo.txt", "further worktree edit\n");
 
         let gix_repo = open_repo(workdir);
-        let status = gix_repo.status_impl().expect("combined status");
+        let status = gix_repo.status().expect("combined status");
         assert_eq!(
             status.staged,
             vec![file_status("foo.txt", FileStatusKind::Modified)],
@@ -2174,11 +2174,11 @@ mod tests {
         );
         // The per-lane entry points must agree with the combined status.
         assert_eq!(
-            gix_repo.staged_status_impl().expect("staged lane"),
+            gix_repo.staged_status().expect("staged lane"),
             status.staged
         );
         assert_eq!(
-            gix_repo.worktree_status_impl().expect("worktree lane"),
+            gix_repo.worktree_status().expect("worktree lane"),
             status.unstaged
         );
     }
@@ -2193,8 +2193,8 @@ mod tests {
         git_success(workdir, &["add", "new.txt"]);
 
         let gix_repo = open_repo(workdir);
-        let combined = gix_repo.status_impl().expect("combined status");
-        let staged = gix_repo.staged_status_impl().expect("staged status");
+        let combined = gix_repo.status().expect("combined status");
+        let staged = gix_repo.staged_status().expect("staged status");
 
         assert_eq!(combined.staged, staged);
         assert_eq!(staged, vec![file_status("new.txt", FileStatusKind::Added)]);
@@ -2208,9 +2208,9 @@ mod tests {
         setup_both_modified_text_conflict(workdir, "tracked.txt");
 
         let gix_repo = open_repo(workdir);
-        let combined = gix_repo.status_impl().expect("combined status");
-        let staged = gix_repo.staged_status_impl().expect("staged status");
-        let worktree = gix_repo.worktree_status_impl().expect("worktree status");
+        let combined = gix_repo.status().expect("combined status");
+        let staged = gix_repo.staged_status().expect("staged status");
+        let worktree = gix_repo.worktree_status().expect("worktree status");
 
         assert!(combined.staged.is_empty());
         assert!(staged.is_empty());
@@ -2252,7 +2252,7 @@ mod tests {
         .expect("head tree");
         assert_ne!(head_commit_id, head_tree_id);
 
-        let staged = gix_repo.staged_status_impl().expect("staged status");
+        let staged = gix_repo.staged_status().expect("staged status");
         assert_eq!(staged.len(), 1);
         assert_eq!(staged[0].path, PathBuf::from("tracked.txt"));
         assert_eq!(staged[0].kind, FileStatusKind::Modified);
@@ -2438,12 +2438,7 @@ mod tests {
         );
 
         // With a clean index nothing is staged; this also primes the cache.
-        assert!(
-            gix_repo
-                .staged_status_impl()
-                .expect("staged status")
-                .is_empty()
-        );
+        assert!(gix_repo.staged_status().expect("staged status").is_empty());
 
         // Reproduce the bug's precondition: a cached staged result whose stamp matches the
         // current index in length + mtime but reflects *different* index content (an atomic
@@ -2470,7 +2465,7 @@ mod tests {
         // recomputed as empty instead of being served from the cache.
         assert!(
             gix_repo
-                .staged_status_impl()
+                .staged_status()
                 .expect("recomputed staged status")
                 .is_empty(),
             "a content-exact stamp must invalidate a stale staged cache on len+mtime collisions"
@@ -2489,7 +2484,7 @@ mod tests {
                 staged: vec![file_status("sentinel.txt", FileStatusKind::Added)],
             });
         assert_eq!(
-            gix_repo.staged_status_impl().expect("cached staged status"),
+            gix_repo.staged_status().expect("cached staged status"),
             vec![file_status("sentinel.txt", FileStatusKind::Added)],
             "an exact stamp match should still hit the staged cache"
         );
@@ -2499,7 +2494,7 @@ mod tests {
     fn status_lanes_track_external_stage_unstage_transitions_across_the_cache() {
         // End-to-end check on a real repo: as external `git add` / `git reset` rewrite `.git/index`,
         // a file must move between the staged and unstaged lanes, and the staged cache (populated by
-        // each `status_impl` call) must invalidate on every index rewrite so it never serves a
+        // each `status` call) must invalidate on every index rewrite so it never serves a
         // stale lane. This reproduces the original "file stuck in the wrong section" symptom.
         let tmp = tempfile::tempdir().expect("tempdir");
         let workdir = tmp.path();
@@ -2514,14 +2509,14 @@ mod tests {
         // Stage a modification: foo is staged, nothing unstaged. Primes the staged cache.
         write_file(workdir, "foo.txt", "v1\n");
         git_success(workdir, &["add", "foo.txt"]);
-        let status = gix_repo.status_impl().expect("status after staging");
+        let status = gix_repo.status().expect("status after staging");
         assert_eq!(status.staged, modified(FileStatusKind::Modified));
         assert!(status.unstaged.is_empty());
 
         // Edit the worktree again WITHOUT staging: foo is now in BOTH lanes. The index is unchanged,
         // so the staged lane is served from the cache while the unstaged lane is recomputed.
         write_file(workdir, "foo.txt", "v2\n");
-        let status = gix_repo.status_impl().expect("status with worktree edit");
+        let status = gix_repo.status().expect("status with worktree edit");
         assert_eq!(
             status.staged,
             modified(FileStatusKind::Modified),
@@ -2536,7 +2531,7 @@ mod tests {
         // Externally stage the new content (`git add`): foo leaves the unstaged lane but stays
         // staged. The index changed, so the cached staged result must be invalidated and recomputed.
         git_success(workdir, &["add", "foo.txt"]);
-        let status = gix_repo.status_impl().expect("status after restaging");
+        let status = gix_repo.status().expect("status after restaging");
         assert_eq!(status.staged, modified(FileStatusKind::Modified));
         assert!(
             status.unstaged.is_empty(),
@@ -2546,7 +2541,7 @@ mod tests {
         // Externally unstage (`git reset`): foo leaves the staged lane and (re)enters the unstaged
         // lane — the exact transition the freshness bug got wrong. Again the cache must invalidate.
         git_success(workdir, &["reset", "HEAD", "--", "foo.txt"]);
-        let status = gix_repo.status_impl().expect("status after unstaging");
+        let status = gix_repo.status().expect("status after unstaging");
         assert!(
             status.staged.is_empty(),
             "unstaging must remove foo from the staged lane (stale cache would keep it)"
@@ -2559,11 +2554,11 @@ mod tests {
 
         // The per-lane entry points must agree with the combined status after all the churn.
         assert_eq!(
-            gix_repo.staged_status_impl().expect("staged lane"),
+            gix_repo.staged_status().expect("staged lane"),
             status.staged
         );
         assert_eq!(
-            gix_repo.worktree_status_impl().expect("worktree lane"),
+            gix_repo.worktree_status().expect("worktree lane"),
             status.unstaged
         );
     }
@@ -2587,7 +2582,7 @@ mod tests {
 
         let repo = open_repo(workdir);
         let StatusForPaths::Lists { unstaged, staged } = repo
-            .status_for_paths_impl(&[PathBuf::from("a.txt")])
+            .status_for_paths(&[PathBuf::from("a.txt")])
             .expect("status for the staged path")
         else {
             panic!("expected a mergeable list answer");
@@ -2624,7 +2619,7 @@ mod tests {
 
         let repo = open_repo(workdir);
         let StatusForPaths::Lists { unstaged, staged } = repo
-            .status_for_paths_impl(&[PathBuf::from("b.txt")])
+            .status_for_paths(&[PathBuf::from("b.txt")])
             .expect("status for the unstaged path")
         else {
             panic!("expected a mergeable list answer");

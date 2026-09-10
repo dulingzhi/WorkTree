@@ -462,51 +462,37 @@ impl GitRepository for GixRepo {
         self.list_remote_branches_cancellable_impl(cancellation)
     }
 
-    fn worktree_status(&self) -> Result<Vec<worktree_core::domain::FileStatus>> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::Status);
-        self.worktree_status_impl()
-    }
+    delegate_git_repository! {
+        @trace(Status)
+        fn worktree_status(&self) -> Result<Vec<worktree_core::domain::FileStatus>>;
 
-    fn worktree_status_cancellable(
-        &self,
-        cancellation: &CancellationToken,
-    ) -> Result<Vec<worktree_core::domain::FileStatus>> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::Status);
-        self.worktree_status_cancellable_impl(cancellation)
-    }
+        @trace(Status)
+        fn worktree_status_cancellable(
+            &self,
+            cancellation: &CancellationToken,
+        ) -> Result<Vec<worktree_core::domain::FileStatus>>;
 
-    fn staged_status(&self) -> Result<Vec<worktree_core::domain::FileStatus>> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::Status);
-        self.staged_status_impl()
-    }
+        @trace(Status)
+        fn staged_status(&self) -> Result<Vec<worktree_core::domain::FileStatus>>;
 
-    fn staged_status_cancellable(
-        &self,
-        cancellation: &CancellationToken,
-    ) -> Result<Vec<worktree_core::domain::FileStatus>> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::Status);
-        self.staged_status_cancellable_impl(cancellation)
-    }
+        @trace(Status)
+        fn staged_status_cancellable(
+            &self,
+            cancellation: &CancellationToken,
+        ) -> Result<Vec<worktree_core::domain::FileStatus>>;
 
-    fn status(&self) -> Result<RepoStatus> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::Status);
-        self.status_impl()
-    }
+        @trace(Status)
+        fn status(&self) -> Result<RepoStatus>;
 
-    fn status_cancellable(&self, cancellation: &CancellationToken) -> Result<RepoStatus> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::Status);
-        self.status_cancellable_impl(cancellation)
-    }
+        @trace(Status)
+        fn status_cancellable(&self, cancellation: &CancellationToken) -> Result<RepoStatus>;
 
-    fn upstream_divergence(&self) -> Result<Option<UpstreamDivergence>> {
-        self.upstream_divergence_impl()
-    }
+        fn upstream_divergence(&self) -> Result<Option<UpstreamDivergence>>;
 
-    fn upstream_divergence_cancellable(
-        &self,
-        cancellation: &CancellationToken,
-    ) -> Result<Option<UpstreamDivergence>> {
-        self.upstream_divergence_cancellable_impl(cancellation)
+        fn upstream_divergence_cancellable(
+            &self,
+            cancellation: &CancellationToken,
+        ) -> Result<Option<UpstreamDivergence>>;
     }
 
     fn pull_branch_with_output(&self, remote: &str, branch: &str) -> Result<CommandOutput> {
@@ -594,11 +580,11 @@ impl GitRepository for GixRepo {
         fn lfs_new_side_smudged(&self, target: &DiffTarget) -> Result<Option<Vec<u8>>>;
     }
 
-    fn status_for_paths(
-        &self,
-        paths: &[PathBuf],
-    ) -> worktree_core::services::Result<worktree_core::services::StatusForPaths> {
-        self.status_for_paths_impl(paths)
+    delegate_git_repository! {
+        fn status_for_paths(
+            &self,
+            paths: &[PathBuf],
+        ) -> worktree_core::services::Result<worktree_core::services::StatusForPaths>;
     }
 
     fn checkout_pull_request(&self, remote: &str, number: u64) -> Result<()> {

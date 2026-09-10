@@ -856,7 +856,7 @@ impl GixRepo {
     }
 
     fn worktree_overwrite_blocker_paths(&self) -> Result<FxHashSet<PathBuf>> {
-        let status = self.status_impl()?;
+        let status = self.status()?;
         Ok(status
             .unstaged
             .into_iter()
@@ -932,7 +932,7 @@ impl GixRepo {
                 // this is exactly the set "unstage everything" may act on — and
                 // a path-limited `git reset` only rewrites those index entries,
                 // leaving MERGE_HEAD and every worktree file untouched.
-                let staged = self.staged_index_paths_impl()?;
+                let staged = self.staged_index_paths()?;
                 let staged_paths: Vec<&Path> = staged.iter().map(|path| path.as_path()).collect();
                 if staged_paths.is_empty() {
                     return Ok(());

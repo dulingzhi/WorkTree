@@ -255,7 +255,7 @@ impl GixRepo {
         let nested_workdir = repo_workdir_for_submodule_trust(&repo).join(path);
         let nested_status_repo =
             GixRepo::new(nested_workdir.clone(), nested_repo.clone().into_sync());
-        let nested_status = nested_status_repo.status_impl()?;
+        let nested_status = nested_status_repo.status()?;
         if !nested_status.staged.is_empty() || !nested_status.unstaged.is_empty() {
             return Err(Error::new(ErrorKind::Backend(format!(
                 "submodule '{}' has inner changes. Commit, stash, or discard them before changing the pointer.",
@@ -790,7 +790,7 @@ fn submodule_live_inner_changes(
         nested_workdir.to_path_buf(),
         nested_repo.clone().into_sync(),
     );
-    let RepoStatus { staged, unstaged } = nested_status_repo.status_impl()?;
+    let RepoStatus { staged, unstaged } = nested_status_repo.status()?;
     let staged_counts = git_numstat_counts(nested_workdir, true)?;
     let unstaged_counts = git_numstat_counts(nested_workdir, false)?;
     Ok((

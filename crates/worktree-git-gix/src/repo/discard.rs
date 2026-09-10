@@ -12,7 +12,7 @@ impl GixRepo {
             return Ok(());
         }
 
-        let status = self.status_impl()?;
+        let status = self.status()?;
         let mut selected: FxHashSet<&Path> =
             FxHashSet::with_capacity_and_hasher(paths.len(), Default::default());
         selected.extend(paths.iter().copied());
