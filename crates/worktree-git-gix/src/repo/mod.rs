@@ -391,13 +391,13 @@ impl GitRepository for GixRepo {
         fn reflog_head(&self, limit: usize) -> Result<Vec<ReflogEntry>>;
     }
 
-    fn current_branch(&self) -> Result<String> {
-        self.current_branch_impl()
+    delegate_git_repository! {
+        fn current_branch(&self) -> Result<String>;
     }
 
     fn current_branch_cancellable(&self, cancellation: &CancellationToken) -> Result<String> {
         cancellation.check_cancelled()?;
-        let branch = self.current_branch_impl()?;
+        let branch = self.current_branch()?;
         cancellation.check_cancelled()?;
         Ok(branch)
     }
@@ -406,15 +406,15 @@ impl GitRepository for GixRepo {
         self.head_commit_id_impl()
     }
 
-    fn list_branches(&self) -> Result<Vec<Branch>> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::RefEnumerate);
-        self.list_branches_impl()
+    delegate_git_repository! {
+        @trace(RefEnumerate)
+        fn list_branches(&self) -> Result<Vec<Branch>>;
     }
 
     fn list_branches_cancellable(&self, cancellation: &CancellationToken) -> Result<Vec<Branch>> {
         let _scope = git_ops_trace::scope(GitOpTraceKind::RefEnumerate);
         cancellation.check_cancelled()?;
-        let branches = self.list_branches_impl()?;
+        let branches = self.list_branches()?;
         cancellation.check_cancelled()?;
         Ok(branches)
     }
@@ -1077,8 +1077,8 @@ impl GitRepository for GixRepo {
         Ok(worktrees)
     }
 
-    fn list_ref_metadata(&self) -> Result<Vec<(String, RefMetadata)>> {
-        self.list_ref_metadata_impl()
+    delegate_git_repository! {
+        fn list_ref_metadata(&self) -> Result<Vec<(String, RefMetadata)>>;
     }
 
     fn list_ref_metadata_cancellable(
@@ -1086,7 +1086,7 @@ impl GitRepository for GixRepo {
         cancellation: &CancellationToken,
     ) -> Result<Vec<(String, RefMetadata)>> {
         cancellation.check_cancelled()?;
-        let metadata = self.list_ref_metadata_impl()?;
+        let metadata = self.list_ref_metadata()?;
         cancellation.check_cancelled()?;
         Ok(metadata)
     }

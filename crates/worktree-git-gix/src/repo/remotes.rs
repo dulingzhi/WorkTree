@@ -158,7 +158,7 @@ impl GixRepo {
     }
 
     fn current_branch_name(&self) -> Result<Option<String>> {
-        let head = self.current_branch_impl()?;
+        let head = self.current_branch()?;
         let head = head.trim();
         if head.is_empty() || head == "HEAD" {
             return Ok(None);

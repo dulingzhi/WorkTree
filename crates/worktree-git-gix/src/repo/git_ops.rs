@@ -32,7 +32,7 @@ pub(super) fn head_upstream_divergence(
 }
 
 impl GixRepo {
-    pub(super) fn current_branch_impl(&self) -> Result<String> {
+    pub(super) fn current_branch(&self) -> Result<String> {
         self.current_branch_gix().or_else(|gix_err| {
             self.current_branch_cli().map_err(|cli_err| {
                 Error::new(ErrorKind::Backend(format!(
@@ -74,7 +74,7 @@ impl GixRepo {
         Ok(has_branch_sections)
     }
 
-    pub(super) fn list_branches_impl(&self) -> Result<Vec<Branch>> {
+    pub(super) fn list_branches(&self) -> Result<Vec<Branch>> {
         let has_branch_tracking = self.branch_tracking_config_present()?;
         if has_branch_tracking {
             // Upstream tracking is config-driven (`branch.*`) and can change while the backend
@@ -158,7 +158,7 @@ impl GixRepo {
         parse_local_branches_for_each_ref(&output)
     }
 
-    pub(super) fn list_ref_metadata_impl(&self) -> Result<Vec<(String, RefMetadata)>> {
+    pub(super) fn list_ref_metadata(&self) -> Result<Vec<(String, RefMetadata)>> {
         let mut cmd = self.git_workdir_cmd();
         cmd.arg("for-each-ref")
             .arg(
