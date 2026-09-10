@@ -6,14 +6,14 @@ use worktree_core::path_utils::canonicalize_or_original;
 use worktree_core::services::{CommandOutput, Result};
 
 impl GixRepo {
-    pub(super) fn list_worktrees_impl(&self) -> Result<Vec<Worktree>> {
+    pub(super) fn list_worktrees(&self) -> Result<Vec<Worktree>> {
         let mut cmd = self.git_workdir_cmd();
         cmd.arg("worktree").arg("list").arg("--porcelain").arg("-z");
         let output = run_git_capture_bytes(cmd, "git worktree list --porcelain -z")?;
         parse_git_worktree_list_porcelain_z(&output)
     }
 
-    pub(super) fn add_worktree_with_output_impl(
+    pub(super) fn add_worktree_with_output(
         &self,
         path: &Path,
         reference: Option<&str>,
@@ -29,16 +29,13 @@ impl GixRepo {
         run_git_with_output(cmd, &label)
     }
 
-    pub(super) fn remove_worktree_with_output_impl(&self, path: &Path) -> Result<CommandOutput> {
+    pub(super) fn remove_worktree_with_output(&self, path: &Path) -> Result<CommandOutput> {
         let mut cmd = self.git_workdir_cmd();
         cmd.arg("worktree").arg("remove").arg(path);
         run_git_with_output(cmd, &format!("git worktree remove {}", path.display()))
     }
 
-    pub(super) fn force_remove_worktree_with_output_impl(
-        &self,
-        path: &Path,
-    ) -> Result<CommandOutput> {
+    pub(super) fn force_remove_worktree_with_output(&self, path: &Path) -> Result<CommandOutput> {
         let mut cmd = self.git_workdir_cmd();
         cmd.arg("worktree").arg("remove").arg("--force").arg(path);
         run_git_with_output(

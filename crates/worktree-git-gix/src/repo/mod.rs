@@ -1009,8 +1009,8 @@ impl GitRepository for GixRepo {
         ) -> Result<MergetoolResult>;
     }
 
-    fn export_patch_with_output(&self, commit_id: &CommitId, dest: &Path) -> Result<CommandOutput> {
-        self.export_patch_with_output_impl(commit_id, dest)
+    delegate_git_repository! {
+        fn export_patch_with_output(&self, commit_id: &CommitId, dest: &Path) -> Result<CommandOutput>;
     }
 
     delegate_git_repository! {
@@ -1043,28 +1043,22 @@ impl GitRepository for GixRepo {
         fn set_assume_unchanged(&self, path: &Path, enable: bool) -> Result<()>;
     }
 
-    fn apply_patch_with_output(&self, patch: &Path) -> Result<CommandOutput> {
-        self.apply_patch_with_output_impl(patch)
-    }
+    delegate_git_repository! {
+        fn apply_patch_with_output(&self, patch: &Path) -> Result<CommandOutput>;
 
-    fn apply_unified_patch_to_index_with_output(
-        &self,
-        patch: &str,
-        reverse: bool,
-    ) -> Result<CommandOutput> {
-        self.apply_unified_patch_to_index_with_output_impl(patch, reverse)
-    }
+        fn apply_unified_patch_to_index_with_output(
+            &self,
+            patch: &str,
+            reverse: bool,
+        ) -> Result<CommandOutput>;
 
-    fn apply_unified_patch_to_worktree_with_output(
-        &self,
-        patch: &str,
-        reverse: bool,
-    ) -> Result<CommandOutput> {
-        self.apply_unified_patch_to_worktree_with_output_impl(patch, reverse)
-    }
+        fn apply_unified_patch_to_worktree_with_output(
+            &self,
+            patch: &str,
+            reverse: bool,
+        ) -> Result<CommandOutput>;
 
-    fn list_worktrees(&self) -> Result<Vec<Worktree>> {
-        self.list_worktrees_impl()
+        fn list_worktrees(&self) -> Result<Vec<Worktree>>;
     }
 
     fn list_worktrees_cancellable(
@@ -1072,7 +1066,7 @@ impl GitRepository for GixRepo {
         cancellation: &CancellationToken,
     ) -> Result<Vec<Worktree>> {
         cancellation.check_cancelled()?;
-        let worktrees = self.list_worktrees_impl()?;
+        let worktrees = self.list_worktrees()?;
         cancellation.check_cancelled()?;
         Ok(worktrees)
     }
@@ -1091,20 +1085,16 @@ impl GitRepository for GixRepo {
         Ok(metadata)
     }
 
-    fn add_worktree_with_output(
-        &self,
-        path: &Path,
-        reference: Option<&str>,
-    ) -> Result<CommandOutput> {
-        self.add_worktree_with_output_impl(path, reference)
-    }
+    delegate_git_repository! {
+        fn add_worktree_with_output(
+            &self,
+            path: &Path,
+            reference: Option<&str>,
+        ) -> Result<CommandOutput>;
 
-    fn remove_worktree_with_output(&self, path: &Path) -> Result<CommandOutput> {
-        self.remove_worktree_with_output_impl(path)
-    }
+        fn remove_worktree_with_output(&self, path: &Path) -> Result<CommandOutput>;
 
-    fn force_remove_worktree_with_output(&self, path: &Path) -> Result<CommandOutput> {
-        self.force_remove_worktree_with_output_impl(path)
+        fn force_remove_worktree_with_output(&self, path: &Path) -> Result<CommandOutput>;
     }
 
     fn list_submodules(&self) -> Result<Vec<Submodule>> {

@@ -8,7 +8,7 @@ use worktree_core::error::{Error, ErrorKind};
 use worktree_core::services::{CommandOutput, Result};
 
 impl GixRepo {
-    pub(super) fn export_patch_with_output_impl(
+    pub(super) fn export_patch_with_output(
         &self,
         commit_id: &CommitId,
         dest: &Path,
@@ -30,13 +30,13 @@ impl GixRepo {
         })
     }
 
-    pub(super) fn apply_patch_with_output_impl(&self, patch: &Path) -> Result<CommandOutput> {
+    pub(super) fn apply_patch_with_output(&self, patch: &Path) -> Result<CommandOutput> {
         let mut cmd = self.git_workdir_cmd();
         cmd.arg("am").arg("--3way").arg("--").arg(patch);
         run_git_with_output(cmd, &format!("git am --3way {}", patch.display()))
     }
 
-    pub(super) fn apply_unified_patch_to_index_with_output_impl(
+    pub(super) fn apply_unified_patch_to_index_with_output(
         &self,
         patch: &str,
         reverse: bool,
@@ -66,7 +66,7 @@ impl GixRepo {
         run_git_with_output(cmd, &label)
     }
 
-    pub(super) fn apply_unified_patch_to_worktree_with_output_impl(
+    pub(super) fn apply_unified_patch_to_worktree_with_output(
         &self,
         patch: &str,
         reverse: bool,
