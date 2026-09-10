@@ -38,11 +38,11 @@ fn allow_file_submodule_transport(cmd: &mut Command) {
 }
 
 impl GixRepo {
-    pub(super) fn list_submodules_impl(&self) -> Result<Vec<Submodule>> {
-        self.list_submodules_cancellable_impl(&CancellationToken::new())
+    pub(super) fn list_submodules(&self) -> Result<Vec<Submodule>> {
+        self.list_submodules_cancellable(&CancellationToken::new())
     }
 
-    pub(super) fn list_submodules_cancellable_impl(
+    pub(super) fn list_submodules_cancellable(
         &self,
         cancellation: &CancellationToken,
     ) -> Result<Vec<Submodule>> {
@@ -55,14 +55,14 @@ impl GixRepo {
         Ok(submodules)
     }
 
-    pub(super) fn submodule_diff_summary_impl(
+    pub(super) fn submodule_diff_summary(
         &self,
         target: &DiffTarget,
     ) -> Result<SubmoduleDiffSummary> {
         let repo = self.reopen_repo()?;
         match target {
             DiffTarget::WorkingTree { path, .. } => {
-                submodule_worktree_diff_summary(&repo, &self.list_submodules_impl()?, path)
+                submodule_worktree_diff_summary(&repo, &self.list_submodules()?, path)
             }
             DiffTarget::Commit {
                 commit_id,
@@ -74,7 +74,7 @@ impl GixRepo {
         }
     }
 
-    pub(super) fn check_submodule_add_trust_impl(
+    pub(super) fn check_submodule_add_trust(
         &self,
         url: &str,
         path: &Path,
@@ -95,7 +95,7 @@ impl GixRepo {
         }
     }
 
-    pub(super) fn check_submodule_update_trust_impl(&self) -> Result<SubmoduleTrustDecision> {
+    pub(super) fn check_submodule_update_trust(&self) -> Result<SubmoduleTrustDecision> {
         let repo = self.reopen_repo()?;
         let trust_root = repo_workdir_for_submodule_trust(&repo);
         let mut sources = BTreeMap::new();
@@ -109,10 +109,7 @@ impl GixRepo {
         }
     }
 
-    pub(super) fn check_submodule_load_trust_impl(
-        &self,
-        path: &Path,
-    ) -> Result<SubmoduleTrustDecision> {
+    pub(super) fn check_submodule_load_trust(&self, path: &Path) -> Result<SubmoduleTrustDecision> {
         let repo = self.reopen_repo()?;
         let trust_root = repo_workdir_for_submodule_trust(&repo);
         let mut sources = BTreeMap::new();
@@ -138,7 +135,7 @@ impl GixRepo {
         }
     }
 
-    pub(super) fn add_submodule_with_output_impl(
+    pub(super) fn add_submodule_with_output(
         &self,
         url: &str,
         path: &Path,
@@ -191,7 +188,7 @@ impl GixRepo {
         }
     }
 
-    pub(super) fn update_submodules_with_output_impl(
+    pub(super) fn update_submodules_with_output(
         &self,
         approved_sources: &[SubmoduleTrustTarget],
     ) -> Result<CommandOutput> {
@@ -211,7 +208,7 @@ impl GixRepo {
         }
     }
 
-    pub(super) fn load_submodule_with_output_impl(
+    pub(super) fn load_submodule_with_output(
         &self,
         path: &Path,
         approved_sources: &[SubmoduleTrustTarget],
@@ -242,7 +239,7 @@ impl GixRepo {
         }
     }
 
-    pub(super) fn change_submodule_pointer_with_output_impl(
+    pub(super) fn change_submodule_pointer_with_output(
         &self,
         path: &Path,
         reference: &str,
@@ -290,7 +287,7 @@ impl GixRepo {
         ))
     }
 
-    pub(super) fn remove_submodule_with_output_impl(&self, path: &Path) -> Result<CommandOutput> {
+    pub(super) fn remove_submodule_with_output(&self, path: &Path) -> Result<CommandOutput> {
         let repo = self.reopen_repo()?;
         let workdir = repo_workdir_for_submodule_trust(&repo).to_path_buf();
         let git_dir = repo.git_dir().to_path_buf();
@@ -1892,7 +1889,7 @@ mod tests {
         cancellation.cancel();
 
         let error = repo
-            .list_submodules_cancellable_impl(&cancellation)
+            .list_submodules_cancellable(&cancellation)
             .expect_err("cancelled submodule listing should fail");
         assert!(matches!(error.kind(), ErrorKind::Cancelled));
     }
@@ -2019,7 +2016,7 @@ mod tests {
 
         let repo = open_repo(tmp.path());
         let summary = repo
-            .submodule_diff_summary_impl(&DiffTarget::WorkingTree {
+            .submodule_diff_summary(&DiffTarget::WorkingTree {
                 path: submodule_path.into(),
                 area: DiffArea::Staged,
             })

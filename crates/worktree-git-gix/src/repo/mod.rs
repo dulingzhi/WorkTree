@@ -1067,15 +1067,13 @@ impl GitRepository for GixRepo {
         fn force_remove_worktree_with_output(&self, path: &Path) -> Result<CommandOutput>;
     }
 
-    fn list_submodules(&self) -> Result<Vec<Submodule>> {
-        self.list_submodules_impl()
-    }
+    delegate_git_repository! {
+        fn list_submodules(&self) -> Result<Vec<Submodule>>;
 
-    fn list_submodules_cancellable(
-        &self,
-        cancellation: &CancellationToken,
-    ) -> Result<Vec<Submodule>> {
-        self.list_submodules_cancellable_impl(cancellation)
+        fn list_submodules_cancellable(
+            &self,
+            cancellation: &CancellationToken,
+        ) -> Result<Vec<Submodule>>;
     }
 
     delegate_git_repository! {
@@ -1084,59 +1082,43 @@ impl GitRepository for GixRepo {
         fn list_tree_files_at_commit(&self, commit_id: &CommitId) -> Result<Vec<FileEntry>>;
     }
 
-    fn submodule_diff_summary(&self, target: &DiffTarget) -> Result<SubmoduleDiffSummary> {
-        self.submodule_diff_summary_impl(target)
-    }
+    delegate_git_repository! {
+        fn submodule_diff_summary(&self, target: &DiffTarget) -> Result<SubmoduleDiffSummary>;
 
-    fn check_submodule_add_trust(&self, url: &str, path: &Path) -> Result<SubmoduleTrustDecision> {
-        self.check_submodule_add_trust_impl(url, path)
-    }
+        fn check_submodule_add_trust(&self, url: &str, path: &Path) -> Result<SubmoduleTrustDecision>;
 
-    fn check_submodule_update_trust(&self) -> Result<SubmoduleTrustDecision> {
-        self.check_submodule_update_trust_impl()
-    }
+        fn check_submodule_update_trust(&self) -> Result<SubmoduleTrustDecision>;
 
-    fn check_submodule_load_trust(&self, path: &Path) -> Result<SubmoduleTrustDecision> {
-        self.check_submodule_load_trust_impl(path)
-    }
+        fn check_submodule_load_trust(&self, path: &Path) -> Result<SubmoduleTrustDecision>;
 
-    fn add_submodule_with_output(
-        &self,
-        url: &str,
-        path: &Path,
-        branch: Option<&str>,
-        name: Option<&str>,
-        force: bool,
-        approved_sources: &[SubmoduleTrustTarget],
-    ) -> Result<CommandOutput> {
-        self.add_submodule_with_output_impl(url, path, branch, name, force, approved_sources)
-    }
+        fn add_submodule_with_output(
+            &self,
+            url: &str,
+            path: &Path,
+            branch: Option<&str>,
+            name: Option<&str>,
+            force: bool,
+            approved_sources: &[SubmoduleTrustTarget],
+        ) -> Result<CommandOutput>;
 
-    fn update_submodules_with_output(
-        &self,
-        approved_sources: &[SubmoduleTrustTarget],
-    ) -> Result<CommandOutput> {
-        self.update_submodules_with_output_impl(approved_sources)
-    }
+        fn update_submodules_with_output(
+            &self,
+            approved_sources: &[SubmoduleTrustTarget],
+        ) -> Result<CommandOutput>;
 
-    fn load_submodule_with_output(
-        &self,
-        path: &Path,
-        approved_sources: &[SubmoduleTrustTarget],
-    ) -> Result<CommandOutput> {
-        self.load_submodule_with_output_impl(path, approved_sources)
-    }
+        fn load_submodule_with_output(
+            &self,
+            path: &Path,
+            approved_sources: &[SubmoduleTrustTarget],
+        ) -> Result<CommandOutput>;
 
-    fn change_submodule_pointer_with_output(
-        &self,
-        path: &Path,
-        reference: &str,
-    ) -> Result<CommandOutput> {
-        self.change_submodule_pointer_with_output_impl(path, reference)
-    }
+        fn change_submodule_pointer_with_output(
+            &self,
+            path: &Path,
+            reference: &str,
+        ) -> Result<CommandOutput>;
 
-    fn remove_submodule_with_output(&self, path: &Path) -> Result<CommandOutput> {
-        self.remove_submodule_with_output_impl(path)
+        fn remove_submodule_with_output(&self, path: &Path) -> Result<CommandOutput>;
     }
 
     delegate_git_repository! {

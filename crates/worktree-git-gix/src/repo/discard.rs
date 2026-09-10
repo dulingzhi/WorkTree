@@ -24,7 +24,7 @@ impl GixRepo {
             FxHashSet::with_capacity_and_hasher(paths.len(), Default::default());
         let mut has_conflicts = false;
         let submodule_paths: FxHashSet<std::path::PathBuf> = self
-            .list_submodules_impl()?
+            .list_submodules()?
             .into_iter()
             .map(|submodule| submodule.path)
             .collect();
