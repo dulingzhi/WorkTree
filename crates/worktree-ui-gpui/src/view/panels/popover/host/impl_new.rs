@@ -1,7 +1,7 @@
 //! `PopoverHost` construction.
 
 use super::super::*;
-use super::host::PopoverHost;
+use super::popover_host::PopoverHost;
 use super::kinds::{
     PopoverKind, RemotePopoverKind, RepoPopoverKind, SubmodulePopoverKind, WorktreePopoverKind,
 };

@@ -2,7 +2,7 @@
 //! scheduling around them.
 
 use super::super::*;
-use super::host::PopoverHost;
+use super::popover_host::PopoverHost;
 
 // @split-module: impl_settings
 impl PopoverHost {

@@ -10,6 +10,8 @@ mod text_spec;
 
 use super::*;
 
+#[cfg(test)]
 pub(in crate::view::rows::diff) use row_builders::coverage_gutter_color;
 pub(in crate::view) use row_builders::should_hide_unified_diff_header_line;
+#[cfg(test)]
 pub(in crate::view::rows::diff) use text_spec::focused_diff_line_bg;

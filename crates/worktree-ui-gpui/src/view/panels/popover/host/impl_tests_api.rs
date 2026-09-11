@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 use super::super::*;
-use super::host::PopoverHost;
+use super::popover_host::PopoverHost;
 #[cfg(test)]
 use super::kinds::PopoverKind;
 

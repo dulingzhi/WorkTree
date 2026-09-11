@@ -211,21 +211,24 @@ mod worktree_view;
 
 use app_model::AppUiModel;
 use branch_sidebar::{BranchSection, BranchSidebarRow};
+#[cfg(test)]
+use caches::DeferredLineStarts;
 use caches::{
-    DeferredLineStarts, DiffTextLayoutCacheEntry, HistoryBaseCache, HistoryBaseCacheRequest,
-    HistoryBaseRowVm, HistoryCache, HistoryCacheBuildRequest, HistoryDecorationCache,
-    HistoryDecorationCacheRequest, HistoryDecorationRowVm, HistoryDisplayKey, HistoryRefListItem,
-    HistoryRefListItemKind, HistoryStashIdsCache, HistoryTextVm, HistoryWorktreeSummaryCache,
-    LoadableImagePreview, LoadableMarkdownDiff, LoadableMarkdownDoc, MarkdownPreviewList,
-    MarkdownPreviewWrapCache, MarkdownPreviewWrapKey, MarkdownSearchSurface,
+    DiffTextLayoutCacheEntry, HistoryBaseCache, HistoryBaseCacheRequest, HistoryBaseRowVm,
+    HistoryCache, HistoryCacheBuildRequest, HistoryDecorationCache, HistoryDecorationCacheRequest,
+    HistoryDecorationRowVm, HistoryDisplayKey, HistoryRefListItem, HistoryRefListItemKind,
+    HistoryStashIdsCache, HistoryTextVm, HistoryWorktreeSummaryCache, LoadableImagePreview,
+    LoadableMarkdownDiff, LoadableMarkdownDoc, MarkdownPreviewList, MarkdownPreviewWrapCache,
+    MarkdownPreviewWrapKey, MarkdownSearchSurface,
 };
 use chrome::{TitleBarView, cursor_style_for_resize_edge, resize_edge};
+#[cfg(test)]
+use conflict_resolver::{ConflictModeState, StreamedConflictState};
 use conflict_resolver::{
-    ConflictModeState, ConflictPickSide, ConflictResolverImagePreviewState,
-    ConflictResolverJoinTarget, ConflictResolverMarkdownPreviewState, ConflictResolverUiState,
-    ConflictResolverViewMode, ConflictRowSelection, ResolvedOutlineData,
-    ResolvedOutputConflictMarker, ResolverPickTarget, StreamedConflictState, ThreeWayColumn,
-    ThreeWaySides,
+    ConflictPickSide, ConflictResolverImagePreviewState, ConflictResolverJoinTarget,
+    ConflictResolverMarkdownPreviewState, ConflictResolverUiState, ConflictResolverViewMode,
+    ConflictRowSelection, ResolvedOutlineData, ResolvedOutputConflictMarker, ResolverPickTarget,
+    ThreeWayColumn, ThreeWaySides,
 };
 #[cfg(test)]
 use date_time::format_datetime;
