@@ -15,24 +15,15 @@ use super::helpers::{
     ResolvedOutputSourceRevision, append_choice_after_conflict_block, append_line_insertion_text,
     centered_reveal_scroll_y, conflict_group_indices_for_choice,
     conflict_group_member_indices_for_ix, conflict_region_index_is_unique,
-    conflict_strategy_needs_full_side_payloads, count_newlines,
     first_output_marker_line_for_conflict, line_content_byte_range_for_index,
     output_line_range_for_conflict_block_in_text, reset_conflict_block_selection,
     resolved_outline_delta_for_snapshot_transition, resolved_output_marker_for_line,
-    resolved_output_markers_for_text, should_skip_resolved_outline_provenance, source_line_count,
-    split_line_count, split_target_conflict_block_into_subchunks,
-    worktree_output_requires_protection,
+    resolved_output_markers_for_text, source_line_count, split_line_count,
+    split_target_conflict_block_into_subchunks,
 };
 use super::*;
 use crate::kit::text_model::TextModelSnapshot;
-use rustc_hash::{FxHashMap, FxHasher};
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::Instant;
-use worktree_core::mergetool_trace::{
-    self, MergetoolTraceEvent, MergetoolTraceRenderingMode, MergetoolTraceSideStats,
-    MergetoolTraceStage,
-};
+use worktree_core::mergetool_trace::{self};
 
 mod alignment;
 mod bootstrap;
