@@ -8,7 +8,7 @@
 ## 继承约束（含 2026-09-07 用户授权的节奏变更）
 
 - **验证节奏（新）**：**任务级四腿**——提交级便宜腿（`cargo check -p <触及包> --all-targets` + 定向包测试 + rustfmt，~1-3 分钟），任务边界完整四腿后评审。**例外：高风险批量语义变换保持提交级完整四腿**（T10 委托壳宏化、T8 reducer 分派化）。
-- **四腿矩阵**：(a) `cargo test --workspace --no-default-features --features gix`（基线 **49 行**/0/5,935——T2 归并 worktree-git 曾降至 47，T5 新建 worktree-test-support 的两 0-测试目标 +2 回升）；(b) `cargo test --workspace`（**50**/0/6,020）；(c) live clippy（touch lib.rs + JSON + stderr 含 Checking；p3t9fix-extract.py first-arrow 提取 + `tr -d '\r'`；与 clippy-baseline.txt 逐字节 diff）；(d) `cargo test -p worktree-ui-gpui -- --list` 名单比对（P4 触及非 UI crate 时须同步对比对应包的 --list 快照）。
+- **四腿矩阵**：(a) `cargo test --workspace --no-default-features --features gix`（基线 **50 行**/0/5,935——原记 49，2026-09-12 实测 50 并据此沿用；T2 归并 worktree-git 曾降至 47，T5 新建 worktree-test-support 的两 0-测试目标 +2 回升）；(b) `cargo test --workspace`（**51**/0/6,020——原记 50，同上勘误）；(c) live clippy（touch lib.rs + JSON + stderr 含 Checking；p3t9fix-extract.py first-arrow 提取 + `tr -d '\r'`；与 clippy-baseline.txt 逐字节 diff。**注意：本腿跑 `--no-default-features --features gix`，与默认 feature set 下的 `unused import` 集合不同——拆分类任务收尾必须两个 feature set 都跑 `cargo check`**）；(d) `cargo test -p worktree-ui-gpui -- --list` 名单比对（P4 触及非 UI crate 时须同步对比对应包的 --list 快照）。
 - **W2**：具名 import；禁新增 `use xxx::*`（特许：迁移文件文件头 `use super::*;`）。
 - **G1**：末次验证后零源码改动。**受众保持**：可见性升级须编译器证据，逐名记录消费方。
 - **rustfmt**：`rustfmt --edition 2024 --config skip_children=true` 仅触及文件。
@@ -83,13 +83,16 @@
 **T12 repo/mod.rs 委托壳宏化 + 167 `_impl` 改回本名**（spec:145）——**高风险件，提交级完整四腿**。`delegate!` 声明宏或 `#[trace_op]` 属性宏（选型先试 3 个子模块做样板）；按 19 子模块分批（remotes 40 最大）。168 调用点与 167 定义的一一对应表先行建档。
 
 **T13 services.rs 176 方法 trait 拆域**（**裁定：按 T12 落地痛感后定**，2026-09-08——届时以可读性证据呈主会话裁定，不预排）：log/history/remotes/status/diff 分组与 repo/ 子模块分布同构。
+- **✅ 完成 2026-09-11（76a876fe）**：175 方法拆为 Log 20 / History 22 / Remotes 32 / Status 11 / Diff 23 / Porcelain 41 / Worktree 23 七域 trait + 聚合 trait（保留 `spec` + 2 个跨域默认）。**跨域默认是硬约束**：`where Self: Porcelain + Log` → E0038 失去 dyn 兼容，域 trait 声明必需 + 聚合给默认 → E0034 二义性；唯一可行解是默认体只留聚合 trait。30 实现点重排，零方法的域补空 `impl`。四腿全绿。
 
 **T14 file_diff.rs（4,266）六边界拆**（spec:155）：line_text / rows_anchors / plan / levenshtein / align / benchmark；物理序即切分序，:1354 prepare_replacement_lines 为天然接缝。
+- **✅ 完成 2026-09-11（cfe8c23e）**：line_text 485 / rows_anchors 51 / plan 643 / levenshtein 124 / align 1,859 / benchmark 111 / tests 1,058 / mod 33。三项判断记录在案：接缝歧义取任务行自称的 `:1354`；**物理序唯一偏差**是文件头 :21-35 的 12 个调参常量各归其唯一读者模块（纯物理切会落进无读者的 line_text）；benchmark 是 `cfg(feature="benchmarks")` 跨切面而非行区间，`mod benchmark;` 与 re-export 须同 cfg 门控。四腿全绿。
 
 ### Wave 5 — UI 巨型文件残余池（**裁定：只收挂号件**，2026-09-08）
 
 - 本阶段收 P3 评审挂号的 7 件：popover/host.rs 2,788、diff_search.rs 2,726、context_menu.rs 2,799、rows/diff/rows.rs 2,419、markdown_preview.rs(rows) 2,239、resolved_output_syntax.rs 2,195、bootstrap.rs 2,148。
-- 未挂号大件（view/mod.rs 4,787、terminal_panel 4,578、sidebar×2、diff_cache、theme、app 等 45 个）**另立 P5**。验收度量 ">2,000 行 <10 个" 在 P4 后仍不达标属预期，P5 收口。
+- **✅ 全部完成 2026-09-12**，各 1 提交、0 error / 0 warning、独立提取器等价 PASS（叶子 fn 项 + (类型,方法) 归属多重集全等、注释零丢失）：markdown_preview→`f9285db3`(2,239→最大片 740)、bootstrap→`589a6814`(2,148→1,408)、resolved_output_syntax→`ee70f44a`(2,195→796)、diff_search→`02554887`(2,726→1,175)、rows→`e55d5110`(2,419→1,401)、host→`b4f7b6e1`(2,788→1,130)、context_menu→`752e3281`(2,799→1,904)，收尾两提交 `67f9c716`（clippy 腿修复）+ `4e220316`（台账）。**七件全部降到 2,000 行以下**。三个新形态记入台账：巨型 `impl` 需按方法组先切开；`pub(in super::…)` 是相对路径，下沉一层须补 `super::`；glob 供给的名字既不能 `use super::{X}` 也不能用 rustc 相对建议，唯一忠实还原是把头部 glob 下沉一层重复进每个片段（对 W2 的显式偏离，理由在台账）。
+- 未挂号大件（view/mod.rs 4,787、terminal_panel 4,578、sidebar×2、diff_cache、theme、app 等 45 个）**另立 P5**。验收度量 ">2,000 行 <10 个" 在 P4 后仍不达标属预期，P5 收口（2026-09-12 实测仓库 73 个 >2,000 行，含测试文件与上述池）。
 
 ## Self-Review 结论（草稿）
 
