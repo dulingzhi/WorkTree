@@ -14,7 +14,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 use worktree_core::domain::*;
 use worktree_core::error::{Error, ErrorKind};
-use worktree_core::services::{GitBackend, GitRepository, PullMode, Result};
+use worktree_core::services::{
+    GitBackend, GitRepository, GitRepositoryDiff, GitRepositoryHistory, GitRepositoryLog,
+    GitRepositoryPorcelain, GitRepositoryRemotes, GitRepositoryStatus, GitRepositoryWorktree,
+    PullMode, Result,
+};
 use worktree_state::model::Loadable;
 use worktree_state::model::RepoId;
 use worktree_state::model::SidebarDataRequest;
@@ -1243,7 +1247,8 @@ impl GitRepository for SlowSubmoduleRepo {
     fn spec(&self) -> &RepoSpec {
         &self.spec
     }
-
+}
+impl GitRepositoryLog for SlowSubmoduleRepo {
     fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
         Self::unsupported()
     }
@@ -1255,15 +1260,9 @@ impl GitRepository for SlowSubmoduleRepo {
     fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
         Self::unsupported()
     }
-
-    fn current_branch(&self) -> Result<String> {
-        Self::unsupported()
-    }
-
-    fn list_branches(&self) -> Result<Vec<Branch>> {
-        Self::unsupported()
-    }
-
+}
+impl GitRepositoryHistory for SlowSubmoduleRepo {}
+impl GitRepositoryRemotes for SlowSubmoduleRepo {
     fn list_remotes(&self) -> Result<Vec<Remote>> {
         Self::unsupported()
     }
@@ -1272,11 +1271,34 @@ impl GitRepository for SlowSubmoduleRepo {
         Self::unsupported()
     }
 
-    fn status(&self) -> Result<RepoStatus> {
+    fn fetch_all(&self) -> Result<()> {
         Self::unsupported()
     }
 
+    fn pull(&self, _mode: PullMode) -> Result<()> {
+        Self::unsupported()
+    }
+
+    fn push(&self) -> Result<()> {
+        Self::unsupported()
+    }
+}
+impl GitRepositoryStatus for SlowSubmoduleRepo {
+    fn status(&self) -> Result<RepoStatus> {
+        Self::unsupported()
+    }
+}
+impl GitRepositoryDiff for SlowSubmoduleRepo {
     fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
+        Self::unsupported()
+    }
+}
+impl GitRepositoryPorcelain for SlowSubmoduleRepo {
+    fn current_branch(&self) -> Result<String> {
+        Self::unsupported()
+    }
+
+    fn list_branches(&self) -> Result<Vec<Branch>> {
         Self::unsupported()
     }
 
@@ -1302,11 +1324,6 @@ impl GitRepository for SlowSubmoduleRepo {
 
     fn revert(&self, _id: &CommitId) -> Result<()> {
         Self::unsupported()
-    }
-
-    fn list_submodules(&self) -> Result<Vec<Submodule>> {
-        std::thread::sleep(Duration::from_millis(250));
-        Ok(Vec::new())
     }
 
     fn stash_create(
@@ -1343,20 +1360,14 @@ impl GitRepository for SlowSubmoduleRepo {
         Self::unsupported()
     }
 
-    fn fetch_all(&self) -> Result<()> {
-        Self::unsupported()
-    }
-
-    fn pull(&self, _mode: PullMode) -> Result<()> {
-        Self::unsupported()
-    }
-
-    fn push(&self) -> Result<()> {
-        Self::unsupported()
-    }
-
     fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
         Self::unsupported()
+    }
+}
+impl GitRepositoryWorktree for SlowSubmoduleRepo {
+    fn list_submodules(&self) -> Result<Vec<Submodule>> {
+        std::thread::sleep(Duration::from_millis(250));
+        Ok(Vec::new())
     }
 }
 
@@ -1388,7 +1399,8 @@ impl GitRepository for SlowStashRepo {
     fn spec(&self) -> &RepoSpec {
         &self.spec
     }
-
+}
+impl GitRepositoryLog for SlowStashRepo {
     fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
         Self::unsupported()
     }
@@ -1400,15 +1412,9 @@ impl GitRepository for SlowStashRepo {
     fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
         Self::unsupported()
     }
-
-    fn current_branch(&self) -> Result<String> {
-        Self::unsupported()
-    }
-
-    fn list_branches(&self) -> Result<Vec<Branch>> {
-        Self::unsupported()
-    }
-
+}
+impl GitRepositoryHistory for SlowStashRepo {}
+impl GitRepositoryRemotes for SlowStashRepo {
     fn list_remotes(&self) -> Result<Vec<Remote>> {
         Self::unsupported()
     }
@@ -1417,11 +1423,34 @@ impl GitRepository for SlowStashRepo {
         Self::unsupported()
     }
 
-    fn status(&self) -> Result<RepoStatus> {
+    fn fetch_all(&self) -> Result<()> {
         Self::unsupported()
     }
 
+    fn pull(&self, _mode: PullMode) -> Result<()> {
+        Self::unsupported()
+    }
+
+    fn push(&self) -> Result<()> {
+        Self::unsupported()
+    }
+}
+impl GitRepositoryStatus for SlowStashRepo {
+    fn status(&self) -> Result<RepoStatus> {
+        Self::unsupported()
+    }
+}
+impl GitRepositoryDiff for SlowStashRepo {
     fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
+        Self::unsupported()
+    }
+}
+impl GitRepositoryPorcelain for SlowStashRepo {
+    fn current_branch(&self) -> Result<String> {
+        Self::unsupported()
+    }
+
+    fn list_branches(&self) -> Result<Vec<Branch>> {
         Self::unsupported()
     }
 
@@ -1484,22 +1513,11 @@ impl GitRepository for SlowStashRepo {
         Self::unsupported()
     }
 
-    fn fetch_all(&self) -> Result<()> {
-        Self::unsupported()
-    }
-
-    fn pull(&self, _mode: PullMode) -> Result<()> {
-        Self::unsupported()
-    }
-
-    fn push(&self) -> Result<()> {
-        Self::unsupported()
-    }
-
     fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
         Self::unsupported()
     }
 }
+impl GitRepositoryWorktree for SlowStashRepo {}
 
 fn repo_tab_selector(repo_id: RepoId) -> &'static str {
     Box::leak(format!("repo_tab_{}", repo_id.0).into_boxed_str())

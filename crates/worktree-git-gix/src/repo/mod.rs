@@ -17,9 +17,11 @@ use worktree_core::git_ops_trace::{self, GitOpTraceKind};
 use worktree_core::services::{
     BisectState, BisectVerdict, BlameLine, CancellationToken, CommandOutput,
     CommitOperationOutcome, ConflictFileStages, ConflictSide, ForcePushLease, GitRepository,
-    InteractiveRebaseEntry, MergeRequestPushOptions, MergetoolResult, PullMode, RemoteUrlKind,
-    ResetMode, Result, SafePushAfterCommitContext, SafePushAfterCommitDecision,
-    SafePushAfterCommitTarget, SequencerState, SubmoduleTrustDecision, SubmoduleTrustTarget,
+    GitRepositoryDiff, GitRepositoryHistory, GitRepositoryLog, GitRepositoryPorcelain,
+    GitRepositoryRemotes, GitRepositoryStatus, GitRepositoryWorktree, InteractiveRebaseEntry,
+    MergeRequestPushOptions, MergetoolResult, PullMode, RemoteUrlKind, ResetMode, Result,
+    SafePushAfterCommitContext, SafePushAfterCommitDecision, SafePushAfterCommitTarget,
+    SequencerState, SubmoduleTrustDecision, SubmoduleTrustTarget,
 };
 
 /// Convert a gix ObjectId to an `Arc<str>` hex string without intermediate String allocation.
@@ -288,10 +290,23 @@ macro_rules! delegate_git_repository {
 }
 
 impl GitRepository for GixRepo {
+    delegate_git_repository! {
+        fn push_after_commit_with_output(
+            &self,
+            target: &SafePushAfterCommitTarget,
+        ) -> Result<CommandOutput>;
+
+        fn push_after_commit_set_upstream_with_output(
+            &self,
+            target: &SafePushAfterCommitTarget,
+        ) -> Result<CommandOutput>;
+    }
+
     fn spec(&self) -> &RepoSpec {
         &self.spec
     }
-
+}
+impl GitRepositoryLog for GixRepo {
     delegate_git_repository! {
         @trace(LogWalk)
         fn log_history_mode_page(
@@ -389,118 +404,15 @@ impl GitRepository for GixRepo {
         fn search_commits(&self, query: &str, limit: usize) -> Result<Vec<Commit>>;
 
         fn reflog_head(&self, limit: usize) -> Result<Vec<ReflogEntry>>;
-    }
 
-    delegate_git_repository! {
-        fn current_branch(&self) -> Result<String>;
-    }
-
-    fn current_branch_cancellable(&self, cancellation: &CancellationToken) -> Result<String> {
-        cancellation.check_cancelled()?;
-        let branch = self.current_branch()?;
-        cancellation.check_cancelled()?;
-        Ok(branch)
-    }
-
-    delegate_git_repository! {
-        fn head_commit_id(&self) -> Result<Option<CommitId>>;
-    }
-
-    delegate_git_repository! {
-        @trace(RefEnumerate)
-        fn list_branches(&self) -> Result<Vec<Branch>>;
-    }
-
-    fn list_branches_cancellable(&self, cancellation: &CancellationToken) -> Result<Vec<Branch>> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::RefEnumerate);
-        cancellation.check_cancelled()?;
-        let branches = self.list_branches()?;
-        cancellation.check_cancelled()?;
-        Ok(branches)
-    }
-
-    delegate_git_repository! {
-        @trace(RefEnumerate)
-        fn list_tags(&self) -> Result<Vec<Tag>>;
-
-        @trace(RefEnumerate)
-        fn list_tags_cancellable(&self, cancellation: &CancellationToken) -> Result<Vec<Tag>>;
-
-        @trace(RefEnumerate)
-        fn list_remote_tags(&self) -> Result<Vec<RemoteTag>>;
-
-        @trace(RefEnumerate)
-        fn list_remote_tags_cancellable(
+        fn resolve_file_path_at_commit(
             &self,
-            cancellation: &CancellationToken,
-        ) -> Result<Vec<RemoteTag>>;
+            path: &Path,
+            commit: &CommitId,
+        ) -> Result<Option<PathBuf>>;
     }
-
-    delegate_git_repository! {
-        @trace(RefEnumerate)
-        fn list_remotes(&self) -> Result<Vec<Remote>>;
-    }
-
-    fn list_remotes_cancellable(&self, cancellation: &CancellationToken) -> Result<Vec<Remote>> {
-        let _scope = git_ops_trace::scope(GitOpTraceKind::RefEnumerate);
-        cancellation.check_cancelled()?;
-        let remotes = self.list_remotes()?;
-        cancellation.check_cancelled()?;
-        Ok(remotes)
-    }
-
-    delegate_git_repository! {
-        @trace(RefEnumerate)
-        fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>>;
-
-        @trace(RefEnumerate)
-        fn list_remote_branches_cancellable(
-            &self,
-            cancellation: &CancellationToken,
-        ) -> Result<Vec<RemoteBranch>>;
-    }
-
-    delegate_git_repository! {
-        @trace(Status)
-        fn worktree_status(&self) -> Result<Vec<worktree_core::domain::FileStatus>>;
-
-        @trace(Status)
-        fn worktree_status_cancellable(
-            &self,
-            cancellation: &CancellationToken,
-        ) -> Result<Vec<worktree_core::domain::FileStatus>>;
-
-        @trace(Status)
-        fn staged_status(&self) -> Result<Vec<worktree_core::domain::FileStatus>>;
-
-        @trace(Status)
-        fn staged_status_cancellable(
-            &self,
-            cancellation: &CancellationToken,
-        ) -> Result<Vec<worktree_core::domain::FileStatus>>;
-
-        @trace(Status)
-        fn status(&self) -> Result<RepoStatus>;
-
-        @trace(Status)
-        fn status_cancellable(&self, cancellation: &CancellationToken) -> Result<RepoStatus>;
-
-        fn upstream_divergence(&self) -> Result<Option<UpstreamDivergence>>;
-
-        fn upstream_divergence_cancellable(
-            &self,
-            cancellation: &CancellationToken,
-        ) -> Result<Option<UpstreamDivergence>>;
-    }
-
-    delegate_git_repository! {
-        fn pull_branch_with_output(&self, remote: &str, branch: &str) -> Result<CommandOutput>;
-
-        fn merge_ref_with_output(&self, reference: &str) -> Result<CommandOutput>;
-
-        fn squash_ref_with_output(&self, reference: &str) -> Result<CommandOutput>;
-    }
-
+}
+impl GitRepositoryHistory for GixRepo {
     delegate_git_repository! {
         fn squash_message_preview(&self, oldest: &CommitId, head: &CommitId) -> Result<String>;
 
@@ -510,172 +422,14 @@ impl GitRepository for GixRepo {
             expected_head: &CommitId,
             message: &str,
         ) -> Result<CommandOutput>;
-    }
 
-    delegate_git_repository! {
-        @trace(Diff)
-        fn diff_unified(&self, target: &DiffTarget) -> Result<String>;
-
-        @trace(Diff)
-        fn staged_diff_unified(&self) -> Result<String>;
-
-        @trace(Diff)
-        fn diff_parsed(&self, target: &DiffTarget) -> Result<Diff>;
-
-        @trace(Diff)
-        fn diff_parsed_cancellable(
-            &self,
-            target: &DiffTarget,
-            cancellation: &CancellationToken,
-        ) -> Result<Diff>;
-
-        fn diff_file_text(&self, target: &DiffTarget) -> Result<Option<FileDiffText>>;
-
-        fn diff_preview_text_file(
-            &self,
-            target: &DiffTarget,
-            side: DiffPreviewTextSide,
-        ) -> Result<Option<PathBuf>>;
-
-        fn diff_file_image(&self, target: &DiffTarget) -> Result<Option<FileDiffImage>>;
-
-        fn conflict_file_stages(&self, path: &Path) -> Result<Option<ConflictFileStages>>;
-
-        fn conflict_session(&self, path: &Path) -> Result<Option<ConflictSession>>;
-    }
-
-    delegate_git_repository! {
-        fn create_branch(&self, name: &str, target: &CommitId) -> Result<()>;
-
-        fn rename_branch(&self, old_name: &str, new_name: &str) -> Result<()>;
-
-        fn delete_branch(&self, name: &str) -> Result<()>;
-
-        fn delete_branch_force(&self, name: &str) -> Result<()>;
-
-        fn checkout_branch(&self, name: &str) -> Result<()>;
-
-        fn checkout_remote_branch(&self, remote: &str, branch: &str, local_branch: &str) -> Result<()>;
-    }
-
-    delegate_git_repository! {
-        fn lfs_new_side_smudged(&self, target: &DiffTarget) -> Result<Option<Vec<u8>>>;
-    }
-
-    delegate_git_repository! {
-        fn status_for_paths(
-            &self,
-            paths: &[PathBuf],
-        ) -> worktree_core::services::Result<worktree_core::services::StatusForPaths>;
-    }
-
-    delegate_git_repository! {
-        fn checkout_pull_request(&self, remote: &str, number: u64) -> Result<()>;
-
-        fn checkout_commit(&self, id: &CommitId) -> Result<()>;
-
-        fn cherry_pick(&self, id: &CommitId) -> Result<()>;
-    }
-
-    delegate_git_repository! {
         fn cherry_pick_with_output(
             &self,
             id: &CommitId,
             commit: bool,
             mainline: Option<usize>,
         ) -> Result<CommandOutput>;
-    }
 
-    delegate_git_repository! {
-        fn revert(&self, id: &CommitId) -> Result<()>;
-
-        fn stash_create(
-            &self,
-            message: &str,
-            include_untracked: bool,
-            keep_index: bool,
-            paths: &[PathBuf],
-        ) -> Result<()>;
-
-        fn stash_list(&self) -> Result<Vec<StashEntry>>;
-    }
-
-    fn stash_list_cancellable(&self, cancellation: &CancellationToken) -> Result<Vec<StashEntry>> {
-        cancellation.check_cancelled()?;
-        let stashes = self.stash_list()?;
-        cancellation.check_cancelled()?;
-        Ok(stashes)
-    }
-
-    delegate_git_repository! {
-        fn stash_apply(&self, index: usize) -> Result<()>;
-
-        fn stash_drop(&self, index: usize) -> Result<()>;
-
-        fn stash_branch(&self, branch: &str, index: usize) -> Result<()>;
-
-        fn stage(&self, paths: &[&Path]) -> Result<()>;
-
-        fn unstage(&self, paths: &[&Path]) -> Result<()>;
-
-        fn commit(&self, message: &str) -> Result<()>;
-
-        fn commit_with_outcome(&self, message: &str) -> Result<CommitOperationOutcome>;
-
-        fn commit_amend(&self, message: &str) -> Result<()>;
-
-        fn commit_amend_with_outcome(&self, message: &str) -> Result<CommitOperationOutcome>;
-    }
-
-    fn fetch_all(&self) -> Result<()> {
-        self.fetch_all(true)
-    }
-
-    fn fetch_all_with_output(&self) -> Result<CommandOutput> {
-        self.fetch_all_with_output(true)
-    }
-
-    fn fetch_all_with_output_prune(&self, prune: bool) -> Result<CommandOutput> {
-        self.fetch_all_with_output(prune)
-    }
-
-    delegate_git_repository! {
-        fn pull(&self, mode: PullMode) -> Result<()>;
-
-        fn pull_with_output(&self, mode: PullMode) -> Result<CommandOutput>;
-
-        fn push(&self) -> Result<()>;
-
-        fn push_with_output(&self) -> Result<CommandOutput>;
-
-        fn push_force(&self) -> Result<()>;
-
-        fn push_force_with_output(&self) -> Result<CommandOutput>;
-
-        fn safe_push_after_commit(
-            &self,
-            context: &SafePushAfterCommitContext,
-        ) -> Result<SafePushAfterCommitDecision>;
-
-        fn push_after_commit_with_output(
-            &self,
-            target: &SafePushAfterCommitTarget,
-        ) -> Result<CommandOutput>;
-
-        fn push_after_commit_set_upstream_with_output(
-            &self,
-            target: &SafePushAfterCommitTarget,
-        ) -> Result<CommandOutput>;
-
-        fn push_force_with_lease_with_output(&self, lease: &ForcePushLease) -> Result<CommandOutput>;
-
-        fn push_merge_request_with_output(
-            &self,
-            options: &MergeRequestPushOptions,
-        ) -> Result<CommandOutput>;
-    }
-
-    delegate_git_repository! {
         fn reset_with_output(&self, target: &str, mode: ResetMode) -> Result<CommandOutput>;
 
         fn rebase_with_output(&self, onto: &str) -> Result<CommandOutput>;
@@ -703,44 +457,11 @@ impl GitRepository for GixRepo {
         fn merge_abort_with_output(&self) -> Result<CommandOutput>;
 
         fn rebase_in_progress(&self) -> Result<bool>;
-    }
 
-    fn rebase_in_progress_cancellable(&self, cancellation: &CancellationToken) -> Result<bool> {
-        cancellation.check_cancelled()?;
-        let in_progress = self.rebase_in_progress()?;
-        cancellation.check_cancelled()?;
-        Ok(in_progress)
-    }
-
-    delegate_git_repository! {
         fn sequencer_state(&self) -> Result<SequencerState>;
-    }
 
-    fn sequencer_state_cancellable(
-        &self,
-        cancellation: &CancellationToken,
-    ) -> Result<SequencerState> {
-        cancellation.check_cancelled()?;
-        let state = self.sequencer_state()?;
-        cancellation.check_cancelled()?;
-        Ok(state)
-    }
-
-    delegate_git_repository! {
         fn bisect_state(&self) -> Result<Option<BisectState>>;
-    }
 
-    fn bisect_state_cancellable(
-        &self,
-        cancellation: &CancellationToken,
-    ) -> Result<Option<BisectState>> {
-        cancellation.check_cancelled()?;
-        let state = self.bisect_state()?;
-        cancellation.check_cancelled()?;
-        Ok(state)
-    }
-
-    delegate_git_repository! {
         fn bisect_start_with_output(
             &self,
             bad: Option<&str>,
@@ -758,6 +479,33 @@ impl GitRepository for GixRepo {
         fn merge_commit_message(&self) -> Result<Option<String>>;
     }
 
+    fn rebase_in_progress_cancellable(&self, cancellation: &CancellationToken) -> Result<bool> {
+        cancellation.check_cancelled()?;
+        let in_progress = self.rebase_in_progress()?;
+        cancellation.check_cancelled()?;
+        Ok(in_progress)
+    }
+
+    fn sequencer_state_cancellable(
+        &self,
+        cancellation: &CancellationToken,
+    ) -> Result<SequencerState> {
+        cancellation.check_cancelled()?;
+        let state = self.sequencer_state()?;
+        cancellation.check_cancelled()?;
+        Ok(state)
+    }
+
+    fn bisect_state_cancellable(
+        &self,
+        cancellation: &CancellationToken,
+    ) -> Result<Option<BisectState>> {
+        cancellation.check_cancelled()?;
+        let state = self.bisect_state()?;
+        cancellation.check_cancelled()?;
+        Ok(state)
+    }
+
     fn merge_commit_message_cancellable(
         &self,
         cancellation: &CancellationToken,
@@ -767,32 +515,55 @@ impl GitRepository for GixRepo {
         cancellation.check_cancelled()?;
         Ok(message)
     }
-
+}
+impl GitRepositoryRemotes for GixRepo {
     delegate_git_repository! {
-        fn create_tag_with_output(
+        fn head_commit_id(&self) -> Result<Option<CommitId>>;
+
+        @trace(RefEnumerate)
+        fn list_remotes(&self) -> Result<Vec<Remote>>;
+
+        @trace(RefEnumerate)
+        fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>>;
+
+        @trace(RefEnumerate)
+        fn list_remote_branches_cancellable(
             &self,
-            name: &str,
-            target: &str,
-            message: Option<&str>,
-            annotated: bool,
+            cancellation: &CancellationToken,
+        ) -> Result<Vec<RemoteBranch>>;
+
+        fn pull_branch_with_output(&self, remote: &str, branch: &str) -> Result<CommandOutput>;
+
+        fn merge_ref_with_output(&self, reference: &str) -> Result<CommandOutput>;
+
+        fn squash_ref_with_output(&self, reference: &str) -> Result<CommandOutput>;
+
+        fn pull(&self, mode: PullMode) -> Result<()>;
+
+        fn pull_with_output(&self, mode: PullMode) -> Result<CommandOutput>;
+
+        fn push(&self) -> Result<()>;
+
+        fn push_with_output(&self) -> Result<CommandOutput>;
+
+        fn push_force(&self) -> Result<()>;
+
+        fn push_force_with_output(&self) -> Result<CommandOutput>;
+
+        fn safe_push_after_commit(
+            &self,
+            context: &SafePushAfterCommitContext,
+        ) -> Result<SafePushAfterCommitDecision>;
+
+        fn push_force_with_lease_with_output(&self, lease: &ForcePushLease) -> Result<CommandOutput>;
+
+        fn push_merge_request_with_output(
+            &self,
+            options: &MergeRequestPushOptions,
         ) -> Result<CommandOutput>;
 
-        fn delete_tag_with_output(&self, name: &str) -> Result<CommandOutput>;
-    }
-
-    delegate_git_repository! {
         fn prune_merged_branches_with_output(&self) -> Result<CommandOutput>;
-    }
 
-    delegate_git_repository! {
-        fn prune_local_tags_with_output(&self) -> Result<CommandOutput>;
-
-        fn push_tag_with_output(&self, remote: &str, name: &str) -> Result<CommandOutput>;
-
-        fn delete_remote_tag_with_output(&self, remote: &str, name: &str) -> Result<CommandOutput>;
-    }
-
-    delegate_git_repository! {
         fn add_remote_with_output(&self, name: &str, url: &str) -> Result<CommandOutput>;
 
         fn remove_remote_with_output(&self, name: &str) -> Result<CommandOutput>;
@@ -837,47 +608,115 @@ impl GitRepository for GixRepo {
         ) -> Result<CommandOutput>;
     }
 
+    fn list_remotes_cancellable(&self, cancellation: &CancellationToken) -> Result<Vec<Remote>> {
+        let _scope = git_ops_trace::scope(GitOpTraceKind::RefEnumerate);
+        cancellation.check_cancelled()?;
+        let remotes = self.list_remotes()?;
+        cancellation.check_cancelled()?;
+        Ok(remotes)
+    }
+
+    fn fetch_all(&self) -> Result<()> {
+        self.fetch_all(true)
+    }
+
+    fn fetch_all_with_output(&self) -> Result<CommandOutput> {
+        self.fetch_all_with_output(true)
+    }
+
+    fn fetch_all_with_output_prune(&self, prune: bool) -> Result<CommandOutput> {
+        self.fetch_all_with_output(prune)
+    }
+}
+impl GitRepositoryStatus for GixRepo {
     delegate_git_repository! {
+        @trace(Status)
+        fn worktree_status(&self) -> Result<Vec<worktree_core::domain::FileStatus>>;
+
+        @trace(Status)
+        fn worktree_status_cancellable(
+            &self,
+            cancellation: &CancellationToken,
+        ) -> Result<Vec<worktree_core::domain::FileStatus>>;
+
+        @trace(Status)
+        fn staged_status(&self) -> Result<Vec<worktree_core::domain::FileStatus>>;
+
+        @trace(Status)
+        fn staged_status_cancellable(
+            &self,
+            cancellation: &CancellationToken,
+        ) -> Result<Vec<worktree_core::domain::FileStatus>>;
+
+        @trace(Status)
+        fn status(&self) -> Result<RepoStatus>;
+
+        @trace(Status)
+        fn status_cancellable(&self, cancellation: &CancellationToken) -> Result<RepoStatus>;
+
+        fn upstream_divergence(&self) -> Result<Option<UpstreamDivergence>>;
+
+        fn upstream_divergence_cancellable(
+            &self,
+            cancellation: &CancellationToken,
+        ) -> Result<Option<UpstreamDivergence>>;
+
+        fn status_for_paths(
+            &self,
+            paths: &[PathBuf],
+        ) -> worktree_core::services::Result<worktree_core::services::StatusForPaths>;
+
+        fn assume_unchanged_list(&self) -> Result<Vec<PathBuf>>;
+
+        fn set_assume_unchanged(&self, path: &Path, enable: bool) -> Result<()>;
+    }
+}
+impl GitRepositoryDiff for GixRepo {
+    delegate_git_repository! {
+        @trace(Diff)
+        fn diff_unified(&self, target: &DiffTarget) -> Result<String>;
+
+        @trace(Diff)
+        fn staged_diff_unified(&self) -> Result<String>;
+
+        @trace(Diff)
+        fn diff_parsed(&self, target: &DiffTarget) -> Result<Diff>;
+
+        @trace(Diff)
+        fn diff_parsed_cancellable(
+            &self,
+            target: &DiffTarget,
+            cancellation: &CancellationToken,
+        ) -> Result<Diff>;
+
+        fn diff_file_text(&self, target: &DiffTarget) -> Result<Option<FileDiffText>>;
+
+        fn diff_preview_text_file(
+            &self,
+            target: &DiffTarget,
+            side: DiffPreviewTextSide,
+        ) -> Result<Option<PathBuf>>;
+
+        fn diff_file_image(&self, target: &DiffTarget) -> Result<Option<FileDiffImage>>;
+
+        fn conflict_file_stages(&self, path: &Path) -> Result<Option<ConflictFileStages>>;
+
+        fn conflict_session(&self, path: &Path) -> Result<Option<ConflictSession>>;
+
+        fn lfs_new_side_smudged(&self, target: &DiffTarget) -> Result<Option<Vec<u8>>>;
+
         @trace(Blame)
         fn blame_file(&self, path: &Path, rev: Option<&str>) -> Result<Vec<BlameLine>>;
 
         @trace(Blame)
         fn blame_worktree_file(&self, path: &Path, area: DiffArea) -> Result<Vec<BlameLine>>;
-    }
 
-    delegate_git_repository! {
-        fn resolve_file_path_at_commit(
-            &self,
-            path: &Path,
-            commit: &CommitId,
-        ) -> Result<Option<PathBuf>>;
-    }
-
-    delegate_git_repository! {
         fn checkout_conflict_side(&self, path: &Path, side: ConflictSide) -> Result<CommandOutput>;
 
         fn accept_conflict_deletion(&self, path: &Path) -> Result<CommandOutput>;
 
         fn checkout_conflict_base(&self, path: &Path) -> Result<CommandOutput>;
-    }
 
-    delegate_git_repository! {
-        fn launch_mergetool(
-            &self,
-            path: &Path,
-            preference: &ExternalMergeToolSelection,
-        ) -> Result<MergetoolResult>;
-    }
-
-    delegate_git_repository! {
-        fn export_patch_with_output(&self, commit_id: &CommitId, dest: &Path) -> Result<CommandOutput>;
-    }
-
-    delegate_git_repository! {
-        fn archive_zip_with_output(&self, revision: &str, dest: &Path) -> Result<CommandOutput>;
-    }
-
-    delegate_git_repository! {
         fn lfs_enabled(&self) -> Result<bool>;
 
         fn lfs_is_filtered(&self, path: &Path) -> Result<bool>;
@@ -888,14 +727,142 @@ impl GitRepository for GixRepo {
 
         fn cleanup_with_output(&self) -> Result<CommandOutput>;
     }
-
+}
+impl GitRepositoryPorcelain for GixRepo {
     delegate_git_repository! {
-        fn assume_unchanged_list(&self) -> Result<Vec<PathBuf>>;
+        fn current_branch(&self) -> Result<String>;
 
-        fn set_assume_unchanged(&self, path: &Path, enable: bool) -> Result<()>;
+        @trace(RefEnumerate)
+        fn list_branches(&self) -> Result<Vec<Branch>>;
+
+        @trace(RefEnumerate)
+        fn list_tags(&self) -> Result<Vec<Tag>>;
+
+        @trace(RefEnumerate)
+        fn list_tags_cancellable(&self, cancellation: &CancellationToken) -> Result<Vec<Tag>>;
+
+        @trace(RefEnumerate)
+        fn list_remote_tags(&self) -> Result<Vec<RemoteTag>>;
+
+        @trace(RefEnumerate)
+        fn list_remote_tags_cancellable(
+            &self,
+            cancellation: &CancellationToken,
+        ) -> Result<Vec<RemoteTag>>;
+
+        fn create_branch(&self, name: &str, target: &CommitId) -> Result<()>;
+
+        fn rename_branch(&self, old_name: &str, new_name: &str) -> Result<()>;
+
+        fn delete_branch(&self, name: &str) -> Result<()>;
+
+        fn delete_branch_force(&self, name: &str) -> Result<()>;
+
+        fn checkout_branch(&self, name: &str) -> Result<()>;
+
+        fn checkout_remote_branch(&self, remote: &str, branch: &str, local_branch: &str) -> Result<()>;
+
+        fn checkout_pull_request(&self, remote: &str, number: u64) -> Result<()>;
+
+        fn checkout_commit(&self, id: &CommitId) -> Result<()>;
+
+        fn cherry_pick(&self, id: &CommitId) -> Result<()>;
+
+        fn revert(&self, id: &CommitId) -> Result<()>;
+
+        fn stash_create(
+            &self,
+            message: &str,
+            include_untracked: bool,
+            keep_index: bool,
+            paths: &[PathBuf],
+        ) -> Result<()>;
+
+        fn stash_list(&self) -> Result<Vec<StashEntry>>;
+
+        fn stash_apply(&self, index: usize) -> Result<()>;
+
+        fn stash_drop(&self, index: usize) -> Result<()>;
+
+        fn stash_branch(&self, branch: &str, index: usize) -> Result<()>;
+
+        fn stage(&self, paths: &[&Path]) -> Result<()>;
+
+        fn unstage(&self, paths: &[&Path]) -> Result<()>;
+
+        fn commit(&self, message: &str) -> Result<()>;
+
+        fn commit_with_outcome(&self, message: &str) -> Result<CommitOperationOutcome>;
+
+        fn commit_amend(&self, message: &str) -> Result<()>;
+
+        fn commit_amend_with_outcome(&self, message: &str) -> Result<CommitOperationOutcome>;
+
+        fn create_tag_with_output(
+            &self,
+            name: &str,
+            target: &str,
+            message: Option<&str>,
+            annotated: bool,
+        ) -> Result<CommandOutput>;
+
+        fn delete_tag_with_output(&self, name: &str) -> Result<CommandOutput>;
+
+        fn prune_local_tags_with_output(&self) -> Result<CommandOutput>;
+
+        fn push_tag_with_output(&self, remote: &str, name: &str) -> Result<CommandOutput>;
+
+        fn delete_remote_tag_with_output(&self, remote: &str, name: &str) -> Result<CommandOutput>;
+
+        fn launch_mergetool(
+            &self,
+            path: &Path,
+            preference: &ExternalMergeToolSelection,
+        ) -> Result<MergetoolResult>;
+
+        fn archive_zip_with_output(&self, revision: &str, dest: &Path) -> Result<CommandOutput>;
+
+        fn list_ref_metadata(&self) -> Result<Vec<(String, RefMetadata)>>;
+
+        fn discard_worktree_changes(&self, paths: &[&Path]) -> Result<()>;
     }
 
+    fn current_branch_cancellable(&self, cancellation: &CancellationToken) -> Result<String> {
+        cancellation.check_cancelled()?;
+        let branch = self.current_branch()?;
+        cancellation.check_cancelled()?;
+        Ok(branch)
+    }
+
+    fn list_branches_cancellable(&self, cancellation: &CancellationToken) -> Result<Vec<Branch>> {
+        let _scope = git_ops_trace::scope(GitOpTraceKind::RefEnumerate);
+        cancellation.check_cancelled()?;
+        let branches = self.list_branches()?;
+        cancellation.check_cancelled()?;
+        Ok(branches)
+    }
+
+    fn stash_list_cancellable(&self, cancellation: &CancellationToken) -> Result<Vec<StashEntry>> {
+        cancellation.check_cancelled()?;
+        let stashes = self.stash_list()?;
+        cancellation.check_cancelled()?;
+        Ok(stashes)
+    }
+
+    fn list_ref_metadata_cancellable(
+        &self,
+        cancellation: &CancellationToken,
+    ) -> Result<Vec<(String, RefMetadata)>> {
+        cancellation.check_cancelled()?;
+        let metadata = self.list_ref_metadata()?;
+        cancellation.check_cancelled()?;
+        Ok(metadata)
+    }
+}
+impl GitRepositoryWorktree for GixRepo {
     delegate_git_repository! {
+        fn export_patch_with_output(&self, commit_id: &CommitId, dest: &Path) -> Result<CommandOutput>;
+
         fn apply_patch_with_output(&self, patch: &Path) -> Result<CommandOutput>;
 
         fn apply_unified_patch_to_index_with_output(
@@ -911,33 +878,7 @@ impl GitRepository for GixRepo {
         ) -> Result<CommandOutput>;
 
         fn list_worktrees(&self) -> Result<Vec<Worktree>>;
-    }
 
-    fn list_worktrees_cancellable(
-        &self,
-        cancellation: &CancellationToken,
-    ) -> Result<Vec<Worktree>> {
-        cancellation.check_cancelled()?;
-        let worktrees = self.list_worktrees()?;
-        cancellation.check_cancelled()?;
-        Ok(worktrees)
-    }
-
-    delegate_git_repository! {
-        fn list_ref_metadata(&self) -> Result<Vec<(String, RefMetadata)>>;
-    }
-
-    fn list_ref_metadata_cancellable(
-        &self,
-        cancellation: &CancellationToken,
-    ) -> Result<Vec<(String, RefMetadata)>> {
-        cancellation.check_cancelled()?;
-        let metadata = self.list_ref_metadata()?;
-        cancellation.check_cancelled()?;
-        Ok(metadata)
-    }
-
-    delegate_git_repository! {
         fn add_worktree_with_output(
             &self,
             path: &Path,
@@ -947,24 +888,18 @@ impl GitRepository for GixRepo {
         fn remove_worktree_with_output(&self, path: &Path) -> Result<CommandOutput>;
 
         fn force_remove_worktree_with_output(&self, path: &Path) -> Result<CommandOutput>;
-    }
 
-    delegate_git_repository! {
         fn list_submodules(&self) -> Result<Vec<Submodule>>;
 
         fn list_submodules_cancellable(
             &self,
             cancellation: &CancellationToken,
         ) -> Result<Vec<Submodule>>;
-    }
 
-    delegate_git_repository! {
         fn list_worktree_files(&self) -> Result<Vec<FileEntry>>;
 
         fn list_tree_files_at_commit(&self, commit_id: &CommitId) -> Result<Vec<FileEntry>>;
-    }
 
-    delegate_git_repository! {
         fn submodule_diff_summary(&self, target: &DiffTarget) -> Result<SubmoduleDiffSummary>;
 
         fn check_submodule_add_trust(&self, url: &str, path: &Path) -> Result<SubmoduleTrustDecision>;
@@ -1003,8 +938,14 @@ impl GitRepository for GixRepo {
         fn remove_submodule_with_output(&self, path: &Path) -> Result<CommandOutput>;
     }
 
-    delegate_git_repository! {
-        fn discard_worktree_changes(&self, paths: &[&Path]) -> Result<()>;
+    fn list_worktrees_cancellable(
+        &self,
+        cancellation: &CancellationToken,
+    ) -> Result<Vec<Worktree>> {
+        cancellation.check_cancelled()?;
+        let worktrees = self.list_worktrees()?;
+        cancellation.check_cancelled()?;
+        Ok(worktrees)
     }
 }
 

@@ -64,7 +64,8 @@ impl GitRepository for ReadyOpenRepo {
     fn spec(&self) -> &RepoSpec {
         &self.spec
     }
-
+}
+impl GitRepositoryLog for ReadyOpenRepo {
     fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
         Ok(LogPage {
             commits: Vec::new(),
@@ -90,7 +91,40 @@ impl GitRepository for ReadyOpenRepo {
     fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
         Ok(Vec::new())
     }
+}
+impl GitRepositoryHistory for ReadyOpenRepo {}
+impl GitRepositoryRemotes for ReadyOpenRepo {
+    fn list_remotes(&self) -> Result<Vec<Remote>> {
+        Ok(Vec::new())
+    }
 
+    fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
+        Ok(Vec::new())
+    }
+
+    fn fetch_all(&self) -> Result<()> {
+        Ok(())
+    }
+
+    fn pull(&self, _mode: PullMode) -> Result<()> {
+        Ok(())
+    }
+
+    fn push(&self) -> Result<()> {
+        Ok(())
+    }
+}
+impl GitRepositoryStatus for ReadyOpenRepo {
+    fn status(&self) -> Result<RepoStatus> {
+        Ok(RepoStatus::default())
+    }
+}
+impl GitRepositoryDiff for ReadyOpenRepo {
+    fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
+        Ok(String::new())
+    }
+}
+impl GitRepositoryPorcelain for ReadyOpenRepo {
     fn current_branch(&self) -> Result<String> {
         Ok("main".to_string())
     }
@@ -109,40 +143,30 @@ impl GitRepository for ReadyOpenRepo {
         Ok(Vec::new())
     }
 
-    fn list_remotes(&self) -> Result<Vec<Remote>> {
-        Ok(Vec::new())
-    }
-
-    fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
-        Ok(Vec::new())
-    }
-
-    fn status(&self) -> Result<RepoStatus> {
-        Ok(RepoStatus::default())
-    }
-
-    fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
-        Ok(String::new())
-    }
-
     fn create_branch(&self, _name: &str, _target: &CommitId) -> Result<()> {
         Ok(())
     }
+
     fn delete_branch(&self, _name: &str) -> Result<()> {
         Ok(())
     }
+
     fn checkout_branch(&self, _name: &str) -> Result<()> {
         Ok(())
     }
+
     fn checkout_commit(&self, _id: &CommitId) -> Result<()> {
         Ok(())
     }
+
     fn cherry_pick(&self, _id: &CommitId) -> Result<()> {
         Ok(())
     }
+
     fn revert(&self, _id: &CommitId) -> Result<()> {
         Ok(())
     }
+
     fn stash_create(
         &self,
         _message: &str,
@@ -152,37 +176,36 @@ impl GitRepository for ReadyOpenRepo {
     ) -> Result<()> {
         Ok(())
     }
+
     fn stash_list(&self) -> Result<Vec<StashEntry>> {
         Ok(Vec::new())
     }
+
     fn stash_apply(&self, _index: usize) -> Result<()> {
         Ok(())
     }
+
     fn stash_drop(&self, _index: usize) -> Result<()> {
         Ok(())
     }
+
     fn stage(&self, _paths: &[&Path]) -> Result<()> {
         Ok(())
     }
+
     fn unstage(&self, _paths: &[&Path]) -> Result<()> {
         Ok(())
     }
+
     fn commit(&self, _message: &str) -> Result<()> {
         Ok(())
     }
-    fn fetch_all(&self) -> Result<()> {
-        Ok(())
-    }
-    fn pull(&self, _mode: PullMode) -> Result<()> {
-        Ok(())
-    }
-    fn push(&self) -> Result<()> {
-        Ok(())
-    }
+
     fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
         Ok(())
     }
 }
+impl GitRepositoryWorktree for ReadyOpenRepo {}
 
 struct BlockingTagLoad {
     started_tx: mpsc::Sender<()>,
@@ -318,7 +341,8 @@ impl GitRepository for BlockingDiffRepo {
     fn spec(&self) -> &RepoSpec {
         &self.spec
     }
-
+}
+impl GitRepositoryLog for BlockingDiffRepo {
     fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
         Ok(LogPage {
             commits: Vec::new(),
@@ -344,15 +368,9 @@ impl GitRepository for BlockingDiffRepo {
     fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
         Ok(Vec::new())
     }
-
-    fn current_branch(&self) -> Result<String> {
-        Ok("main".to_string())
-    }
-
-    fn list_branches(&self) -> Result<Vec<Branch>> {
-        Ok(Vec::new())
-    }
-
+}
+impl GitRepositoryHistory for BlockingDiffRepo {}
+impl GitRepositoryRemotes for BlockingDiffRepo {
     fn list_remotes(&self) -> Result<Vec<Remote>> {
         Ok(Vec::new())
     }
@@ -361,10 +379,24 @@ impl GitRepository for BlockingDiffRepo {
         Ok(Vec::new())
     }
 
+    fn fetch_all(&self) -> Result<()> {
+        Ok(())
+    }
+
+    fn pull(&self, _mode: PullMode) -> Result<()> {
+        Ok(())
+    }
+
+    fn push(&self) -> Result<()> {
+        Ok(())
+    }
+}
+impl GitRepositoryStatus for BlockingDiffRepo {
     fn status(&self) -> Result<RepoStatus> {
         Ok(RepoStatus::default())
     }
-
+}
+impl GitRepositoryDiff for BlockingDiffRepo {
     fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
         self.wait_for_release("diff_unified");
         Ok("diff --git a/tracked.txt b/tracked.txt\n--- a/tracked.txt\n+++ b/tracked.txt\n@@ -1 +1 @@\n-old\n+new\n".to_string())
@@ -381,25 +413,40 @@ impl GitRepository for BlockingDiffRepo {
             Some("new\n".to_string()),
         )))
     }
+}
+impl GitRepositoryPorcelain for BlockingDiffRepo {
+    fn current_branch(&self) -> Result<String> {
+        Ok("main".to_string())
+    }
+
+    fn list_branches(&self) -> Result<Vec<Branch>> {
+        Ok(Vec::new())
+    }
 
     fn create_branch(&self, _name: &str, _target: &CommitId) -> Result<()> {
         Ok(())
     }
+
     fn delete_branch(&self, _name: &str) -> Result<()> {
         Ok(())
     }
+
     fn checkout_branch(&self, _name: &str) -> Result<()> {
         Ok(())
     }
+
     fn checkout_commit(&self, _id: &CommitId) -> Result<()> {
         Ok(())
     }
+
     fn cherry_pick(&self, _id: &CommitId) -> Result<()> {
         Ok(())
     }
+
     fn revert(&self, _id: &CommitId) -> Result<()> {
         Ok(())
     }
+
     fn stash_create(
         &self,
         _message: &str,
@@ -409,37 +456,36 @@ impl GitRepository for BlockingDiffRepo {
     ) -> Result<()> {
         Ok(())
     }
+
     fn stash_list(&self) -> Result<Vec<StashEntry>> {
         Ok(Vec::new())
     }
+
     fn stash_apply(&self, _index: usize) -> Result<()> {
         Ok(())
     }
+
     fn stash_drop(&self, _index: usize) -> Result<()> {
         Ok(())
     }
+
     fn stage(&self, _paths: &[&Path]) -> Result<()> {
         Ok(())
     }
+
     fn unstage(&self, _paths: &[&Path]) -> Result<()> {
         Ok(())
     }
+
     fn commit(&self, _message: &str) -> Result<()> {
         Ok(())
     }
-    fn fetch_all(&self) -> Result<()> {
-        Ok(())
-    }
-    fn pull(&self, _mode: PullMode) -> Result<()> {
-        Ok(())
-    }
-    fn push(&self) -> Result<()> {
-        Ok(())
-    }
+
     fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
         Ok(())
     }
 }
+impl GitRepositoryWorktree for BlockingDiffRepo {}
 
 #[test]
 fn dispatch_increments_failure_counter_when_channel_is_disconnected() {

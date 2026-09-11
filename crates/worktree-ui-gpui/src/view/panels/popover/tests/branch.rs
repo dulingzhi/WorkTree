@@ -8,7 +8,11 @@ use worktree_core::domain::{
     Branch, CommitDetails, CommitId, LogPage, ReflogEntry, RepoSpec, RepoStatus, StashEntry,
 };
 use worktree_core::path_utils::canonicalize_or_original;
-use worktree_core::services::{CommandOutput, PullMode};
+use worktree_core::services::{
+    CommandOutput, GitRepository, GitRepositoryDiff, GitRepositoryHistory, GitRepositoryLog,
+    GitRepositoryPorcelain, GitRepositoryRemotes, GitRepositoryStatus, GitRepositoryWorktree,
+    PullMode,
+};
 use worktree_state::model::Loadable;
 use worktree_state::msg::{Msg, StoreEvent};
 
@@ -76,7 +80,8 @@ impl GitRepository for TrackingRepo {
     fn spec(&self) -> &RepoSpec {
         &self.spec
     }
-
+}
+impl GitRepositoryLog for TrackingRepo {
     fn log_head_page(
         &self,
         _limit: usize,
@@ -103,7 +108,130 @@ impl GitRepository for TrackingRepo {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .clone())
     }
+}
+impl GitRepositoryHistory for TrackingRepo {
+    fn bisect_state(&self) -> Result<Option<worktree_core::services::BisectState>> {
+        // Reads triggered by refreshes must not pollute `actions()` — prompt
+        // tests assert on its exact contents.
+        Ok(self
+            .bisect
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone())
+    }
 
+    fn bisect_start_with_output(
+        &self,
+        bad: Option<&str>,
+        goods: &[String],
+    ) -> Result<CommandOutput> {
+        self.actions
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push(format!(
+                "bisect-start:{}:{}",
+                bad.unwrap_or("none"),
+                goods.join(","),
+            ));
+        Ok(CommandOutput::empty_success("git bisect start"))
+    }
+
+    fn bisect_mark_with_output(
+        &self,
+        verdict: worktree_core::services::BisectVerdict,
+        commit: Option<&str>,
+    ) -> Result<CommandOutput> {
+        self.actions
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push(format!(
+                "bisect-mark:{}:{}",
+                verdict.as_str(),
+                commit.unwrap_or("none"),
+            ));
+        Ok(CommandOutput::empty_success("git bisect mark"))
+    }
+
+    fn bisect_reset_with_output(&self) -> Result<CommandOutput> {
+        self.actions
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push("bisect-reset".to_string());
+        Ok(CommandOutput::empty_success("git bisect reset"))
+    }
+
+    fn reset_with_output(
+        &self,
+        target: &str,
+        mode: worktree_core::services::ResetMode,
+    ) -> Result<CommandOutput> {
+        self.actions
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push(format!("reset:{mode:?}:{target}"));
+        Ok(CommandOutput::empty_success("git reset"))
+    }
+
+    fn merge_abort_with_output(&self) -> Result<CommandOutput> {
+        self.actions
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push("merge-abort".to_string());
+        Ok(CommandOutput::empty_success("git merge --abort"))
+    }
+}
+impl GitRepositoryRemotes for TrackingRepo {
+    fn list_remotes(&self) -> Result<Vec<worktree_core::domain::Remote>> {
+        Ok(Vec::new())
+    }
+
+    fn list_remote_branches(&self) -> Result<Vec<worktree_core::domain::RemoteBranch>> {
+        Ok(Vec::new())
+    }
+
+    fn fetch_all(&self) -> Result<()> {
+        Ok(())
+    }
+
+    fn pull(&self, _mode: PullMode) -> Result<()> {
+        Ok(())
+    }
+
+    fn push(&self) -> Result<()> {
+        Ok(())
+    }
+
+    fn push_merge_request_with_output(
+        &self,
+        options: &worktree_core::services::MergeRequestPushOptions,
+    ) -> Result<CommandOutput> {
+        self.actions
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push(format!(
+                "push-mr:{}:{}:{}:{}:{}",
+                options.create,
+                options.target_branch.as_deref().unwrap_or(""),
+                options.merge_when_pipeline_succeeds,
+                options.remove_source_branch,
+                options.push_to_mr_branch,
+            ));
+        Ok(CommandOutput::empty_success("git push"))
+    }
+}
+impl GitRepositoryStatus for TrackingRepo {
+    fn status(&self) -> Result<RepoStatus> {
+        Ok(RepoStatus::default())
+    }
+}
+impl GitRepositoryDiff for TrackingRepo {
+    fn diff_unified(&self, _target: &worktree_core::domain::DiffTarget) -> Result<String> {
+        Err(Error::new(ErrorKind::Unsupported(
+            "diffs are not needed in create-branch popover tests",
+        )))
+    }
+}
+impl GitRepositoryPorcelain for TrackingRepo {
     fn current_branch(&self) -> Result<String> {
         Ok(self
             .current_branch
@@ -126,24 +254,6 @@ impl GitRepository for TrackingRepo {
                 divergence: None,
             })
             .collect())
-    }
-
-    fn list_remotes(&self) -> Result<Vec<worktree_core::domain::Remote>> {
-        Ok(Vec::new())
-    }
-
-    fn list_remote_branches(&self) -> Result<Vec<worktree_core::domain::RemoteBranch>> {
-        Ok(Vec::new())
-    }
-
-    fn status(&self) -> Result<RepoStatus> {
-        Ok(RepoStatus::default())
-    }
-
-    fn diff_unified(&self, _target: &worktree_core::domain::DiffTarget) -> Result<String> {
-        Err(Error::new(ErrorKind::Unsupported(
-            "diffs are not needed in create-branch popover tests",
-        )))
     }
 
     fn create_branch(&self, name: &str, _target: &CommitId) -> Result<()> {
@@ -244,18 +354,6 @@ impl GitRepository for TrackingRepo {
         Ok(())
     }
 
-    fn fetch_all(&self) -> Result<()> {
-        Ok(())
-    }
-
-    fn pull(&self, _mode: PullMode) -> Result<()> {
-        Ok(())
-    }
-
-    fn push(&self) -> Result<()> {
-        Ok(())
-    }
-
     fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
         Ok(())
     }
@@ -275,95 +373,8 @@ impl GitRepository for TrackingRepo {
             "git tag {name} {target}"
         )))
     }
-
-    fn push_merge_request_with_output(
-        &self,
-        options: &worktree_core::services::MergeRequestPushOptions,
-    ) -> Result<CommandOutput> {
-        self.actions
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .push(format!(
-                "push-mr:{}:{}:{}:{}:{}",
-                options.create,
-                options.target_branch.as_deref().unwrap_or(""),
-                options.merge_when_pipeline_succeeds,
-                options.remove_source_branch,
-                options.push_to_mr_branch,
-            ));
-        Ok(CommandOutput::empty_success("git push"))
-    }
-
-    fn bisect_state(&self) -> Result<Option<worktree_core::services::BisectState>> {
-        // Reads triggered by refreshes must not pollute `actions()` — prompt
-        // tests assert on its exact contents.
-        Ok(self
-            .bisect
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clone())
-    }
-
-    fn bisect_start_with_output(
-        &self,
-        bad: Option<&str>,
-        goods: &[String],
-    ) -> Result<CommandOutput> {
-        self.actions
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .push(format!(
-                "bisect-start:{}:{}",
-                bad.unwrap_or("none"),
-                goods.join(","),
-            ));
-        Ok(CommandOutput::empty_success("git bisect start"))
-    }
-
-    fn bisect_mark_with_output(
-        &self,
-        verdict: worktree_core::services::BisectVerdict,
-        commit: Option<&str>,
-    ) -> Result<CommandOutput> {
-        self.actions
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .push(format!(
-                "bisect-mark:{}:{}",
-                verdict.as_str(),
-                commit.unwrap_or("none"),
-            ));
-        Ok(CommandOutput::empty_success("git bisect mark"))
-    }
-
-    fn bisect_reset_with_output(&self) -> Result<CommandOutput> {
-        self.actions
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .push("bisect-reset".to_string());
-        Ok(CommandOutput::empty_success("git bisect reset"))
-    }
-
-    fn reset_with_output(
-        &self,
-        target: &str,
-        mode: worktree_core::services::ResetMode,
-    ) -> Result<CommandOutput> {
-        self.actions
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .push(format!("reset:{mode:?}:{target}"));
-        Ok(CommandOutput::empty_success("git reset"))
-    }
-
-    fn merge_abort_with_output(&self) -> Result<CommandOutput> {
-        self.actions
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .push("merge-abort".to_string());
-        Ok(CommandOutput::empty_success("git merge --abort"))
-    }
 }
+impl GitRepositoryWorktree for TrackingRepo {}
 
 struct TrackingBackend {
     repo: Arc<TrackingRepo>,

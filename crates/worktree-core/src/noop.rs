@@ -11,6 +11,11 @@ use std::sync::Arc;
 use crate::domain::*;
 use crate::error::{Error, ErrorKind};
 use crate::services::{GitBackend, GitRepository, Result};
+#[cfg(test)]
+use crate::services::{
+    GitRepositoryDiff, GitRepositoryHistory, GitRepositoryLog, GitRepositoryPorcelain,
+    GitRepositoryRemotes, GitRepositoryStatus, GitRepositoryWorktree,
+};
 
 #[derive(Default)]
 struct NoopBackend;
@@ -43,7 +48,9 @@ impl GitRepository for NoopRepo {
     fn spec(&self) -> &RepoSpec {
         &self.spec
     }
-
+}
+#[cfg(test)]
+impl GitRepositoryLog for NoopRepo {
     fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
         Err(Error::new(ErrorKind::Unsupported("No Git backend enabled")))
     }
@@ -55,15 +62,11 @@ impl GitRepository for NoopRepo {
     fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
         Err(Error::new(ErrorKind::Unsupported("No Git backend enabled")))
     }
-
-    fn current_branch(&self) -> Result<String> {
-        Err(Error::new(ErrorKind::Unsupported("No Git backend enabled")))
-    }
-
-    fn list_branches(&self) -> Result<Vec<Branch>> {
-        Err(Error::new(ErrorKind::Unsupported("No Git backend enabled")))
-    }
-
+}
+#[cfg(test)]
+impl GitRepositoryHistory for NoopRepo {}
+#[cfg(test)]
+impl GitRepositoryRemotes for NoopRepo {
     fn list_remotes(&self) -> Result<Vec<Remote>> {
         Err(Error::new(ErrorKind::Unsupported("No Git backend enabled")))
     }
@@ -72,11 +75,37 @@ impl GitRepository for NoopRepo {
         Err(Error::new(ErrorKind::Unsupported("No Git backend enabled")))
     }
 
-    fn status(&self) -> Result<RepoStatus> {
+    fn fetch_all(&self) -> Result<()> {
         Err(Error::new(ErrorKind::Unsupported("No Git backend enabled")))
     }
 
+    fn pull(&self, _mode: crate::services::PullMode) -> Result<()> {
+        Err(Error::new(ErrorKind::Unsupported("No Git backend enabled")))
+    }
+
+    fn push(&self) -> Result<()> {
+        Err(Error::new(ErrorKind::Unsupported("No Git backend enabled")))
+    }
+}
+#[cfg(test)]
+impl GitRepositoryStatus for NoopRepo {
+    fn status(&self) -> Result<RepoStatus> {
+        Err(Error::new(ErrorKind::Unsupported("No Git backend enabled")))
+    }
+}
+#[cfg(test)]
+impl GitRepositoryDiff for NoopRepo {
     fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
+        Err(Error::new(ErrorKind::Unsupported("No Git backend enabled")))
+    }
+}
+#[cfg(test)]
+impl GitRepositoryPorcelain for NoopRepo {
+    fn current_branch(&self) -> Result<String> {
+        Err(Error::new(ErrorKind::Unsupported("No Git backend enabled")))
+    }
+
+    fn list_branches(&self) -> Result<Vec<Branch>> {
         Err(Error::new(ErrorKind::Unsupported("No Git backend enabled")))
     }
 
@@ -138,22 +167,12 @@ impl GitRepository for NoopRepo {
         Err(Error::new(ErrorKind::Unsupported("No Git backend enabled")))
     }
 
-    fn fetch_all(&self) -> Result<()> {
-        Err(Error::new(ErrorKind::Unsupported("No Git backend enabled")))
-    }
-
-    fn pull(&self, _mode: crate::services::PullMode) -> Result<()> {
-        Err(Error::new(ErrorKind::Unsupported("No Git backend enabled")))
-    }
-
-    fn push(&self) -> Result<()> {
-        Err(Error::new(ErrorKind::Unsupported("No Git backend enabled")))
-    }
-
     fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
         Err(Error::new(ErrorKind::Unsupported("No Git backend enabled")))
     }
 }
+#[cfg(test)]
+impl GitRepositoryWorktree for NoopRepo {}
 
 #[cfg(test)]
 mod tests {
@@ -162,7 +181,9 @@ mod tests {
     use crate::error::ErrorKind;
     use crate::external_merge_tool::ExternalMergeToolSelection;
     use crate::services::{
-        ConflictSide, GitBackend, GitRepository, PullMode, RemoteUrlKind, ResetMode, Result,
+        ConflictSide, GitBackend, GitRepository, GitRepositoryDiff, GitRepositoryHistory,
+        GitRepositoryLog, GitRepositoryPorcelain, GitRepositoryRemotes, GitRepositoryStatus,
+        GitRepositoryWorktree, PullMode, RemoteUrlKind, ResetMode, Result,
         SafePushAfterCommitTarget,
     };
     use std::path::{Path, PathBuf};

@@ -509,57 +509,92 @@ fn load_conflict_file_effect_reads_worktree_and_emits_loaded() {
         fn spec(&self) -> &RepoSpec {
             &self.spec
         }
+    }
+    impl GitRepositoryLog for Repo {
         fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
             unimplemented!()
         }
+
         fn commit_details(&self, _id: &CommitId) -> Result<CommitDetails> {
             unimplemented!()
         }
+
         fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
             unimplemented!()
         }
-        fn current_branch(&self) -> Result<String> {
-            unimplemented!()
-        }
-        fn list_branches(&self) -> Result<Vec<Branch>> {
-            unimplemented!()
-        }
+    }
+    impl GitRepositoryHistory for Repo {}
+    impl GitRepositoryRemotes for Repo {
         fn list_remotes(&self) -> Result<Vec<Remote>> {
             unimplemented!()
         }
+
         fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
             unimplemented!()
         }
+
+        fn fetch_all(&self) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn pull(&self, _mode: PullMode) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn push(&self) -> Result<()> {
+            unimplemented!()
+        }
+    }
+    impl GitRepositoryStatus for Repo {
         fn status(&self) -> Result<RepoStatus> {
             unimplemented!()
         }
+    }
+    impl GitRepositoryDiff for Repo {
         fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
             unimplemented!()
         }
+
         fn diff_file_text(
             &self,
             _target: &DiffTarget,
         ) -> Result<Option<worktree_core::domain::FileDiffText>> {
             Ok(Some(self.diff.clone()))
         }
+    }
+    impl GitRepositoryPorcelain for Repo {
+        fn current_branch(&self) -> Result<String> {
+            unimplemented!()
+        }
+
+        fn list_branches(&self) -> Result<Vec<Branch>> {
+            unimplemented!()
+        }
+
         fn create_branch(&self, _name: &str, _target: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn delete_branch(&self, _name: &str) -> Result<()> {
             unimplemented!()
         }
+
         fn checkout_branch(&self, _name: &str) -> Result<()> {
             unimplemented!()
         }
+
         fn checkout_commit(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn cherry_pick(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn revert(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_create(
             &self,
             _message: &str,
@@ -569,37 +604,36 @@ fn load_conflict_file_effect_reads_worktree_and_emits_loaded() {
         ) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_list(&self) -> Result<Vec<StashEntry>> {
             unimplemented!()
         }
+
         fn stash_apply(&self, _index: usize) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_drop(&self, _index: usize) -> Result<()> {
             unimplemented!()
         }
+
         fn stage(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
+
         fn unstage(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
+
         fn commit(&self, _message: &str) -> Result<()> {
             unimplemented!()
         }
-        fn fetch_all(&self) -> Result<()> {
-            unimplemented!()
-        }
-        fn pull(&self, _mode: PullMode) -> Result<()> {
-            unimplemented!()
-        }
-        fn push(&self) -> Result<()> {
-            unimplemented!()
-        }
+
         fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
     }
+    impl GitRepositoryWorktree for Repo {}
 
     let base = std::env::temp_dir().join(format!(
         "worktree-conflict-load-test-{}-{}",
@@ -702,58 +736,94 @@ fn load_conflict_file_effect_reuses_conflict_session_payloads_without_stage_fetc
         fn spec(&self) -> &RepoSpec {
             &self.spec
         }
+    }
+    impl GitRepositoryLog for Repo {
         fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
             unimplemented!()
         }
+
         fn commit_details(&self, _id: &CommitId) -> Result<CommitDetails> {
             unimplemented!()
         }
+
         fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
             unimplemented!()
         }
-        fn current_branch(&self) -> Result<String> {
-            unimplemented!()
-        }
-        fn list_branches(&self) -> Result<Vec<Branch>> {
-            unimplemented!()
-        }
+    }
+    impl GitRepositoryHistory for Repo {}
+    impl GitRepositoryRemotes for Repo {
         fn list_remotes(&self) -> Result<Vec<Remote>> {
             unimplemented!()
         }
+
         fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
             unimplemented!()
         }
+
+        fn fetch_all(&self) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn pull(&self, _mode: PullMode) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn push(&self) -> Result<()> {
+            unimplemented!()
+        }
+    }
+    impl GitRepositoryStatus for Repo {
         fn status(&self) -> Result<RepoStatus> {
             unimplemented!()
         }
+    }
+    impl GitRepositoryDiff for Repo {
         fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
             unimplemented!()
         }
+
         fn conflict_file_stages(&self, _path: &Path) -> Result<Option<ConflictFileStages>> {
             self.stage_calls.fetch_add(1, Ordering::SeqCst);
             Ok(None)
         }
+
         fn conflict_session(&self, _path: &Path) -> Result<Option<ConflictSession>> {
             Ok(Some(self.session.clone()))
         }
+    }
+    impl GitRepositoryPorcelain for Repo {
+        fn current_branch(&self) -> Result<String> {
+            unimplemented!()
+        }
+
+        fn list_branches(&self) -> Result<Vec<Branch>> {
+            unimplemented!()
+        }
+
         fn create_branch(&self, _name: &str, _target: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn delete_branch(&self, _name: &str) -> Result<()> {
             unimplemented!()
         }
+
         fn checkout_branch(&self, _name: &str) -> Result<()> {
             unimplemented!()
         }
+
         fn checkout_commit(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn cherry_pick(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn revert(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_create(
             &self,
             _message: &str,
@@ -763,37 +833,36 @@ fn load_conflict_file_effect_reuses_conflict_session_payloads_without_stage_fetc
         ) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_list(&self) -> Result<Vec<StashEntry>> {
             unimplemented!()
         }
+
         fn stash_apply(&self, _index: usize) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_drop(&self, _index: usize) -> Result<()> {
             unimplemented!()
         }
+
         fn stage(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
+
         fn unstage(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
+
         fn commit(&self, _message: &str) -> Result<()> {
             unimplemented!()
         }
-        fn fetch_all(&self) -> Result<()> {
-            unimplemented!()
-        }
-        fn pull(&self, _mode: PullMode) -> Result<()> {
-            unimplemented!()
-        }
-        fn push(&self) -> Result<()> {
-            unimplemented!()
-        }
+
         fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
     }
+    impl GitRepositoryWorktree for Repo {}
 
     let base = std::env::temp_dir().join(format!(
         "worktree-conflict-load-session-reuse-test-{}-{}",
@@ -922,58 +991,94 @@ fn load_conflict_file_effect_preserves_binary_payloads_when_reusing_session() {
         fn spec(&self) -> &RepoSpec {
             &self.spec
         }
+    }
+    impl GitRepositoryLog for Repo {
         fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
             unimplemented!()
         }
+
         fn commit_details(&self, _id: &CommitId) -> Result<CommitDetails> {
             unimplemented!()
         }
+
         fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
             unimplemented!()
         }
-        fn current_branch(&self) -> Result<String> {
-            unimplemented!()
-        }
-        fn list_branches(&self) -> Result<Vec<Branch>> {
-            unimplemented!()
-        }
+    }
+    impl GitRepositoryHistory for Repo {}
+    impl GitRepositoryRemotes for Repo {
         fn list_remotes(&self) -> Result<Vec<Remote>> {
             unimplemented!()
         }
+
         fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
             unimplemented!()
         }
+
+        fn fetch_all(&self) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn pull(&self, _mode: PullMode) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn push(&self) -> Result<()> {
+            unimplemented!()
+        }
+    }
+    impl GitRepositoryStatus for Repo {
         fn status(&self) -> Result<RepoStatus> {
             unimplemented!()
         }
+    }
+    impl GitRepositoryDiff for Repo {
         fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
             unimplemented!()
         }
+
         fn conflict_file_stages(&self, _path: &Path) -> Result<Option<ConflictFileStages>> {
             self.stage_calls.fetch_add(1, Ordering::SeqCst);
             Ok(None)
         }
+
         fn conflict_session(&self, _path: &Path) -> Result<Option<ConflictSession>> {
             Ok(Some(self.session.clone()))
         }
+    }
+    impl GitRepositoryPorcelain for Repo {
+        fn current_branch(&self) -> Result<String> {
+            unimplemented!()
+        }
+
+        fn list_branches(&self) -> Result<Vec<Branch>> {
+            unimplemented!()
+        }
+
         fn create_branch(&self, _name: &str, _target: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn delete_branch(&self, _name: &str) -> Result<()> {
             unimplemented!()
         }
+
         fn checkout_branch(&self, _name: &str) -> Result<()> {
             unimplemented!()
         }
+
         fn checkout_commit(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn cherry_pick(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn revert(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_create(
             &self,
             _message: &str,
@@ -983,37 +1088,36 @@ fn load_conflict_file_effect_preserves_binary_payloads_when_reusing_session() {
         ) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_list(&self) -> Result<Vec<StashEntry>> {
             unimplemented!()
         }
+
         fn stash_apply(&self, _index: usize) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_drop(&self, _index: usize) -> Result<()> {
             unimplemented!()
         }
+
         fn stage(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
+
         fn unstage(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
+
         fn commit(&self, _message: &str) -> Result<()> {
             unimplemented!()
         }
-        fn fetch_all(&self) -> Result<()> {
-            unimplemented!()
-        }
-        fn pull(&self, _mode: PullMode) -> Result<()> {
-            unimplemented!()
-        }
-        fn push(&self) -> Result<()> {
-            unimplemented!()
-        }
+
         fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
     }
+    impl GitRepositoryWorktree for Repo {}
 
     let base = std::env::temp_dir().join(format!(
         "worktree-conflict-load-session-reuse-binary-test-{}-{}",
@@ -1154,58 +1258,94 @@ fn load_conflict_file_effect_reuses_absent_current_payload_without_rereading_wor
         fn spec(&self) -> &RepoSpec {
             &self.spec
         }
+    }
+    impl GitRepositoryLog for Repo {
         fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
             unimplemented!()
         }
+
         fn commit_details(&self, _id: &CommitId) -> Result<CommitDetails> {
             unimplemented!()
         }
+
         fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
             unimplemented!()
         }
-        fn current_branch(&self) -> Result<String> {
-            unimplemented!()
-        }
-        fn list_branches(&self) -> Result<Vec<Branch>> {
-            unimplemented!()
-        }
+    }
+    impl GitRepositoryHistory for Repo {}
+    impl GitRepositoryRemotes for Repo {
         fn list_remotes(&self) -> Result<Vec<Remote>> {
             unimplemented!()
         }
+
         fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
             unimplemented!()
         }
+
+        fn fetch_all(&self) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn pull(&self, _mode: PullMode) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn push(&self) -> Result<()> {
+            unimplemented!()
+        }
+    }
+    impl GitRepositoryStatus for Repo {
         fn status(&self) -> Result<RepoStatus> {
             unimplemented!()
         }
+    }
+    impl GitRepositoryDiff for Repo {
         fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
             unimplemented!()
         }
+
         fn conflict_file_stages(&self, _path: &Path) -> Result<Option<ConflictFileStages>> {
             self.stage_calls.fetch_add(1, Ordering::SeqCst);
             Ok(None)
         }
+
         fn conflict_session(&self, _path: &Path) -> Result<Option<ConflictSession>> {
             Ok(Some(self.session.clone()))
         }
+    }
+    impl GitRepositoryPorcelain for Repo {
+        fn current_branch(&self) -> Result<String> {
+            unimplemented!()
+        }
+
+        fn list_branches(&self) -> Result<Vec<Branch>> {
+            unimplemented!()
+        }
+
         fn create_branch(&self, _name: &str, _target: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn delete_branch(&self, _name: &str) -> Result<()> {
             unimplemented!()
         }
+
         fn checkout_branch(&self, _name: &str) -> Result<()> {
             unimplemented!()
         }
+
         fn checkout_commit(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn cherry_pick(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn revert(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_create(
             &self,
             _message: &str,
@@ -1215,37 +1355,36 @@ fn load_conflict_file_effect_reuses_absent_current_payload_without_rereading_wor
         ) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_list(&self) -> Result<Vec<StashEntry>> {
             unimplemented!()
         }
+
         fn stash_apply(&self, _index: usize) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_drop(&self, _index: usize) -> Result<()> {
             unimplemented!()
         }
+
         fn stage(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
+
         fn unstage(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
+
         fn commit(&self, _message: &str) -> Result<()> {
             unimplemented!()
         }
-        fn fetch_all(&self) -> Result<()> {
-            unimplemented!()
-        }
-        fn pull(&self, _mode: PullMode) -> Result<()> {
-            unimplemented!()
-        }
-        fn push(&self) -> Result<()> {
-            unimplemented!()
-        }
+
         fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
     }
+    impl GitRepositoryWorktree for Repo {}
 
     let _trace_lock = MERGETOOL_TRACE_TEST_LOCK
         .lock()
@@ -1381,57 +1520,93 @@ fn load_conflict_file_effect_records_trace_stages_and_sizes() {
         fn spec(&self) -> &RepoSpec {
             &self.spec
         }
+    }
+    impl GitRepositoryLog for Repo {
         fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
             unimplemented!()
         }
+
         fn commit_details(&self, _id: &CommitId) -> Result<CommitDetails> {
             unimplemented!()
         }
+
         fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
             unimplemented!()
         }
-        fn current_branch(&self) -> Result<String> {
-            unimplemented!()
-        }
-        fn list_branches(&self) -> Result<Vec<Branch>> {
-            unimplemented!()
-        }
+    }
+    impl GitRepositoryHistory for Repo {}
+    impl GitRepositoryRemotes for Repo {
         fn list_remotes(&self) -> Result<Vec<Remote>> {
             unimplemented!()
         }
+
         fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
             unimplemented!()
         }
+
+        fn fetch_all(&self) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn pull(&self, _mode: PullMode) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn push(&self) -> Result<()> {
+            unimplemented!()
+        }
+    }
+    impl GitRepositoryStatus for Repo {
         fn status(&self) -> Result<RepoStatus> {
             unimplemented!()
         }
+    }
+    impl GitRepositoryDiff for Repo {
         fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
             unimplemented!()
         }
+
         fn conflict_file_stages(&self, _path: &Path) -> Result<Option<ConflictFileStages>> {
             Ok(Some(self.stages.clone()))
         }
+
         fn conflict_session(&self, _path: &Path) -> Result<Option<ConflictSession>> {
             Ok(Some(self.session.clone()))
         }
+    }
+    impl GitRepositoryPorcelain for Repo {
+        fn current_branch(&self) -> Result<String> {
+            unimplemented!()
+        }
+
+        fn list_branches(&self) -> Result<Vec<Branch>> {
+            unimplemented!()
+        }
+
         fn create_branch(&self, _name: &str, _target: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn delete_branch(&self, _name: &str) -> Result<()> {
             unimplemented!()
         }
+
         fn checkout_branch(&self, _name: &str) -> Result<()> {
             unimplemented!()
         }
+
         fn checkout_commit(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn cherry_pick(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn revert(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_create(
             &self,
             _message: &str,
@@ -1441,37 +1616,36 @@ fn load_conflict_file_effect_records_trace_stages_and_sizes() {
         ) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_list(&self) -> Result<Vec<StashEntry>> {
             unimplemented!()
         }
+
         fn stash_apply(&self, _index: usize) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_drop(&self, _index: usize) -> Result<()> {
             unimplemented!()
         }
+
         fn stage(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
+
         fn unstage(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
+
         fn commit(&self, _message: &str) -> Result<()> {
             unimplemented!()
         }
-        fn fetch_all(&self) -> Result<()> {
-            unimplemented!()
-        }
-        fn pull(&self, _mode: PullMode) -> Result<()> {
-            unimplemented!()
-        }
-        fn push(&self) -> Result<()> {
-            unimplemented!()
-        }
+
         fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
     }
+    impl GitRepositoryWorktree for Repo {}
 
     fn trace_line_count(text: &str) -> usize {
         if text.is_empty() {
@@ -1655,51 +1829,85 @@ fn save_worktree_file_effect_writes_and_can_stage() {
         fn spec(&self) -> &RepoSpec {
             &self.spec
         }
+    }
+    impl GitRepositoryLog for Repo {
         fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
             unimplemented!()
         }
+
         fn commit_details(&self, _id: &CommitId) -> Result<CommitDetails> {
             unimplemented!()
         }
+
         fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
             unimplemented!()
         }
-        fn current_branch(&self) -> Result<String> {
-            unimplemented!()
-        }
-        fn list_branches(&self) -> Result<Vec<Branch>> {
-            unimplemented!()
-        }
+    }
+    impl GitRepositoryHistory for Repo {}
+    impl GitRepositoryRemotes for Repo {
         fn list_remotes(&self) -> Result<Vec<Remote>> {
             unimplemented!()
         }
+
         fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
             unimplemented!()
         }
+
+        fn fetch_all(&self) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn pull(&self, _mode: PullMode) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn push(&self) -> Result<()> {
+            unimplemented!()
+        }
+    }
+    impl GitRepositoryStatus for Repo {
         fn status(&self) -> Result<RepoStatus> {
             unimplemented!()
         }
+    }
+    impl GitRepositoryDiff for Repo {
         fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
             unimplemented!()
         }
+    }
+    impl GitRepositoryPorcelain for Repo {
+        fn current_branch(&self) -> Result<String> {
+            unimplemented!()
+        }
+
+        fn list_branches(&self) -> Result<Vec<Branch>> {
+            unimplemented!()
+        }
+
         fn create_branch(&self, _name: &str, _target: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn delete_branch(&self, _name: &str) -> Result<()> {
             unimplemented!()
         }
+
         fn checkout_branch(&self, _name: &str) -> Result<()> {
             unimplemented!()
         }
+
         fn checkout_commit(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn cherry_pick(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn revert(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_create(
             &self,
             _message: &str,
@@ -1709,15 +1917,19 @@ fn save_worktree_file_effect_writes_and_can_stage() {
         ) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_list(&self) -> Result<Vec<StashEntry>> {
             unimplemented!()
         }
+
         fn stash_apply(&self, _index: usize) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_drop(&self, _index: usize) -> Result<()> {
             unimplemented!()
         }
+
         fn stage(&self, paths: &[&Path]) -> Result<()> {
             let mut staged = self.staged.lock().unwrap();
             for p in paths {
@@ -1725,25 +1937,20 @@ fn save_worktree_file_effect_writes_and_can_stage() {
             }
             Ok(())
         }
+
         fn unstage(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
+
         fn commit(&self, _message: &str) -> Result<()> {
             unimplemented!()
         }
-        fn fetch_all(&self) -> Result<()> {
-            unimplemented!()
-        }
-        fn pull(&self, _mode: PullMode) -> Result<()> {
-            unimplemented!()
-        }
-        fn push(&self) -> Result<()> {
-            unimplemented!()
-        }
+
         fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
     }
+    impl GitRepositoryWorktree for Repo {}
 
     let base = std::env::temp_dir().join(format!(
         "worktree-save-worktree-file-test-{}-{}",
@@ -1900,51 +2107,85 @@ fn append_gitignore_patterns_effect_creates_appends_and_dedupes() {
         fn spec(&self) -> &RepoSpec {
             &self.spec
         }
+    }
+    impl GitRepositoryLog for Repo {
         fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
             unimplemented!()
         }
+
         fn commit_details(&self, _id: &CommitId) -> Result<CommitDetails> {
             unimplemented!()
         }
+
         fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
             unimplemented!()
         }
-        fn current_branch(&self) -> Result<String> {
-            unimplemented!()
-        }
-        fn list_branches(&self) -> Result<Vec<Branch>> {
-            unimplemented!()
-        }
+    }
+    impl GitRepositoryHistory for Repo {}
+    impl GitRepositoryRemotes for Repo {
         fn list_remotes(&self) -> Result<Vec<Remote>> {
             unimplemented!()
         }
+
         fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
             unimplemented!()
         }
+
+        fn fetch_all(&self) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn pull(&self, _mode: PullMode) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn push(&self) -> Result<()> {
+            unimplemented!()
+        }
+    }
+    impl GitRepositoryStatus for Repo {
         fn status(&self) -> Result<RepoStatus> {
             unimplemented!()
         }
+    }
+    impl GitRepositoryDiff for Repo {
         fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
             unimplemented!()
         }
+    }
+    impl GitRepositoryPorcelain for Repo {
+        fn current_branch(&self) -> Result<String> {
+            unimplemented!()
+        }
+
+        fn list_branches(&self) -> Result<Vec<Branch>> {
+            unimplemented!()
+        }
+
         fn create_branch(&self, _name: &str, _target: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn delete_branch(&self, _name: &str) -> Result<()> {
             unimplemented!()
         }
+
         fn checkout_branch(&self, _name: &str) -> Result<()> {
             unimplemented!()
         }
+
         fn checkout_commit(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn cherry_pick(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn revert(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_create(
             &self,
             _message: &str,
@@ -1954,37 +2195,36 @@ fn append_gitignore_patterns_effect_creates_appends_and_dedupes() {
         ) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_list(&self) -> Result<Vec<StashEntry>> {
             unimplemented!()
         }
+
         fn stash_apply(&self, _index: usize) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_drop(&self, _index: usize) -> Result<()> {
             unimplemented!()
         }
+
         fn stage(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
+
         fn unstage(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
+
         fn commit(&self, _message: &str) -> Result<()> {
             unimplemented!()
         }
-        fn fetch_all(&self) -> Result<()> {
-            unimplemented!()
-        }
-        fn pull(&self, _mode: PullMode) -> Result<()> {
-            unimplemented!()
-        }
-        fn push(&self) -> Result<()> {
-            unimplemented!()
-        }
+
         fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
     }
+    impl GitRepositoryWorktree for Repo {}
 
     // `tempfile` rather than a hand-rolled directory: its `Drop` runs on unwind,
     // so a failing assertion below does not leave a stray repo in /tmp.
@@ -2103,88 +2343,49 @@ fn checkout_conflict_base_effect_calls_repo_and_emits_finished() {
         fn spec(&self) -> &RepoSpec {
             &self.spec
         }
+    }
+    impl GitRepositoryLog for Repo {
         fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
             unimplemented!()
         }
+
         fn commit_details(&self, _id: &CommitId) -> Result<CommitDetails> {
             unimplemented!()
         }
+
         fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
             unimplemented!()
         }
-        fn current_branch(&self) -> Result<String> {
-            unimplemented!()
-        }
-        fn list_branches(&self) -> Result<Vec<Branch>> {
-            unimplemented!()
-        }
+    }
+    impl GitRepositoryHistory for Repo {}
+    impl GitRepositoryRemotes for Repo {
         fn list_remotes(&self) -> Result<Vec<Remote>> {
             unimplemented!()
         }
+
         fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
             unimplemented!()
         }
-        fn status(&self) -> Result<RepoStatus> {
-            unimplemented!()
-        }
-        fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
-            unimplemented!()
-        }
-        fn create_branch(&self, _name: &str, _target: &CommitId) -> Result<()> {
-            unimplemented!()
-        }
-        fn delete_branch(&self, _name: &str) -> Result<()> {
-            unimplemented!()
-        }
-        fn checkout_branch(&self, _name: &str) -> Result<()> {
-            unimplemented!()
-        }
-        fn checkout_commit(&self, _id: &CommitId) -> Result<()> {
-            unimplemented!()
-        }
-        fn cherry_pick(&self, _id: &CommitId) -> Result<()> {
-            unimplemented!()
-        }
-        fn revert(&self, _id: &CommitId) -> Result<()> {
-            unimplemented!()
-        }
-        fn stash_create(
-            &self,
-            _message: &str,
-            _include_untracked: bool,
-            _keep_index: bool,
-            _paths: &[PathBuf],
-        ) -> Result<()> {
-            unimplemented!()
-        }
-        fn stash_list(&self) -> Result<Vec<StashEntry>> {
-            unimplemented!()
-        }
-        fn stash_apply(&self, _index: usize) -> Result<()> {
-            unimplemented!()
-        }
-        fn stash_drop(&self, _index: usize) -> Result<()> {
-            unimplemented!()
-        }
-        fn stage(&self, _paths: &[&Path]) -> Result<()> {
-            unimplemented!()
-        }
-        fn unstage(&self, _paths: &[&Path]) -> Result<()> {
-            unimplemented!()
-        }
-        fn commit(&self, _message: &str) -> Result<()> {
-            unimplemented!()
-        }
+
         fn fetch_all(&self) -> Result<()> {
             unimplemented!()
         }
+
         fn pull(&self, _mode: PullMode) -> Result<()> {
             unimplemented!()
         }
+
         fn push(&self) -> Result<()> {
             unimplemented!()
         }
-        fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
+    }
+    impl GitRepositoryStatus for Repo {
+        fn status(&self) -> Result<RepoStatus> {
+            unimplemented!()
+        }
+    }
+    impl GitRepositoryDiff for Repo {
+        fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
             unimplemented!()
         }
 
@@ -2199,6 +2400,78 @@ fn checkout_conflict_base_effect_calls_repo_and_emits_finished() {
             )))
         }
     }
+    impl GitRepositoryPorcelain for Repo {
+        fn current_branch(&self) -> Result<String> {
+            unimplemented!()
+        }
+
+        fn list_branches(&self) -> Result<Vec<Branch>> {
+            unimplemented!()
+        }
+
+        fn create_branch(&self, _name: &str, _target: &CommitId) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn delete_branch(&self, _name: &str) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn checkout_branch(&self, _name: &str) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn checkout_commit(&self, _id: &CommitId) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn cherry_pick(&self, _id: &CommitId) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn revert(&self, _id: &CommitId) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn stash_list(&self) -> Result<Vec<StashEntry>> {
+            unimplemented!()
+        }
+
+        fn stash_apply(&self, _index: usize) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn stash_drop(&self, _index: usize) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn stage(&self, _paths: &[&Path]) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn unstage(&self, _paths: &[&Path]) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn commit(&self, _message: &str) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
+            unimplemented!()
+        }
+    }
+    impl GitRepositoryWorktree for Repo {}
 
     let repo_id = RepoId(1);
     let rel = PathBuf::from("conflicted.txt");
@@ -2271,88 +2544,49 @@ fn accept_conflict_deletion_effect_calls_repo_and_emits_finished() {
         fn spec(&self) -> &RepoSpec {
             &self.spec
         }
+    }
+    impl GitRepositoryLog for Repo {
         fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
             unimplemented!()
         }
+
         fn commit_details(&self, _id: &CommitId) -> Result<CommitDetails> {
             unimplemented!()
         }
+
         fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
             unimplemented!()
         }
-        fn current_branch(&self) -> Result<String> {
-            unimplemented!()
-        }
-        fn list_branches(&self) -> Result<Vec<Branch>> {
-            unimplemented!()
-        }
+    }
+    impl GitRepositoryHistory for Repo {}
+    impl GitRepositoryRemotes for Repo {
         fn list_remotes(&self) -> Result<Vec<Remote>> {
             unimplemented!()
         }
+
         fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
             unimplemented!()
         }
-        fn status(&self) -> Result<RepoStatus> {
-            unimplemented!()
-        }
-        fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
-            unimplemented!()
-        }
-        fn create_branch(&self, _name: &str, _target: &CommitId) -> Result<()> {
-            unimplemented!()
-        }
-        fn delete_branch(&self, _name: &str) -> Result<()> {
-            unimplemented!()
-        }
-        fn checkout_branch(&self, _name: &str) -> Result<()> {
-            unimplemented!()
-        }
-        fn checkout_commit(&self, _id: &CommitId) -> Result<()> {
-            unimplemented!()
-        }
-        fn cherry_pick(&self, _id: &CommitId) -> Result<()> {
-            unimplemented!()
-        }
-        fn revert(&self, _id: &CommitId) -> Result<()> {
-            unimplemented!()
-        }
-        fn stash_create(
-            &self,
-            _message: &str,
-            _include_untracked: bool,
-            _keep_index: bool,
-            _paths: &[PathBuf],
-        ) -> Result<()> {
-            unimplemented!()
-        }
-        fn stash_list(&self) -> Result<Vec<StashEntry>> {
-            unimplemented!()
-        }
-        fn stash_apply(&self, _index: usize) -> Result<()> {
-            unimplemented!()
-        }
-        fn stash_drop(&self, _index: usize) -> Result<()> {
-            unimplemented!()
-        }
-        fn stage(&self, _paths: &[&Path]) -> Result<()> {
-            unimplemented!()
-        }
-        fn unstage(&self, _paths: &[&Path]) -> Result<()> {
-            unimplemented!()
-        }
-        fn commit(&self, _message: &str) -> Result<()> {
-            unimplemented!()
-        }
+
         fn fetch_all(&self) -> Result<()> {
             unimplemented!()
         }
+
         fn pull(&self, _mode: PullMode) -> Result<()> {
             unimplemented!()
         }
+
         fn push(&self) -> Result<()> {
             unimplemented!()
         }
-        fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
+    }
+    impl GitRepositoryStatus for Repo {
+        fn status(&self) -> Result<RepoStatus> {
+            unimplemented!()
+        }
+    }
+    impl GitRepositoryDiff for Repo {
+        fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
             unimplemented!()
         }
 
@@ -2367,6 +2601,78 @@ fn accept_conflict_deletion_effect_calls_repo_and_emits_finished() {
             )))
         }
     }
+    impl GitRepositoryPorcelain for Repo {
+        fn current_branch(&self) -> Result<String> {
+            unimplemented!()
+        }
+
+        fn list_branches(&self) -> Result<Vec<Branch>> {
+            unimplemented!()
+        }
+
+        fn create_branch(&self, _name: &str, _target: &CommitId) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn delete_branch(&self, _name: &str) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn checkout_branch(&self, _name: &str) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn checkout_commit(&self, _id: &CommitId) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn cherry_pick(&self, _id: &CommitId) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn revert(&self, _id: &CommitId) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn stash_create(
+            &self,
+            _message: &str,
+            _include_untracked: bool,
+            _keep_index: bool,
+            _paths: &[PathBuf],
+        ) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn stash_list(&self) -> Result<Vec<StashEntry>> {
+            unimplemented!()
+        }
+
+        fn stash_apply(&self, _index: usize) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn stash_drop(&self, _index: usize) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn stage(&self, _paths: &[&Path]) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn unstage(&self, _paths: &[&Path]) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn commit(&self, _message: &str) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
+            unimplemented!()
+        }
+    }
+    impl GitRepositoryWorktree for Repo {}
 
     let repo_id = RepoId(1);
     let rel = PathBuf::from("conflicted.txt");
@@ -2442,51 +2748,85 @@ fn load_stashes_effect_truncates_results_to_limit() {
         fn spec(&self) -> &RepoSpec {
             &self.spec
         }
+    }
+    impl GitRepositoryLog for Repo {
         fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
             unimplemented!()
         }
+
         fn commit_details(&self, _id: &CommitId) -> Result<CommitDetails> {
             unimplemented!()
         }
+
         fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
             unimplemented!()
         }
-        fn current_branch(&self) -> Result<String> {
-            unimplemented!()
-        }
-        fn list_branches(&self) -> Result<Vec<Branch>> {
-            unimplemented!()
-        }
+    }
+    impl GitRepositoryHistory for Repo {}
+    impl GitRepositoryRemotes for Repo {
         fn list_remotes(&self) -> Result<Vec<Remote>> {
             unimplemented!()
         }
+
         fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
             unimplemented!()
         }
+
+        fn fetch_all(&self) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn pull(&self, _mode: PullMode) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn push(&self) -> Result<()> {
+            unimplemented!()
+        }
+    }
+    impl GitRepositoryStatus for Repo {
         fn status(&self) -> Result<RepoStatus> {
             unimplemented!()
         }
+    }
+    impl GitRepositoryDiff for Repo {
         fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
             unimplemented!()
         }
+    }
+    impl GitRepositoryPorcelain for Repo {
+        fn current_branch(&self) -> Result<String> {
+            unimplemented!()
+        }
+
+        fn list_branches(&self) -> Result<Vec<Branch>> {
+            unimplemented!()
+        }
+
         fn create_branch(&self, _name: &str, _target: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn delete_branch(&self, _name: &str) -> Result<()> {
             unimplemented!()
         }
+
         fn checkout_branch(&self, _name: &str) -> Result<()> {
             unimplemented!()
         }
+
         fn checkout_commit(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn cherry_pick(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn revert(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_create(
             &self,
             _message: &str,
@@ -2496,37 +2836,36 @@ fn load_stashes_effect_truncates_results_to_limit() {
         ) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_list(&self) -> Result<Vec<StashEntry>> {
             Ok(self.stashes.clone())
         }
+
         fn stash_apply(&self, _index: usize) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_drop(&self, _index: usize) -> Result<()> {
             unimplemented!()
         }
+
         fn stage(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
+
         fn unstage(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
+
         fn commit(&self, _message: &str) -> Result<()> {
             unimplemented!()
         }
-        fn fetch_all(&self) -> Result<()> {
-            unimplemented!()
-        }
-        fn pull(&self, _mode: PullMode) -> Result<()> {
-            unimplemented!()
-        }
-        fn push(&self) -> Result<()> {
-            unimplemented!()
-        }
+
         fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
     }
+    impl GitRepositoryWorktree for Repo {}
 
     let base = std::env::temp_dir().join(format!(
         "worktree-stash-load-test-{}-{}",
@@ -2612,50 +2951,81 @@ fn stash_effect_requests_stash_reload_on_success() {
         fn spec(&self) -> &RepoSpec {
             &self.spec
         }
-
+    }
+    impl GitRepositoryLog for RecordingRepo {
         fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
             unimplemented!()
         }
+
         fn commit_details(&self, _id: &CommitId) -> Result<CommitDetails> {
             unimplemented!()
         }
+
         fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
             unimplemented!()
         }
-        fn current_branch(&self) -> Result<String> {
-            unimplemented!()
-        }
-        fn list_branches(&self) -> Result<Vec<Branch>> {
-            unimplemented!()
-        }
+    }
+    impl GitRepositoryHistory for RecordingRepo {}
+    impl GitRepositoryRemotes for RecordingRepo {
         fn list_remotes(&self) -> Result<Vec<Remote>> {
             unimplemented!()
         }
+
         fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
             unimplemented!()
         }
+
+        fn fetch_all(&self) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn pull(&self, _mode: PullMode) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn push(&self) -> Result<()> {
+            unimplemented!()
+        }
+    }
+    impl GitRepositoryStatus for RecordingRepo {
         fn status(&self) -> Result<RepoStatus> {
             unimplemented!()
         }
+    }
+    impl GitRepositoryDiff for RecordingRepo {
         fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
+            unimplemented!()
+        }
+    }
+    impl GitRepositoryPorcelain for RecordingRepo {
+        fn current_branch(&self) -> Result<String> {
+            unimplemented!()
+        }
+
+        fn list_branches(&self) -> Result<Vec<Branch>> {
             unimplemented!()
         }
 
         fn create_branch(&self, _name: &str, _target: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn delete_branch(&self, _name: &str) -> Result<()> {
             unimplemented!()
         }
+
         fn checkout_branch(&self, _name: &str) -> Result<()> {
             unimplemented!()
         }
+
         fn checkout_commit(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn cherry_pick(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn revert(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
@@ -2673,12 +3043,15 @@ fn stash_effect_requests_stash_reload_on_success() {
             ));
             Ok(())
         }
+
         fn stash_list(&self) -> Result<Vec<StashEntry>> {
             unimplemented!()
         }
+
         fn stash_apply(&self, _index: usize) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_drop(&self, _index: usize) -> Result<()> {
             unimplemented!()
         }
@@ -2686,25 +3059,20 @@ fn stash_effect_requests_stash_reload_on_success() {
         fn stage(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
+
         fn unstage(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
+
         fn commit(&self, _message: &str) -> Result<()> {
             unimplemented!()
         }
-        fn fetch_all(&self) -> Result<()> {
-            unimplemented!()
-        }
-        fn pull(&self, _mode: PullMode) -> Result<()> {
-            unimplemented!()
-        }
-        fn push(&self) -> Result<()> {
-            unimplemented!()
-        }
+
         fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
     }
+    impl GitRepositoryWorktree for RecordingRepo {}
 
     struct Backend;
     impl GitBackend for Backend {
@@ -2792,50 +3160,81 @@ fn pop_stash_effect_applies_and_drops_then_requests_stash_reload() {
         fn spec(&self) -> &RepoSpec {
             &self.spec
         }
-
+    }
+    impl GitRepositoryLog for RecordingRepo {
         fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
             unimplemented!()
         }
+
         fn commit_details(&self, _id: &CommitId) -> Result<CommitDetails> {
             unimplemented!()
         }
+
         fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
             unimplemented!()
         }
-        fn current_branch(&self) -> Result<String> {
-            unimplemented!()
-        }
-        fn list_branches(&self) -> Result<Vec<Branch>> {
-            unimplemented!()
-        }
+    }
+    impl GitRepositoryHistory for RecordingRepo {}
+    impl GitRepositoryRemotes for RecordingRepo {
         fn list_remotes(&self) -> Result<Vec<Remote>> {
             unimplemented!()
         }
+
         fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
             unimplemented!()
         }
+
+        fn fetch_all(&self) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn pull(&self, _mode: PullMode) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn push(&self) -> Result<()> {
+            unimplemented!()
+        }
+    }
+    impl GitRepositoryStatus for RecordingRepo {
         fn status(&self) -> Result<RepoStatus> {
             unimplemented!()
         }
+    }
+    impl GitRepositoryDiff for RecordingRepo {
         fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
+            unimplemented!()
+        }
+    }
+    impl GitRepositoryPorcelain for RecordingRepo {
+        fn current_branch(&self) -> Result<String> {
+            unimplemented!()
+        }
+
+        fn list_branches(&self) -> Result<Vec<Branch>> {
             unimplemented!()
         }
 
         fn create_branch(&self, _name: &str, _target: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn delete_branch(&self, _name: &str) -> Result<()> {
             unimplemented!()
         }
+
         fn checkout_branch(&self, _name: &str) -> Result<()> {
             unimplemented!()
         }
+
         fn checkout_commit(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn cherry_pick(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn revert(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
@@ -2849,13 +3248,16 @@ fn pop_stash_effect_applies_and_drops_then_requests_stash_reload() {
         ) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_list(&self) -> Result<Vec<StashEntry>> {
             unimplemented!()
         }
+
         fn stash_apply(&self, index: usize) -> Result<()> {
             self.calls.lock().unwrap().push(format!("apply {index}"));
             Ok(())
         }
+
         fn stash_drop(&self, index: usize) -> Result<()> {
             self.calls.lock().unwrap().push(format!("drop {index}"));
             Ok(())
@@ -2864,25 +3266,20 @@ fn pop_stash_effect_applies_and_drops_then_requests_stash_reload() {
         fn stage(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
+
         fn unstage(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
+
         fn commit(&self, _message: &str) -> Result<()> {
             unimplemented!()
         }
-        fn fetch_all(&self) -> Result<()> {
-            unimplemented!()
-        }
-        fn pull(&self, _mode: PullMode) -> Result<()> {
-            unimplemented!()
-        }
-        fn push(&self) -> Result<()> {
-            unimplemented!()
-        }
+
         fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
     }
+    impl GitRepositoryWorktree for RecordingRepo {}
 
     struct Backend;
     impl GitBackend for Backend {
@@ -2967,50 +3364,81 @@ fn pop_stash_effect_propagates_apply_error_without_drop_or_reload() {
         fn spec(&self) -> &RepoSpec {
             &self.spec
         }
-
+    }
+    impl GitRepositoryLog for FailingApplyRepo {
         fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
             unimplemented!()
         }
+
         fn commit_details(&self, _id: &CommitId) -> Result<CommitDetails> {
             unimplemented!()
         }
+
         fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
             unimplemented!()
         }
-        fn current_branch(&self) -> Result<String> {
-            unimplemented!()
-        }
-        fn list_branches(&self) -> Result<Vec<Branch>> {
-            unimplemented!()
-        }
+    }
+    impl GitRepositoryHistory for FailingApplyRepo {}
+    impl GitRepositoryRemotes for FailingApplyRepo {
         fn list_remotes(&self) -> Result<Vec<Remote>> {
             unimplemented!()
         }
+
         fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
             unimplemented!()
         }
+
+        fn fetch_all(&self) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn pull(&self, _mode: PullMode) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn push(&self) -> Result<()> {
+            unimplemented!()
+        }
+    }
+    impl GitRepositoryStatus for FailingApplyRepo {
         fn status(&self) -> Result<RepoStatus> {
             unimplemented!()
         }
+    }
+    impl GitRepositoryDiff for FailingApplyRepo {
         fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
+            unimplemented!()
+        }
+    }
+    impl GitRepositoryPorcelain for FailingApplyRepo {
+        fn current_branch(&self) -> Result<String> {
+            unimplemented!()
+        }
+
+        fn list_branches(&self) -> Result<Vec<Branch>> {
             unimplemented!()
         }
 
         fn create_branch(&self, _name: &str, _target: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn delete_branch(&self, _name: &str) -> Result<()> {
             unimplemented!()
         }
+
         fn checkout_branch(&self, _name: &str) -> Result<()> {
             unimplemented!()
         }
+
         fn checkout_commit(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn cherry_pick(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn revert(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
@@ -3024,13 +3452,16 @@ fn pop_stash_effect_propagates_apply_error_without_drop_or_reload() {
         ) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_list(&self) -> Result<Vec<StashEntry>> {
             unimplemented!()
         }
+
         fn stash_apply(&self, index: usize) -> Result<()> {
             self.calls.lock().unwrap().push(format!("apply {index}"));
             Err(Error::new(ErrorKind::Backend("apply failed".to_string())))
         }
+
         fn stash_drop(&self, index: usize) -> Result<()> {
             self.calls.lock().unwrap().push(format!("drop {index}"));
             Ok(())
@@ -3039,25 +3470,20 @@ fn pop_stash_effect_propagates_apply_error_without_drop_or_reload() {
         fn stage(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
+
         fn unstage(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
+
         fn commit(&self, _message: &str) -> Result<()> {
             unimplemented!()
         }
-        fn fetch_all(&self) -> Result<()> {
-            unimplemented!()
-        }
-        fn pull(&self, _mode: PullMode) -> Result<()> {
-            unimplemented!()
-        }
-        fn push(&self) -> Result<()> {
-            unimplemented!()
-        }
+
         fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
     }
+    impl GitRepositoryWorktree for FailingApplyRepo {}
 
     struct Backend;
     impl GitBackend for Backend {
@@ -3141,50 +3567,81 @@ fn drop_stash_effect_requests_stash_reload_on_success() {
         fn spec(&self) -> &RepoSpec {
             &self.spec
         }
-
+    }
+    impl GitRepositoryLog for RecordingRepo {
         fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
             unimplemented!()
         }
+
         fn commit_details(&self, _id: &CommitId) -> Result<CommitDetails> {
             unimplemented!()
         }
+
         fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
             unimplemented!()
         }
-        fn current_branch(&self) -> Result<String> {
-            unimplemented!()
-        }
-        fn list_branches(&self) -> Result<Vec<Branch>> {
-            unimplemented!()
-        }
+    }
+    impl GitRepositoryHistory for RecordingRepo {}
+    impl GitRepositoryRemotes for RecordingRepo {
         fn list_remotes(&self) -> Result<Vec<Remote>> {
             unimplemented!()
         }
+
         fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
             unimplemented!()
         }
+
+        fn fetch_all(&self) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn pull(&self, _mode: PullMode) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn push(&self) -> Result<()> {
+            unimplemented!()
+        }
+    }
+    impl GitRepositoryStatus for RecordingRepo {
         fn status(&self) -> Result<RepoStatus> {
             unimplemented!()
         }
+    }
+    impl GitRepositoryDiff for RecordingRepo {
         fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
+            unimplemented!()
+        }
+    }
+    impl GitRepositoryPorcelain for RecordingRepo {
+        fn current_branch(&self) -> Result<String> {
+            unimplemented!()
+        }
+
+        fn list_branches(&self) -> Result<Vec<Branch>> {
             unimplemented!()
         }
 
         fn create_branch(&self, _name: &str, _target: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn delete_branch(&self, _name: &str) -> Result<()> {
             unimplemented!()
         }
+
         fn checkout_branch(&self, _name: &str) -> Result<()> {
             unimplemented!()
         }
+
         fn checkout_commit(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn cherry_pick(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn revert(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
@@ -3198,12 +3655,15 @@ fn drop_stash_effect_requests_stash_reload_on_success() {
         ) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_list(&self) -> Result<Vec<StashEntry>> {
             unimplemented!()
         }
+
         fn stash_apply(&self, _index: usize) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_drop(&self, index: usize) -> Result<()> {
             self.calls.lock().unwrap().push(format!("drop {index}"));
             Ok(())
@@ -3212,25 +3672,20 @@ fn drop_stash_effect_requests_stash_reload_on_success() {
         fn stage(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
+
         fn unstage(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
+
         fn commit(&self, _message: &str) -> Result<()> {
             unimplemented!()
         }
-        fn fetch_all(&self) -> Result<()> {
-            unimplemented!()
-        }
-        fn pull(&self, _mode: PullMode) -> Result<()> {
-            unimplemented!()
-        }
-        fn push(&self) -> Result<()> {
-            unimplemented!()
-        }
+
         fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
     }
+    impl GitRepositoryWorktree for RecordingRepo {}
 
     struct Backend;
     impl GitBackend for Backend {
@@ -3312,50 +3767,81 @@ fn drop_stash_effect_requests_stash_reload_on_error() {
         fn spec(&self) -> &RepoSpec {
             &self.spec
         }
-
+    }
+    impl GitRepositoryLog for FailingRepo {
         fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
             unimplemented!()
         }
+
         fn commit_details(&self, _id: &CommitId) -> Result<CommitDetails> {
             unimplemented!()
         }
+
         fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
             unimplemented!()
         }
-        fn current_branch(&self) -> Result<String> {
-            unimplemented!()
-        }
-        fn list_branches(&self) -> Result<Vec<Branch>> {
-            unimplemented!()
-        }
+    }
+    impl GitRepositoryHistory for FailingRepo {}
+    impl GitRepositoryRemotes for FailingRepo {
         fn list_remotes(&self) -> Result<Vec<Remote>> {
             unimplemented!()
         }
+
         fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
             unimplemented!()
         }
+
+        fn fetch_all(&self) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn pull(&self, _mode: PullMode) -> Result<()> {
+            unimplemented!()
+        }
+
+        fn push(&self) -> Result<()> {
+            unimplemented!()
+        }
+    }
+    impl GitRepositoryStatus for FailingRepo {
         fn status(&self) -> Result<RepoStatus> {
             unimplemented!()
         }
+    }
+    impl GitRepositoryDiff for FailingRepo {
         fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
+            unimplemented!()
+        }
+    }
+    impl GitRepositoryPorcelain for FailingRepo {
+        fn current_branch(&self) -> Result<String> {
+            unimplemented!()
+        }
+
+        fn list_branches(&self) -> Result<Vec<Branch>> {
             unimplemented!()
         }
 
         fn create_branch(&self, _name: &str, _target: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn delete_branch(&self, _name: &str) -> Result<()> {
             unimplemented!()
         }
+
         fn checkout_branch(&self, _name: &str) -> Result<()> {
             unimplemented!()
         }
+
         fn checkout_commit(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn cherry_pick(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
+
         fn revert(&self, _id: &CommitId) -> Result<()> {
             unimplemented!()
         }
@@ -3369,12 +3855,15 @@ fn drop_stash_effect_requests_stash_reload_on_error() {
         ) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_list(&self) -> Result<Vec<StashEntry>> {
             unimplemented!()
         }
+
         fn stash_apply(&self, _index: usize) -> Result<()> {
             unimplemented!()
         }
+
         fn stash_drop(&self, index: usize) -> Result<()> {
             self.calls.lock().unwrap().push(format!("drop {index}"));
             Err(Error::new(ErrorKind::Backend("drop failed".to_string())))
@@ -3383,25 +3872,20 @@ fn drop_stash_effect_requests_stash_reload_on_error() {
         fn stage(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
+
         fn unstage(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
+
         fn commit(&self, _message: &str) -> Result<()> {
             unimplemented!()
         }
-        fn fetch_all(&self) -> Result<()> {
-            unimplemented!()
-        }
-        fn pull(&self, _mode: PullMode) -> Result<()> {
-            unimplemented!()
-        }
-        fn push(&self) -> Result<()> {
-            unimplemented!()
-        }
+
         fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
             unimplemented!()
         }
     }
+    impl GitRepositoryWorktree for FailingRepo {}
 
     struct Backend;
     impl GitBackend for Backend {
@@ -3497,50 +3981,81 @@ impl GitRepository for UnsupportedRepo {
     fn spec(&self) -> &RepoSpec {
         &self.spec
     }
-
+}
+impl GitRepositoryLog for UnsupportedRepo {
     fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
         unsupported_repo_result()
     }
+
     fn commit_details(&self, _id: &CommitId) -> Result<CommitDetails> {
         unsupported_repo_result()
     }
+
     fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
         unsupported_repo_result()
     }
-    fn current_branch(&self) -> Result<String> {
-        unsupported_repo_result()
-    }
-    fn list_branches(&self) -> Result<Vec<Branch>> {
-        unsupported_repo_result()
-    }
+}
+impl GitRepositoryHistory for UnsupportedRepo {}
+impl GitRepositoryRemotes for UnsupportedRepo {
     fn list_remotes(&self) -> Result<Vec<Remote>> {
         unsupported_repo_result()
     }
+
     fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
         unsupported_repo_result()
     }
+
+    fn fetch_all(&self) -> Result<()> {
+        unsupported_repo_result()
+    }
+
+    fn pull(&self, _mode: PullMode) -> Result<()> {
+        unsupported_repo_result()
+    }
+
+    fn push(&self) -> Result<()> {
+        unsupported_repo_result()
+    }
+}
+impl GitRepositoryStatus for UnsupportedRepo {
     fn status(&self) -> Result<RepoStatus> {
         unsupported_repo_result()
     }
+}
+impl GitRepositoryDiff for UnsupportedRepo {
     fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
+        unsupported_repo_result()
+    }
+}
+impl GitRepositoryPorcelain for UnsupportedRepo {
+    fn current_branch(&self) -> Result<String> {
+        unsupported_repo_result()
+    }
+
+    fn list_branches(&self) -> Result<Vec<Branch>> {
         unsupported_repo_result()
     }
 
     fn create_branch(&self, _name: &str, _target: &CommitId) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn delete_branch(&self, _name: &str) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn checkout_branch(&self, _name: &str) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn checkout_commit(&self, _id: &CommitId) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn cherry_pick(&self, _id: &CommitId) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn revert(&self, _id: &CommitId) -> Result<()> {
         unsupported_repo_result()
     }
@@ -3554,12 +4069,15 @@ impl GitRepository for UnsupportedRepo {
     ) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn stash_list(&self) -> Result<Vec<StashEntry>> {
         unsupported_repo_result()
     }
+
     fn stash_apply(&self, _index: usize) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn stash_drop(&self, _index: usize) -> Result<()> {
         unsupported_repo_result()
     }
@@ -3567,25 +4085,20 @@ impl GitRepository for UnsupportedRepo {
     fn stage(&self, _paths: &[&Path]) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn unstage(&self, _paths: &[&Path]) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn commit(&self, _message: &str) -> Result<()> {
         unsupported_repo_result()
     }
-    fn fetch_all(&self) -> Result<()> {
-        unsupported_repo_result()
-    }
-    fn pull(&self, _mode: PullMode) -> Result<()> {
-        unsupported_repo_result()
-    }
-    fn push(&self) -> Result<()> {
-        unsupported_repo_result()
-    }
+
     fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
         unsupported_repo_result()
     }
 }
+impl GitRepositoryWorktree for UnsupportedRepo {}
 
 struct PanicOpenBackend;
 
@@ -3632,22 +4145,61 @@ impl GitRepository for MetadataSchedulingRepo {
     fn spec(&self) -> &RepoSpec {
         &self.spec
     }
-
+}
+impl GitRepositoryLog for MetadataSchedulingRepo {
     fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
         unsupported_repo_result()
     }
+
     fn commit_details(&self, _id: &CommitId) -> Result<CommitDetails> {
         unsupported_repo_result()
     }
+
     fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
         unsupported_repo_result()
     }
+}
+impl GitRepositoryHistory for MetadataSchedulingRepo {}
+impl GitRepositoryRemotes for MetadataSchedulingRepo {
+    fn list_remotes(&self) -> Result<Vec<Remote>> {
+        unsupported_repo_result()
+    }
+
+    fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
+        unsupported_repo_result()
+    }
+
+    fn fetch_all(&self) -> Result<()> {
+        unsupported_repo_result()
+    }
+
+    fn pull(&self, _mode: PullMode) -> Result<()> {
+        unsupported_repo_result()
+    }
+
+    fn push(&self) -> Result<()> {
+        unsupported_repo_result()
+    }
+}
+impl GitRepositoryStatus for MetadataSchedulingRepo {
+    fn status(&self) -> Result<RepoStatus> {
+        unsupported_repo_result()
+    }
+}
+impl GitRepositoryDiff for MetadataSchedulingRepo {
+    fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
+        unsupported_repo_result()
+    }
+}
+impl GitRepositoryPorcelain for MetadataSchedulingRepo {
     fn current_branch(&self) -> Result<String> {
         unsupported_repo_result()
     }
+
     fn list_branches(&self) -> Result<Vec<Branch>> {
         unsupported_repo_result()
     }
+
     fn list_tags(&self) -> Result<Vec<worktree_core::domain::Tag>> {
         match self.mode {
             MetadataRepoMode::ReadyTags => {
@@ -3657,6 +4209,7 @@ impl GitRepository for MetadataSchedulingRepo {
             MetadataRepoMode::BlockingRemoteTags => unsupported_repo_result(),
         }
     }
+
     fn list_remote_tags(&self) -> Result<Vec<worktree_core::domain::RemoteTag>> {
         match self.mode {
             MetadataRepoMode::BlockingRemoteTags => {
@@ -3667,36 +4220,31 @@ impl GitRepository for MetadataSchedulingRepo {
             MetadataRepoMode::ReadyTags => unsupported_repo_result(),
         }
     }
-    fn list_remotes(&self) -> Result<Vec<Remote>> {
-        unsupported_repo_result()
-    }
-    fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
-        unsupported_repo_result()
-    }
-    fn status(&self) -> Result<RepoStatus> {
-        unsupported_repo_result()
-    }
-    fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
-        unsupported_repo_result()
-    }
+
     fn create_branch(&self, _name: &str, _target: &CommitId) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn delete_branch(&self, _name: &str) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn checkout_branch(&self, _name: &str) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn checkout_commit(&self, _id: &CommitId) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn cherry_pick(&self, _id: &CommitId) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn revert(&self, _id: &CommitId) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn stash_create(
         &self,
         _message: &str,
@@ -3706,37 +4254,36 @@ impl GitRepository for MetadataSchedulingRepo {
     ) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn stash_list(&self) -> Result<Vec<StashEntry>> {
         unsupported_repo_result()
     }
+
     fn stash_apply(&self, _index: usize) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn stash_drop(&self, _index: usize) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn stage(&self, _paths: &[&Path]) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn unstage(&self, _paths: &[&Path]) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn commit(&self, _message: &str) -> Result<()> {
         unsupported_repo_result()
     }
-    fn fetch_all(&self) -> Result<()> {
-        unsupported_repo_result()
-    }
-    fn pull(&self, _mode: PullMode) -> Result<()> {
-        unsupported_repo_result()
-    }
-    fn push(&self) -> Result<()> {
-        unsupported_repo_result()
-    }
+
     fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
         unsupported_repo_result()
     }
 }
+impl GitRepositoryWorktree for MetadataSchedulingRepo {}
 
 enum SelectedDiffRepoMode {
     BlockingDiff,
@@ -3755,34 +4302,52 @@ impl GitRepository for SelectedDiffSchedulingRepo {
     fn spec(&self) -> &RepoSpec {
         &self.spec
     }
-
+}
+impl GitRepositoryLog for SelectedDiffSchedulingRepo {
     fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
         unsupported_repo_result()
     }
+
     fn commit_details(&self, _id: &CommitId) -> Result<CommitDetails> {
         unsupported_repo_result()
     }
+
     fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
         unsupported_repo_result()
     }
-    fn current_branch(&self) -> Result<String> {
-        unsupported_repo_result()
-    }
-    fn list_branches(&self) -> Result<Vec<Branch>> {
-        unsupported_repo_result()
-    }
+}
+impl GitRepositoryHistory for SelectedDiffSchedulingRepo {}
+impl GitRepositoryRemotes for SelectedDiffSchedulingRepo {
     fn list_remotes(&self) -> Result<Vec<Remote>> {
         unsupported_repo_result()
     }
+
     fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
         unsupported_repo_result()
     }
+
+    fn fetch_all(&self) -> Result<()> {
+        unsupported_repo_result()
+    }
+
+    fn pull(&self, _mode: PullMode) -> Result<()> {
+        unsupported_repo_result()
+    }
+
+    fn push(&self) -> Result<()> {
+        unsupported_repo_result()
+    }
+}
+impl GitRepositoryStatus for SelectedDiffSchedulingRepo {
     fn status(&self) -> Result<RepoStatus> {
         unsupported_repo_result()
     }
+}
+impl GitRepositoryDiff for SelectedDiffSchedulingRepo {
     fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
         unsupported_repo_result()
     }
+
     fn diff_parsed_cancellable(
         &self,
         target: &DiffTarget,
@@ -3807,24 +4372,40 @@ impl GitRepository for SelectedDiffSchedulingRepo {
             "diff --git a/tracked.txt b/tracked.txt\n",
         ))
     }
+}
+impl GitRepositoryPorcelain for SelectedDiffSchedulingRepo {
+    fn current_branch(&self) -> Result<String> {
+        unsupported_repo_result()
+    }
+
+    fn list_branches(&self) -> Result<Vec<Branch>> {
+        unsupported_repo_result()
+    }
+
     fn create_branch(&self, _name: &str, _target: &CommitId) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn delete_branch(&self, _name: &str) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn checkout_branch(&self, _name: &str) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn checkout_commit(&self, _id: &CommitId) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn cherry_pick(&self, _id: &CommitId) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn revert(&self, _id: &CommitId) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn stash_create(
         &self,
         _message: &str,
@@ -3834,37 +4415,36 @@ impl GitRepository for SelectedDiffSchedulingRepo {
     ) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn stash_list(&self) -> Result<Vec<StashEntry>> {
         unsupported_repo_result()
     }
+
     fn stash_apply(&self, _index: usize) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn stash_drop(&self, _index: usize) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn stage(&self, _paths: &[&Path]) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn unstage(&self, _paths: &[&Path]) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn commit(&self, _message: &str) -> Result<()> {
         unsupported_repo_result()
     }
-    fn fetch_all(&self) -> Result<()> {
-        unsupported_repo_result()
-    }
-    fn pull(&self, _mode: PullMode) -> Result<()> {
-        unsupported_repo_result()
-    }
-    fn push(&self) -> Result<()> {
-        unsupported_repo_result()
-    }
+
     fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
         unsupported_repo_result()
     }
 }
+impl GitRepositoryWorktree for SelectedDiffSchedulingRepo {}
 
 struct RecordingLogRepo {
     spec: RepoSpec,
@@ -3875,7 +4455,8 @@ impl GitRepository for RecordingLogRepo {
     fn spec(&self) -> &RepoSpec {
         &self.spec
     }
-
+}
+impl GitRepositoryLog for RecordingLogRepo {
     fn log_history_mode_page(
         &self,
         mode: LogScope,
@@ -3916,45 +4497,76 @@ impl GitRepository for RecordingLogRepo {
     fn commit_details(&self, _id: &CommitId) -> Result<CommitDetails> {
         unsupported_repo_result()
     }
+
     fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
         unsupported_repo_result()
     }
-    fn current_branch(&self) -> Result<String> {
-        unsupported_repo_result()
-    }
-    fn list_branches(&self) -> Result<Vec<Branch>> {
-        unsupported_repo_result()
-    }
+}
+impl GitRepositoryHistory for RecordingLogRepo {}
+impl GitRepositoryRemotes for RecordingLogRepo {
     fn list_remotes(&self) -> Result<Vec<Remote>> {
         unsupported_repo_result()
     }
+
     fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
         unsupported_repo_result()
     }
+
+    fn fetch_all(&self) -> Result<()> {
+        unsupported_repo_result()
+    }
+
+    fn pull(&self, _mode: PullMode) -> Result<()> {
+        unsupported_repo_result()
+    }
+
+    fn push(&self) -> Result<()> {
+        unsupported_repo_result()
+    }
+}
+impl GitRepositoryStatus for RecordingLogRepo {
     fn status(&self) -> Result<RepoStatus> {
         unsupported_repo_result()
     }
+}
+impl GitRepositoryDiff for RecordingLogRepo {
     fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
         unsupported_repo_result()
     }
+}
+impl GitRepositoryPorcelain for RecordingLogRepo {
+    fn current_branch(&self) -> Result<String> {
+        unsupported_repo_result()
+    }
+
+    fn list_branches(&self) -> Result<Vec<Branch>> {
+        unsupported_repo_result()
+    }
+
     fn create_branch(&self, _name: &str, _target: &CommitId) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn delete_branch(&self, _name: &str) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn checkout_branch(&self, _name: &str) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn checkout_commit(&self, _id: &CommitId) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn cherry_pick(&self, _id: &CommitId) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn revert(&self, _id: &CommitId) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn stash_create(
         &self,
         _message: &str,
@@ -3964,37 +4576,36 @@ impl GitRepository for RecordingLogRepo {
     ) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn stash_list(&self) -> Result<Vec<StashEntry>> {
         unsupported_repo_result()
     }
+
     fn stash_apply(&self, _index: usize) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn stash_drop(&self, _index: usize) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn stage(&self, _paths: &[&Path]) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn unstage(&self, _paths: &[&Path]) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn commit(&self, _message: &str) -> Result<()> {
         unsupported_repo_result()
     }
-    fn fetch_all(&self) -> Result<()> {
-        unsupported_repo_result()
-    }
-    fn pull(&self, _mode: PullMode) -> Result<()> {
-        unsupported_repo_result()
-    }
-    fn push(&self) -> Result<()> {
-        unsupported_repo_result()
-    }
+
     fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
         unsupported_repo_result()
     }
 }
+impl GitRepositoryWorktree for RecordingLogRepo {}
 
 struct RecordingCheckoutRepo {
     spec: RepoSpec,
@@ -4005,32 +4616,58 @@ impl GitRepository for RecordingCheckoutRepo {
     fn spec(&self) -> &RepoSpec {
         &self.spec
     }
-
+}
+impl GitRepositoryLog for RecordingCheckoutRepo {
     fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
         unsupported_repo_result()
     }
+
     fn commit_details(&self, _id: &CommitId) -> Result<CommitDetails> {
         unsupported_repo_result()
     }
+
     fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
         unsupported_repo_result()
     }
-    fn current_branch(&self) -> Result<String> {
-        unsupported_repo_result()
-    }
-    fn list_branches(&self) -> Result<Vec<Branch>> {
-        unsupported_repo_result()
-    }
+}
+impl GitRepositoryHistory for RecordingCheckoutRepo {}
+impl GitRepositoryRemotes for RecordingCheckoutRepo {
     fn list_remotes(&self) -> Result<Vec<Remote>> {
         unsupported_repo_result()
     }
+
     fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
         unsupported_repo_result()
     }
+
+    fn fetch_all(&self) -> Result<()> {
+        unsupported_repo_result()
+    }
+
+    fn pull(&self, _mode: PullMode) -> Result<()> {
+        unsupported_repo_result()
+    }
+
+    fn push(&self) -> Result<()> {
+        unsupported_repo_result()
+    }
+}
+impl GitRepositoryStatus for RecordingCheckoutRepo {
     fn status(&self) -> Result<RepoStatus> {
         unsupported_repo_result()
     }
+}
+impl GitRepositoryDiff for RecordingCheckoutRepo {
     fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
+        unsupported_repo_result()
+    }
+}
+impl GitRepositoryPorcelain for RecordingCheckoutRepo {
+    fn current_branch(&self) -> Result<String> {
+        unsupported_repo_result()
+    }
+
+    fn list_branches(&self) -> Result<Vec<Branch>> {
         unsupported_repo_result()
     }
 
@@ -4041,9 +4678,11 @@ impl GitRepository for RecordingCheckoutRepo {
             .push(format!("create {name} {}", target.as_ref()));
         Ok(())
     }
+
     fn delete_branch(&self, _name: &str) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn checkout_branch(&self, name: &str) -> Result<()> {
         self.calls
             .lock()
@@ -4051,6 +4690,7 @@ impl GitRepository for RecordingCheckoutRepo {
             .push(format!("checkout {name}"));
         Ok(())
     }
+
     fn checkout_remote_branch(&self, remote: &str, branch: &str, local_branch: &str) -> Result<()> {
         self.calls
             .lock()
@@ -4060,6 +4700,7 @@ impl GitRepository for RecordingCheckoutRepo {
             ));
         Ok(())
     }
+
     fn checkout_commit(&self, id: &CommitId) -> Result<()> {
         self.calls
             .lock()
@@ -4067,6 +4708,7 @@ impl GitRepository for RecordingCheckoutRepo {
             .push(format!("checkout_commit {}", id.as_ref()));
         Ok(())
     }
+
     fn checkout_pull_request(&self, remote: &str, number: u64) -> Result<()> {
         self.calls
             .lock()
@@ -4074,9 +4716,11 @@ impl GitRepository for RecordingCheckoutRepo {
             .push(format!("checkout_pull {remote} #{number}"));
         Ok(())
     }
+
     fn cherry_pick(&self, _id: &CommitId) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn revert(&self, _id: &CommitId) -> Result<()> {
         unsupported_repo_result()
     }
@@ -4090,12 +4734,15 @@ impl GitRepository for RecordingCheckoutRepo {
     ) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn stash_list(&self) -> Result<Vec<StashEntry>> {
         unsupported_repo_result()
     }
+
     fn stash_apply(&self, _index: usize) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn stash_drop(&self, _index: usize) -> Result<()> {
         unsupported_repo_result()
     }
@@ -4103,25 +4750,20 @@ impl GitRepository for RecordingCheckoutRepo {
     fn stage(&self, _paths: &[&Path]) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn unstage(&self, _paths: &[&Path]) -> Result<()> {
         unsupported_repo_result()
     }
+
     fn commit(&self, _message: &str) -> Result<()> {
         unsupported_repo_result()
     }
-    fn fetch_all(&self) -> Result<()> {
-        unsupported_repo_result()
-    }
-    fn pull(&self, _mode: PullMode) -> Result<()> {
-        unsupported_repo_result()
-    }
-    fn push(&self) -> Result<()> {
-        unsupported_repo_result()
-    }
+
     fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
         unsupported_repo_result()
     }
 }
+impl GitRepositoryWorktree for RecordingCheckoutRepo {}
 
 fn wait_for_checkout_refresh_messages(
     msg_rx: &std::sync::mpsc::Receiver<Msg>,

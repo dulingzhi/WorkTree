@@ -52,7 +52,8 @@ impl GitRepository for RepoActivationRecordingRepo {
     fn spec(&self) -> &RepoSpec {
         &self.spec
     }
-
+}
+impl GitRepositoryLog for RepoActivationRecordingRepo {
     fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
         self.calls
             .log
@@ -70,18 +71,9 @@ impl GitRepository for RepoActivationRecordingRepo {
     fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
         Ok(Vec::new())
     }
-
-    fn current_branch(&self) -> Result<String> {
-        Ok("main".to_string())
-    }
-
-    fn list_branches(&self) -> Result<Vec<Branch>> {
-        self.calls
-            .branches
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        Ok(Vec::new())
-    }
-
+}
+impl GitRepositoryHistory for RepoActivationRecordingRepo {}
+impl GitRepositoryRemotes for RepoActivationRecordingRepo {
     fn list_remotes(&self) -> Result<Vec<Remote>> {
         Ok(Vec::new())
     }
@@ -93,6 +85,19 @@ impl GitRepository for RepoActivationRecordingRepo {
         Ok(Vec::new())
     }
 
+    fn fetch_all(&self) -> Result<()> {
+        Ok(())
+    }
+
+    fn pull(&self, _mode: PullMode) -> Result<()> {
+        Ok(())
+    }
+
+    fn push(&self) -> Result<()> {
+        Ok(())
+    }
+}
+impl GitRepositoryStatus for RepoActivationRecordingRepo {
     fn status(&self) -> Result<RepoStatus> {
         self.calls
             .status
@@ -102,9 +107,22 @@ impl GitRepository for RepoActivationRecordingRepo {
             unstaged: Vec::new(),
         })
     }
-
+}
+impl GitRepositoryDiff for RepoActivationRecordingRepo {
     fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
         Ok(String::new())
+    }
+}
+impl GitRepositoryPorcelain for RepoActivationRecordingRepo {
+    fn current_branch(&self) -> Result<String> {
+        Ok("main".to_string())
+    }
+
+    fn list_branches(&self) -> Result<Vec<Branch>> {
+        self.calls
+            .branches
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        Ok(Vec::new())
     }
 
     fn create_branch(&self, _name: &str, _target: &CommitId) -> Result<()> {
@@ -165,22 +183,11 @@ impl GitRepository for RepoActivationRecordingRepo {
         Ok(())
     }
 
-    fn fetch_all(&self) -> Result<()> {
-        Ok(())
-    }
-
-    fn pull(&self, _mode: PullMode) -> Result<()> {
-        Ok(())
-    }
-
-    fn push(&self) -> Result<()> {
-        Ok(())
-    }
-
     fn discard_worktree_changes(&self, _paths: &[&Path]) -> Result<()> {
         Ok(())
     }
 }
+impl GitRepositoryWorktree for RepoActivationRecordingRepo {}
 
 fn unique_repo_monitor_test_path(label: &str) -> PathBuf {
     std::env::temp_dir().join(format!(

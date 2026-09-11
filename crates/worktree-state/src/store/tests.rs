@@ -17,7 +17,11 @@ use worktree_core::path_utils::canonicalize_or_original;
 use worktree_core::process::{
     GitExecutablePreference, current_git_executable_preference, install_git_executable_preference,
 };
-use worktree_core::services::{CancellationToken, CommandOutput, PullMode, Result};
+use worktree_core::services::{
+    CancellationToken, CommandOutput, GitRepository, GitRepositoryDiff, GitRepositoryHistory,
+    GitRepositoryLog, GitRepositoryPorcelain, GitRepositoryRemotes, GitRepositoryStatus,
+    GitRepositoryWorktree, PullMode, Result,
+};
 #[cfg(windows)]
 use worktree_test_support::is_git_shell_startup_failure;
 use worktree_test_support::run_git;
@@ -40,56 +44,87 @@ impl GitRepository for DummyRepo {
     fn spec(&self) -> &RepoSpec {
         &self.spec
     }
+}
+impl GitRepositoryLog for DummyRepo {
+    fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
+        unimplemented!()
+    }
 
+    fn commit_details(&self, _id: &CommitId) -> Result<CommitDetails> {
+        unimplemented!()
+    }
+
+    fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
+        unimplemented!()
+    }
+}
+impl GitRepositoryHistory for DummyRepo {}
+impl GitRepositoryRemotes for DummyRepo {
+    fn list_remotes(&self) -> Result<Vec<Remote>> {
+        unimplemented!()
+    }
+
+    fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
+        unimplemented!()
+    }
+
+    fn fetch_all(&self) -> Result<()> {
+        unimplemented!()
+    }
+
+    fn pull(&self, _mode: PullMode) -> Result<()> {
+        unimplemented!()
+    }
+
+    fn push(&self) -> Result<()> {
+        unimplemented!()
+    }
+}
+impl GitRepositoryStatus for DummyRepo {
+    fn status(&self) -> Result<RepoStatus> {
+        unimplemented!()
+    }
+}
+impl GitRepositoryDiff for DummyRepo {
     fn lfs_new_side_smudged(&self, _target: &DiffTarget) -> Result<Option<Vec<u8>>> {
         // A deterministic stand-in for `git lfs smudge`: the preview tests
         // must not require the git-lfs binary.
         Ok(Some(b"fake-smudged-image-bytes".to_vec()))
     }
 
-    fn log_head_page(&self, _limit: usize, _cursor: Option<&LogCursor>) -> Result<LogPage> {
+    fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
         unimplemented!()
     }
-    fn commit_details(&self, _id: &CommitId) -> Result<CommitDetails> {
-        unimplemented!()
-    }
-    fn reflog_head(&self, _limit: usize) -> Result<Vec<ReflogEntry>> {
-        unimplemented!()
-    }
+}
+impl GitRepositoryPorcelain for DummyRepo {
     fn current_branch(&self) -> Result<String> {
         unimplemented!()
     }
+
     fn list_branches(&self) -> Result<Vec<Branch>> {
-        unimplemented!()
-    }
-    fn list_remotes(&self) -> Result<Vec<Remote>> {
-        unimplemented!()
-    }
-    fn list_remote_branches(&self) -> Result<Vec<RemoteBranch>> {
-        unimplemented!()
-    }
-    fn status(&self) -> Result<RepoStatus> {
-        unimplemented!()
-    }
-    fn diff_unified(&self, _target: &DiffTarget) -> Result<String> {
         unimplemented!()
     }
 
     fn create_branch(&self, _name: &str, _target: &CommitId) -> Result<()> {
         unimplemented!()
     }
+
     fn delete_branch(&self, _name: &str) -> Result<()> {
         unimplemented!()
     }
+
     fn checkout_branch(&self, _name: &str) -> Result<()> {
         unimplemented!()
     }
+
     fn checkout_commit(&self, _id: &CommitId) -> Result<()> {
         unimplemented!()
     }
+
     fn cherry_pick(&self, _id: &CommitId) -> Result<()> {
         unimplemented!()
     }
+
     fn revert(&self, _id: &CommitId) -> Result<()> {
         unimplemented!()
     }
@@ -103,12 +138,15 @@ impl GitRepository for DummyRepo {
     ) -> Result<()> {
         unimplemented!()
     }
+
     fn stash_list(&self) -> Result<Vec<StashEntry>> {
         unimplemented!()
     }
+
     fn stash_apply(&self, _index: usize) -> Result<()> {
         unimplemented!()
     }
+
     fn stash_drop(&self, _index: usize) -> Result<()> {
         unimplemented!()
     }
@@ -116,19 +154,12 @@ impl GitRepository for DummyRepo {
     fn stage(&self, _paths: &[&Path]) -> Result<()> {
         unimplemented!()
     }
+
     fn unstage(&self, _paths: &[&Path]) -> Result<()> {
         unimplemented!()
     }
+
     fn commit(&self, _message: &str) -> Result<()> {
-        unimplemented!()
-    }
-    fn fetch_all(&self) -> Result<()> {
-        unimplemented!()
-    }
-    fn pull(&self, _mode: PullMode) -> Result<()> {
-        unimplemented!()
-    }
-    fn push(&self) -> Result<()> {
         unimplemented!()
     }
 
@@ -136,6 +167,7 @@ impl GitRepository for DummyRepo {
         unimplemented!()
     }
 }
+impl GitRepositoryWorktree for DummyRepo {}
 
 struct FailingBackend;
 
