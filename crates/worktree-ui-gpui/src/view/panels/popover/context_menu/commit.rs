@@ -150,12 +150,10 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
     // One lookup serves both the summary label and the copy-info entry: the
     // right-clicked commit sits in the loaded log page, which carries the
     // author and time both need.
-    let found_commit = this
-        .active_repo()
-        .and_then(|r| match &r.log {
-            Loadable::Ready(page) => page.commits.iter().find(|c| c.id == *commit_id),
-            _ => None,
-        });
+    let found_commit = this.active_repo().and_then(|r| match &r.log {
+        Loadable::Ready(page) => page.commits.iter().find(|c| c.id == *commit_id),
+        _ => None,
+    });
     let commit_summary = found_commit
         .map(|c| format!("{} — {}", c.author, c.summary))
         .unwrap_or_default();
