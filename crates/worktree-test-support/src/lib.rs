@@ -119,11 +119,32 @@ pub fn is_git_shell_startup_failure(text: &str) -> bool {
 
 /// `git hash-object -w --stdin`: write `contents` as a blob into `repo`'s
 /// object store and return its hex object id.
+///
+/// Runs against an empty git config. `hash-object` applies the clean filter, so a
+/// host with `core.autocrlf=true` — or any `filter.*` driver in its global or
+/// system config — would hash a different byte stream for the same `contents`,
+/// and the id would stop being a property of the input alone.
 pub fn hash_blob(repo: &Path, contents: &[u8]) -> String {
     use std::io::Write as _;
     use std::process::Stdio;
+    use std::sync::OnceLock;
+
+    static EMPTY_CONFIG: OnceLock<std::path::PathBuf> = OnceLock::new();
+    let empty_config = EMPTY_CONFIG.get_or_init(|| {
+        let dir = std::env::temp_dir().join("worktree-test-support");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("empty-gitconfig");
+        if !path.exists() {
+            let _ = std::fs::write(&path, b"");
+        }
+        path
+    });
 
     let mut child = Command::new("git")
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_GLOBAL", empty_config)
+        .env("GIT_CONFIG_SYSTEM", empty_config)
+        .env("GIT_TERMINAL_PROMPT", "0")
         .arg("-C")
         .arg(repo)
         .args(["hash-object", "-w", "--stdin"])

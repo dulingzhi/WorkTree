@@ -211,8 +211,6 @@ mod worktree_view;
 
 use app_model::AppUiModel;
 use branch_sidebar::{BranchSection, BranchSidebarRow};
-#[cfg(test)]
-use caches::DeferredLineStarts;
 use caches::{
     DiffTextLayoutCacheEntry, HistoryBaseCache, HistoryBaseCacheRequest, HistoryBaseRowVm,
     HistoryCache, HistoryCacheBuildRequest, HistoryDecorationCache, HistoryDecorationCacheRequest,
@@ -274,6 +272,12 @@ use history_refs_hover::{HISTORY_REFS_HOVER_MENU_INVOKER_PREFIX, HistoryRefsHove
 #[cfg(test)]
 use panels::RemoteRow;
 use panels::{ActionBarView, BottomStatusBarView, PopoverHost, RepoTabsBarView, action_bar_height};
+// `components` is the leaf layer, but it is a leaf by *direction*, not by
+// isolation: these two type-only re-exports are the sanctioned channel through
+// which it names the panel-defined `PopoverKind` / `AutosquashMode` (and the
+// picker purposes beside them) without importing `panels::` itself. Sinking the
+// types into `components` would remove the channel; until then, treat this
+// re-export as deliberate and keep it type-only.
 use panels::{
     AutosquashMode, BranchPickerPurpose, PopoverKind, RemotePickerPurpose, RemotePopoverKind,
     RepoPopoverKind, StashPickerPurpose, SubmodulePopoverKind, WorktreePopoverKind,
