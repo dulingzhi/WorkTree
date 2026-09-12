@@ -10,6 +10,7 @@
 - **验证节奏（新）**：**任务级四腿**——提交级便宜腿（`cargo check -p <触及包> --all-targets` + 定向包测试 + rustfmt，~1-3 分钟），任务边界完整四腿后评审。**例外：高风险批量语义变换保持提交级完整四腿**（T10 委托壳宏化、T8 reducer 分派化）。
 - **四腿矩阵**：(a) `cargo test --workspace --no-default-features --features gix`（基线 **50 行**/0/5,935——原记 49，2026-09-12 实测 50 并据此沿用；T2 归并 worktree-git 曾降至 47，T5 新建 worktree-test-support 的两 0-测试目标 +2 回升）；(b) `cargo test --workspace`（**51**/0/6,020——原记 50，同上勘误）；(c) live clippy（touch lib.rs + JSON + stderr 含 Checking；p3t9fix-extract.py first-arrow 提取 + `tr -d '\r'`；与 clippy-baseline.txt 逐字节 diff。**注意：本腿跑 `--no-default-features --features gix`，与默认 feature set 下的 `unused import` 集合不同——拆分类任务收尾必须两个 feature set 都跑 `cargo check`**）；(d) `cargo test -p worktree-ui-gpui -- --list` 名单比对（P4 触及非 UI crate 时须同步对比对应包的 --list 快照）。
 - **W2**：具名 import；禁新增 `use xxx::*`（特许：迁移文件文件头 `use super::*;`）。
+  - **豁免修订（2026-09-12，Wave 5 落地时发现）**：把一个文件拆成目录模块时，**片段各自重复该文件头部的 glob 并把 `super::` 下沉一层**（`use super::*;` → `use super::super::*;`），视同"迁移文件文件头"特许的延伸。理由：glob 导入的名字可以被*使用*但**永远不能被重新导入**——`use super::{X}` 失败，rustc 的相对建议也失败，因为 glob 不产生可命名的绑定；片段要么继承头部 glob，要么这些名字根本无路可达。重复的是原文件已有的那一行（不是新引入依赖），且逐片段可审计。第七件（`rows/diff/rows.rs`）之外还有纯 glob 链的文件同理。
 - **G1**：末次验证后零源码改动。**受众保持**：可见性升级须编译器证据，逐名记录消费方。
 - **rustfmt**：`rustfmt --edition 2024 --config skip_children=true` 仅触及文件。
 - **串行 cargo**；LNK2019 → `cargo clean -p <包>` 重试。**flake 注册表 5 件**（裁定不修；单目标全路径 --exact ×3 + 全量重跑复核）。
@@ -93,6 +94,26 @@
 - 本阶段收 P3 评审挂号的 7 件：popover/host.rs 2,788、diff_search.rs 2,726、context_menu.rs 2,799、rows/diff/rows.rs 2,419、markdown_preview.rs(rows) 2,239、resolved_output_syntax.rs 2,195、bootstrap.rs 2,148。
 - **✅ 全部完成 2026-09-12**，各 1 提交、0 error / 0 warning、独立提取器等价 PASS（叶子 fn 项 + (类型,方法) 归属多重集全等、注释零丢失）：markdown_preview→`f9285db3`(2,239→最大片 740)、bootstrap→`589a6814`(2,148→1,408)、resolved_output_syntax→`ee70f44a`(2,195→796)、diff_search→`02554887`(2,726→1,175)、rows→`e55d5110`(2,419→1,401)、host→`b4f7b6e1`(2,788→1,130)、context_menu→`752e3281`(2,799→1,904)，收尾两提交 `67f9c716`（clippy 腿修复）+ `4e220316`（台账）。**七件全部降到 2,000 行以下**。三个新形态记入台账：巨型 `impl` 需按方法组先切开；`pub(in super::…)` 是相对路径，下沉一层须补 `super::`；glob 供给的名字既不能 `use super::{X}` 也不能用 rustc 相对建议，唯一忠实还原是把头部 glob 下沉一层重复进每个片段（对 W2 的显式偏离，理由在台账）。
 - 未挂号大件（view/mod.rs 4,787、terminal_panel 4,578、sidebar×2、diff_cache、theme、app 等 45 个）**另立 P5**。验收度量 ">2,000 行 <10 个" 在 P4 后仍不达标属预期，P5 收口（2026-09-12 实测仓库 73 个 >2,000 行，含测试文件与上述池）。
+
+## 可见性放宽证据（补记 2026-09-12）
+
+**T8 NOTE-1 — `RepoState::set_spec`（model.rs:1455）**：T8 把 session.rs 的内联测试外迁为 **integration target**（`crates/worktree-state/tests/session.rs`，独立 crate，只能看见 `pub` 项），随后把 `set_spec` 由 `pub(crate)` 放宽为 `pub`（提交 `b722935a`）。当时的证据未落盘（`widening-evidence.json` 是临时工件，且 `/tmp` 已不可达）。复现与判据如下，两条命令即可复核：
+
+```
+$ sed -i 's/^    pub fn set_spec/    pub(crate) fn set_spec/' crates/worktree-state/src/model.rs
+$ cargo check -p worktree-state --all-targets
+error[E0624]: method `set_spec` is private
+    --> crates\worktree-state\tests\session.rs:1182:24
+     |
+1182 |         state.repos[0].set_spec(RepoSpec {
+     |                        ^^^^^^^^ private method
+```
+
+即：放宽的必要性由**独立 crate 的测试调用点**证明，不是为方便而放宽。
+
+**T8 NOTE-2 — `to_path`-only singles 计数口径**：判据定为「只以 `*_to_path` 形式存在、且没有同名非 `_to_path` 公开包装的 persist 操作」。按此口径实数为 **3**：`persist_repo_history_modes_batch_to_path`、`persist_repo_history_author_filter_to_path`、`persist_repo_history_ref_filters_to_path`。另一候选 `persist_to_path`（session.rs:1883）虽是 `pub`，但它是 10 对收敛后共同调用的**共享序列化器**，不是"某个 persist 操作的单件形态"——把它计入（得 4）属于把机制与 API 混为一谈。**结论：3，口径如上。**
+
+**计数表纪律（本会话多次踩坑后确立）**：任何计数类登记项必须**连同口径定义一起记**（含脚本/命令、包含与排除规则）。本会话已有三次因口径缺失而无法复核（T11 的 re-export/dispatch 计数、本条的 3 vs 4、Wave 5 各件"模块数"是否含 tests.rs）。
 
 ## Self-Review 结论（草稿）
 
