@@ -1687,6 +1687,24 @@ impl GixRepo {
             return Ok(page);
         }
 
+        // Cold-open shortcut: if the refs have not changed since the last walk,
+        // rehydrate the page from disk instead of re-walking the commit graph.
+        // Mirrors rgitui's ref-fingerprinted history cache.
+        let mode_idx = super::history_cache::mode_index(&mode);
+        let cursor_oid = cursor.map(|c| c.last_seen.0.to_string());
+        let author_str = author.map(|a| a.0.clone());
+        if let Some(page) = super::history_cache::load_log_page(
+            &repo,
+            &self.spec.workdir,
+            mode_idx,
+            limit,
+            author_str.as_deref(),
+            cursor_oid.as_deref(),
+        ) {
+            self.store_log_head_page(cache_key, &page);
+            return Ok(page);
+        }
+
         let page = match head_id {
             Some(head_id) => self.log_paged_page(
                 mode,
@@ -1704,6 +1722,18 @@ impl GixRepo {
         if let Some(cancellation) = cancellation {
             cancellation.check_cancelled()?;
         }
+        // Persist for the next cold open. If the walk was cancelled above, the
+        // `?` already returned before we reach here, so partial pages are never
+        // written to disk.
+        super::history_cache::store_log_page(
+            &repo,
+            &self.spec.workdir,
+            &page,
+            mode_idx,
+            limit,
+            author_str.as_deref(),
+            cursor_oid.as_deref(),
+        );
         Ok(page)
     }
 
@@ -1795,7 +1825,23 @@ impl GixRepo {
         // orders what it yields by commit time regardless.
         tips.sort();
 
-        self.log_paged_page(
+        // Cold-open shortcut, mirroring the head-page path: if the refs have not
+        // changed, rehydrate from disk instead of re-walking every branch tip.
+        let mode_idx = super::history_cache::mode_index(&HistoryMode::AllBranches);
+        let cursor_oid = cursor.map(|c| c.last_seen.0.to_string());
+        let author_str = author.map(|a| a.0.clone());
+        if let Some(page) = super::history_cache::load_log_page(
+            &repo,
+            &self.spec.workdir,
+            mode_idx,
+            limit,
+            author_str.as_deref(),
+            cursor_oid.as_deref(),
+        ) {
+            return Ok(page);
+        }
+
+        let page = self.log_paged_page(
             HistoryMode::AllBranches,
             Arc::from(tips),
             limit,
@@ -1803,7 +1849,21 @@ impl GixRepo {
             cancellation,
             author,
             chunks,
-        )
+        )?;
+
+        if let Some(cancellation) = cancellation {
+            cancellation.check_cancelled()?;
+        }
+        super::history_cache::store_log_page(
+            &repo,
+            &self.spec.workdir,
+            &page,
+            mode_idx,
+            limit,
+            author_str.as_deref(),
+            cursor_oid.as_deref(),
+        );
+        Ok(page)
     }
 
     pub(super) fn log_file_page(

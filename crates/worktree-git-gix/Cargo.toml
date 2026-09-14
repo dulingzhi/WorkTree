@@ -19,6 +19,8 @@ gix = { workspace = true }
 rust-i18n = { workspace = true }
 rustc-hash = { workspace = true }
 tempfile = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 worktree-core = { workspace = true, features = ["test-support", "benchmarks"] }
