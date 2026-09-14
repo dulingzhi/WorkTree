@@ -533,40 +533,23 @@ impl GixRepo {
 
         let mut tmp_file =
             tempfile::NamedTempFile::new_in(std::env::temp_dir()).map_err(io_err_to_error)?;
+        // Route the `git cat-file` subprocess through `run_git_raw_output` so it
+        // inherits the transient lock-conflict retry (os error 5 on Windows when
+        // another program briefly locks `.git` state or the temp dir).
         let mut command = self.git_workdir_cmd();
-        command
-            .arg("cat-file")
-            .arg("blob")
-            .arg(blob_id.to_string())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped());
-        let mut child = command.spawn().map_err(io_err_to_error)?;
-        let mut stdout = child.stdout.take().ok_or_else(|| {
-            Error::new(ErrorKind::Backend(
-                "git cat-file did not expose stdout".to_string(),
-            ))
-        })?;
-        // Diff sides must be valid UTF-8 for the viewer; a blob saved in a
-        // legacy encoding (GBK and friends) is transcode-detected in place
-        // while it streams through.
-        let mut utf8_check = StreamingUtf8Check::default();
-        let mut buffer = [0u8; 64 * 1024];
-        loop {
-            let read = stdout.read(&mut buffer).map_err(io_err_to_error)?;
-            if read == 0 {
-                break;
-            }
-            utf8_check.push(&buffer[..read]);
-            tmp_file
-                .write_all(&buffer[..read])
-                .map_err(io_err_to_error)?;
-        }
-        let blob_is_utf8 = utf8_check.finish();
-
-        let output = child.wait_with_output().map_err(io_err_to_error)?;
+        command.arg("cat-file").arg("blob").arg(blob_id.to_string());
+        let output = run_git_raw_output(command, "git cat-file")?;
         if !output.status.success() {
             return Err(git_command_failed_error("git cat-file", output));
         }
+        // Diff sides must be valid UTF-8 for the viewer; a blob saved in a
+        // legacy encoding (GBK and friends) is transcode-detected in place.
+        let mut utf8_check = StreamingUtf8Check::default();
+        utf8_check.push(&output.stdout);
+        let blob_is_utf8 = utf8_check.finish();
+        tmp_file
+            .write_all(&output.stdout)
+            .map_err(io_err_to_error)?;
         if !blob_is_utf8 {
             rewrite_temp_file_as_utf8(&mut tmp_file)?;
         }

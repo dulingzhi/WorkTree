@@ -412,6 +412,31 @@ pub(super) fn load_log_page(
     Some(page)
 }
 
+/// Retry a filesystem mutation on transient sharing-violation errors. On
+/// Windows these surface as `PermissionDenied` when an antivirus scanner or
+/// another git process briefly holds an exclusive lock on the cache file. A
+/// missed cache write is non-fatal, but we ride out a short-lived lock instead
+/// of silently dropping the entry.
+fn retry_on_transient_fs(op: impl Fn() -> std::io::Result<()>) -> bool {
+    const ATTEMPTS: usize = 4;
+    let mut last = None;
+    for attempt in 0..ATTEMPTS {
+        match op() {
+            Ok(()) => return true,
+            Err(err)
+                if attempt + 1 < ATTEMPTS
+                    && err.kind() == std::io::ErrorKind::PermissionDenied =>
+            {
+                let backoff_ms = 25u64.saturating_mul(1 << attempt.min(3)).min(300);
+                std::thread::sleep(std::time::Duration::from_millis(backoff_ms));
+                last = Some(err);
+            }
+            Err(_) => return false,
+        }
+    }
+    last.is_some()
+}
+
 /// Persist a freshly walked run of commits as the snapshot for this
 /// (mode, author) pair, keyed by the current refs.
 ///
@@ -455,7 +480,7 @@ pub(super) fn store_log_page(
     };
 
     let dir = cache_dir();
-    if std::fs::create_dir_all(&dir).is_err() {
+    if !retry_on_transient_fs(|| std::fs::create_dir_all(&dir)) {
         return;
     }
 
@@ -465,12 +490,12 @@ pub(super) fn store_log_page(
         fingerprint,
         key,
     ));
-    if std::fs::write(&tmp, &bytes).is_err() {
+    if !retry_on_transient_fs(|| std::fs::write(&tmp, &bytes)) {
         return;
     }
     // Atomic publish; a partial write from a crashed process is left as a stray
     // temp file and simply ignored on the next read.
-    if std::fs::rename(&tmp, &path).is_ok() {
+    if retry_on_transient_fs(|| std::fs::rename(&tmp, &path)) {
         CACHE_STATS.stores.fetch_add(1, Ordering::Relaxed);
         log_event(format_args!(
             "store mode={mode_idx} limit={limit} commits={} bytes={} generations<={MAX_GENERATIONS_PER_REPO}",

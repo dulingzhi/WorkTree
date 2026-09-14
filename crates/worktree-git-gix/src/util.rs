@@ -30,6 +30,50 @@ const GIT_COMMAND_WAIT_POLL_MAX: Duration = Duration::from_millis(5);
 const WORKTREE_ASKPASS_PROMPT_LOG_ENV: &str = "WORKTREE_ASKPASS_PROMPT_LOG";
 const WORKTREE_ASKPASS_PASSPHRASE_PROMPT_LOG_ENV: &str = "WORKTREE_ASKPASS_PASSPHRASE_PROMPT_LOG";
 
+// Git operations on Windows collide with other programs — the git CLI, an IDE's
+// git integration, an antivirus scanner, or the Windows Search indexer — that
+// briefly hold an exclusive lock on `.git` state or a temp file. The collision
+// surfaces as an os error 5 ("permission denied" / "sharing violation"). Retry
+// the operation a few times with backoff so a short-lived lock does not become
+// a hard error for the user.
+const GIT_TRANSIENT_RETRY_ATTEMPTS: usize = 4;
+const GIT_TRANSIENT_RETRY_INITIAL_MS: u64 = 25;
+const GIT_TRANSIENT_RETRY_MAX_MS: u64 = 300;
+
+/// Git reports lock collisions on its own files (`.git/index`, `packed-refs`,
+/// loose objects) as a non-zero exit whose stderr mentions a permission or
+/// sharing violation, rather than as an OS error we can observe directly. Match
+/// that so we retry the whole command instead of failing it.
+fn git_output_looks_like_sharing_violation(stderr: &[u8], stdout: &[u8]) -> bool {
+    let probe = |bytes: &[u8]| {
+        let lower = String::from_utf8_lossy(bytes).to_ascii_lowercase();
+        lower.contains("permission denied")
+            || lower.contains("sharing violation")
+            || lower.contains("access is denied")
+            || lower.contains("another process")
+    };
+    probe(stderr) || probe(stdout)
+}
+
+/// True for the transient "another process briefly holds the file" class of
+/// failure: an OS-level `PermissionDenied` (Windows raises this for sharing
+/// violations), or a git command that exited non-zero because a file it touched
+/// was locked by another program.
+fn error_is_transient(error: &Error) -> bool {
+    match error.kind() {
+        ErrorKind::Io(io::ErrorKind::PermissionDenied) => true,
+        ErrorKind::Git(failure) => {
+            git_output_looks_like_sharing_violation(failure.stderr(), failure.stdout())
+        }
+        _ => false,
+    }
+}
+
+fn transient_retry_backoff(attempt: usize) -> Duration {
+    let step = GIT_TRANSIENT_RETRY_INITIAL_MS.saturating_mul(1u64 << attempt.min(4));
+    Duration::from_millis(step.min(GIT_TRANSIENT_RETRY_MAX_MS))
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct TestGitCommandEnvironment {
     pub(crate) global_config: PathBuf,
@@ -548,18 +592,54 @@ fn wait_for_child_with_timeout(
     })
 }
 
-fn run_command_with_timeout(
+pub(crate) fn run_command_with_timeout(
     mut cmd: Command,
     label: &str,
     timeout: Duration,
     cancellation: Option<&CancellationToken>,
 ) -> Result<Output> {
-    configure_background_command(&mut cmd);
-    configure_non_interactive_git(&mut cmd);
-    let askpass_context = if command_may_require_auth(&cmd) {
+    // Retry the whole command when it fails due to a transient lock collision
+    // (cross-program file lock on Windows — see [`error_is_transient`]). This is
+    // the choke point every raw-output git command (diff, log capture, status)
+    // funnels through, so a short-lived lock rides out instead of erroring. A
+    // `Command` is a reusable builder, so re-spawning it re-runs the same git
+    // invocation; `configure_background_command` etc. are re-applied per attempt.
+    let mut last_error = None;
+    for attempt in 0..GIT_TRANSIENT_RETRY_ATTEMPTS {
+        match run_command_with_timeout_once(&mut cmd, label, timeout, cancellation) {
+            Ok(output) => return Ok(output),
+            Err(error)
+                if attempt + 1 < GIT_TRANSIENT_RETRY_ATTEMPTS
+                    && error_is_transient(&error) =>
+            {
+                if cancellation.is_some_and(CancellationToken::is_cancelled) {
+                    return Err(error);
+                }
+                std::thread::sleep(transient_retry_backoff(attempt));
+                last_error = Some(error);
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    Err(last_error.unwrap_or_else(|| {
+        Error::new(ErrorKind::Backend(
+            "git command failed after transient lock-conflict retries".to_string(),
+        ))
+    }))
+}
+
+fn run_command_with_timeout_once(
+    cmd: &mut Command,
+    label: &str,
+    timeout: Duration,
+    cancellation: Option<&CancellationToken>,
+) -> Result<Output> {
+    configure_background_command(cmd);
+    configure_non_interactive_git(cmd);
+    let askpass_context = if command_may_require_auth(cmd) {
         let auth = take_pending_git_auth();
         let script = create_askpass_script()?;
-        configure_git_auth_prompt(&mut cmd, auth.as_ref(), &script);
+        configure_git_auth_prompt(cmd, auth.as_ref(), &script);
         Some((script, auth))
     } else {
         None
@@ -626,9 +706,49 @@ pub(crate) fn run_git_with_stdin_capture(
     timeout: Duration,
     cancellation: Option<&CancellationToken>,
 ) -> Result<Vec<u8>> {
+    // Retry on transient lock collisions like the other git runners. `input` is
+    // moved into the child's stdin writer thread, so clone it for each attempt.
+    // A `Command` is a reusable builder, so re-spawning `cmd` re-runs git.
+    let mut last_error = None;
+    for attempt in 0..GIT_TRANSIENT_RETRY_ATTEMPTS {
+        match run_git_with_stdin_capture_once(
+            &mut cmd,
+            input.clone(),
+            label,
+            timeout,
+            cancellation,
+        ) {
+            Ok(bytes) => return Ok(bytes),
+            Err(error)
+                if attempt + 1 < GIT_TRANSIENT_RETRY_ATTEMPTS
+                    && error_is_transient(&error) =>
+            {
+                if cancellation.is_some_and(CancellationToken::is_cancelled) {
+                    return Err(error);
+                }
+                std::thread::sleep(transient_retry_backoff(attempt));
+                last_error = Some(error);
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    Err(last_error.unwrap_or_else(|| {
+        Error::new(ErrorKind::Backend(
+            "git stdin command failed after transient lock-conflict retries".to_string(),
+        ))
+    }))
+}
+
+fn run_git_with_stdin_capture_once(
+    cmd: &mut Command,
+    input: Vec<u8>,
+    label: &str,
+    timeout: Duration,
+    cancellation: Option<&CancellationToken>,
+) -> Result<Vec<u8>> {
     use std::io::Write as _;
 
-    configure_background_command(&mut cmd);
+    configure_background_command(cmd);
     cmd.env("GIT_TERMINAL_PROMPT", "0");
     cmd.stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -739,7 +859,41 @@ where
     };
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
-    let mut child = cmd.spawn().map_err(io_err)?;
+    // `parse_stdout` is `FnOnce` and consumes the child's stdout, so we can only
+    // retry the OS-level spawn here — the most common place a cross-program lock
+    // collision (os error 5 on Windows) bites a git subprocess. A `Command` is a
+    // reusable builder, so re-spawning the same `cmd` re-launches git. Once up,
+    // read commands like diff/log take no git write locks, so a full
+    // retry-the-command path is unnecessary.
+    let mut last_spawn_err = None;
+    let mut spawned_child = None;
+    for attempt in 0..GIT_TRANSIENT_RETRY_ATTEMPTS {
+        match cmd.spawn() {
+            Ok(child) => {
+                spawned_child = Some(child);
+                break;
+            }
+            Err(err)
+                if attempt + 1 < GIT_TRANSIENT_RETRY_ATTEMPTS
+                    && err.kind() == io::ErrorKind::PermissionDenied
+                    && !cancellation.is_some_and(CancellationToken::is_cancelled) =>
+            {
+                std::thread::sleep(transient_retry_backoff(attempt));
+                last_spawn_err = Some(err);
+            }
+            Err(err) => return Err(io_err(err)),
+        }
+    }
+    let mut child = match spawned_child {
+        Some(child) => child,
+        None => {
+            return Err(io_err(last_spawn_err.unwrap_or_else(|| {
+                std::io::Error::other(
+                    "git command spawn failed after transient lock-conflict retries",
+                )
+            })));
+        }
+    };
     let stdout = child.stdout.take().ok_or_else(|| {
         Error::new(ErrorKind::Backend(format!(
             "{label} did not provide piped stdout"
