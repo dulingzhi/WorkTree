@@ -127,11 +127,10 @@ impl GixRepo {
             return Err(git_command_failed_error(label, output));
         }
 
-        String::from_utf8(output.stdout).map_err(|_| {
-            Error::new(ErrorKind::Backend(
-                "git diff produced non-UTF-8 output".to_string(),
-            ))
-        })
+        // A diff of a legacy-encoded file (GBK and friends) is perfectly
+        // valid text that just is not valid UTF-8. Transcode it instead of
+        // rejecting the whole diff — see `decode_utf8_bytes`.
+        decode_utf8_bytes(output.stdout)
     }
 
     pub(super) fn diff_parsed(&self, target: &DiffTarget) -> Result<Diff> {
@@ -145,11 +144,15 @@ impl GixRepo {
             "git diff",
             true,
             move |stdout| {
-                Diff::from_unified_reader(target, BufReader::new(stdout)).map_err(|err| {
-                    Error::new(ErrorKind::Backend(format!(
-                        "git diff produced non-UTF-8 output: {err}"
-                    )))
-                })
+                // Read the bytes first and transcode: `from_unified_reader`
+                // uses `read_to_string`, which fails outright on legacy
+                // encodings. Diffing a GBK file must not be an error.
+                let mut buf = Vec::new();
+                BufReader::new(stdout)
+                    .read_to_end(&mut buf)
+                    .map_err(|err| Error::new(ErrorKind::Io(err.kind())))?;
+                let text = decode_utf8_bytes(buf)?;
+                Ok(Diff::from_unified(target, text.as_str()))
             },
         )
     }
@@ -172,11 +175,14 @@ impl GixRepo {
             true,
             cancellation,
             move |stdout| {
-                Diff::from_unified_reader(target, BufReader::new(stdout)).map_err(|err| {
-                    Error::new(ErrorKind::Backend(format!(
-                        "git diff produced non-UTF-8 output: {err}"
-                    )))
-                })
+                // Same transcoding path as `diff_parsed` — see the comment
+                // there for why the bytes are collected before parsing.
+                let mut buf = Vec::new();
+                BufReader::new(stdout)
+                    .read_to_end(&mut buf)
+                    .map_err(|err| Error::new(ErrorKind::Io(err.kind())))?;
+                let text = decode_utf8_bytes(buf)?;
+                Ok(Diff::from_unified(target, text.as_str()))
             },
         )
     }
