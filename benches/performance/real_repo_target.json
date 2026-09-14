@@ -2,7 +2,7 @@
   "schema_version": 1,
   "generator": "scripts/generate-perf-target-manifest.sh",
   "generator_version": "1",
-  "generated_at": "2026-09-14T17:57:18Z",
+  "generated_at": "2026-09-14T18:01:38Z",
   "git_version": "2.43.0",
   "target": {
     "repo_url": "https://github.com/rust-lang/rust.git",
@@ -23,8 +23,8 @@
   "scenarios": [
     { "case": "monorepo_open_and_history_load", "enabled": true,  "checkout_ref": "a8a1e6fd9df2e094d6f09c0d57991508680acc1c", "history_limit": 10000 },
     { "case": "deep_history_open_and_scroll",    "enabled": true,  "checkout_ref": "a8a1e6fd9df2e094d6f09c0d57991508680acc1c", "history_limit": 50000 },
-    { "case": "mid_merge_conflict_list_and_open", "enabled": false, "merge_ref": "", "conflict_path": "" },
-    { "case": "large_file_diff_open",             "enabled": false,     "diff_path": "", "diff_commitish": "HEAD" }
+    { "case": "mid_merge_conflict_list_and_open", "enabled": true, "merge_ref": "origin/stable", "conflict_path": "Cargo.lock" },
+    { "case": "large_file_diff_open",             "enabled": true,     "diff_path": "Cargo.lock", "diff_commitish": "HEAD" }
   ],
-  "regenerate_command": "scripts/generate-perf-target-manifest.sh --repo-url https://github.com/rust-lang/rust.git --ref main --name rust"
+  "regenerate_command": "scripts/generate-perf-target-manifest.sh --repo-url https://github.com/rust-lang/rust.git --ref main --name rust --conflict-merge-ref origin/stable --conflict-path Cargo.lock --diff-path Cargo.lock"
 }
