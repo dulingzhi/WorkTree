@@ -1700,16 +1700,28 @@ impl GixRepo {
             limit,
             author_str.as_deref(),
             cursor_oid.as_deref(),
+            None,
         ) {
             self.store_log_head_page(cache_key, &page);
             return Ok(page);
         }
 
-        let page = match head_id {
+        // A cold first page fetches a wider window than was asked for, and the
+        // whole run is cached as a snapshot: every later page size and every
+        // "load more" inside that window is then served by slicing one file
+        // instead of re-walking. Streaming requests are excluded because they
+        // want the first results as soon as possible, not a deeper buffer.
+        let fetch_limit = if cursor.is_none() && chunks.is_none() {
+            limit.max(super::history_cache::SNAPSHOT_COMMITS)
+        } else {
+            limit
+        };
+
+        let walked = match head_id {
             Some(head_id) => self.log_paged_page(
                 mode,
                 Arc::from(vec![head_id]),
-                limit,
+                fetch_limit,
                 cursor,
                 cancellation,
                 author,
@@ -1718,22 +1730,41 @@ impl GixRepo {
             None => empty_log_page(),
         };
 
-        self.store_log_head_page(cache_key, &page);
         if let Some(cancellation) = cancellation {
             cancellation.check_cancelled()?;
         }
         // Persist for the next cold open. If the walk was cancelled above, the
         // `?` already returned before we reach here, so partial pages are never
-        // written to disk.
+        // written to disk. This runs before truncation so the snapshot keeps the
+        // whole window, not just the page handed back.
         super::history_cache::store_log_page(
             &repo,
             &self.spec.workdir,
-            &page,
+            &walked,
             mode_idx,
             limit,
             author_str.as_deref(),
             cursor_oid.as_deref(),
+            None,
         );
+
+        let mut page = walked;
+        if page.commits.len() > limit {
+            // The commit that would have followed the returned page — it anchors
+            // the next request at an offset inside the snapshot.
+            let next_id = page.commits.get(limit).map(|c| c.id.clone());
+            page.commits.truncate(limit);
+            page.next_cursor = page.commits.last().map(|last| LogCursor {
+                last_seen: last.id.clone(),
+                resume_from: next_id,
+                // The walk state behind a token describes the wider fetch, not
+                // this truncation point, so it is dropped; `last_seen` carries
+                // the resume, and the next page is a snapshot slice anyway.
+                resume_token: None,
+            });
+        }
+
+        self.store_log_head_page(cache_key, &page);
         Ok(page)
     }
 
@@ -1772,6 +1803,13 @@ impl GixRepo {
         let repo = self._repo.to_thread_local();
         let head_id = gix_head_id_or_none(&repo)?;
 
+        // Cache params. The lookup is deferred until the refs have been
+        // enumerated below, because producing the fingerprint *is* the
+        // enumeration — doing it here would pay for it a second time.
+        let mode_idx = super::history_cache::mode_index(&HistoryMode::AllBranches);
+        let cursor_oid = cursor.map(|c| c.last_seen.0.to_string());
+        let author_str = author.map(|a| a.0.clone());
+
         let refs = repo
             .references()
             .map_err(|e| Error::new(ErrorKind::Backend(format!("gix references: {e}"))))?;
@@ -1785,6 +1823,14 @@ impl GixRepo {
             tips.push(head_id);
             seen.insert(head_id);
         }
+
+        // One enumeration feeds all three consumers — the walk tips, the cache
+        // fingerprint, and the later cache store. Enumerating a few hundred
+        // loose refs costs tens of milliseconds and, as measured on a 281-ref
+        // repo, that money goes to filesystem syscalls rather than to parsing,
+        // so there is no cheaper API to switch to: the win comes from doing it
+        // once per request instead of three times.
+        let mut ref_entries: Vec<(Vec<u8>, Option<String>)> = Vec::new();
 
         let iter = refs
             .all()
@@ -1801,12 +1847,37 @@ impl GixRepo {
             ) {
                 continue;
             }
+            // Recorded for every ref, not just the ones that yield a tip, so
+            // the fingerprint matches what the standalone helper would compute
+            // — and before `reference` is consumed just below.
+            ref_entries.push((
+                reference.name().as_bstr().as_bytes().to_vec(),
+                reference.target().try_id().map(|oid| oid.to_string()),
+            ));
             let Some(id) = reference_commit_id(reference)? else {
                 continue;
             };
             if seen.insert(id) {
                 tips.push(id);
             }
+        }
+
+        let ref_fingerprint =
+            super::history_cache::all_refs_fingerprint_from_entries(&repo, &mut ref_entries);
+
+        // Now that the fingerprint is in hand, the cache can be consulted
+        // without enumerating again. On a hit this is the last work the
+        // request does — even the stash reflog below is skipped.
+        if let Some(page) = super::history_cache::load_log_page(
+            &repo,
+            &self.spec.workdir,
+            mode_idx,
+            limit,
+            author_str.as_deref(),
+            cursor_oid.as_deref(),
+            Some(ref_fingerprint),
+        ) {
+            return Ok(page);
         }
 
         // `git log --all` includes only `refs/stash` tip, but users expect history scope=all
@@ -1825,26 +1896,19 @@ impl GixRepo {
         // orders what it yields by commit time regardless.
         tips.sort();
 
-        // Cold-open shortcut, mirroring the head-page path: if the refs have not
-        // changed, rehydrate from disk instead of re-walking every branch tip.
-        let mode_idx = super::history_cache::mode_index(&HistoryMode::AllBranches);
-        let cursor_oid = cursor.map(|c| c.last_seen.0.to_string());
-        let author_str = author.map(|a| a.0.clone());
-        if let Some(page) = super::history_cache::load_log_page(
-            &repo,
-            &self.spec.workdir,
-            mode_idx,
-            limit,
-            author_str.as_deref(),
-            cursor_oid.as_deref(),
-        ) {
-            return Ok(page);
-        }
+        // Same snapshot-window idea as the head-page path, but smaller: this
+        // walk seeds from every ref, so each extra commit costs visibly more
+        // than it does when walking from HEAD alone.
+        let fetch_limit = if cursor.is_none() && chunks.is_none() {
+            limit.max(super::history_cache::SNAPSHOT_COMMITS_ALL_BRANCHES)
+        } else {
+            limit
+        };
 
-        let page = self.log_paged_page(
+        let walked = self.log_paged_page(
             HistoryMode::AllBranches,
             Arc::from(tips),
-            limit,
+            fetch_limit,
             cursor,
             cancellation,
             author,
@@ -1854,6 +1918,8 @@ impl GixRepo {
         if let Some(cancellation) = cancellation {
             cancellation.check_cancelled()?;
         }
+        // Stored before truncation so the snapshot keeps the whole window.
+        let mut page = walked;
         super::history_cache::store_log_page(
             &repo,
             &self.spec.workdir,
@@ -1862,7 +1928,20 @@ impl GixRepo {
             limit,
             author_str.as_deref(),
             cursor_oid.as_deref(),
+            // Same fingerprint the lookup used: the refs cannot have changed
+            // in between, and re-enumerating here was the third of three
+            // identical passes.
+            Some(ref_fingerprint),
         );
+        if page.commits.len() > limit {
+            let next_id = page.commits.get(limit).map(|c| c.id.clone());
+            page.commits.truncate(limit);
+            page.next_cursor = page.commits.last().map(|last| LogCursor {
+                last_seen: last.id.clone(),
+                resume_from: next_id,
+                resume_token: None,
+            });
+        }
         Ok(page)
     }
 
@@ -2288,6 +2367,206 @@ mod tests {
     fn open_repo(workdir: &Path) -> GixRepo {
         let thread_safe_repo = gix::open(workdir).expect("open repo").into_sync();
         GixRepo::new(workdir.to_path_buf(), thread_safe_repo)
+    }
+
+    /// Diagnostic harness against a REAL repository, opted into with
+    /// `WORKTREE_GIX_CACHE_PROBE_REPO=<workdir>`, following the
+    /// `WORKTREE_GIX_PROBE_REPO` convention in `status.rs`.
+    ///
+    /// Measures exactly what the disk cache exists for: the cold open. Each pass
+    /// builds a *fresh* `GixRepo`, so the in-process LRU is empty and the second
+    /// pass can only be served from disk. Read-only with respect to the repo.
+    #[test]
+    fn real_repo_history_cache_probe() {
+        use super::super::history_cache as hc;
+
+        let Some(workdir) =
+            std::env::var_os("WORKTREE_GIX_CACHE_PROBE_REPO").map(std::path::PathBuf::from)
+        else {
+            eprintln!("skipping: WORKTREE_GIX_CACHE_PROBE_REPO not set");
+            return;
+        };
+
+        hc::CACHE_STATS.reset();
+        let mode_for = |idx: u8| match idx {
+            4 => HistoryMode::AllBranches,
+            _ => HistoryMode::FirstParent,
+        };
+        let limit = 100;
+
+        // Fingerprint cost: the head-page fingerprint touches only HEAD, the
+        // AllBranches one has to enumerate every ref.
+        let thread_local = gix::open(&workdir).expect("open probe repo");
+        let started = std::time::Instant::now();
+        let _ = hc::head_fingerprint(&thread_local);
+        let head_fp_ms = started.elapsed().as_secs_f64() * 1000.0;
+        let started = std::time::Instant::now();
+        let _ = hc::all_refs_fingerprint(&thread_local);
+        let all_fp_ms = started.elapsed().as_secs_f64() * 1000.0;
+        eprintln!("PROBE repo={}", workdir.display());
+        eprintln!("PROBE fingerprint head={head_fp_ms:.3}ms all_refs={all_fp_ms:.3}ms");
+
+        // Where does the all-refs fingerprint actually spend its time? Split
+        // "iterate the refs" from "resolve each ref's target", so an
+        // optimisation can be aimed at the step that is really expensive.
+        let mut iter_gix_ms = f64::NAN;
+        if let Ok(refs) = thread_local.references() {
+            let started = std::time::Instant::now();
+            let mut iterated = 0usize;
+            if let Ok(iter) = refs.all() {
+                for reference in iter {
+                    if reference.is_ok() {
+                        iterated += 1;
+                    }
+                }
+            }
+            let iter_ms = started.elapsed().as_secs_f64() * 1000.0;
+            iter_gix_ms = iter_ms;
+
+            let started = std::time::Instant::now();
+            let mut targeted = 0usize;
+            if let Ok(iter) = refs.all() {
+                for reference in iter.flatten() {
+                    if reference.target().try_id().is_some() {
+                        targeted += 1;
+                    }
+                }
+            }
+            let target_ms = started.elapsed().as_secs_f64() * 1000.0;
+
+            eprintln!(
+                "PROBE fingerprint breakdown: refs={iterated} iterate={iter_ms:.3}ms \
+                 with_target={target_ms:.3}ms resolved={targeted}"
+            );
+        }
+
+        // How much of that 40-odd ms is gix overhead and how much is raw
+        // filesystem I/O? If a plain walk of `refs/` is far cheaper, the
+        // fingerprint does not have to go through gix at all — and if it is
+        // I/O-bound, the only way to shrink it is to read the files in
+        // parallel. Measure both before choosing.
+        {
+            let git_dir = thread_local.path().to_path_buf();
+            let refs_dir = git_dir.join("refs");
+
+            let started = std::time::Instant::now();
+            let mut files = Vec::new();
+            let mut stack = vec![refs_dir.clone()];
+            while let Some(dir) = stack.pop() {
+                if let Ok(entries) = std::fs::read_dir(&dir) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if path.is_dir() {
+                            stack.push(path);
+                        } else {
+                            files.push(path);
+                        }
+                    }
+                }
+            }
+            let listing_ms = started.elapsed().as_secs_f64() * 1000.0;
+
+            let started = std::time::Instant::now();
+            let mut read_ok = 0usize;
+            for path in &files {
+                if std::fs::read_to_string(path).is_ok() {
+                    read_ok += 1;
+                }
+            }
+            let seq_ms = started.elapsed().as_secs_f64() * 1000.0;
+
+            let started = std::time::Instant::now();
+            let mut par_ok = 0usize;
+            let workers = std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(4)
+                .min(8);
+            std::thread::scope(|scope| {
+                let chunks: Vec<_> = files.chunks(files.len() / workers.max(1) + 1).collect();
+                let handles: Vec<_> = chunks
+                    .into_iter()
+                    .map(|chunk| {
+                        scope.spawn(move || {
+                            let mut ok = 0usize;
+                            for path in chunk {
+                                if std::fs::read_to_string(path).is_ok() {
+                                    ok += 1;
+                                }
+                            }
+                            ok
+                        })
+                    })
+                    .collect();
+                for handle in handles {
+                    par_ok += handle.join().unwrap_or(0);
+                }
+            });
+            let par_ms = started.elapsed().as_secs_f64() * 1000.0;
+
+            let packed = git_dir.join("packed-refs");
+            let packed_len = std::fs::metadata(&packed).map(|m| m.len()).unwrap_or(0);
+            eprintln!(
+                "PROBE raw refs: loose_files={} list={listing_ms:.3}ms \
+                 read_sequential={seq_ms:.3}ms read_parallel({workers})={par_ms:.3}ms \
+                 packed_refs={packed_len}B (gix iterate was {iter_gix_ms:.3}ms)",
+                read_ok
+            );
+            assert_eq!(read_ok, par_ok, "both walks must read the same files");
+        }
+
+        for (idx, label) in [(1u8, "first_parent"), (4u8, "all_branches")] {
+            // Start from nothing so the first pass really has to walk.
+            hc::clear_repo_cache(&workdir);
+
+            let cold = open_repo(&workdir);
+            let started = std::time::Instant::now();
+            let walked = cold
+                .log_history_mode_page_inner(mode_for(idx), None, limit, None, None, None)
+                .expect("cold history page");
+            let walk_ms = started.elapsed().as_secs_f64() * 1000.0;
+
+            // Fresh instance: empty LRU, so this can only come from disk.
+            let warm = open_repo(&workdir);
+            let started = std::time::Instant::now();
+            let rehydrated = warm
+                .log_history_mode_page_inner(mode_for(idx), None, limit, None, None, None)
+                .expect("warm history page");
+            let hit_ms = started.elapsed().as_secs_f64() * 1000.0;
+
+            let speedup = if hit_ms > 0.0 { walk_ms / hit_ms } else { walk_ms };
+            eprintln!(
+                "PROBE {label}: commits={} walk={walk_ms:.1}ms disk={hit_ms:.1}ms speedup={speedup:.1}x",
+                walked.commits.len()
+            );
+            assert_eq!(
+                walked.commits, rehydrated.commits,
+                "{label}: the page rebuilt from disk must match the walked page"
+            );
+            assert!(
+                hit_ms < walk_ms,
+                "{label}: a disk hit ({hit_ms:.1}ms) should beat a full walk ({walk_ms:.1}ms)"
+            );
+
+            // "Load more" on yet another fresh instance. With a snapshot this is
+            // a slice out of the same file; without one it is another full walk.
+            let more = open_repo(&workdir);
+            let cursor = rehydrated.next_cursor.clone();
+            let started = std::time::Instant::now();
+            let second = more
+                .log_history_mode_page_inner(mode_for(idx), None, limit, cursor.as_ref(), None, None)
+                .expect("second page");
+            let more_ms = started.elapsed().as_secs_f64() * 1000.0;
+            eprintln!(
+                "PROBE {label}: load_more commits={} took={more_ms:.1}ms (walk was {walk_ms:.1}ms)",
+                second.commits.len()
+            );
+        }
+
+        eprintln!("PROBE stats {}", hc::CACHE_STATS.summary());
+        assert!(
+            hc::CACHE_STATS.hits.load(std::sync::atomic::Ordering::Relaxed) >= 2,
+            "each second open should have been served from disk"
+        );
     }
 
     #[test]

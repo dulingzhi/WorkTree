@@ -4,23 +4,35 @@
 //! page is serialized to disk keyed by a fingerprint of the repository's refs.
 //! When the refs have not changed since the cache was written, the page is
 //! rehydrated from disk instead of re-walking the commit graph — every object
-//! read is skipped. The in-process [`super::log::GixRepo`] LRU cache already
+//! read is skipped.
+//!
+//! The fingerprint is *scope-aware*: `AllBranches` walks every ref so it is
+//! keyed off all of them, while the head-page modes walk from HEAD alone and are
+//! keyed off HEAD alone. Otherwise `git fetch` moving remotes would evict the
+//! default first screen, which is the page this cache exists to serve. The in-process [`super::log::GixRepo`] LRU cache already
 //! covers repeats *within* a session; this layer covers the cold start after a
 //! process restart, which is what "open fast" is about.
 //!
-//! The page is stored as a dedicated serializable projection ([`CachedLogPage`])
+//! A cache entry is a *snapshot*: one contiguous run of commits for a
+//! (mode, author) pair, not a single page. Any request inside that run — any
+//! page size, any "load more" offset — is served by slicing it, so one entry
+//! covers a whole stretch of navigation instead of one exact request.
+//!
+//! It is stored as a dedicated serializable projection ([`CachedSnapshot`])
 //! rather than `worktree_core::domain::LogPage` directly, so no `serde` derives
-//! are added to the shared domain types. The page is reconstructed on a hit.
+//! are added to the shared domain types. Commits are reconstructed on a hit.
 
 use rustc_hash::FxHasher;
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use gix::bstr::ByteSlice as _;
 use gix::Repository;
+use worktree_core::applog::{self, Level};
 use worktree_core::domain::{
     Commit, CommitId, CommitParentIds, HistoryMode, LogCursor, LogPage,
 };
@@ -28,19 +40,29 @@ use worktree_core::domain::{
 use crate::util::unix_seconds_to_system_time_or_epoch;
 use super::history::gix_head_id_or_none;
 
-const SCHEMA_VERSION: u32 = 1;
+const SCHEMA_VERSION: u32 = 2;
+/// How many commits one snapshot holds — the fetch window for a cold first page.
+///
+/// Walking this many instead of just `limit` costs marginally more once, and in
+/// exchange every page size and every "load more" inside the window is served by
+/// slicing that one file instead of re-walking.
+pub(super) const SNAPSHOT_COMMITS: usize = 500;
+/// The `AllBranches` window. That walk seeds from every ref, so each extra
+/// commit costs visibly more than it does from HEAD alone — small enough to
+/// keep the cold open honest, large enough to cover a couple of pages.
+pub(super) const SNAPSHOT_COMMITS_ALL_BRANCHES: usize = 200;
 /// Keep at most this many cached generations per repository on disk.
-const MAX_GENERATIONS_PER_REPO: usize = 4;
+///
+/// Deliberately well above rgitui's single generation: the fingerprint includes
+/// HEAD, so **switching branches yields a new fingerprint**, and keeping several
+/// generations is what lets "switch back to a branch" hit the cache instead of
+/// re-walking. One entry is a single page (a few KB), so the disk cost is
+/// negligible next to the win.
+const MAX_GENERATIONS_PER_REPO: usize = 16;
 
 // ---------------------------------------------------------------------------
 // Serialized projection
 // ---------------------------------------------------------------------------
-
-#[derive(Serialize, Deserialize)]
-struct CachedCursor {
-    last_seen: String,
-    resume_from: Option<String>,
-}
 
 #[derive(Serialize, Deserialize)]
 struct CachedCommit {
@@ -48,62 +70,113 @@ struct CachedCommit {
     parent_ids: Vec<String>,
     summary: String,
     author: String,
+    /// Unix seconds; `SystemTime` is not serializable in the domain type.
     time: i64,
     signed: bool,
 }
 
 #[derive(Serialize, Deserialize)]
-struct CachedLogPage {
+struct CachedSnapshot {
     schema_version: u32,
     ref_fingerprint: u64,
     mode: u8,
-    limit: u32,
     author: Option<String>,
-    /// `last_seen` oid of the request cursor, or empty for the first page.
-    cursor: String,
+    /// Whether the walk that produced this run had commits beyond the last one.
+    /// Decides whether a request that runs off the end may still have more.
+    has_more: bool,
+    /// The contiguous run, oldest-request-first (i.e. starting at the walk's
+    /// start point). Requests address it by offset, not by page identity.
     commits: Vec<CachedCommit>,
-    next_cursor: Option<CachedCursor>,
 }
 
 // ---------------------------------------------------------------------------
 // Fingerprinting
 // ---------------------------------------------------------------------------
 
-/// A stable hash of the repository's refs. Any commit, branch switch, or tag
-/// change alters the fingerprint, which is exactly when a cached page is stale.
-fn ref_fingerprint(repo: &Repository) -> u64 {
-    let mut hasher = FxHasher::default();
-
-    // HEAD: its resolved commit id, and whether it is detached. A branch rename
-    // at the same commit must still count, so the symbolic name matters too.
+/// Hash the parts of HEAD that can change a history page: its resolved commit
+/// id, whether it is detached, and its symbolic name. A branch rename at the
+/// same commit must still invalidate, so the name matters as well as the id.
+fn hash_head(repo: &Repository, hasher: &mut FxHasher) {
     if let Ok(Some(head_id)) = gix_head_id_or_none(repo) {
-        head_id.to_string().hash(&mut hasher);
+        head_id.to_string().hash(hasher);
     }
     if let Ok(head) = repo.head() {
-        head.is_detached().hash(&mut hasher);
-        head.name().as_bstr().as_bytes().hash(&mut hasher);
+        head.is_detached().hash(hasher);
+        head.name().as_bstr().as_bytes().hash(hasher);
     }
+}
 
-    // Every reference under refs/, as (name bytes, target). Sorting makes the
-    // hash order-independent; the target is what actually changes when history
-    // moves forward, so it is the dominant invalidation signal.
-    if let Ok(refs) = repo.references() {
-        if let Ok(iter) = refs.all() {
-            let mut entries: Vec<(Vec<u8>, Option<String>)> = Vec::new();
-            for reference in iter {
-                let Ok(reference) = reference else {
-                    continue;
-                };
-                let name = reference.name().as_bstr().as_bytes().to_vec();
-                let target = reference.target().try_id().map(|oid| oid.to_string());
-                entries.push((name, target));
-            }
-            entries.sort();
-            entries.hash(&mut hasher);
-        }
-    }
-
+/// Fingerprint for the head-page modes (everything except `AllBranches`).
+///
+/// Those walks seed from HEAD alone — see `Arc::from(vec![head_id])` in
+/// `log_history_mode_page_inner` — so only a HEAD change can alter the result.
+/// Keying them off HEAD alone means ordinary ref churn (`git fetch` moving
+/// remotes, creating a branch, tagging) no longer invalidates the default first
+/// screen, which is the whole point of the cache.
+pub(super) fn head_fingerprint(repo: &Repository) -> u64 {
+    let mut hasher = FxHasher::default();
+    hash_head(repo, &mut hasher);
     hasher.finish()
+}
+
+/// Finish an all-refs fingerprint from entries collected during some other
+/// pass over the refs.
+///
+/// Exists so the `AllBranches` walk can derive its fingerprint from the very
+/// same enumeration it uses to build walk tips. Enumerating loose refs is real
+/// file I/O — on a repository with ~300 loose refs a single pass costs tens of
+/// milliseconds, so paying for it two or three times per cold open dominated
+/// the whole request.
+///
+/// The entries are sorted so the hash does not depend on enumeration order.
+pub(super) fn all_refs_fingerprint_from_entries(
+    repo: &Repository,
+    entries: &mut Vec<(Vec<u8>, Option<String>)>,
+) -> u64 {
+    let mut hasher = FxHasher::default();
+    hash_head(repo, &mut hasher);
+    entries.sort();
+    entries.hash(&mut hasher);
+    hasher.finish()
+}
+
+/// Standalone all-refs fingerprint, for the probe harness's timing breakdown.
+#[allow(dead_code)]
+pub(super) fn all_refs_fingerprint(repo: &Repository) -> u64 {
+    let mut entries: Vec<(Vec<u8>, Option<String>)> = Vec::new();
+    // Two `let else` rather than a chained `and_then`: the iterator borrows the
+    // ref store, so the two steps cannot be collapsed into one expression.
+    let Ok(refs) = repo.references() else {
+        return all_refs_fingerprint_from_entries(repo, &mut entries);
+    };
+    let Ok(iter) = refs.all() else {
+        return all_refs_fingerprint_from_entries(repo, &mut entries);
+    };
+    for reference in iter.flatten() {
+        if matches!(
+            reference.name().category(),
+            Some(gix::reference::Category::Tag)
+        ) {
+            continue;
+        }
+        let name = reference.name().as_bstr().as_bytes().to_vec();
+        let target = reference.target().try_id().map(|oid| oid.to_string());
+        entries.push((name, target));
+    }
+    all_refs_fingerprint_from_entries(repo, &mut entries)
+}
+
+/// A stable hash of exactly the refs that can invalidate `mode_idx`'s page.
+///
+/// Scope-aware on purpose: `AllBranches` reads every ref, while the head-page
+/// modes read only HEAD. Using one shared fingerprint would let unrelated ref
+/// churn evict the default first screen.
+fn ref_fingerprint(repo: &Repository, mode_idx: u8) -> u64 {
+    if mode_idx == MODE_ALL_BRANCHES {
+        all_refs_fingerprint(repo)
+    } else {
+        head_fingerprint(repo)
+    }
 }
 
 /// Stable hash of the workdir path, used as the per-repo namespace on disk.
@@ -130,20 +203,22 @@ fn cache_path(repo_path: &Path, fingerprint: u64, request_hash: u64) -> PathBuf 
     ))
 }
 
-/// Hash of the request itself (everything that selects *which* page this is).
-fn request_hash(
-    mode_idx: u8,
-    limit: usize,
-    author: Option<&str>,
-    cursor_oid: Option<&str>,
-) -> u64 {
+/// Hash of what a snapshot is scoped by: the mode and the author filter.
+///
+/// Deliberately *not* `limit` or the cursor — those say where to slice inside a
+/// snapshot, not which snapshot to open. Dropping them is what lets one file
+/// serve every page size and every "load more" offset.
+fn snapshot_hash(mode_idx: u8, author: Option<&str>) -> u64 {
     let mut hasher = FxHasher::default();
     mode_idx.hash(&mut hasher);
-    limit.hash(&mut hasher);
     author.hash(&mut hasher);
-    cursor_oid.hash(&mut hasher);
     hasher.finish()
 }
+
+/// `mode_index` of `HistoryMode::AllBranches` — the only mode whose walk seeds
+/// from every ref rather than from HEAD alone, and therefore the only one whose
+/// fingerprint has to cover all refs.
+const MODE_ALL_BRANCHES: u8 = 4;
 
 pub(super) fn mode_index(mode: &HistoryMode) -> u8 {
     match mode {
@@ -151,18 +226,108 @@ pub(super) fn mode_index(mode: &HistoryMode) -> u8 {
         HistoryMode::FirstParent => 1,
         HistoryMode::NoMerges => 2,
         HistoryMode::MergesOnly => 3,
-        HistoryMode::AllBranches => 4,
+        HistoryMode::AllBranches => MODE_ALL_BRANCHES,
     }
+}
+
+// ---------------------------------------------------------------------------
+// Hit-rate instrumentation
+// ---------------------------------------------------------------------------
+
+/// Cumulative cache counters.
+///
+/// The question this answers in the field is "what fraction of history reads
+/// were served from disk, and why did the rest miss?" — that is what tells us
+/// whether a fingerprint is too broad (stale) or a view is never reused (cold).
+/// Relaxed ordering is fine: these are diagnostics, never control flow.
+#[derive(Debug, Default)]
+pub(crate) struct CacheStats {
+    /// A valid page was rehydrated from disk; no walk happened.
+    pub hits: AtomicU64,
+    /// No cache file existed (or could not be read) — the true cold path.
+    pub misses_cold: AtomicU64,
+    /// A file existed but its fingerprint or request parameters did not match.
+    pub misses_stale: AtomicU64,
+    /// A file existed but could not be deserialized.
+    pub misses_corrupt: AtomicU64,
+    /// Pages successfully published to disk.
+    pub stores: AtomicU64,
+}
+
+pub(crate) static CACHE_STATS: CacheStats = CacheStats {
+    hits: AtomicU64::new(0),
+    misses_cold: AtomicU64::new(0),
+    misses_stale: AtomicU64::new(0),
+    misses_corrupt: AtomicU64::new(0),
+    stores: AtomicU64::new(0),
+};
+
+// Deliberately not wired to a UI surface yet; `reset`/`snapshot` are for the
+// probe harness today and app-level reporting later.
+#[allow(dead_code)]
+impl CacheStats {
+    pub(crate) fn reset(&self) {
+        self.hits.store(0, Ordering::Relaxed);
+        self.misses_cold.store(0, Ordering::Relaxed);
+        self.misses_stale.store(0, Ordering::Relaxed);
+        self.misses_corrupt.store(0, Ordering::Relaxed);
+        self.stores.store(0, Ordering::Relaxed);
+    }
+
+    /// `(hits, cold, stale, corrupt, stores)`
+    pub(crate) fn snapshot(&self) -> (u64, u64, u64, u64, u64) {
+        (
+            self.hits.load(Ordering::Relaxed),
+            self.misses_cold.load(Ordering::Relaxed),
+            self.misses_stale.load(Ordering::Relaxed),
+            self.misses_corrupt.load(Ordering::Relaxed),
+            self.stores.load(Ordering::Relaxed),
+        )
+    }
+
+    /// Hits as a fraction of all reads; 0.0 when nothing has been read.
+    pub(crate) fn hit_rate(&self) -> f64 {
+        let (hits, cold, stale, corrupt, _) = self.snapshot();
+        let reads = hits + cold + stale + corrupt;
+        if reads == 0 {
+            0.0
+        } else {
+            hits as f64 / reads as f64
+        }
+    }
+
+    /// One-line diagnostic summary.
+    pub(crate) fn summary(&self) -> String {
+        let (hits, cold, stale, corrupt, stores) = self.snapshot();
+        format!(
+            "hits={hits} cold={cold} stale={stale} corrupt={corrupt} \
+             stores={stores} hit_rate={:.1}%",
+            self.hit_rate() * 100.0
+        )
+    }
+}
+
+/// Emit one record to the app log.
+///
+/// A no-op until `applog::init()` has opened today's file, so early startup and
+/// tests are unaffected. Volume is bounded by the in-process LRU: the disk cache
+/// is only consulted when that misses, so this fires once per distinct page
+/// rather than once per redraw.
+fn log_event(message: std::fmt::Arguments<'_>) {
+    applog::log(Level::Info, "history_cache", message);
 }
 
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
-/// Load a cached history page for the given request, if a fresh one exists.
+/// Serve a history page out of the cached snapshot, if it can.
 ///
-/// Returns `None` when there is no cache, the cache is stale (refs changed),
-/// the schema version differs, or deserialization fails for any reason.
+/// The snapshot is a contiguous run of commits; this resolves the requested
+/// cursor to an offset in that run and slices `limit` commits from it. Returns
+/// `None` when there is no usable snapshot — stale refs, a different schema, a
+/// cursor that is not inside the run, or a request that would run past the end
+/// while more commits still exist (those genuinely need a walk).
 pub(super) fn load_log_page(
     repo: &Repository,
     repo_path: &Path,
@@ -170,28 +335,92 @@ pub(super) fn load_log_page(
     limit: usize,
     author: Option<&str>,
     cursor_oid: Option<&str>,
+    // Pre-computed ref fingerprint, when the caller already enumerated refs
+    // for its own purposes. `None` means "compute it here".
+    //
+    // Enumerating a repository with a few hundred loose refs costs tens of
+    // milliseconds — measured on a 281-ref repo at ~33ms, and the cost is
+    // filesystem syscalls rather than parsing, so it does not get cheaper by
+    // going around gix. A caller that already has the refs in hand must
+    // therefore be able to hand the fingerprint over instead of paying twice.
+    fingerprint: Option<u64>,
 ) -> Option<LogPage> {
-    let fingerprint = ref_fingerprint(repo);
-    let path = cache_path(repo_path, fingerprint, request_hash(mode_idx, limit, author, cursor_oid));
+    let fingerprint = fingerprint.unwrap_or_else(|| ref_fingerprint(repo, mode_idx));
+    let path = cache_path(repo_path, fingerprint, snapshot_hash(mode_idx, author));
 
-    let bytes = std::fs::read(&path).ok()?;
-    let parsed: CachedLogPage = serde_json::from_slice(&bytes).ok()?;
+    let bytes = match std::fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            CACHE_STATS.misses_cold.fetch_add(1, Ordering::Relaxed);
+            log_event(format_args!(
+                "miss kind=cold mode={mode_idx} limit={limit} rate={:.0}%",
+                CACHE_STATS.hit_rate() * 100.0
+            ));
+            return None;
+        }
+    };
+    let parsed: CachedSnapshot = match serde_json::from_slice(&bytes) {
+        Ok(parsed) => parsed,
+        Err(_) => {
+            CACHE_STATS.misses_corrupt.fetch_add(1, Ordering::Relaxed);
+            log_event(format_args!(
+                "miss kind=corrupt mode={mode_idx} limit={limit} rate={:.0}%",
+                CACHE_STATS.hit_rate() * 100.0
+            ));
+            return None;
+        }
+    };
 
     // Stale / mismatched cache: ignore and let the caller re-walk.
     if parsed.schema_version != SCHEMA_VERSION
         || parsed.ref_fingerprint != fingerprint
         || parsed.mode != mode_idx
-        || parsed.limit as usize != limit
         || parsed.author.as_deref() != author
-        || parsed.cursor != cursor_oid.unwrap_or("")
     {
+        CACHE_STATS.misses_stale.fetch_add(1, Ordering::Relaxed);
+        log_event(format_args!(
+            "miss kind=stale mode={mode_idx} limit={limit} rate={:.0}%",
+            CACHE_STATS.hit_rate() * 100.0
+        ));
         return None;
     }
 
-    Some(reconstruct(&parsed))
+    let page = match slice_snapshot(&parsed, limit, cursor_oid) {
+        Ok(page) => page,
+        Err(SliceMiss::Outside) => {
+            CACHE_STATS.misses_cold.fetch_add(1, Ordering::Relaxed);
+            log_event(format_args!(
+                "miss kind=outside mode={mode_idx} limit={limit} rate={:.0}%",
+                CACHE_STATS.hit_rate() * 100.0
+            ));
+            return None;
+        }
+        Err(SliceMiss::Short { available }) => {
+            CACHE_STATS.misses_cold.fetch_add(1, Ordering::Relaxed);
+            log_event(format_args!(
+                "miss kind=short mode={mode_idx} limit={limit} available={available} rate={:.0}%",
+                CACHE_STATS.hit_rate() * 100.0
+            ));
+            return None;
+        }
+    };
+
+    CACHE_STATS.hits.fetch_add(1, Ordering::Relaxed);
+    log_event(format_args!(
+        "hit mode={mode_idx} limit={limit} served={} rate={:.0}%",
+        page.commits.len(),
+        CACHE_STATS.hit_rate() * 100.0
+    ));
+    Some(page)
 }
 
-/// Persist a freshly produced history page to disk, keyed by the current refs.
+/// Persist a freshly walked run of commits as the snapshot for this
+/// (mode, author) pair, keyed by the current refs.
+///
+/// Only first-page walks are stored. A walk resumed from a cursor starts part
+/// way through history, so its run is not addressable by offset from the start
+/// and would only ever match that one exact request.
+///
 /// Failures are non-fatal: a missed cache only costs the next cold open.
 pub(super) fn store_log_page(
     repo: &Repository,
@@ -201,19 +430,25 @@ pub(super) fn store_log_page(
     limit: usize,
     author: Option<&str>,
     cursor_oid: Option<&str>,
+    // See [`load_log_page`]: pass the fingerprint when the caller has already
+    // enumerated refs, so storing does not enumerate them again.
+    fingerprint: Option<u64>,
 ) {
-    let fingerprint = ref_fingerprint(repo);
-    let path = cache_path(repo_path, fingerprint, request_hash(mode_idx, limit, author, cursor_oid));
+    if cursor_oid.is_some() {
+        return;
+    }
 
-    let cached = CachedLogPage {
+    let fingerprint = fingerprint.unwrap_or_else(|| ref_fingerprint(repo, mode_idx));
+    let key = snapshot_hash(mode_idx, author);
+    let path = cache_path(repo_path, fingerprint, key);
+
+    let cached = CachedSnapshot {
         schema_version: SCHEMA_VERSION,
         ref_fingerprint: fingerprint,
         mode: mode_idx,
-        limit: limit as u32,
         author: author.map(str::to_owned),
-        cursor: cursor_oid.unwrap_or("").to_owned(),
+        has_more: page.next_cursor.is_some(),
         commits: page.commits.iter().map(project_commit).collect(),
-        next_cursor: page.next_cursor.as_ref().map(project_cursor),
     };
 
     let bytes = match serde_json::to_vec(&cached) {
@@ -230,14 +465,21 @@ pub(super) fn store_log_page(
         "tmp-{}-{:016x}-{:016x}.json",
         std::process::id(),
         fingerprint,
-        request_hash(mode_idx, limit, author, cursor_oid),
+        key,
     ));
     if std::fs::write(&tmp, &bytes).is_err() {
         return;
     }
     // Atomic publish; a partial write from a crashed process is left as a stray
     // temp file and simply ignored on the next read.
-    let _ = std::fs::rename(&tmp, &path);
+    if std::fs::rename(&tmp, &path).is_ok() {
+        CACHE_STATS.stores.fetch_add(1, Ordering::Relaxed);
+        log_event(format_args!(
+            "store mode={mode_idx} limit={limit} commits={} bytes={} generations<={MAX_GENERATIONS_PER_REPO}",
+            cached.commits.len(),
+            bytes.len()
+        ));
+    }
     prune_old_generations(repo_path, fingerprint);
 }
 
@@ -260,43 +502,81 @@ fn project_commit(c: &Commit) -> CachedCommit {
     }
 }
 
-fn project_cursor(c: &LogCursor) -> CachedCursor {
-    CachedCursor {
-        last_seen: c.last_seen.0.to_string(),
-        resume_from: c.resume_from.as_ref().map(|r| r.0.to_string()),
-    }
+/// Why a snapshot cannot serve a request, so a walk is needed instead.
+#[derive(Debug, PartialEq, Eq)]
+enum SliceMiss {
+    /// The cursor's last-seen commit is not in the run, so it cannot be located.
+    Outside,
+    /// The run ends before the page is full, but more commits do exist.
+    Short { available: usize },
 }
 
-fn reconstruct(cached: &CachedLogPage) -> LogPage {
-    let commits = cached
-        .commits
+/// Slice one page out of a snapshot run.
+///
+/// Pure — no filesystem, no repository — so the mechanism that lets one file
+/// serve every page size and every "load more" offset can be tested directly.
+fn slice_snapshot(
+    snapshot: &CachedSnapshot,
+    limit: usize,
+    cursor_oid: Option<&str>,
+) -> Result<LogPage, SliceMiss> {
+    let start = match cursor_oid {
+        None => 0,
+        Some(oid) => match snapshot.commits.iter().position(|c| c.id == oid) {
+            Some(index) => index + 1,
+            None => return Err(SliceMiss::Outside),
+        },
+    };
+
+    let available = snapshot.commits.len().saturating_sub(start);
+    // Not enough cached to fill the page while more commits do exist: slicing
+    // here would silently truncate the page, so walk instead.
+    if available < limit && snapshot.has_more {
+        return Err(SliceMiss::Short { available });
+    }
+
+    let end = (start + limit).min(snapshot.commits.len());
+    let commits: Vec<Commit> = snapshot.commits[start..end]
         .iter()
-        .map(|c| Commit {
-            id: CommitId(Arc::from(c.id.as_str())),
-            parent_ids: CommitParentIds::from(
-                c.parent_ids
-                    .iter()
-                    .map(|p| CommitId(Arc::from(p.as_str())))
-                    .collect::<Vec<_>>(),
-            ),
-            summary: Arc::from(c.summary.as_str()),
-            author: Arc::from(c.author.as_str()),
-            time: unix_seconds_to_system_time_or_epoch(c.time),
-            signed: c.signed,
-        })
+        .map(reconstruct_commit)
         .collect();
 
-    let next_cursor = cached.next_cursor.as_ref().map(|c| LogCursor {
-        last_seen: CommitId(Arc::from(c.last_seen.as_str())),
-        resume_from: c.resume_from.as_ref().map(|r| CommitId(Arc::from(r.as_str()))),
-        // The gix walk state behind a resume token is gone after a restart; fall
-        // back to `last_seen` semantics, which the consumer also supports.
-        resume_token: None,
-    });
+    // A next page exists whenever commits remain in the run, or the run was cut
+    // short by the snapshot window while the walk still had more.
+    let next_cursor = if end < snapshot.commits.len() || snapshot.has_more {
+        snapshot.commits[..end].last().map(|last| LogCursor {
+            last_seen: CommitId(Arc::from(last.id.as_str())),
+            resume_from: snapshot
+                .commits
+                .get(end)
+                .map(|next| CommitId(Arc::from(next.id.as_str()))),
+            // The gix walk state behind a resume token is gone after a restart;
+            // fall back to `last_seen`, which the consumer also supports.
+            resume_token: None,
+        })
+    } else {
+        None
+    };
 
-    LogPage {
+    Ok(LogPage {
         commits,
         next_cursor,
+    })
+}
+
+fn reconstruct_commit(c: &CachedCommit) -> Commit {
+    Commit {
+        id: CommitId(Arc::from(c.id.as_str())),
+        parent_ids: CommitParentIds::from(
+            c.parent_ids
+                .iter()
+                .map(|p| CommitId(Arc::from(p.as_str())))
+                .collect::<Vec<_>>(),
+        ),
+        summary: Arc::from(c.summary.as_str()),
+        author: Arc::from(c.author.as_str()),
+        time: unix_seconds_to_system_time_or_epoch(c.time),
+        signed: c.signed,
     }
 }
 
@@ -335,6 +615,28 @@ fn prune_old_generations(repo_path: &Path, _fingerprint: u64) {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+/// Delete every cache file for this repository.
+///
+/// Test-only: lets the probe harness measure a genuine cold open instead of
+/// reusing whatever a previous run left behind.
+#[cfg(test)]
+pub(super) fn clear_repo_cache(repo_path: &Path) {
+    let Ok(entries) = std::fs::read_dir(cache_dir()) else {
+        return;
+    };
+    let prefix = format!("v{}-r{:016x}-", SCHEMA_VERSION, repo_hash(repo_path));
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let matches = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with(&prefix) && name.ends_with(".json"));
+        if matches {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -382,56 +684,122 @@ mod tests {
         }
     }
 
-    /// The page survives a full serialize -> deserialize -> reconstruct cycle,
+    /// Build a snapshot whose commits are `c0..c{n-1}`, for slicing tests.
+    fn snapshot_of(count: usize, has_more: bool) -> CachedSnapshot {
+        CachedSnapshot {
+            schema_version: SCHEMA_VERSION,
+            ref_fingerprint: 1,
+            mode: 1,
+            author: None,
+            has_more,
+            commits: (0..count)
+                .map(|i| CachedCommit {
+                    id: format!("c{i}"),
+                    parent_ids: Vec::new(),
+                    summary: format!("commit {i}"),
+                    author: "Test".to_string(),
+                    time: 1_700_000_000 + i as i64,
+                    signed: false,
+                })
+                .collect(),
+        }
+    }
+
+    fn ids(page: &LogPage) -> Vec<String> {
+        page.commits.iter().map(|c| c.id.0.to_string()).collect()
+    }
+
+    /// The commits survive a full serialize -> deserialize -> reconstruct cycle,
     /// which is exactly what the on-disk cache does on a cold open.
     #[test]
-    fn page_round_trips_through_cached_projection() {
+    fn commits_round_trip_through_cached_projection() {
         let page = sample_page();
-        let cached = CachedLogPage {
+        let cached = CachedSnapshot {
             schema_version: SCHEMA_VERSION,
             ref_fingerprint: 0xabcdef,
             mode: 1,
-            limit: 50,
             author: Some("alice".to_string()),
-            cursor: "4444444444444444444444444444444444444444".to_string(),
+            has_more: true,
             commits: page.commits.iter().map(project_commit).collect(),
-            next_cursor: page.next_cursor.as_ref().map(project_cursor),
         };
 
         let json = serde_json::to_string(&cached).expect("serialize");
-        let parsed: CachedLogPage = serde_json::from_str(&json).expect("deserialize");
-        let rebuilt = reconstruct(&parsed);
+        let parsed: CachedSnapshot = serde_json::from_str(&json).expect("deserialize");
+        let rebuilt: Vec<Commit> = parsed.commits.iter().map(reconstruct_commit).collect();
 
-        // Commits are bit-for-bit equivalent (ids, parents, summary, author,
-        // time, signed).
-        assert_eq!(rebuilt.commits, page.commits);
-        // Cursor identity survives; only the opaque resume token is intentionally
-        // discarded.
-        let rebuilt_cursor = rebuilt.next_cursor.expect("next_cursor");
-        let original_cursor = page.next_cursor.expect("next_cursor");
-        assert_eq!(rebuilt_cursor.last_seen, original_cursor.last_seen);
-        assert_eq!(rebuilt_cursor.resume_from, original_cursor.resume_from);
-        assert!(rebuilt_cursor.resume_token.is_none());
+        assert_eq!(rebuilt, page.commits);
     }
 
-    /// Encoding then decoding a second time yields the same page again, so the
+    /// Encoding then decoding a second time yields the same bytes, so the
     /// on-disk form is stable across repeated cold opens.
     #[test]
     fn cached_projection_is_idempotent() {
         let page = sample_page();
-        let cached = CachedLogPage {
+        let cached = CachedSnapshot {
             schema_version: SCHEMA_VERSION,
             ref_fingerprint: 1,
             mode: 0,
-            limit: 10,
             author: None,
-            cursor: String::new(),
+            has_more: false,
             commits: page.commits.iter().map(project_commit).collect(),
-            next_cursor: page.next_cursor.as_ref().map(project_cursor),
         };
         let once = serde_json::to_string(&cached).unwrap();
-        let parsed: CachedLogPage = serde_json::from_str(&once).unwrap();
+        let parsed: CachedSnapshot = serde_json::from_str(&once).unwrap();
         let twice = serde_json::to_string(&parsed).unwrap();
         assert_eq!(once, twice);
+    }
+
+    /// One snapshot serves every page size: this is the whole point of storing a
+    /// run instead of a page.
+    #[test]
+    fn snapshot_serves_any_page_size() {
+        let snapshot = snapshot_of(10, true);
+        for limit in [1usize, 3, 10] {
+            let page = slice_snapshot(&snapshot, limit, None).expect("slice");
+            assert_eq!(page.commits.len(), limit, "limit={limit}");
+            assert_eq!(ids(&page)[0], "c0");
+        }
+        // Asking for more than the run holds while more exist must walk.
+        assert_eq!(
+            slice_snapshot(&snapshot, 20, None).unwrap_err(),
+            SliceMiss::Short { available: 10 }
+        );
+    }
+
+    /// "Load more" is served by offset: the cursor names the last commit the
+    /// caller saw, and the next page starts after it.
+    #[test]
+    fn snapshot_serves_load_more_by_offset() {
+        let snapshot = snapshot_of(10, true);
+
+        let first = slice_snapshot(&snapshot, 4, None).expect("first page");
+        assert_eq!(ids(&first), vec!["c0", "c1", "c2", "c3"]);
+
+        let cursor = first.next_cursor.expect("has a next page").last_seen.0.to_string();
+        assert_eq!(cursor, "c3");
+
+        let second = slice_snapshot(&snapshot, 4, Some(&cursor)).expect("second page");
+        assert_eq!(ids(&second), vec!["c4", "c5", "c6", "c7"]);
+    }
+
+    /// A cursor that is not inside the run cannot be served — it would silently
+    /// return the wrong commits.
+    #[test]
+    fn snapshot_rejects_cursor_outside_the_run() {
+        let snapshot = snapshot_of(10, false);
+        assert_eq!(
+            slice_snapshot(&snapshot, 4, Some("nope")).unwrap_err(),
+            SliceMiss::Outside
+        );
+    }
+
+    /// When the run is the whole history, a request past its end yields a short
+    /// final page rather than a miss.
+    #[test]
+    fn snapshot_returns_short_final_page_when_history_ends() {
+        let snapshot = snapshot_of(10, false);
+        let page = slice_snapshot(&snapshot, 4, Some("c8")).expect("final page");
+        assert_eq!(ids(&page), vec!["c9"]);
+        assert!(page.next_cursor.is_none(), "nothing follows the last commit");
     }
 }
