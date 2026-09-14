@@ -215,35 +215,18 @@ pub(super) fn panel(
                         let Some(commit_id) = commit_ids.get(ix).cloned() else {
                             return;
                         };
-                        if is_dir {
-                            // A folder has no single content to open, so a row
-                            // shows the commit instead: selected in the history
-                            // list with its changes *under* the folder in the
-                            // diff view — the same thing the Enter key does.
-                            this.store.dispatch(Msg::SelectCommit {
-                                repo_id,
-                                commit_id: commit_id.clone(),
-                            });
-                            this.store.dispatch(Msg::SelectDiff {
-                                repo_id,
-                                target: DiffTarget::Commit {
-                                    commit_id,
-                                    path: Some(path.clone()),
-                                },
-                            });
-                        } else {
-                            // Open the file's *content* at the chosen commit
-                            // (which also records the view in the back/forward
-                            // history), rather than showing that commit's diff.
-                            // Routed through `OpenFileAtCommit` so the path is
-                            // resolved to the name the file had at that commit,
-                            // following renames.
-                            this.store.dispatch(Msg::OpenFileAtCommit {
-                                repo_id,
-                                commit_id,
-                                path: path.clone(),
-                            });
-                        }
+                        // Locate the commit in the main history/commit list and
+                        // select it — do NOT open its diff. A file-history row is
+                        // a commit on that file's timeline; clicking it should
+                        // jump the commit list to it and highlight it, not swap
+                        // the diff pane to that commit's changes. The previous
+                        // behaviour opened the file's content (`OpenFileAtCommit`)
+                        // or the commit's diff (`SelectDiff`), which is not what
+                        // a history-row click should do.
+                        this.store.dispatch(Msg::SelectCommit {
+                            repo_id,
+                            commit_id,
+                        });
                         this.close_popover(cx);
                     })
                     .into_any_element()
