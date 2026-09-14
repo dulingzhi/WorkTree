@@ -17,6 +17,16 @@ on:
         description: Optional git ref to benchmark (for example refs/pull/123/head)
         required: false
         type: string
+  # T2 (iteration 06): PR-triggered lightweight subset. Doc-only PRs are
+  # skipped via paths so we do not burn runner minutes on markdown changes.
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'crates/**'
+      - 'scripts/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/perf.yml'
 
 permissions:
   contents: read
@@ -27,8 +37,12 @@ concurrency:
 
 jobs:
   performance-budgets:
-    name: Performance budgets (manual PR subset)
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.suite == 'pr-subset'
+    name: Performance budgets (PR subset + manual)
+    # T2 (iteration 06): also fires on pull_request so every code PR gets a
+    # lightweight budget check. Strict gating activates automatically once
+    # PERF_RUNNER (and PERF_REAL_REPO_ROOT) repo variables are configured;
+    # until then it runs in alerting (--skip-missing) mode on shared runners.
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.suite == 'pr-subset')
     runs-on: ubuntu-22.04
     # Shared runners are noisy for performance numbers; treat this as signal/alerting only.
     continue-on-error: true
@@ -125,8 +139,15 @@ jobs:
         cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- 'clipboard/copy_10k_lines_from_diff'
         # Display (Phase 4) — scale factor sweep is the most representative display cost benchmark
         cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- 'display/render_cost_1x_vs_2x_vs_3x_scale'
-    - name: Emit budget report (alerting mode, skip missing)
-      run: cargo run -p worktree-ui-gpui --bin perf_budget_report -- --criterion-root target/criterion --skip-missing
+    - name: Emit budget report (strict on dedicated runner, alerting on shared)
+      run: |
+        if [ -n "${{ vars.PERF_RUNNER }}" ]; then
+          echo "::notice::Running in strict mode on dedicated runner (${{ vars.PERF_RUNNER }})"
+          cargo run -p worktree-ui-gpui --bin perf_budget_report -- --criterion-root target/criterion --strict
+        else
+          echo "::notice::Running in alerting mode (PERF_RUNNER unset) — numbers are noisy"
+          cargo run -p worktree-ui-gpui --bin perf_budget_report -- --criterion-root target/criterion --skip-missing
+        fi
 
   performance-budgets-full:
     name: Performance budgets (strict, full suite)

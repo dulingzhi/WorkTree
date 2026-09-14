@@ -157,3 +157,12 @@ P0 修复 CI 健康度（新增，最高优先）→ Wave 1 数字出仓 → Wav
 - **P0**：修 Clippy / Rustfmt 失败 + 查明 19 天未运行的原因（配额？额度？设置？）+ 恢复绿灯。**不修完，性能数字无 CI 可信度。**
 - T2 口径修正为「新增 `pull_request` 触发器 + 轻量子集 + strict」，而非"拆分现有 job"。
 - T1 / T3（靶子快照、README 实测表）不依赖 CI，可与 P0 并行。
+
+## T2 实施进展（2026-09-15）
+
+已落地 `pull_request` 触发器（迭代 06 T2 口径修正：原 perf.yml 只有 `schedule`+`workflow_dispatch`，无 PR 门控）：
+- `on` 新增 `pull_request: types:[opened,synchronize,reopened]`，带 `paths` 过滤（`crates/**`、`scripts/**`、`Cargo.toml`、`Cargo.lock`、`.github/workflows/perf.yml`），doc-only PR 跳过以省 runner 分钟。
+- `performance-budgets` job 的 `if` 扩展为 `pull_request || (workflow_dispatch && suite==pr-subset)`；job 名改为「PR subset + manual」。
+- 该 job 的预算报告步改为条件式：配了 `PERF_RUNNER` 则 `--strict`（真门控），否则 `--skip-missing`（告警/容忍带）。`continue-on-error: true` 保留（PR 容忍带；严格数字走 nightly 全量专用 runner）。
+- 未推、未开 CI。生效前提：P0 开启 Actions（`gh api -X PUT repos/dulingzhi/WorkTree/actions/permissions -f enabled=true`）+ 配置 `PERF_RUNNER`/`PERF_REAL_REPO_ROOT` 变量后，PR 子集才会跑 `--strict`。
+- 验证：YAML 结构按既有 `performance-budgets-full` 同名条件式对齐（本机无 pyyaml，未做机器解析，人工核对缩进一致）。
