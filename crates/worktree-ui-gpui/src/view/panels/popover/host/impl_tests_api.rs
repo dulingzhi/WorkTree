@@ -2,9 +2,9 @@
 
 #[cfg(test)]
 use super::super::*;
-use super::popover_host::PopoverHost;
 #[cfg(test)]
 use super::kinds::PopoverKind;
+use super::popover_host::PopoverHost;
 
 // @split-module: impl_tests_api
 impl PopoverHost {

@@ -1,10 +1,10 @@
 //! `PopoverHost` construction.
 
 use super::super::*;
-use super::popover_host::PopoverHost;
 use super::kinds::{
     PopoverKind, RemotePopoverKind, RepoPopoverKind, SubmodulePopoverKind, WorktreePopoverKind,
 };
+use super::popover_host::PopoverHost;
 use super::state::{
     BranchPickerState, CloneRepoState, CommitPromptState, CommitSearchPickerState,
     ContextMenuState, CreateBranchState, CreateTagState, FileHistoryState, GitignoreState,

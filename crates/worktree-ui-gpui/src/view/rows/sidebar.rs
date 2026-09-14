@@ -430,8 +430,7 @@ impl SidebarPaneView {
         // header's label. It has to live inside the header: `uniform_list` lays
         // every row out at the height it measures for row zero, so a spacer
         // row's own height never applies — it just claims a full slot.
-        let section_gap =
-            crate::view::components::sidebar_section_gap(density, ui_scale_percent);
+        let section_gap = crate::view::components::sidebar_section_gap(density, ui_scale_percent);
         // Padding above a section header's label: the section gap for every
         // mid-list header, none for row zero so the first section keeps its
         // flush top against the list's inset.
@@ -4499,8 +4498,14 @@ mod tests {
         let (compact_header_h, compact_gap) = cx.update(|_window, app| {
             let scale = ui_scale::current(app).percent;
             (
-                crate::view::components::section_header_height(crate::density::Density::Compact, scale),
-                crate::view::components::sidebar_section_gap(crate::density::Density::Compact, scale),
+                crate::view::components::section_header_height(
+                    crate::density::Density::Compact,
+                    scale,
+                ),
+                crate::view::components::sidebar_section_gap(
+                    crate::density::Density::Compact,
+                    scale,
+                ),
             )
         });
         let last_pr_row = cx

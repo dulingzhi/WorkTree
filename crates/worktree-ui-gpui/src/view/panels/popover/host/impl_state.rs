@@ -2,8 +2,8 @@
 //! the toast hook.
 
 use super::super::*;
-use super::popover_host::PopoverHost;
 use super::kinds::PopoverKind;
+use super::popover_host::PopoverHost;
 
 // @split-module: impl_state
 impl PopoverHost {

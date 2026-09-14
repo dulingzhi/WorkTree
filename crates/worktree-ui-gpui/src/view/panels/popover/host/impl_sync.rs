@@ -1,8 +1,8 @@
 //! `PopoverHost` sync: pushing settings and modes out to the panes.
 
 use super::super::*;
-use super::popover_host::PopoverHost;
 use super::kinds::PopoverKind;
+use super::popover_host::PopoverHost;
 
 // @split-module: impl_sync
 impl PopoverHost {

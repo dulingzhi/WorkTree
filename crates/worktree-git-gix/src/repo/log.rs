@@ -2533,7 +2533,11 @@ mod tests {
                 .expect("warm history page");
             let hit_ms = started.elapsed().as_secs_f64() * 1000.0;
 
-            let speedup = if hit_ms > 0.0 { walk_ms / hit_ms } else { walk_ms };
+            let speedup = if hit_ms > 0.0 {
+                walk_ms / hit_ms
+            } else {
+                walk_ms
+            };
             eprintln!(
                 "PROBE {label}: commits={} walk={walk_ms:.1}ms disk={hit_ms:.1}ms speedup={speedup:.1}x",
                 walked.commits.len()
@@ -2553,7 +2557,14 @@ mod tests {
             let cursor = rehydrated.next_cursor.clone();
             let started = std::time::Instant::now();
             let second = more
-                .log_history_mode_page_inner(mode_for(idx), None, limit, cursor.as_ref(), None, None)
+                .log_history_mode_page_inner(
+                    mode_for(idx),
+                    None,
+                    limit,
+                    cursor.as_ref(),
+                    None,
+                    None,
+                )
                 .expect("second page");
             let more_ms = started.elapsed().as_secs_f64() * 1000.0;
             eprintln!(
@@ -2564,7 +2575,10 @@ mod tests {
 
         eprintln!("PROBE stats {}", hc::CACHE_STATS.summary());
         assert!(
-            hc::CACHE_STATS.hits.load(std::sync::atomic::Ordering::Relaxed) >= 2,
+            hc::CACHE_STATS
+                .hits
+                .load(std::sync::atomic::Ordering::Relaxed)
+                >= 2,
             "each second open should have been served from disk"
         );
     }

@@ -899,7 +899,10 @@ mod tests {
         };
 
         assert_eq!(last_value("commit.gpgsign"), Some("true".to_string()));
-        assert_eq!(last_value("user.signingkey"), Some("ABC1234DEF".to_string()));
+        assert_eq!(
+            last_value("user.signingkey"),
+            Some("ABC1234DEF".to_string())
+        );
         assert_eq!(
             last_value("gpg.program"),
             Some("C:/tools/gpg.exe".to_string())

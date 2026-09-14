@@ -26,19 +26,17 @@ use rustc_hash::FxHasher;
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use gix::bstr::ByteSlice as _;
 use gix::Repository;
+use gix::bstr::ByteSlice as _;
 use worktree_core::applog::{self, Level};
-use worktree_core::domain::{
-    Commit, CommitId, CommitParentIds, HistoryMode, LogCursor, LogPage,
-};
+use worktree_core::domain::{Commit, CommitId, CommitParentIds, HistoryMode, LogCursor, LogPage};
 
-use crate::util::unix_seconds_to_system_time_or_epoch;
 use super::history::gix_head_id_or_none;
+use crate::util::unix_seconds_to_system_time_or_epoch;
 
 const SCHEMA_VERSION: u32 = 2;
 /// How many commits one snapshot holds — the fetch window for a cold first page.
@@ -601,7 +599,11 @@ fn prune_old_generations(repo_path: &Path, _fingerprint: u64) {
                 .and_then(|n| n.to_str())
                 .is_some_and(|n| n.starts_with(&prefix) && n.ends_with(".json"))
         })
-        .filter_map(|p| std::fs::metadata(&p).ok().map(|m| (m.modified().unwrap_or(UNIX_EPOCH), p)))
+        .filter_map(|p| {
+            std::fs::metadata(&p)
+                .ok()
+                .map(|m| (m.modified().unwrap_or(UNIX_EPOCH), p))
+        })
         .collect();
     if paths.len() <= MAX_GENERATIONS_PER_REPO {
         return;
@@ -648,9 +650,7 @@ mod tests {
         LogPage {
             commits: vec![
                 Commit {
-                    id: CommitId(Arc::from(
-                        "1111111111111111111111111111111111111111",
-                    )),
+                    id: CommitId(Arc::from("1111111111111111111111111111111111111111")),
                     parent_ids: CommitParentIds::from(vec![CommitId(Arc::from(
                         "2222222222222222222222222222222222222222",
                     ))]),
@@ -660,9 +660,7 @@ mod tests {
                     signed: false,
                 },
                 Commit {
-                    id: CommitId(Arc::from(
-                        "3333333333333333333333333333333333333333",
-                    )),
+                    id: CommitId(Arc::from("3333333333333333333333333333333333333333")),
                     parent_ids: CommitParentIds::from(vec![]),
                     summary: Arc::from("second"),
                     author: Arc::from("Bob"),
@@ -671,9 +669,7 @@ mod tests {
                 },
             ],
             next_cursor: Some(LogCursor {
-                last_seen: CommitId(Arc::from(
-                    "3333333333333333333333333333333333333333",
-                )),
+                last_seen: CommitId(Arc::from("3333333333333333333333333333333333333333")),
                 resume_from: Some(CommitId(Arc::from(
                     "2222222222222222222222222222222222222222",
                 ))),
@@ -775,7 +771,12 @@ mod tests {
         let first = slice_snapshot(&snapshot, 4, None).expect("first page");
         assert_eq!(ids(&first), vec!["c0", "c1", "c2", "c3"]);
 
-        let cursor = first.next_cursor.expect("has a next page").last_seen.0.to_string();
+        let cursor = first
+            .next_cursor
+            .expect("has a next page")
+            .last_seen
+            .0
+            .to_string();
         assert_eq!(cursor, "c3");
 
         let second = slice_snapshot(&snapshot, 4, Some(&cursor)).expect("second page");
@@ -800,6 +801,9 @@ mod tests {
         let snapshot = snapshot_of(10, false);
         let page = slice_snapshot(&snapshot, 4, Some("c8")).expect("final page");
         assert_eq!(ids(&page), vec!["c9"]);
-        assert!(page.next_cursor.is_none(), "nothing follows the last commit");
+        assert!(
+            page.next_cursor.is_none(),
+            "nothing follows the last commit"
+        );
     }
 }

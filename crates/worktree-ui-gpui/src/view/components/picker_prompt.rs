@@ -1954,14 +1954,15 @@ mod tests {
         // A commit row shows only a 7-character short sha; the full hash
         // rides along as hidden match text so a pasted longer prefix still
         // finds the row.
-        let item = PickerPromptItem::from_parts([PickerPromptItemPart::new(
-            "fix: the widget",
-        )
-        .profile(TextTruncationProfile::End)])
+        let item = PickerPromptItem::from_parts([
+            PickerPromptItemPart::new("fix: the widget").profile(TextTruncationProfile::End)
+        ])
         .secondary_parts([
             PickerPromptItemPart::new("Test User"),
             PickerPromptItemPart::separator("  •  "),
-            PickerPromptItemPart::new("abc1234").flexible(false).tooltip(false),
+            PickerPromptItemPart::new("abc1234")
+                .flexible(false)
+                .tooltip(false),
         ])
         .hidden_search_text("abc1234def567890abcdef1234567890abcdef12");
 
@@ -1977,7 +1978,11 @@ mod tests {
         // The full hash matches too — the hit owns no part, so no visible
         // range highlights, and the hidden text stays out of the sort key.
         let full = match_items(std::slice::from_ref(&item), &[0], "abc1234def56789");
-        assert_eq!(full.len(), 1, "a pasted prefix past the short sha finds the row");
+        assert_eq!(
+            full.len(),
+            1,
+            "a pasted prefix past the short sha finds the row"
+        );
         let full_range = full[0].range.clone().expect("hidden hit records its range");
         assert!(
             item.parts()

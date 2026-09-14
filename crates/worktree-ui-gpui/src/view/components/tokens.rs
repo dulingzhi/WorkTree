@@ -160,13 +160,22 @@ mod tests {
     #[test]
     fn comfortable_tiers_are_roomier_than_compact() {
         for (comfortable, compact) in [
-            (history_row_height_px(Density::Comfortable), history_row_height_px(Density::Compact)),
-            (list_row_height_px(Density::Comfortable), list_row_height_px(Density::Compact)),
+            (
+                history_row_height_px(Density::Comfortable),
+                history_row_height_px(Density::Compact),
+            ),
+            (
+                list_row_height_px(Density::Comfortable),
+                list_row_height_px(Density::Compact),
+            ),
             (
                 section_header_height_px(Density::Comfortable),
                 section_header_height_px(Density::Compact),
             ),
-            (file_row_height_px(Density::Comfortable), file_row_height_px(Density::Compact)),
+            (
+                file_row_height_px(Density::Comfortable),
+                file_row_height_px(Density::Compact),
+            ),
             (
                 sidebar_top_inset_px(Density::Comfortable),
                 sidebar_top_inset_px(Density::Compact),
