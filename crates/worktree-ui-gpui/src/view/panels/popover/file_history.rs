@@ -223,10 +223,8 @@ pub(super) fn panel(
                         // behaviour opened the file's content (`OpenFileAtCommit`)
                         // or the commit's diff (`SelectDiff`), which is not what
                         // a history-row click should do.
-                        this.store.dispatch(Msg::SelectCommit {
-                            repo_id,
-                            commit_id,
-                        });
+                        this.store
+                            .dispatch(Msg::SelectCommit { repo_id, commit_id });
                         this.close_popover(cx);
                     })
                     .into_any_element()

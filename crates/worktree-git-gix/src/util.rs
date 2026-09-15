@@ -609,8 +609,7 @@ pub(crate) fn run_command_with_timeout(
         match run_command_with_timeout_once(&mut cmd, label, timeout, cancellation) {
             Ok(output) => return Ok(output),
             Err(error)
-                if attempt + 1 < GIT_TRANSIENT_RETRY_ATTEMPTS
-                    && error_is_transient(&error) =>
+                if attempt + 1 < GIT_TRANSIENT_RETRY_ATTEMPTS && error_is_transient(&error) =>
             {
                 if cancellation.is_some_and(CancellationToken::is_cancelled) {
                     return Err(error);
@@ -711,17 +710,11 @@ pub(crate) fn run_git_with_stdin_capture(
     // A `Command` is a reusable builder, so re-spawning `cmd` re-runs git.
     let mut last_error = None;
     for attempt in 0..GIT_TRANSIENT_RETRY_ATTEMPTS {
-        match run_git_with_stdin_capture_once(
-            &mut cmd,
-            input.clone(),
-            label,
-            timeout,
-            cancellation,
-        ) {
+        match run_git_with_stdin_capture_once(&mut cmd, input.clone(), label, timeout, cancellation)
+        {
             Ok(bytes) => return Ok(bytes),
             Err(error)
-                if attempt + 1 < GIT_TRANSIENT_RETRY_ATTEMPTS
-                    && error_is_transient(&error) =>
+                if attempt + 1 < GIT_TRANSIENT_RETRY_ATTEMPTS && error_is_transient(&error) =>
             {
                 if cancellation.is_some_and(CancellationToken::is_cancelled) {
                     return Err(error);

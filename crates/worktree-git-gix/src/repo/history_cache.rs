@@ -424,8 +424,7 @@ fn retry_on_transient_fs(op: impl Fn() -> std::io::Result<()>) -> bool {
         match op() {
             Ok(()) => return true,
             Err(err)
-                if attempt + 1 < ATTEMPTS
-                    && err.kind() == std::io::ErrorKind::PermissionDenied =>
+                if attempt + 1 < ATTEMPTS && err.kind() == std::io::ErrorKind::PermissionDenied =>
             {
                 let backoff_ms = 25u64.saturating_mul(1 << attempt.min(3)).min(300);
                 std::thread::sleep(std::time::Duration::from_millis(backoff_ms));
