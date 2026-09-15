@@ -246,6 +246,7 @@ pub(super) enum BranchSidebarRow {
     },
     StashItem {
         index: usize,
+        id: CommitId,
         message: SharedString,
         tooltip: SharedString,
         created_at: Option<std::time::SystemTime>,
@@ -1399,6 +1400,7 @@ pub(super) fn branch_sidebar_rows(
                     };
                     rows.push(BranchSidebarRow::StashItem {
                         index: stash.index,
+                        id: stash.id.clone(),
                         message,
                         tooltip,
                         created_at: stash.created_at,

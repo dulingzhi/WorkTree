@@ -529,24 +529,35 @@ fn commit_file_changes(
     commit: &gix::Commit<'_>,
     parent_ids: &[gix::ObjectId],
 ) -> Result<Vec<CommitFileChange>> {
-    if parent_ids.len() > 1 {
-        return Ok(Vec::new());
-    }
-
     let commit_tree = commit
         .tree()
         .map_err(|e| Error::new(ErrorKind::Backend(format!("gix commit tree: {e}"))))?;
-    let parent_tree = parent_ids
-        .first()
-        .map(|&id| {
-            repo.find_commit(id)
-                .map_err(|e| Error::new(ErrorKind::Backend(format!("gix parent commit: {e}"))))?
-                .tree()
-                .map_err(|e| Error::new(ErrorKind::Backend(format!("gix parent tree: {e}"))))
-        })
-        .transpose()?;
 
-    tree_diff_file_changes(repo, parent_tree.as_ref(), &commit_tree)
+    // A root commit has no parents, so every path is an addition against the
+    // empty tree.
+    if parent_ids.is_empty() {
+        return tree_diff_file_changes(repo, None, &commit_tree);
+    }
+
+    // A merge commit has more than one parent. Reporting only the diff against
+    // the first parent hides the other side's changes, and the previous
+    // early-return reported nothing at all — so the detail pane showed an empty
+    // file list. Instead report the union of files that differ from *any*
+    // parent, which is the intuitive "what this merge touched" set.
+    let mut changes: Vec<CommitFileChange> = Vec::new();
+    for &parent_id in parent_ids {
+        let parent_tree = repo
+            .find_commit(parent_id)
+            .map_err(|e| Error::new(ErrorKind::Backend(format!("gix parent commit: {e}"))))?
+            .tree()
+            .map_err(|e| Error::new(ErrorKind::Backend(format!("gix parent tree: {e}"))))?;
+        for change in tree_diff_file_changes(repo, Some(&parent_tree), &commit_tree)? {
+            if !changes.iter().any(|seen| seen.path == change.path) {
+                changes.push(change);
+            }
+        }
+    }
+    Ok(changes)
 }
 
 /// List the files that differ between two commits (`from` → `to`), for the

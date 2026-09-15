@@ -869,11 +869,13 @@ impl SidebarPaneView {
                     .into_any_element(),
                 BranchSidebarRow::StashItem {
                     index,
+                    id,
                     message,
                     tooltip,
                     created_at: _,
                 } => {
                     let tooltip = tooltip.clone();
+                    let stash_id = id.clone();
                     let stash_message_for_menu = message.as_ref().to_owned();
                     let context_menu_invoker: SharedString =
                         format!("stash_menu_{}_{}", repo_id.0, index).into();
@@ -913,10 +915,20 @@ impl SidebarPaneView {
                             .flex_1(),
                         )
                         .on_click(cx.listener(move |this, e: &ClickEvent, _w, cx| {
-                            if !e.standard_click() || e.click_count() < 2 {
+                            if !e.standard_click() {
                                 return;
                             }
-                            this.store.dispatch(Msg::ApplyStash { repo_id, index });
+                            if e.click_count() >= 2 {
+                                this.store.dispatch(Msg::ApplyStash { repo_id, index });
+                            } else {
+                                // A single click reveals the stash's commit detail
+                                // (a stash is just a commit); apply/pop/branch/drop
+                                // remain in the right-click menu.
+                                this.store.dispatch(Msg::SelectCommit {
+                                    repo_id,
+                                    commit_id: stash_id.clone(),
+                                });
+                            }
                             cx.notify();
                         }))
                         .on_mouse_down(
