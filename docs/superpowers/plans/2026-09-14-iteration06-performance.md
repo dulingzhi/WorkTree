@@ -166,3 +166,20 @@ P0 修复 CI 健康度（新增，最高优先）→ Wave 1 数字出仓 → Wav
 - 该 job 的预算报告步改为条件式：配了 `PERF_RUNNER` 则 `--strict`（真门控），否则 `--skip-missing`（告警/容忍带）。`continue-on-error: true` 保留（PR 容忍带；严格数字走 nightly 全量专用 runner）。
 - 未推、未开 CI。生效前提：P0 开启 Actions（`gh api -X PUT repos/dulingzhi/WorkTree/actions/permissions -f enabled=true`）+ 配置 `PERF_RUNNER`/`PERF_REAL_REPO_ROOT` 变量后，PR 子集才会跑 `--strict`。
 - 验证：YAML 结构按既有 `performance-budgets-full` 同名条件式对齐（本机无 pyyaml，未做机器解析，人工核对缩进一致）。
+
+## T1 实施进展（2026-09-15）
+
+靶子快照已落地并复现：
+- 固定靶子 = `rust-lang/rust` @ `main`，钉死 commit `a8a1e6fd9df2e094d6f09c0d57991508680acc1c`，**340,056 commits**、163 tags、磁盘 **1.4 GB**（之前 `--ref master` 失败，rust 默认分支已改 `main`）。
+- `scripts/generate-perf-target-manifest.sh`（v1，仓库无关、可复现）：`git clone --no-single-branch` 到 `tmp/perf-real-repo/<name>/source.git`，量 ref/commit 数 + `count-objects` 体积，写出 4 个场景 `metadata.json`（`source:"../source.git"` 相对解析，故快照可整体 relocate）；同时提交版本化 `benches/performance/real_repo_target.json`。
+- `tmp/perf-real-repo/` 已 git-ignore，只提交小的 manifest，多 GB 克隆留本地。
+- 修复（已进脚本）：ref 解析容错（`origin/<ref>` / `refs/tags/<ref>` 回退）；`branch_count` glob 改 `refs/remotes/origin/*`；**冲突场景需要 `conflict_merge_ref` 作为 `source.git` 的本地分支**（否则 bench clone 只带 `refs/heads/*`，worktree 里没有 `origin/stable`，`git merge origin/stable` 报 "not something we can merge"）。脚本现自动 `git branch <ref> origin/<ref>`。
+
+## T3 实施进展（2026-09-15，进行中）
+
+README（中英双版）已新增 `## Performance` / `## 性能` 节 + 4 行场景表，单元格暂填占位 `_benchmark running_` / `_基准运行中_`。
+- 已测得两路（2026-09-15 本地，native Windows 路径 `D:/...` 否则 Rust bench 二进制不识别 Git-Bash 的 `/mnt/d/...` 虚拟路径）：
+  - `monorepo_open_and_history_load`：mean ≈ **10.76 s**（`[10.626 s 10.757 s 10.928 s]`）
+  - `deep_history_open_and_scroll`：mean ≈ **514.4 ms**（`[507.39 ms 514.42 ms 520.98 ms]`）
+- `mid_merge_conflict_list_and_open` 与 `large_file_diff_open` 待补：上一轮因 `merge_ref` 写成 `origin/stable` 导致 harness 解析失败 panic；已修正 `source.git` 本地分支 + `merge_ref` 改裸分支名 `stable`（或 `beta`，以实测冲突为准），重跑 `cargo bench ... real_repo` 取数后回填两表并 commit T3。
+- 注意：本地 Windows 跑 `cargo bench` 须 `WORKTREE_PERF_REAL_REPO_ROOT="$(pwd -W)/tmp/perf-real-repo/rust"`（native 路径）。

@@ -136,6 +136,66 @@ if ! g -C "${source_repo}" rev-parse --verify --quiet "${ref}" >/dev/null 2>&1; 
     g -C "${source_repo}" fetch --quiet --tags origin "${ref}"
 fi
 
+# The benchmark harness clones source.git into a throwaway worktree, and only
+# refs/heads/* propagate to that clone as origin/<ref>. So the conflict merge
+# ref must exist as a LOCAL branch here; otherwise the worktree clone lacks
+# origin/<ref> and `git merge origin/<ref>` fails with "not something we can
+# merge". RealRepoFixture::resolve_cloned_ref turns the bare branch name into
+# origin/<ref>, so the manifest records the branch name (e.g. "stable"), not the
+# fully-qualified origin/stable.
+if [[ -n "${conflict_merge_ref}" ]]; then
+  if ! g -C "${source_repo}" show-ref --verify --quiet "refs/heads/${conflict_merge_ref}"; then
+    if g -C "${source_repo}" show-ref --verify --quiet "refs/remotes/origin/${conflict_merge_ref}"; then
+      echo "==> Creating local branch ${conflict_merge_ref} -> origin/${conflict_merge_ref}"
+      g -C "${source_repo}" branch "${conflict_merge_ref}" "origin/${conflict_merge_ref}"
+    else
+      echo "conflict-merge-ref '${conflict_merge_ref}' not found as a branch in ${source_repo}" >&2
+      exit 1
+    fi
+  fi
+fi
+
+# Real upstream branches (e.g. rust stable/beta) do NOT conflict on Cargo.lock
+# when merged into main (one side is frozen at the cut point), so the harness's
+# mid-merge conflict scenario would find no conflict and panic. We synthesize a
+# fixture branch `perf-conflict-cargo` from merge-base(pinned, origin/<ref>):
+# it rewrites Cargo.lock (bumps every version) so BOTH sides diverge from the
+# base -> a guaranteed real content conflict, while the branch touches only
+# Cargo.lock so the harness's working-tree merge is a fast single-file write.
+synthesize_conflict_fixture() {
+  local base_ref="$1"
+  local base_commit
+  base_commit="$(g -C "${source_repo}" merge-base "${commit_sha}" "origin/${base_ref}" 2>/dev/null)"
+  if [[ -z "${base_commit}" ]]; then
+    echo "could not compute merge-base(pinned, origin/${base_ref}) for conflict fixture" >&2
+    exit 1
+  fi
+  local cl_blob
+  cl_blob="$(g -C "${source_repo}" ls-tree "${base_commit}" -- Cargo.lock | awk '{print $3}')"
+  if [[ -z "${cl_blob}" ]]; then
+    echo "Cargo.lock not found at conflict fixture base ${base_commit}" >&2
+    exit 1
+  fi
+  local cl_base="${work_dir}/_cl_base"
+  local cl_perf="${work_dir}/_cl_perf"
+  local pc_index="${work_dir}/_pc_index"
+  g -C "${source_repo}" cat-file -p "${cl_blob}" > "${cl_base}"
+  sed 's/version = "\([0-9][^"]*\)"/version = "perf-\1/g' "${cl_base}" > "${cl_perf}"
+  printf '\n# perf-conflict-fixture-marker\n' >> "${cl_perf}"
+  local new_blob
+  new_blob="$(g -C "${source_repo}" hash-object -w --path Cargo.lock "${cl_perf}")"
+  rm -f "${pc_index}"
+  GIT_INDEX_FILE="${pc_index}" g -C "${source_repo}" read-tree "${base_commit}"
+  GIT_INDEX_FILE="${pc_index}" g -C "${source_repo}" update-index --cacheinfo 100644 "${new_blob}" Cargo.lock
+  local new_tree
+  new_tree="$(GIT_INDEX_FILE="${pc_index}" g -C "${source_repo}" write-tree)"
+  local new_commit
+  new_commit="$(g -C "${source_repo}" commit-tree "${new_tree}" -p "${base_commit}" -m "perf fixture: Cargo.lock version bump conflict")"
+  g -C "${source_repo}" branch -f perf-conflict-cargo "${new_commit}"
+  rm -f "${cl_base}" "${cl_perf}" "${pc_index}"
+  echo "==> Synthesized conflict fixture branch perf-conflict-cargo ($(g -C "${source_repo}" rev-parse --short "${new_commit}"))"
+}
+
 # Resolve the commit sha. A cloned repo only has a local branch for the default
 # branch; other branches live under origin/<ref> and tags under refs/tags/<ref>.
 commit_sha="$(g -C "${source_repo}" rev-parse --verify "${ref}" 2>/dev/null \
@@ -202,10 +262,11 @@ JSON
 conflict_enabled="false"
 if [[ -n "${conflict_merge_ref}" && -n "${conflict_path}" ]]; then
   conflict_enabled="true"
+  synthesize_conflict_fixture "${conflict_merge_ref}"
   write_case_metadata "${snapshot_root}/mid_merge_conflict_list_and_open" "$(cat <<JSON
 {
   "source": "../source.git",
-  "merge_ref": "${conflict_merge_ref}",
+  "merge_ref": "perf-conflict-cargo",
   "conflict_path": "${conflict_path}"
 }
 JSON
@@ -259,7 +320,7 @@ cat > "${manifest_out}" <<JSON
   "scenarios": [
     { "case": "monorepo_open_and_history_load", "enabled": true,  "checkout_ref": "${commit_sha}", "history_limit": 10000 },
     { "case": "deep_history_open_and_scroll",    "enabled": true,  "checkout_ref": "${commit_sha}", "history_limit": 50000 },
-    { "case": "mid_merge_conflict_list_and_open", "enabled": ${conflict_enabled}, "merge_ref": "${conflict_merge_ref}", "conflict_path": "${conflict_path}" },
+    { "case": "mid_merge_conflict_list_and_open", "enabled": ${conflict_enabled}, "merge_ref": "perf-conflict-cargo", "conflict_path": "${conflict_path}" },
     { "case": "large_file_diff_open",             "enabled": ${diff_enabled},     "diff_path": "${diff_path}", "diff_commitish": "${diff_commitish}" }
   ],
   "regenerate_command": "${regenerate_command}"

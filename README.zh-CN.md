@@ -84,6 +84,21 @@ WorkTree 本地优先：仓库、凭证与 AI 配置都保存在你自己的机�
 - 全链路原生性能：Rust + GPUI 渲染 + gix Git 操作 + mimalloc 分配器
 - 在真实超大仓库上开发与基准测试
 
+## 性能
+
+WorkTree 的性能以**固定的、版本钉死的真实仓库靶子**为基准，因此下表数字可复现、可在各版本间横向对比——而非会漂移的合成档位。
+
+**固定靶子（迭代 06）：** [rust-lang/rust](https://github.com/rust-lang/rust) @ `main`，钉死在提交 `a8a1e6fd9df2e094d6f09c0d57991508680acc1c`——**340,056 个提交**、163 个标签、磁盘占用 **1.4 GB**。快照与指标由 `scripts/generate-perf-target-manifest.sh` 生成，记录在 `benches/performance/real_repo_target.json`；发版后用该脚本即可刷新靶子。
+
+| 场景 | 测量内容 | 实测（均值） |
+| --- | --- | --- |
+| `monorepo_open_and_history_load` | 打开仓库 + 加载前 1 万页历史 | 8.87 s |
+| `deep_history_open_and_scroll` | 打开 + 滚动 5 万条历史 | 532 ms |
+| `mid_merge_conflict_list_and_open` | 列出并打开一次中型合并的冲突 | 15.30 s |
+| `large_file_diff_open` | 打开一个大文件 diff（`Cargo.lock`） | 587 ms |
+
+数字来自 `real_repo` Criterion 基准（`cargo bench -p worktree-ui-gpui --features benchmarks --bench performance real_repo`），在钉死的快照上运行。方法学、预算框架与四腿验证基线见 `docs/superpowers/plans/2026-09-14-iteration06-performance.md`。
+
 ## 下载
 
 从 [GitHub Releases](https://github.com/dulingzhi/WorkTree/releases) 获取最新的预编译二进制与安装包。
