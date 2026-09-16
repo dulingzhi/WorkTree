@@ -10,6 +10,7 @@ use std::time::SystemTime;
 use worktree_core::conflict_session::{
     ConflictPayload, ConflictSession, ConflictStageParts, canonicalize_stage_parts,
 };
+use worktree_core::diff_tree::DirectoryDiffResult;
 use worktree_core::domain::*;
 use worktree_core::process::GitRuntimeState;
 use worktree_core::services::{
@@ -1010,6 +1011,13 @@ pub struct DiffState {
     /// the path alongside the bytes so the landing guard and the renderer
     /// key off one value.
     pub lfs_image_preview: Loadable<Option<Shared<FileDiffImage>>>,
+    /// Directory-scoped change tree for the selected `directory_diff_target`.
+    /// Built from the same commit-range file list as `diff` but aggregated into
+    /// a nested directory tree (see `worktree_core::diff_tree`). UI layers
+    /// (T-C/T-D/T-E) render this; `None` target means no directory comparison
+    /// is in flight.
+    pub directory_diff_target: Option<DiffTarget>,
+    pub directory_diff: Loadable<Shared<DirectoryDiffResult>>,
 }
 
 impl Default for DiffState {
@@ -1035,6 +1043,8 @@ impl Default for DiffState {
             diff_file_image: Loadable::NotLoaded,
             diff_file_lfs: Loadable::NotLoaded,
             lfs_image_preview: Loadable::NotLoaded,
+            directory_diff_target: None,
+            directory_diff: Loadable::NotLoaded,
         }
     }
 }

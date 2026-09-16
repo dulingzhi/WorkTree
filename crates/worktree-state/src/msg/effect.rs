@@ -232,6 +232,10 @@ pub enum Effect {
         repo_id: RepoId,
         target: DiffTarget,
     },
+    LoadDirectoryDiff {
+        repo_id: RepoId,
+        target: DiffTarget,
+    },
     LoadDiffFile {
         repo_id: RepoId,
         target: DiffTarget,

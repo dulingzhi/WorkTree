@@ -91,6 +91,9 @@ palette:
     remove-worktree: Remove Worktree
     blame: Blame / Annotate
     search-commits: Search Commits
+    compare-directory: Compare Directory…
+    compare-directory-started: Comparing directory changes…
+    compare-directory-needs-range: Compare Directory works from a commit-range compare view
     back: Navigate Back
     forward: Navigate Forward
 

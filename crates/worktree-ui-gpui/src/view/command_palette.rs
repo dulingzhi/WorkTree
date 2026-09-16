@@ -602,6 +602,14 @@ pub(crate) const COMMANDS: &[CommandEntry] = &[
         requires_repo: true,
     },
     CommandEntry {
+        id: "compare-directory",
+        label: "palette.cmd.compare-directory",
+        shortcut: Shortcut::None,
+        category: "palette.cat.history",
+        keywords: "directory folder compare diff changes files subtree scope",
+        requires_repo: true,
+    },
+    CommandEntry {
         id: "show-reflog",
         label: "Show Reflog",
         shortcut: Shortcut::None,
@@ -1380,6 +1388,7 @@ mod tests {
             // History
             "blame",
             "search-commits",
+            "compare-directory",
             "show-reflog",
             // Window and app
             "new-window",

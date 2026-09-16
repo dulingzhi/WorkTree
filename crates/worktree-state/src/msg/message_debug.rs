@@ -426,6 +426,16 @@ impl std::fmt::Debug for InternalMsg {
                 .field("target", target)
                 .field("result", result)
                 .finish(),
+            InternalMsg::DirectoryDiffLoaded {
+                repo_id,
+                target,
+                result,
+            } => f
+                .debug_struct("DirectoryDiffLoaded")
+                .field("repo_id", repo_id)
+                .field("target", target)
+                .field("ok", &result.is_ok())
+                .finish(),
             InternalMsg::DiffFileLoaded {
                 repo_id,
                 target,

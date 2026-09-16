@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::time::Instant;
 use worktree_core::conflict_session::{ConflictPayload, ConflictSession, ConflictStageParts};
+use worktree_core::diff_tree::DirectoryDiffResult;
 use worktree_core::domain::{
     DiffArea, DiffPreviewTextSide, DiffTarget, FileDiffImage, LogCursor, LogScope, RepoStatus,
     Worktree, WorktreeDirtySummary, count_file_statuses,
@@ -2074,6 +2075,43 @@ pub(super) fn schedule_load_diff(
         send_or_log(
             &msg_tx,
             Msg::Internal(crate::msg::InternalMsg::DiffLoaded {
+                repo_id,
+                target,
+                result,
+            }),
+        );
+    });
+}
+
+/// Schedule a directory-scoped change-tree load for a commit range. Reuses the
+/// existing `diff_range_files` primitive (no new backend trait method) and
+/// aggregates the flat file-change list into a nested tree via core's
+/// `DirectoryDiffResult::new`. `target` must be a `CommitRange`; its `path`
+/// field is treated as the directory root (empty = repo root).
+pub(super) fn schedule_load_directory_diff(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    target: DiffTarget,
+) {
+    spawn_with_repo(executor, repos, repo_id, msg_tx, move |repo, msg_tx| {
+        let result: std::result::Result<Arc<DirectoryDiffResult>, String> = match &target {
+            DiffTarget::CommitRange {
+                from_commit_id,
+                to_commit_id,
+                path,
+            } => {
+                let root = path.clone().unwrap_or_else(|| std::path::PathBuf::from(""));
+                repo.diff_range_files(from_commit_id, to_commit_id.as_ref())
+                    .map_err(|e| e.to_string())
+                    .map(|changes| Arc::new(DirectoryDiffResult::new(&changes, &root)))
+            }
+            _ => Err("directory diff requires a CommitRange target".to_string()),
+        };
+        send_or_log(
+            &msg_tx,
+            Msg::Internal(crate::msg::InternalMsg::DirectoryDiffLoaded {
                 repo_id,
                 target,
                 result,

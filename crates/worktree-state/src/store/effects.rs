@@ -595,6 +595,13 @@ fn send_unavailable_git_effect_result(
                 result: Err(git_unavailable_error(runtime)),
             }))
         }
+        Effect::LoadDirectoryDiff { repo_id, target } => send(Msg::Internal(
+            crate::msg::InternalMsg::DirectoryDiffLoaded {
+                repo_id,
+                target,
+                result: Err(git_unavailable_error(runtime).to_string()),
+            },
+        )),
         Effect::LoadDiffFile { repo_id, target } => {
             send(Msg::Internal(crate::msg::InternalMsg::DiffFileLoaded {
                 repo_id,
@@ -2221,6 +2228,13 @@ pub(super) fn schedule_effect(
                 repo_load_context(thread_state, repo_task_tokens, msg_tx, repo_id)
             {
                 repo_load::schedule_load_diff(executor, repos, msg_tx, repo_id, target);
+            }
+        }
+        Effect::LoadDirectoryDiff { repo_id, target } => {
+            if let Some((msg_tx, _)) =
+                repo_load_context(thread_state, repo_task_tokens, msg_tx, repo_id)
+            {
+                repo_load::schedule_load_directory_diff(executor, repos, msg_tx, repo_id, target);
             }
         }
         Effect::LoadDiffFile { repo_id, target } => {

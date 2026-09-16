@@ -1452,6 +1452,46 @@ impl WorkTreeView {
             "show-reflog" => {
                 self.open_reflog_panel_for_active_repo(cx);
             }
+            "compare-directory" => match active_diff_target(&self.state) {
+                Some((
+                    repo_id,
+                    DiffTarget::CommitRange {
+                        from_commit_id,
+                        to_commit_id,
+                        path,
+                    },
+                )) => {
+                    self.store.dispatch(Msg::RequestDirectoryDiff {
+                        repo_id,
+                        target: DiffTarget::CommitRange {
+                            from_commit_id,
+                            to_commit_id,
+                            path,
+                        },
+                    });
+                    self.push_toast(
+                        components::ToastKind::Success,
+                        crate::i18n::tr_str("palette.cmd.compare-directory-started").to_string(),
+                        cx,
+                    );
+                }
+                Some(_) => {
+                    self.push_toast(
+                        components::ToastKind::Error,
+                        crate::i18n::tr_str("palette.cmd.compare-directory-needs-range")
+                            .to_string(),
+                        cx,
+                    );
+                }
+                None => {
+                    self.push_toast(
+                        components::ToastKind::Error,
+                        crate::i18n::tr_str("palette.cmd.compare-directory-needs-range")
+                            .to_string(),
+                        cx,
+                    );
+                }
+            },
             "add-remote" => {
                 if let Some(repo_id) = self.active_repo_id()
                     && let Some(window) = window

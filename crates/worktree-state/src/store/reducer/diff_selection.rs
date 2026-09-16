@@ -14,6 +14,7 @@ use crate::model::{
 use crate::msg::{Effect, Msg};
 use smallvec::SmallVec;
 use std::sync::Arc;
+use worktree_core::diff_tree::DirectoryDiffResult;
 use worktree_core::domain::{
     Diff, DiffArea, DiffPreviewTextFile, DiffPreviewTextSide, DiffTarget, FileDiffImage,
     FileDiffText, LfsPointerChange, SubmoduleDiffRange, SubmoduleDiffSummary,
@@ -870,6 +871,36 @@ pub(super) fn diff_loaded(
     Vec::new()
 }
 
+pub(super) fn directory_diff_loaded(
+    state: &mut AppState,
+    repo_id: RepoId,
+    target: DiffTarget,
+    result: std::result::Result<Arc<DirectoryDiffResult>, String>,
+) -> Vec<Effect> {
+    if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id)
+        && repo_state.diff_state.directory_diff_target.as_ref() == Some(&target)
+    {
+        match result {
+            // A refresh that found no change must not churn the UI: keep the
+            // existing `Arc` so pointer-identity fingerprints stay put and leave
+            // the revs alone. `Loading`/`Error`/`NotLoaded` -> `Ready` always
+            // falls through to the bump below.
+            Ok(v) if matches!(&repo_state.diff_state.directory_diff, Loadable::Ready(cur) if Arc::ptr_eq(cur, &v)) =>
+                {}
+            Ok(v) => {
+                repo_state.diff_state.directory_diff = Loadable::Ready(v);
+                repo_state.bump_diff_state_rev();
+            }
+            Err(e) => {
+                super::util::push_diagnostic(repo_state, DiagnosticKind::Error, e.clone());
+                repo_state.diff_state.directory_diff = Loadable::Error(e);
+                repo_state.bump_diff_state_rev();
+            }
+        }
+    }
+    Vec::new()
+}
+
 pub(super) fn diff_file_loaded(
     state: &mut AppState,
     repo_id: RepoId,
@@ -1328,11 +1359,25 @@ pub(super) fn reduce_diff_selection(msg: Msg, state: &mut AppState) -> ReduceOut
             }
             Vec::new()
         }
+        Msg::RequestDirectoryDiff { repo_id, target } => {
+            if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+                repo_state.diff_state.directory_diff_target = Some(target.clone());
+                repo_state.diff_state.directory_diff = Loadable::Loading;
+                repo_state.bump_diff_state_rev();
+                return ReduceOutcome::Handled(vec![Effect::LoadDirectoryDiff { repo_id, target }]);
+            }
+            Vec::new()
+        }
         Msg::Internal(crate::msg::InternalMsg::DiffLoaded {
             repo_id,
             target,
             result,
         }) => diff_selection::diff_loaded(state, repo_id, target, result),
+        Msg::Internal(crate::msg::InternalMsg::DirectoryDiffLoaded {
+            repo_id,
+            target,
+            result,
+        }) => diff_selection::directory_diff_loaded(state, repo_id, target, result),
         Msg::Internal(crate::msg::InternalMsg::DiffFileLoaded {
             repo_id,
             target,

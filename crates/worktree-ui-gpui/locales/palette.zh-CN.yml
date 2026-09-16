@@ -80,6 +80,9 @@ palette:
     remove-worktree: 移除工作树
     blame: 追溯 / 注释
     search-commits: 搜索提交
+    compare-directory: 对比目录…
+    compare-directory-started: 正在对比目录变更…
+    compare-directory-needs-range: 「对比目录」需在提交区间对比视图中使用
     back: 后退
     forward: 前进
 

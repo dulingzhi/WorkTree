@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use worktree_core::auth::StagedGitAuth;
 use worktree_core::conflict_session::ConflictSession;
+use worktree_core::diff_tree::DirectoryDiffResult;
 use worktree_core::domain::*;
 use worktree_core::error::Error;
 use worktree_core::external_merge_tool::ExternalMergeToolSelection;
@@ -454,6 +455,14 @@ pub enum Msg {
     /// re-targets the working tree while retaining that return destination.
     ExitDiffEditMode {
         repo_id: RepoId,
+    },
+    /// Request a directory-scoped change tree for a commit range, scoped to
+    /// `target`'s `CommitRange.path` (the directory root; empty means repo root).
+    /// Mirrors `LoadDiff` but aggregates file changes into a nested tree instead
+    /// of a flat patch list.
+    RequestDirectoryDiff {
+        repo_id: RepoId,
+        target: DiffTarget,
     },
     /// Open the given file as it was in the parent of `commit_id` (the
     /// revision just before that commit's change). The parent is resolved
@@ -1373,6 +1382,11 @@ pub enum InternalMsg {
         repo_id: RepoId,
         target: DiffTarget,
         result: Result<Diff, Error>,
+    },
+    DirectoryDiffLoaded {
+        repo_id: RepoId,
+        target: DiffTarget,
+        result: Result<Arc<DirectoryDiffResult>, String>,
     },
     DiffFileLoaded {
         repo_id: RepoId,

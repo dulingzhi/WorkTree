@@ -5,6 +5,7 @@ pub mod conflict_output;
 pub mod conflict_session;
 pub mod coverage;
 pub mod diff;
+pub mod diff_tree;
 pub mod domain;
 pub mod encoding;
 pub mod error;
