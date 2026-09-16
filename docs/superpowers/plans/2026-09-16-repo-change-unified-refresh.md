@@ -176,11 +176,20 @@ gpui 的惯用法是 `cx.notify()` + rev 缓存比较，不是事件订阅；引
 | 档 | 任务 | 改动面 | 价值 |
 |----|------|--------|------|
 | **P0** ✅已落地 | 修 commit-list race：`repo_command_finished` 末尾先 `append_cancel_repo_loads_effect_for_repo` 再 `append_refresh_full_effects`（注意提交走 `commit_finished` 本就有取消，缺口在仓库命令路径）；并修 `model.rs:218` 的 `request_log` 丢弃刷新分支（实际在 model.rs 而非 util.rs） | `actions_emit_effects.rs` + `model.rs` | 直接消除 Fetch/Pull/Push 等命令后 commit list 很久才刷；`cargo check` 通过 |
-| **P1** | 引入 `RepoChange` + `dispatch_repo_change()`，把 `repo_command_finished`/`repo_externally_changed` 收敛进来；统一先取消在途 | 新增 `repo_change.rs`；改 `external_and_history.rs`、`actions_emit_effects.rs` | 根除漂移 + race；刷新集合一处维护 |
+| **P1** ✅已落地（命令路径收口） | 引入 `RepoChange` + `dispatch_repo_change()`，把 **`repo_command_finished` 仓库命令路径**收敛进来（外部 `repo_externally_changed` / `repo_action_finished` 路径延后到下一步）；`dispatch_repo_change` 当前为**统一 full refresh**（`append_cancel_repo_loads_effect_for_repo` + `append_refresh_full_effects`），按 `RepoChange` variant 收窄的语义刷新集合（见 2.1）留作下一步 | 新增 `msg/repo_change.rs` + `store/reducer/repo_change.rs`；改 `msg.rs`/`reducer.rs`/`actions_emit_effects.rs` 接线 | 仓库命令路径根除 race + 漂移；`cargo test -p worktree-state` 728 passed |
 | **P2** | 加 `content_rev` + 各 UI 的 `*_cache_rev()`，`history.rs` 等改用派生键 | `model.rs` + 各 pane | UI 侧统一感知、少维护 rev 列表 |
 | **P3** | 评估非活跃仓库外部事件：是否放宽 `repo_monitor` 的 active 门控做"轻量标脏"（不实时全刷，激活时再刷） | `repo_monitor.rs` + 激活刷新 | 多仓场景下其它仓也能感知变化（按需） |
 
 P0/P1 是用户体感问题的直接解；P2/P3 是"统一感知"的长期收口。建议按 P0→P1→P2 推进，P3 单独评估。
+
+### 4.1 P1 落地说明（2026-09-16）
+
+P1 已按"命令路径收口"落地并通过 `cargo test -p worktree-state`（728 passed / 2 failed，两失败均与 P1 无关：① `repo_monitor_active_repo_activation_coalesces_with_in_flight_refresh` 走激活合并路径、P1 未改，属预存问题，建议另立 issue；② `committing_keeps_the_staged_list_refreshing` 为 flaky 计时测试，单独重跑通过）。
+
+- **收口范围**：本次只把 `repo_command_finished`（`actions_emit_effects.rs:1521` 附近）的末尾"内联 cancel + 全量刷新"收口为调用 `dispatch_repo_change`。`repo_externally_changed` 与 `repo_action_finished` 的收敛**延后**到下一步（它们当前仍各自手挑刷新集合，尚未经 `dispatch_repo_change`）。
+- **`dispatch_repo_change` 当前实现 = 统一 full refresh**：先 `append_cancel_repo_loads_effect_for_repo` 再 `append_refresh_full_effects`，`_change` 参数暂未用于收窄刷新集合（与 2.1 的 `match change { … }` 语义收窄不同）。这是有意为之的最小收口：先统一"取消在途 + 全量刷新"以根除 race，再在下一步按 variant 收窄到精准刷新集合，由 `dispatch_repo_change` 单测守护不退化。
+- **P0 顺序回归修复（本次收口时暴露并修掉）**：P0 当时把取消放在 `extra_effects`（命令特例块：worktrees / submodules / diff / submodule_summary 的 `Loading` 标志）构建**之后**，导致 `clear_cancelled_repo_loading` 把命令特例块刚置的 `Loading` 标志**擦掉**，8 个命令相关单测回归。P1 把 `dispatch_repo_change` 调用**前移**到命令特例块之前重新借 `repo_state` 置位，修复后 8 个单测恢复。纪律：**取消必须在命令特例刷新之前**，否则取消会吞掉特例的 `Loading` 标志。
+- **新增文件**：`crates/worktree-state/src/msg/repo_change.rs`（`RepoChange` enum + `from_repo_command_kind`/`from_repo_external_change`/`from_repo_action_kind` 三翻译，全覆盖两枚举所有变体）、`crates/worktree-state/src/store/reducer/repo_change.rs`（`dispatch_repo_change` + 2 单测）。接线：`msg.rs` 加 `mod repo_change;` + `pub use`；`reducer.rs` 加 `mod repo_change;`；`actions_emit_effects.rs` import `RepoChange` 并改写 `repo_command_finished` 末尾。
 
 ---
 
