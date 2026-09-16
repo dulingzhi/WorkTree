@@ -50,6 +50,84 @@ fn select_diff_sets_loading_and_emits_effect() {
     ));
 }
 
+/// Clicking a file inside the directory comparison — a `CommitRange` selection
+/// over the same two commits, only the path differs — must keep the comparison
+/// loaded, or the details-pane tree would vanish the moment a file's diff opens.
+/// Any other selection still leaves the mode.
+#[test]
+fn select_diff_within_the_directory_comparison_keeps_the_tree() {
+    use worktree_core::domain::DiffTarget;
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(2);
+    let mut state = AppState::default();
+    state.repos.push(RepoState::new_opening(
+        RepoId(1),
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    ));
+    state.active_repo = Some(RepoId(1));
+
+    let from = CommitId("1111111111111111111111111111111111111111".into());
+    let to = CommitId("2222222222222222222222222222222222222222".into());
+    let root = DiffTarget::CommitRange {
+        from_commit_id: from.clone(),
+        to_commit_id: Some(to.clone()),
+        path: Some(PathBuf::from("src")),
+    };
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::RequestDirectoryDiff {
+            repo_id: RepoId(1),
+            target: root.clone(),
+        },
+    );
+    assert_eq!(
+        state.repos[0].diff_state.directory_diff_target,
+        Some(root.clone())
+    );
+
+    // A file inside that same comparison (same commits, different path) keeps it.
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::SelectDiff {
+            repo_id: RepoId(1),
+            target: DiffTarget::CommitRange {
+                from_commit_id: from.clone(),
+                to_commit_id: Some(to.clone()),
+                path: Some(PathBuf::from("src/lib.rs")),
+            },
+        },
+    );
+    assert_eq!(
+        state.repos[0].diff_state.directory_diff_target,
+        Some(root.clone()),
+        "a same-range selection keeps the directory comparison on screen"
+    );
+
+    // Any other selection leaves the mode.
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::SelectDiff {
+            repo_id: RepoId(1),
+            target: worktree_core::domain::DiffTarget::WorkingTree {
+                path: PathBuf::from("src/lib.rs"),
+                area: worktree_core::domain::DiffArea::Unstaged,
+            },
+        },
+    );
+    assert_eq!(
+        state.repos[0].diff_state.directory_diff_target, None,
+        "leaving the range drops the comparison"
+    );
+}
+
 #[test]
 fn select_diff_for_image_sets_loading_and_emits_effect() {
     let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();

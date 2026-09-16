@@ -191,3 +191,18 @@ it/hooks` UI；另 rerere、Gitea 为次档。
 目录 diff 特性状态：T-A✓ T-B✓ T-C✓ T-D✓ T-E✓；**T-F 大目录性能档位半段 = 推迟**：其优化需在 git-gix 给 `GitRepositoryDiff` trait 加 pathspec `root/` 前缀裁剪（改动 trait 签名 → 逼改数十 mock，撞 P5 冻结），与 T-B 已定的零新 backend 接口决策相悖；当前 `diff_range_files` 已返回全量路径、聚合正确，大目录靠 T6 虚拟化兜底。
 
 下一步（待用户指定）：堆叠分支 / Git Flow / 原生 hooks（均 P5+ 后，D-G1 决策）；或补 T-D 的目录展开/折叠、T-E 放置位置复核（details vs main pane）。
+
+## T-C / T-D / T-E 收尾（2026-09-17）
+
+核对发现上一节「下一步」已过时：T-D 的**折叠/展开**早已落地（commit `046734b0`：`[+]/[-]` + 点击切换 + `directory_diff_collapsed`）。但 **#19 原意的两种交互都没实现**——落地的是折叠/展开（不是"目录行点击→下钻一层"），文件行是死的；而且 core 的 `filter_by_prefix`（下钻 re-root 的现成帮手）**已实现并有单测，却全仓库无人调用**。T-E 统计条存在但是一行裸文本，缺 #20 要求的"直接子目录数"。
+
+本次补齐 4 项：
+
+- **文件行点击 → 打开该文件 diff**（#19 原意）：`details/mod.rs::render_directory_tree` 文件行改为 dispatch `Msg::SelectDiff { DiffTarget::CommitRange { from, to, path: file } }`（from/to 取自活动 `directory_diff_target`），主面板据此渲染逐文件 unified diff。
+- **对比视图不被打断**：`diff_selection.rs::fill_select_diff_inline` 原先**无条件** `clear_directory_diff_state`，会让树在点文件时消失。新增 `directory_diff_survives_selection(repo_state, next)`——当新选择是**同一对 commit 的 `CommitRange`**（即点的是树里的文件，只有 `path` 变）时**不清理**；其它任何选择（不同 range / 单 commit / 工作区…）照旧退出目录对比模式。state 单测 `select_diff_within_the_directory_comparison_keeps_the_tree`。
+- **目录下钻 + 返回上级**（#19 原意的"下钻"）：`DetailsPaneView` 新增 `directory_diff_root: Option<PathBuf>`；目录行尾部加 `›` 下钻入口（**不动**现有点击=折叠的交互，避免同一元素单/双击手势冲突），顶部出现 `↑ Up` + 当前路径面包屑；显示树 = `filter_by_prefix(&result.root, root)`；下钻根失效（新对比加载后路径不存在）时自动回退到对比根。
+- **统计条补全（T-E）+ 位置结论**：新增纯函数 `directory_diff_stats_line`，按**当前显示目录**输出 `N files changed, +A -D, M subdirectories`（补上 #20 的"直接子目录数"，且随下钻变化）；样式加粗为头部。**位置结论：保留在 details 面板顶部**——目录对比本身就是 details 面板的一种模式（`render_directory_diff` 取代 `commit_details_view`），统计条与树是同一视图的头/体；放主面板会与其"逐文件 diff"职责冲突。UI 单测 `directory_diff_stats_line_reports_direct_subdirectories_and_follows_drill_down`。
+
+**验证**：`cargo check -p worktree-state --tests` + `CARGO_TARGET_DIR=<C盘> cargo check -p worktree-ui-gpui --tests` 通过；`cargo fmt --check` 干净。（`worktree-ui-gpui` 在本机默认 D 盘 target 编不过——tree-sitter C 语法 `C1056`，需 C 盘 target 目录，见项目 MEMORY。）
+
+**仍未做**：大目录虚拟化（T-F 半段，需动 `GitRepositoryDiff` trait 的 pathspec 裁剪，撞 P5 冻结，见上节）。

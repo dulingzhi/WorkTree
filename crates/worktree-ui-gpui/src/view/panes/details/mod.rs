@@ -6,6 +6,7 @@ use super::PaneChromeExt;
 use crate::kit::text_truncation::path_alignment_visible_signature;
 use rustc_hash::FxHasher;
 use std::hash::{Hash, Hasher};
+use worktree_core::domain::DiffTarget;
 use worktree_state::model::{AuthRetryOperation, CommandLogEntry};
 
 #[cfg(test)]
@@ -132,6 +133,11 @@ pub(in super::super) struct DetailsPaneView {
     /// projection of the loaded `DirectoryDiffResult`, so the store never needs
     /// this state and collapsing one costs no reload.
     directory_diff_collapsed: std::collections::HashSet<std::path::PathBuf>,
+    /// The folder the directory-diff tree is currently drilled into, or `None`
+    /// for the comparison root. View-local, like `directory_diff_collapsed`: the
+    /// tree is a pure projection of the loaded `DirectoryDiffResult`, so
+    /// re-rooting it with `filter_by_prefix` costs no reload.
+    directory_diff_root: Option<std::path::PathBuf>,
 
     pub(in super::super) commit_details_delay: Option<CommitDetailsDelayState>,
     pub(in super::super) commit_details_delay_seq: u64,
@@ -511,6 +517,7 @@ impl DetailsPaneView {
             status_multi_selection: FxHashMap::default(),
             status_multi_selection_last_status: FxHashMap::default(),
             directory_diff_collapsed: std::collections::HashSet::default(),
+            directory_diff_root: None,
             commit_details_delay: None,
             commit_details_delay_seq: 0,
             path_display_cache: std::cell::RefCell::new(path_display::PathDisplayCache::default()),
@@ -1634,46 +1641,124 @@ impl Render for DetailsPaneView {
 
 impl DetailsPaneView {
     /// Render the active directory diff (SmartGit-style folder comparison) in
-    /// the details pane: a stats bar plus an expandable/collapsible tree of the
+    /// the details pane: a stats bar — with a breadcrumb once drilled into a
+    /// subdirectory — plus an expandable/collapsible tree of the
     /// `DirectoryDiffResult`.
     fn render_directory_diff(&mut self, cx: &mut gpui::Context<Self>) -> impl IntoElement {
-        let repo = self.active_repo();
-        let body = match repo {
-            Some(repo) => match &repo.diff_state.directory_diff {
-                worktree_state::model::Loadable::Ready(result) => {
-                    let stats = format!(
-                        "{} files changed, +{} -{}",
-                        result.root.file_count, result.root.additions, result.root.deletions
-                    );
+        // Clone the repo-derived bits up front so the tree can mutate view-local
+        // drill/collapse state below without holding a borrow of `self`.
+        let Some((repo_id, range, directory_diff)) = self.active_repo().map(|repo| {
+            // A file row opens that file's diff; the target mirrors the active
+            // comparison so `fill_select_diff_inline` keeps the tree on screen.
+            let range = match repo.diff_state.directory_diff_target.as_ref() {
+                Some(DiffTarget::CommitRange {
+                    from_commit_id,
+                    to_commit_id,
+                    ..
+                }) => Some((from_commit_id.clone(), to_commit_id.clone())),
+                _ => None,
+            };
+            (repo.id, range, repo.diff_state.directory_diff.clone())
+        }) else {
+            return div().size_full().p(px(12.0)).child("No repository");
+        };
+
+        let body = match directory_diff {
+            worktree_state::model::Loadable::Ready(result) => {
+                // Drilling into a folder re-roots the view at it
+                // (`filter_by_prefix` prunes every sibling subtree), so the stats
+                // bar and the rows always describe exactly what is on screen. A
+                // drilled root that no longer resolves (a fresh comparison was
+                // loaded) falls back to the comparison root.
+                let mut drilled_stale = false;
+                let display_root = match self.directory_diff_root.as_ref() {
+                    Some(root) if root != &result.root.path => {
+                        let filtered =
+                            worktree_core::diff_tree::filter_by_prefix(&result.root, root);
+                        if filtered.file_count == 0 && filtered.children.is_empty() {
+                            drilled_stale = true;
+                            result.root.clone()
+                        } else {
+                            filtered
+                        }
+                    }
+                    _ => result.root.clone(),
+                };
+                if drilled_stale {
+                    self.directory_diff_root = None;
+                }
+
+                let header = div().flex().items_center().gap(px(8.0)).child(
                     div()
-                        .child(stats)
-                        .child(self.render_directory_tree(&result.root, 0, cx))
-                }
-                worktree_state::model::Loadable::Loading => div().child("Loading directory diff…"),
-                worktree_state::model::Loadable::Error(err) => {
-                    div().child(format!("Directory diff failed: {err}"))
-                }
-                worktree_state::model::Loadable::NotLoaded => {
-                    div().child("No directory diff loaded")
-                }
-            },
-            None => div().child("No repository"),
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .child(Self::directory_diff_stats_line(&display_root)),
+                );
+                let header = match self.directory_diff_root.as_ref() {
+                    Some(root) => {
+                        let path = root.display().to_string();
+                        let up = div()
+                            .id(gpui::ElementId::Name(gpui::SharedString::from(
+                                "directory-diff-up",
+                            )))
+                            .debug_selector(|| "directory-diff-up".to_string())
+                            .cursor(gpui::CursorStyle::PointingHand)
+                            .child("↑ Up")
+                            .on_click(cx.listener(|this, _event, _window, cx| {
+                                this.directory_diff_root = None;
+                                cx.notify();
+                            }));
+                        header
+                            .child(up)
+                            .child(path)
+                            .debug_selector(|| "directory-diff-breadcrumb".to_string())
+                    }
+                    None => header,
+                };
+
+                div().child(header).child(self.render_directory_tree(
+                    &display_root,
+                    0,
+                    repo_id,
+                    range,
+                    cx,
+                ))
+            }
+            worktree_state::model::Loadable::Loading => div().child("Loading directory diff…"),
+            worktree_state::model::Loadable::Error(err) => {
+                div().child(format!("Directory diff failed: {err}"))
+            }
+            worktree_state::model::Loadable::NotLoaded => div().child("No directory diff loaded"),
         };
         div().size_full().p(px(12.0)).child(body)
     }
 
+    /// The header line for the directory currently on screen: the rolled-up file
+    /// count and line delta plus the number of *direct* subdirectories (task
+    /// T-E's spec). Pure, so it is unit-testable without a renderer.
+    fn directory_diff_stats_line(root: &worktree_core::diff_tree::DirectoryNode) -> String {
+        let subdirectories = root
+            .children
+            .iter()
+            .filter(|child| child.kind == worktree_core::diff_tree::DirectoryNodeKind::Directory)
+            .count();
+        format!(
+            "{} files changed, +{} -{}, {} subdirectories",
+            root.file_count, root.additions, root.deletions, subdirectories
+        )
+    }
+
     /// One row of the directory tree plus, unless collapsed, its children.
-    /// `[-]`/`[+]` marks a directory's state; clicking toggles it.
+    /// Clicking a directory toggles its `[-]`/`[+]` collapse; the trailing `›`
+    /// drills into it. Clicking a file opens that file's diff in the main pane.
     fn render_directory_tree(
         &self,
         node: &worktree_core::diff_tree::DirectoryNode,
         depth: usize,
+        repo_id: RepoId,
+        range: Option<(CommitId, Option<CommitId>)>,
         cx: &mut gpui::Context<Self>,
     ) -> gpui::Div {
-        let is_dir = matches!(
-            node.kind,
-            worktree_core::diff_tree::DirectoryNodeKind::Directory
-        );
+        let is_dir = node.kind == worktree_core::diff_tree::DirectoryNodeKind::Directory;
         let collapsed = is_dir && self.directory_diff_collapsed.contains(node.path.as_path());
         let indent = px(12.0 * depth as f32);
         let label = if is_dir {
@@ -1690,7 +1775,12 @@ impl DetailsPaneView {
             "directory-diff-row-{}",
             node.path.display()
         )));
-        let mut row = div().flex().pl(indent).child(label).id(row_id);
+        let mut row = div()
+            .flex()
+            .items_center()
+            .pl(indent)
+            .child(label)
+            .id(row_id);
         if is_dir {
             let toggle_path = node.path.clone();
             row = row
@@ -1701,13 +1791,53 @@ impl DetailsPaneView {
                     }
                     cx.notify();
                 }));
+            let drill_key = node.path.display().to_string();
+            let drill_id = gpui::ElementId::Name(gpui::SharedString::from(format!(
+                "directory-diff-drill-{drill_key}"
+            )));
+            let drill_debug = drill_key.clone();
+            let drill_path = node.path.clone();
+            row = row.child(
+                div()
+                    .id(drill_id)
+                    .debug_selector(move || format!("directory-diff-drill-{drill_debug}"))
+                    .cursor(gpui::CursorStyle::PointingHand)
+                    .px(px(4.0))
+                    .child("›")
+                    .on_click(cx.listener(move |this, _event, _window, cx| {
+                        this.directory_diff_root = Some(drill_path.clone());
+                        cx.notify();
+                    })),
+            );
+        } else if let Some((from_commit_id, to_commit_id)) = range.clone() {
+            let target = DiffTarget::CommitRange {
+                from_commit_id,
+                to_commit_id,
+                path: Some(node.path.clone()),
+            };
+            let file_repo_id = repo_id;
+            row = row
+                .cursor(gpui::CursorStyle::PointingHand)
+                .on_click(cx.listener(move |this, _event, _window, cx| {
+                    this.store.dispatch(Msg::SelectDiff {
+                        repo_id: file_repo_id,
+                        target: target.clone(),
+                    });
+                    cx.notify();
+                }));
         }
 
         let mut container = div().child(row);
         if !collapsed {
             let mut children = Vec::with_capacity(node.children.len());
             for child in &node.children {
-                children.push(self.render_directory_tree(child, depth + 1, &mut *cx));
+                children.push(self.render_directory_tree(
+                    child,
+                    depth + 1,
+                    repo_id,
+                    range.clone(),
+                    &mut *cx,
+                ));
             }
             container = container.children(children);
         }
@@ -1729,6 +1859,43 @@ mod tests {
                 workdir: PathBuf::from(path),
             },
         )
+    }
+
+    /// The directory-diff header reports files/lines plus the *direct*
+    /// subdirectory count for the directory on screen, and drilling into a
+    /// folder re-roots it (T-E / T-D 收尾).
+    #[test]
+    fn directory_diff_stats_line_reports_direct_subdirectories_and_follows_drill_down() {
+        use std::path::Path;
+        use worktree_core::diff_tree::{aggregate_to_tree, filter_by_prefix};
+        use worktree_core::domain::{CommitFileChange, FileStatusKind};
+
+        let change = |path: &str, additions: u32, deletions: u32| CommitFileChange {
+            path: PathBuf::from(path),
+            kind: FileStatusKind::Modified,
+            is_submodule: false,
+            additions: Some(additions),
+            deletions: Some(deletions),
+        };
+        let root = aggregate_to_tree(
+            &[
+                change("src/a.rs", 10, 1),
+                change("src/b.rs", 2, 3),
+                change("docs/readme.md", 5, 0),
+            ],
+            Path::new(""),
+        );
+        assert_eq!(
+            DetailsPaneView::directory_diff_stats_line(&root),
+            "3 files changed, +17 -4, 2 subdirectories"
+        );
+
+        // Drilled into `src`: only its subtree, no direct subdirectories.
+        let src = filter_by_prefix(&root, Path::new("src"));
+        assert_eq!(
+            DetailsPaneView::directory_diff_stats_line(&src),
+            "2 files changed, +12 -4, 0 subdirectories"
+        );
     }
 
     fn command_log_entry(command: &str, ok: bool, seconds: u64) -> CommandLogEntry {

@@ -551,6 +551,32 @@ pub(super) fn global_nav(
 /// Without this the pane would keep rendering the directory tree forever —
 /// `directory_diff_target` is only ever set by an explicit "Compare
 /// Directory" request, so nothing else would ever clear it.
+/// Whether `next` is a selection *within* the active directory comparison: a
+/// `CommitRange` over the same two commits (the user clicked a file in the
+/// tree). Such a selection must not tear the comparison down; anything else
+/// (a different range, a single commit, the working tree, …) does.
+fn directory_diff_survives_selection(
+    repo_state: &crate::model::RepoState,
+    next: &DiffTarget,
+) -> bool {
+    let Some(DiffTarget::CommitRange {
+        from_commit_id,
+        to_commit_id,
+        ..
+    }) = repo_state.diff_state.directory_diff_target.as_ref()
+    else {
+        return false;
+    };
+    matches!(
+        next,
+        DiffTarget::CommitRange {
+            from_commit_id: next_from,
+            to_commit_id: next_to,
+            ..
+        } if next_from == from_commit_id && next_to == to_commit_id
+    )
+}
+
 pub(crate) fn clear_directory_diff_state(repo_state: &mut crate::model::RepoState) {
     if repo_state.diff_state.directory_diff_target.is_none()
         && matches!(repo_state.diff_state.directory_diff, Loadable::NotLoaded)
@@ -575,7 +601,13 @@ pub(super) fn fill_select_diff_inline(
 
     let content_preview = mode.is_content_view();
     clear_inline_submodule_diff_state(repo_state);
-    clear_directory_diff_state(repo_state);
+    // Selecting a file *inside* the directory comparison — a `CommitRange`
+    // selection over the same two commits, only its `path` differs — keeps the
+    // comparison on screen: the main pane swaps to that file's diff while the
+    // details pane's tree stays put. Any other selection leaves the mode.
+    if !directory_diff_survives_selection(repo_state, &target) {
+        clear_directory_diff_state(repo_state);
+    }
     repo_state.diff_state.content_preview = content_preview;
     repo_state.diff_state.edit_mode = mode == ContentViewMode::Edit;
     if mode != ContentViewMode::Edit {
