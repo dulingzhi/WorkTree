@@ -537,4 +537,10 @@ pub(in crate::view) enum ContextMenuAction {
         remote: String,
         name: String,
     },
+    /// Open the directory diff (SmartGit-style folder comparison) for this
+    /// folder, scoped to the active commit-range compare view.
+    CompareDirectory {
+        repo_id: RepoId,
+        path: std::path::PathBuf,
+    },
 }

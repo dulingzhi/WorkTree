@@ -320,6 +320,42 @@ impl PopoverHost {
                 self.store
                     .dispatch(Msg::ToggleFileBrowserDir { repo_id, path });
             }
+            ContextMenuAction::CompareDirectory { repo_id, path } => {
+                let range = self
+                    .state
+                    .repos
+                    .iter()
+                    .find(|r| r.id == repo_id)
+                    .and_then(|repo| repo.diff_state.diff_target.clone())
+                    .and_then(|target| match target {
+                        worktree_core::domain::DiffTarget::CommitRange {
+                            from_commit_id,
+                            to_commit_id,
+                            ..
+                        } => Some((from_commit_id, to_commit_id)),
+                        _ => None,
+                    });
+                match range {
+                    Some((from_commit_id, to_commit_id)) => {
+                        self.store.dispatch(Msg::RequestDirectoryDiff {
+                            repo_id,
+                            target: worktree_core::domain::DiffTarget::CommitRange {
+                                from_commit_id,
+                                to_commit_id,
+                                path: Some(path),
+                            },
+                        });
+                    }
+                    None => {
+                        self.push_toast(
+                            components::ToastKind::Error,
+                            crate::i18n::tr_str("palette.cmd.compare-directory-needs-range")
+                                .to_string(),
+                            cx,
+                        );
+                    }
+                }
+            }
             // The branch tree's collapse state is view-owned rather than a
             // store message, so these four go through the sidebar pane.
             ContextMenuAction::ToggleSidebarCollapseKey { collapse_key } => {

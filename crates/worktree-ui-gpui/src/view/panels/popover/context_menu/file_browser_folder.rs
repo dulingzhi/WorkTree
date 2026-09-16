@@ -104,6 +104,19 @@ pub(super) fn model(
         }),
     });
 
+    // Folder counterpart of the command-palette "Compare Directory…": diff the
+    // active commit-range view but scoped to this folder.
+    items.push(ContextMenuItem::Entry {
+        label: "Compare Directory…".into(),
+        icon: None,
+        shortcut: None,
+        disabled: false,
+        action: Box::new(ContextMenuAction::CompareDirectory {
+            repo_id,
+            path: path.to_path_buf(),
+        }),
+    });
+
     // A folder listed from a commit or a branch has no guaranteed counterpart
     // on disk, so the OS actions are working-tree only — the same line the file
     // menu draws.
