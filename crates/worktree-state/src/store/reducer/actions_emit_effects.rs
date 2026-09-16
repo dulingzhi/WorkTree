@@ -1051,6 +1051,8 @@ pub(super) fn commit_finished(
     let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
         return Vec::new();
     };
+    // Coarse "repo changed" ping so UI can uniformly sense commits.
+    repo_state.bump_content_rev();
     // Collected before any state below changes: the (pre-commit) staged
     // entries are exactly the paths the commit clears from the staged lane.
     let committed_paths: Vec<PathBuf> = repo_state

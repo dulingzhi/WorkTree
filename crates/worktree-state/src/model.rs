@@ -1,9 +1,10 @@
 use crate::msg::RepoCommandKind;
 use crate::msg::RepoPath;
 use crate::session;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::{FxHashMap, FxHashSet, FxHasher};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -1333,6 +1334,12 @@ pub struct RepoState {
 
     pub open_rev: u64,
     pub ops_rev: u64,
+    /// Monotonic "the repository changed" ping. Bumped by every semantic-change
+    /// dispatch point (`dispatch_repo_change`, `repo_externally_changed`,
+    /// `repo_action_finished`, `commit_finished`) so coarse UI (a top-level
+    /// "repo changed" indicator, or the history view via `history_cache_rev`)
+    /// gets one subscription point instead of re-fingerprinting a dozen revs.
+    pub content_rev: u64,
     pub last_active_at: Option<SystemTime>,
 
     pub missing_on_disk: bool,
@@ -1453,6 +1460,7 @@ impl RepoState {
             conflict_state: ConflictState::default(),
             open_rev: 0,
             ops_rev: 0,
+            content_rev: 0,
             last_active_at: None,
             missing_on_disk: false,
             last_error: None,
@@ -1968,6 +1976,36 @@ impl RepoState {
         }
     }
 
+    /// Derived cache key for the history / commit-list view: folds in every
+    /// repo-level revision the view fingerprints so it does not have to
+    /// maintain its own list and silently miss one when a new source appears.
+    ///
+    /// Includes `content_rev`, so the commit list repaints on *any* repository
+    /// change — the unified "something changed" signal. `active_repo` is an
+    /// `AppState` concern and the display-only `tags_rev` gate is left to the
+    /// caller (`HistoryView::notify_fingerprint_for`): the former is not a
+    /// `RepoState` field, the latter a UI toggle.
+    pub fn history_cache_rev(&self) -> u64 {
+        let mut hasher = FxHasher::default();
+        self.log_rev.hash(&mut hasher);
+        self.history_state.log_rev.hash(&mut hasher);
+        self.history_state.history_scope.hash(&mut hasher);
+        self.history_state.log_scan_progress.hash(&mut hasher);
+        self.head_branch_rev.hash(&mut hasher);
+        self.detached_head_commit.hash(&mut hasher);
+        self.branches_rev.hash(&mut hasher);
+        self.remote_branches_rev.hash(&mut hasher);
+        self.stashes_rev.hash(&mut hasher);
+        self.history_state.selected_commit_rev.hash(&mut hasher);
+        self.file_browser.file_browser_rev.hash(&mut hasher);
+        self.worktree_dirty_rev.hash(&mut hasher);
+        self.history_state.worktree_selection_rev.hash(&mut hasher);
+        self.worktree_status_cache_rev().hash(&mut hasher);
+        self.staged_status_cache_rev().hash(&mut hasher);
+        self.content_rev.hash(&mut hasher);
+        hasher.finish()
+    }
+
     pub fn worktree_status_is_loading(&self) -> bool {
         matches!(self.worktree_status, Loadable::Loading)
             || (matches!(self.worktree_status, Loadable::NotLoaded)
@@ -2343,6 +2381,13 @@ impl RepoState {
 
     pub(crate) fn bump_ops_rev(&mut self) {
         self.ops_rev = self.ops_rev.wrapping_add(1);
+    }
+
+    /// Bump the coarse "the repository changed" ping. Called by every semantic
+    /// change dispatch point so any UI subscribing to `content_rev` repaints
+    /// on a unified signal rather than tracking each fine-grained `*_rev`.
+    pub fn bump_content_rev(&mut self) {
+        self.content_rev = self.content_rev.wrapping_add(1);
     }
 
     pub(crate) fn bump_load_epoch(&mut self) -> u64 {

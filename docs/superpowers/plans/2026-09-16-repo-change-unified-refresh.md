@@ -177,7 +177,7 @@ gpui 的惯用法是 `cx.notify()` + rev 缓存比较，不是事件订阅；引
 |----|------|--------|------|
 | **P0** ✅已落地 | 修 commit-list race：`repo_command_finished` 末尾先 `append_cancel_repo_loads_effect_for_repo` 再 `append_refresh_full_effects`（注意提交走 `commit_finished` 本就有取消，缺口在仓库命令路径）；并修 `model.rs:218` 的 `request_log` 丢弃刷新分支（实际在 model.rs 而非 util.rs） | `actions_emit_effects.rs` + `model.rs` | 直接消除 Fetch/Pull/Push 等命令后 commit list 很久才刷；`cargo check` 通过 |
 | **P1** ✅已落地（命令路径收口） | 引入 `RepoChange` + `dispatch_repo_change()`，把 **`repo_command_finished` 仓库命令路径**收敛进来（外部 `repo_externally_changed` / `repo_action_finished` 路径延后到下一步）；`dispatch_repo_change` 当前为**统一 full refresh**（`append_cancel_repo_loads_effect_for_repo` + `append_refresh_full_effects`），按 `RepoChange` variant 收窄的语义刷新集合（见 2.1）留作下一步 | 新增 `msg/repo_change.rs` + `store/reducer/repo_change.rs`；改 `msg.rs`/`reducer.rs`/`actions_emit_effects.rs` 接线 | 仓库命令路径根除 race + 漂移；`cargo test -p worktree-state` 728 passed |
-| **P2** | 加 `content_rev` + 各 UI 的 `*_cache_rev()`，`history.rs` 等改用派生键 | `model.rs` + 各 pane | UI 侧统一感知、少维护 rev 列表 |
+| **P2** ✅已落地 | 加 `content_rev` 粗粒度"仓库变了"统一 ping + `history_cache_rev()` 派生缓存键；`history.rs::notify_fingerprint_for` 改用派生键；四条变更分发路径统一 bump `content_rev` | `model.rs` + `repo_change.rs`/`external_and_history.rs`/`actions_emit_effects.rs` + `history.rs` | UI 侧统一感知、少维护 rev 列表；直接兑现用户"UI 统一感知"诉求 |
 | **P3** | 评估非活跃仓库外部事件：是否放宽 `repo_monitor` 的 active 门控做"轻量标脏"（不实时全刷，激活时再刷） | `repo_monitor.rs` + 激活刷新 | 多仓场景下其它仓也能感知变化（按需） |
 
 P0/P1 是用户体感问题的直接解；P2/P3 是"统一感知"的长期收口。建议按 P0→P1→P2 推进，P3 单独评估。
@@ -190,6 +190,24 @@ P1 已按"命令路径收口"落地并通过 `cargo test -p worktree-state`（72
 - **`dispatch_repo_change` 当前实现 = 统一 full refresh**：先 `append_cancel_repo_loads_effect_for_repo` 再 `append_refresh_full_effects`，`_change` 参数暂未用于收窄刷新集合（与 2.1 的 `match change { … }` 语义收窄不同）。这是有意为之的最小收口：先统一"取消在途 + 全量刷新"以根除 race，再在下一步按 variant 收窄到精准刷新集合，由 `dispatch_repo_change` 单测守护不退化。
 - **P0 顺序回归修复（本次收口时暴露并修掉）**：P0 当时把取消放在 `extra_effects`（命令特例块：worktrees / submodules / diff / submodule_summary 的 `Loading` 标志）构建**之后**，导致 `clear_cancelled_repo_loading` 把命令特例块刚置的 `Loading` 标志**擦掉**，8 个命令相关单测回归。P1 把 `dispatch_repo_change` 调用**前移**到命令特例块之前重新借 `repo_state` 置位，修复后 8 个单测恢复。纪律：**取消必须在命令特例刷新之前**，否则取消会吞掉特例的 `Loading` 标志。
 - **新增文件**：`crates/worktree-state/src/msg/repo_change.rs`（`RepoChange` enum + `from_repo_command_kind`/`from_repo_external_change`/`from_repo_action_kind` 三翻译，全覆盖两枚举所有变体）、`crates/worktree-state/src/store/reducer/repo_change.rs`（`dispatch_repo_change` + 2 单测）。接线：`msg.rs` 加 `mod repo_change;` + `pub use`；`reducer.rs` 加 `mod repo_change;`；`actions_emit_effects.rs` import `RepoChange` 并改写 `repo_command_finished` 末尾。
+
+---
+
+### 4.2 P2 落地说明（2026-09-16）
+
+P2 已落地并通过 `cargo check -p worktree-state -p worktree-ui-gpui`（仅余预存 dead-code 警告，与本次无关）+ `cargo test -p worktree-state --lib`（基线 728 passed 不退化）。本次**直接兑现用户原始诉求"UI 统一感知仓库变化"**——采用"低风险先交付 UI 感知收益"的路线，把大的路径收敛重构（把外部 `repo_externally_changed` / `repo_action_finished` 也收口进 `dispatch_repo_change`）延后。
+
+- **`content_rev`：统一的"仓库变了"ping**。`RepoState` 新增 `pub content_rev: u64`（在 `ops_rev` 之后），`new_opening` 初始化为 0，新增 `pub fn bump_content_rev(&mut self)`（`wrapping_add(1)`）。由四条变更分发点统一 bump，使 `content_rev` 成为跨 命令/外部/action/提交 四路径的唯一粗信号：
+  - `dispatch_repo_change`（`repo_change.rs`）：`append_refresh_full_effects` 之后 `repo_state.bump_content_rev();`
+  - `repo_externally_changed`（`external_and_history.rs`）：`find(repo_state)` 之后、`file_browser_effect` 之前 `bump`；
+  - `repo_action_finished`（`external_and_history.rs`）：`local_actions_in_flight` 减一之前 `bump`；
+  - `commit_finished`（`actions_emit_effects.rs:1045`）：首个 `find(repo_state)` 之后、`committed_paths` 收集之前 `bump`。
+  - 注：因为 `dispatch_repo_change` 当前 = 统一 full refresh，而 `repo_externally_changed` / `repo_action_finished` / `commit_finished` 各自也已 bump，`content_rev` 在任一语义变化发生时都会单调前进，UI 订阅一点即感知"仓库变了"。
+- **`history_cache_rev()`：history/commit-list 视图的单一派生缓存键**。`RepoState` 新增 `pub fn history_cache_rev(&self) -> u64`，用 `FxHasher`（`rustc_hash`，与 UI 侧 `history.rs` 一致）折叠 history 视图所需的全部 repo 级 rev（含 `content_rev`）：`log_rev` / `history_state.log_rev` / `history_state.history_scope` / `history_state.log_scan_progress` / `head_branch_rev` / `detached_head_commit` / `branches_rev` / `remote_branches_rev` / `stashes_rev` / `history_state.selected_commit_rev` / `file_browser.file_browser_rev` / `worktree_dirty_rev` / `history_state.worktree_selection_rev` / `worktree_status_cache_rev()` / `staged_status_cache_rev()` / `content_rev`。**排除** `active_repo` 与条件门控的 `tags_rev`（后者保留在 UI 调用处）。
+- **UI 侧改造**（`worktree-ui-gpui/src/view/panes/history.rs:143` `notify_fingerprint_for`）：由"内联混 12+ 个 rev"改为 `state.active_repo.hash(&mut hasher)` + `repo.history_cache_rev().hash(&mut hasher)`，仅当 `show_history_tags` 时额外 `repo.tags_rev.hash(&mut hasher)`。语义等价原 16 个 rev 混合列表，且今后新增的 repo 级变化源只需在 `history_cache_rev` 一处登记，UI 不可能再"漏订阅"。`model.rs` 需补 `use std::hash::{Hash, Hasher};`（首轮编译即此缺失）。
+- **`model.rs` 字段新增无需改 `RepoState { … }` 字面构造点**：`push_decision.rs::repo()`、`model.rs::new_repo()`、`actions_emit_effects.rs::repo_with_head_dependent_cached_state` / `repo_state_with_tags_loaded`、`util.rs::repo_state` 均委托 `new_opening`，故加 `content_rev` 字段自动随 `new_opening` 初始化，无需逐点补字段。
+
+> **剩余（用户 P0→P1→P2 指令之外的下一步）**：把外部 `repo_externally_changed` 与 `repo_action_finished` 也收敛进 `dispatch_repo_change`（当前仍各自手挑刷新集合）；把 `dispatch_repo_change` 从"统一 full refresh"收窄为按 `RepoChange` variant 的语义刷新集合（见 2.1 `match change { … }`）；`repo_monitor_active_repo_activation_coalesces_with_in_flight_refresh` 预存失败另立 issue 排查。P3 评估非活跃仓轻量标脏。
 
 ---
 

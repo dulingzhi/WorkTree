@@ -37,6 +37,8 @@ pub(super) fn dispatch_repo_change(
     };
     let git_log_settings = state.git_log_settings;
     append_refresh_full_effects(repo_state, git_log_settings, &mut effects);
+    // The coarse "repo changed" ping: one signal every UI can subscribe to.
+    repo_state.bump_content_rev();
     effects
 }
 
@@ -69,14 +71,16 @@ mod tests {
         let repo_id = RepoId(1);
         let mut state = state_with_ready_repo(repo_id);
         // Simulate a log walk already in flight.
-        state.repos[0].loads_in_flight.request(RepoLoadsInFlight::LOG);
+        state.repos[0]
+            .loads_in_flight
+            .request(RepoLoadsInFlight::LOG);
 
         let effects = dispatch_repo_change(&mut state, repo_id, RepoChange::RefsChanged);
 
         assert!(
-            effects
-                .iter()
-                .any(|e| matches!(e, Effect::CancelRepoLoads { repo_id: id, .. } if *id == repo_id)),
+            effects.iter().any(
+                |e| matches!(e, Effect::CancelRepoLoads { repo_id: id, .. } if *id == repo_id)
+            ),
             "dispatch must cancel in-flight loads before refreshing"
         );
         assert!(

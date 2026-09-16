@@ -155,6 +155,8 @@ pub(super) fn repo_externally_changed(
     let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
         return Vec::new();
     };
+    // Coarse "repo changed" ping so UI can uniformly sense external changes.
+    repo_state.bump_content_rev();
 
     let file_browser_effect =
         file_browser_refresh_for_external_change(repo_state, change, sidebar_shows_this_files_tree);
@@ -825,6 +827,8 @@ pub(super) fn repo_action_finished(
     let succeeded = result.is_ok();
     let mut clear_banner = false;
     if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+        // Coarse "repo changed" ping so UI can uniformly sense local actions.
+        repo_state.bump_content_rev();
         repo_state.local_actions_in_flight = repo_state.local_actions_in_flight.saturating_sub(1);
         repo_state.bump_ops_rev();
         match result {

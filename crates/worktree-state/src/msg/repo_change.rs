@@ -108,10 +108,9 @@ impl RepoChange {
             | RemoveSubmodule { .. } => RepoChange::Anything,
 
             // Export / archive / gc / patch application: full rescan.
-            ExportPatch { .. }
-            | ArchiveZip { .. }
-            | Cleanup
-            | ApplyPatch { .. } => RepoChange::Anything,
+            ExportPatch { .. } | ArchiveZip { .. } | Cleanup | ApplyPatch { .. } => {
+                RepoChange::Anything
+            }
         }
     }
 

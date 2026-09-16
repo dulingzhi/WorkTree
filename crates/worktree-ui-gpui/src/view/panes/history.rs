@@ -147,29 +147,15 @@ impl HistoryView {
         if let Some(repo_id) = state.active_repo
             && let Some(repo) = state.repos.iter().find(|r| r.id == repo_id)
         {
-            repo.log_rev.hash(&mut hasher);
-            repo.history_state.log_rev.hash(&mut hasher);
-            repo.history_state.history_scope.hash(&mut hasher);
-            // A running walk reports progress without changing the log, and the
-            // header prints that count — so it has to repaint on its own.
-            repo.history_state.log_scan_progress.hash(&mut hasher);
-            repo.head_branch_rev.hash(&mut hasher);
-            repo.detached_head_commit.hash(&mut hasher);
-            repo.branches_rev.hash(&mut hasher);
-            repo.remote_branches_rev.hash(&mut hasher);
+            // The whole repo-level fingerprint is now a single derived key on
+            // `RepoState` (`history_cache_rev`): it folds in every revision the
+            // view cares about, including the coarse `content_rev` ping, so the
+            // view no longer maintains its own list (and cannot silently miss a
+            // new source). `tags_rev` stays gated by the display toggle here.
+            repo.history_cache_rev().hash(&mut hasher);
             if show_history_tags {
                 repo.tags_rev.hash(&mut hasher);
             }
-            repo.stashes_rev.hash(&mut hasher);
-            repo.history_state.selected_commit_rev.hash(&mut hasher);
-            repo.file_browser.file_browser_rev.hash(&mut hasher);
-            // The linked-worktree rows live in this table: their badge counts come
-            // from the dirty scan and the selected row from the worktree selection,
-            // so both revs have to move the fingerprint or the rows never repaint.
-            repo.worktree_dirty_rev.hash(&mut hasher);
-            repo.history_state.worktree_selection_rev.hash(&mut hasher);
-            repo.worktree_status_cache_rev().hash(&mut hasher);
-            repo.staged_status_cache_rev().hash(&mut hasher);
         }
 
         hasher.finish()
