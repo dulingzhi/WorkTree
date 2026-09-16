@@ -105,6 +105,10 @@ pub(in crate::view) const REPO_TAB_SIDE_PADDING_PX: f32 = 14.0;
 const REPO_TAB_HOVER_BOX_X_OVERHANG_PX: f32 = 4.0;
 const REPO_TAB_HOVER_BOX_Y_OVERHANG_PX: f32 = 3.0;
 const REPO_TAB_HOVER_BOX_RADIUS_PX: f32 = 4.0;
+/// Diameter of the "external changes pending" dot overlaid on a repo tab that
+/// has un-synced filesystem-watcher changes parked on it (see
+/// `RepoState::pending_external_change`). Matches the sidebar's status dot.
+const REPO_TAB_PENDING_DOT_SIZE_PX: f32 = 6.0;
 
 /// Returns the drag direction and its new high/low-water mark. A direction is
 /// established immediately, but reversing it requires deliberate travel away
@@ -303,6 +307,9 @@ impl RepoTabsBarView {
             repo.id.hash(&mut hasher);
             repo.spec.workdir.hash(&mut hasher);
             repo.missing_on_disk.hash(&mut hasher);
+            // Re-render a background tab's "external changes pending" dot as the
+            // parked change is recorded (bumped) and consumed (reset).
+            repo.pending_external_rev.hash(&mut hasher);
         }
         if let Some(repo_id) = state.active_repo
             && let Some(repo) = state.repos.iter().find(|r| r.id == repo_id)
@@ -341,11 +348,25 @@ impl RepoTabsBarView {
             .into();
         }
 
-        path_display::path_display_shared(&repo.spec.workdir)
+        let path = path_display::path_display_string(&repo.spec.workdir);
+        if Self::repo_tab_shows_pending_external(repo) {
+            format!("{path}\nExternal changes pending — click to refresh").into()
+        } else {
+            path.into()
+        }
     }
 
     fn repo_tab_shows_missing_warning(repo: &RepoState, show_spinner: bool) -> bool {
         repo.missing_on_disk && !show_spinner
+    }
+
+    /// Whether the tab shows the "external changes pending" dot: the filesystem
+    /// watcher recorded changes for this repo while it was inactive, so its view
+    /// is stale until it is activated (which consumes the parked change). Active
+    /// repos never park — they refresh immediately — so the dot only ever marks
+    /// the background repos that keep changing without the user looking.
+    fn repo_tab_shows_pending_external(repo: &RepoState) -> bool {
+        repo.pending_external_change.is_some()
     }
 
     fn repo_tab_click_message(active_repo: Option<RepoId>, repo_id: RepoId) -> Option<Msg> {
@@ -952,6 +973,24 @@ impl Render for RepoTabsBarView {
                             )),
                     )
                 })
+                // A repo that changed on disk while it was in the background gets
+                // an accent dot; activating it consumes the change and clears the
+                // dot. Absolutely positioned so it never nudges the tab's width
+                // math (which only budgets the status slot + label).
+                .when(Self::repo_tab_shows_pending_external(repo), |tab| {
+                    tab.child(
+                        div()
+                            .debug_selector(move || {
+                                format!("repo_tab_pending_external_{}", repo_id.0)
+                            })
+                            .absolute()
+                            .top(scaled_px(2.0))
+                            .right(scaled_px(2.0))
+                            .size(scaled_px(REPO_TAB_PENDING_DOT_SIZE_PX))
+                            .rounded_full()
+                            .bg(theme.colors.accent.foreground),
+                    )
+                })
                 .debug_selector(move || format!("repo_tab_{}", repo_id.0))
                 .on_drag(
                     RepoTabDrag {
@@ -1313,6 +1352,30 @@ mod tests {
             RepoTabsBarView::repo_tab_tooltip(&repo).as_ref(),
             "Repository not found!\n/tmp/missing-repo"
         );
+    }
+
+    /// A repo that changed on disk while in the background shows the pending dot
+    /// and spells the state out in its tooltip; activating it clears both.
+    #[test]
+    fn repo_tab_shows_pending_external_only_while_a_change_is_parked() {
+        let mut repo = repo_state("/tmp/repo");
+        assert!(!RepoTabsBarView::repo_tab_shows_pending_external(&repo));
+        assert_eq!(
+            RepoTabsBarView::repo_tab_tooltip(&repo).as_ref(),
+            "/tmp/repo"
+        );
+
+        repo.pending_external_change = Some(worktree_state::msg::RepoExternalChange::GitState);
+        repo.pending_external_rev = 1;
+        assert!(RepoTabsBarView::repo_tab_shows_pending_external(&repo));
+        assert_eq!(
+            RepoTabsBarView::repo_tab_tooltip(&repo).as_ref(),
+            "/tmp/repo\nExternal changes pending — click to refresh"
+        );
+
+        repo.pending_external_change = None;
+        repo.pending_external_rev = 0;
+        assert!(!RepoTabsBarView::repo_tab_shows_pending_external(&repo));
     }
 
     #[test]

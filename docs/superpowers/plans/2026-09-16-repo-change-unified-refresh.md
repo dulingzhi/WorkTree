@@ -377,7 +377,7 @@ Step A 把 P1 延后的「按 `RepoChange` variant 语义刷新」落地：`disp
 - **`SetActiveRepo`（切仓）只清 parked，不改其刷新**（`repo_management.rs::fill_set_active_repo_inline_impl`，`changed` 时调 `take_pending_external_change()` 丢弃）。这是对 §4.5「`SetActiveRepo` 消费后改发精准刷新」的**有意收窄**：切仓本就有 full/primary 刷新扇出（`repo_switch_can_use_primary_refresh` + `HOT_REPO_SWITCH_SECONDARY_REFRESH_WINDOW` 热点判定），若再叠精准 dispatch 会与该逻辑纠缠且可能重复刷新；清 parked 只为及时清掉「外部变更待刷新」指示器，数据正确性由既有的切仓刷新保证。精准刷新优化实际作用于「同一仓重新聚焦」这一路径。
 - **验证**：`cargo check -p worktree-state --tests` 通过（仅余预存 `status_refresh_e2e.rs:745` 警告）；`cargo fmt --check` 干净（顺带修掉 Step B 遗留在 `repo_change.rs:310` 的一处换行）；新增 3 个单测锁定行为——`repo_externally_changed_while_inactive_parks_the_change`（记录且零 effects）、`repo_externally_changed_while_inactive_accumulates_lanes_and_paths`（车道 OR + 路径并集 + rev 自增两次）、`set_active_repo_consumes_the_parked_external_change`（切仓清 parked）。本机 `cargo test` 仍受 Windows `os error 5` 阻断，实跑以 CI(Linux) 为准。
 
-**未做（可后续）**：UI 侧「外部变更待刷新」徽标尚未接线——`pending_external_change.is_some()` / `pending_external_rev` 已是现成订阅点，接入标签页/侧边栏即可。
+**UI 接线（2026-09-17 续）**：「外部变更待刷新」指示已接入仓库标签栏（`view/panels/repo_tabs_bar.rs`）——非活跃仓 parked 了外部变化时，其标签右上角显示一个 accent 圆点，悬停 tooltip 追加「External changes pending — click to refresh」，激活该仓（消费 parked）后圆点自动消失。实现要点：新增 `repo_tab_shows_pending_external(repo)` 判定；把 `pending_external_rev` 纳入 `notify_fingerprint` 的逐仓哈希（否则后台标签不会重绘）；圆点用绝对定位覆盖，避免扰动标签的宽度预算（宽度只算了 status slot + label）。由于活跃仓立即刷新、从不 park，圆点天然只出现在后台仓上。新增单测 `repo_tab_shows_pending_external_only_while_a_change_is_parked`。**注**：`worktree-ui-gpui` 在本机默认 target 目录编不过（tree-sitter C 语法 `C1056`），验证需用 C 盘 target 目录，见项目 MEMORY。
 
 ---
 
