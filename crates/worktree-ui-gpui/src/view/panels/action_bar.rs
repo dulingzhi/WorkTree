@@ -231,17 +231,6 @@ impl ActionBarView {
             root.set_active_context_menu_invoker(Some(invoker), cx);
         });
     }
-
-    fn push_toast(
-        &mut self,
-        kind: components::ToastKind,
-        message: String,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let _ = self.root_view.update(cx, |root, cx| {
-            root.push_toast(kind, message, cx);
-        });
-    }
 }
 
 impl Render for ActionBarView {
@@ -681,64 +670,11 @@ impl Render for ActionBarView {
                             return;
                         };
                         let repo_id = repo.id;
-                        let pull_retry = this
-                            .root_view
-                            .upgrade()
-                            .is_some_and(|root| root.read(cx).push_pull_retry_enabled());
-                        let head = match &repo.head_branch {
-                            Loadable::Ready(head) => head.clone(),
-                            _ => {
-                                this.store.dispatch(Msg::Push {
-                                    repo_id,
-                                    pull_retry,
-                                });
-                                return;
-                            }
-                        };
-
-                        let upstream_missing = match &repo.branches {
-                            Loadable::Ready(branches) => branches
-                                .iter()
-                                .find(|b| b.name == head)
-                                .is_some_and(|b| b.upstream.is_none()),
-                            _ => false,
-                        };
-
-                        if upstream_missing {
-                            let remote = match &repo.remotes {
-                                Loadable::Ready(remotes) => {
-                                    if remotes.is_empty() {
-                                        None
-                                    } else if remotes.iter().any(|r| r.name == "origin") {
-                                        Some("origin".to_string())
-                                    } else {
-                                        Some(remotes[0].name.clone())
-                                    }
-                                }
-                                _ => Some("origin".to_string()),
-                            };
-
-                            if let Some(remote) = remote {
-                                this.open_popover_at(
-                                    PopoverKind::PushSetUpstreamPrompt { repo_id, remote },
-                                    e.position(),
-                                    window,
-                                    cx,
-                                );
-                                return;
-                            }
-
-                            this.push_toast(
-                                components::ToastKind::Error,
-                                crate::i18n::t!("panels.action_bar.push_no_remotes").into_owned(),
-                                cx,
-                            );
-                            return;
-                        }
-
-                        this.store.dispatch(Msg::Push {
-                            repo_id,
-                            pull_retry,
+                        // Delegate to the root view so the toolbar shares one
+                        // push policy with the command palette and the context
+                        // menu; `at` keeps the prompt anchored to the click.
+                        let _ = this.root_view.update(cx, |root, cx| {
+                            root.request_push(repo_id, Some(e.position()), window, cx);
                         });
                     }),
                     push_menu.on_click_with_bounds(

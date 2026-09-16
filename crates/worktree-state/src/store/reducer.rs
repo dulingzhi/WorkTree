@@ -3,6 +3,7 @@ mod conflict_interactions;
 mod diff_selection;
 mod external_and_history;
 mod loaded_results;
+mod repo_change;
 mod repo_management;
 mod util;
 

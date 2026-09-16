@@ -3,6 +3,7 @@ pub mod benchmarks;
 pub mod model;
 pub mod msg;
 pub mod name_summary;
+pub mod push_decision;
 pub mod session;
 pub mod store;
 

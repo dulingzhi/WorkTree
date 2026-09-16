@@ -19,7 +19,7 @@ use crate::model::{
     PendingCommitRetry, RepoId, RepoLoadsInFlight, RepoState, SubmoduleTrustCheckOperation,
     SubmoduleTrustCheckState, SubmoduleTrustPromptOperation, SubmoduleTrustPromptState,
 };
-use crate::msg::{Effect, Msg, RepoCommandKind, RepoPathList};
+use crate::msg::{Effect, Msg, RepoChange, RepoCommandKind, RepoPathList};
 use rustc_hash::FxHashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -1506,6 +1506,33 @@ pub(super) fn repo_command_finished(
         repo_state.bump_conflict_rev();
     }
 
+    // A completed repo command (fetch/pull/push/...) mutated the repository.
+    // Translate the raw trigger into a semantic `RepoChange` and let the single
+    // dispatch point decide which panels to refresh — cancelling stale in-flight
+    // loads first so a slow log walk does not swallow the refresh (the
+    // "commit list is stale after a fetch/pull/push" race). This mirrors the
+    // invalidation repo_action_finished performs for local actions.
+    //
+    // The cancel runs BEFORE the command-specific refreshes below: the cancel's
+    // `clear_cancelled_repo_loading` resets worktrees / submodules / the active
+    // diff back to `NotLoaded`, and the blocks that follow re-raise those flags
+    // for the panels the full refresh does not cover. Running them in the other
+    // order would let the cancel wipe the `Loading` flags these blocks set.
+    let mut effects = super::repo_change::dispatch_repo_change(
+        state,
+        repo_id,
+        RepoChange::from_repo_command_kind(&command),
+    );
+
+    // Command-specific refreshes the full refresh does not cover (worktrees /
+    // submodules / tags / the active diff). These run AFTER the cancel so the
+    // cancel does not reset their `Loading` flags.
+    let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
+        if clear_banner {
+            clear_banner_error_for_repo(state, repo_id);
+        }
+        return effects;
+    };
     if refresh_worktrees {
         repo_state.set_worktrees(Loadable::Loading);
         extra_effects.push(Effect::LoadWorktrees { repo_id });
@@ -1577,8 +1604,6 @@ pub(super) fn repo_command_finished(
             append_diff_reload_effects(&mut extra_effects, repo_state, repo_id, target);
         }
     }
-    let mut effects = Vec::with_capacity(refresh_full_effect_capacity());
-    append_refresh_full_effects(repo_state, state.git_log_settings, &mut effects);
     effects.extend(extra_effects);
     if clear_banner {
         clear_banner_error_for_repo(state, repo_id);

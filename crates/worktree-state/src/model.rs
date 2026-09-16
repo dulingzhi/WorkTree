@@ -240,9 +240,14 @@ impl RepoLoadsInFlight {
             {
                 self.pending_log = Some(next);
             }
-            // Don't let a refresh request (cursor=None) clobber a pending pagination request
-            // for the same scope, author, and refs.
-            Some(existing) if existing.cursor.is_some() && next.cursor.is_none() => {}
+            // A refresh request (cursor=None) rebuilds the first page with the
+            // latest data, so it must take precedence over a pending pagination
+            // request for the same scope/author/refs: after a repo change the
+            // new top commits must show, and the pending pagination would only
+            // have appended commits the refresh now supersedes.
+            Some(existing) if existing.cursor.is_some() && next.cursor.is_none() => {
+                self.pending_log = Some(next);
+            }
             _ => {
                 self.pending_log = Some(next);
             }
@@ -2927,8 +2932,13 @@ mod tests {
         assert_eq!(loads.finish_log(), None);
     }
 
+    /// A same-scope refresh (cursor=None) takes precedence over a pending
+    /// pagination request: after a repo change the first page must rebuild with
+    /// the latest commits, so the stale pagination it would have appended is
+    /// dropped. (Previously "does not clobber pending pagination"; that let
+    /// external-change refreshes get silently lost behind a pending load-more.)
     #[test]
-    fn request_log_same_scope_refresh_does_not_clobber_pending_pagination() {
+    fn request_log_same_scope_refresh_replaces_pending_pagination() {
         let mut loads = RepoLoadsInFlight::default();
         let cursor = test_cursor("page-1");
 
@@ -2946,6 +2956,9 @@ mod tests {
                 ))
                 .is_none()
         );
+        // A same-scope refresh arrives while the pagination is pending: it must
+        // replace the pagination rather than be dropped, so the latest first page
+        // is what the in-flight walk hands back when it finishes.
         assert!(
             loads
                 .request_log(log_request(LogScope::MergesOnly, None, None))
@@ -2954,11 +2967,7 @@ mod tests {
 
         assert_eq!(
             loads.finish_log().map(|(_, next)| next),
-            Some(log_request(
-                LogScope::MergesOnly,
-                None,
-                Some(cursor.clone())
-            ))
+            Some(log_request(LogScope::MergesOnly, None, None))
         );
     }
 

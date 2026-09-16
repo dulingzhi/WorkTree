@@ -1135,9 +1135,8 @@ impl PopoverHost {
                 return;
             }
             ContextMenuAction::Push { repo_id } => {
-                self.store.dispatch(Msg::Push {
-                    repo_id,
-                    pull_retry: self.push_pull_retry_enabled,
+                let _ = self.root_view.update(cx, |root, cx| {
+                    root.request_push(repo_id, None, window, cx);
                 });
             }
             ContextMenuAction::SetUpstreamBranch {

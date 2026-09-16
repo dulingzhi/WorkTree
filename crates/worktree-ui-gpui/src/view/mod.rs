@@ -967,6 +967,52 @@ impl WorkTreeView {
         }
     }
 
+    /// The one entry point for "push this repo".
+    ///
+    /// Resolves the push decision (does HEAD have an upstream? which remote
+    /// should publish it?) and then either pushes, asks which remote to
+    /// publish to, or reports that there is nowhere to push. Every push
+    /// affordance routes here — toolbar, command palette and context menu
+    /// alike — so they cannot drift apart the way they used to.
+    pub(in crate::view) fn request_push(
+        &mut self,
+        repo_id: RepoId,
+        at: Option<gpui::Point<gpui::Pixels>>,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(repo) = self.state.repos.iter().find(|r| r.id == repo_id) else {
+            return;
+        };
+        let decision = worktree_state::push_decision::push_decision(repo);
+        let pull_retry = self.push_pull_retry_enabled;
+        match decision {
+            worktree_state::push_decision::PushDecision::Push => {
+                self.store.dispatch(Msg::Push {
+                    repo_id,
+                    pull_retry,
+                });
+            }
+            worktree_state::push_decision::PushDecision::NeedsUpstream {
+                remote: Some(remote),
+            } => {
+                let kind = PopoverKind::PushSetUpstreamPrompt { repo_id, remote };
+                match at {
+                    Some(position) => self.open_popover_at(kind, position, window, cx),
+                    None => self.open_popover_centered(kind, window, cx),
+                }
+            }
+            worktree_state::push_decision::PushDecision::NeedsUpstream { remote: None }
+            | worktree_state::push_decision::PushDecision::NoRemotes => {
+                self.push_toast(
+                    components::ToastKind::Error,
+                    crate::i18n::t!("panels.action_bar.push_no_remotes").into_owned(),
+                    cx,
+                );
+            }
+        }
+    }
+
     fn execute_command(
         &mut self,
         command_id: &str,
@@ -1235,11 +1281,10 @@ impl WorkTreeView {
                 }
             }
             "push" => {
-                if let Some(repo_id) = self.active_repo_id() {
-                    self.store.dispatch(Msg::Push {
-                        repo_id,
-                        pull_retry: self.push_pull_retry_enabled,
-                    });
+                if let Some(repo_id) = self.active_repo_id()
+                    && let Some(window) = window
+                {
+                    self.request_push(repo_id, None, window, cx);
                 }
             }
             "force-push" => {
@@ -2750,10 +2795,6 @@ impl WorkTreeView {
         });
         self.schedule_ui_settings_persist(cx);
         cx.notify();
-    }
-
-    pub(in crate::view) fn push_pull_retry_enabled(&self) -> bool {
-        self.push_pull_retry_enabled
     }
 
     pub(in crate::view) fn set_commit_amend_enabled(

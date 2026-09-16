@@ -1,6 +1,7 @@
 mod effect;
 mod message;
 mod message_debug;
+mod repo_change;
 mod repo_command_kind;
 mod repo_external_change;
 mod repo_path;
@@ -13,6 +14,7 @@ pub use message::{
     ConflictBulkScope, ConflictRegionChoice, ConflictRegionResolutionUpdate, InternalMsg, Msg,
     RepoActionKind, RepoWatchDegradedReason,
 };
+pub use repo_change::RepoChange;
 pub use repo_command_kind::RepoCommandKind;
 pub use repo_external_change::RepoExternalChange;
 pub use repo_path::RepoPath;
