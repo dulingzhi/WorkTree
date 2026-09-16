@@ -722,8 +722,22 @@ pub(super) fn log_loaded(
             && let Loadable::Ready(page) = &repo_state.log
         {
             let reveal_target = repo_state.history_state.reveal_target.clone();
+            // A stash's tip commit is not walked by the default history scope —
+            // stashes only join an `AllBranches` traversal — yet selecting a stash
+            // opens its detail pane by selecting that tip. Without this exemption a
+            // reload of the default page reads the stash as "no longer exists" and
+            // wipes the detail pane the user just opened, which is exactly why a
+            // stash's changed-files list could flicker away. Stash tips are the one
+            // kind of selection that is legitimately absent from the page, so they
+            // are treated as always surviving.
+            let stash_ids: FxHashSet<worktree_core::domain::CommitId> = match &repo_state.stashes {
+                Loadable::Ready(stashes) => stashes.iter().map(|stash| stash.id.clone()).collect(),
+                _ => FxHashSet::default(),
+            };
             let survives = |id: &worktree_core::domain::CommitId| {
-                reveal_target.as_ref() == Some(id) || page.commits.iter().any(|c| c.id == *id)
+                reveal_target.as_ref() == Some(id)
+                    || stash_ids.contains(id)
+                    || page.commits.iter().any(|c| c.id == *id)
             };
 
             let mut next = repo_state.history_state.multi_selection.clone();

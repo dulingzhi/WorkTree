@@ -6552,6 +6552,78 @@ fn status_for_paths_patch_replaces_and_appends_covered_entries() {
     );
 }
 
+/// A watcher can report a *directory*; git then expands it, so the response
+/// carries files the request never named. The old list must still have those
+/// files replaced, not appended-to — otherwise the same path shows up twice in
+/// the staged/unstaged list.
+#[test]
+fn status_for_paths_patch_replaces_entries_git_expanded_from_a_directory() {
+    use crate::msg::InternalMsg;
+    use worktree_core::domain::{FileStatus, FileStatusKind};
+    use worktree_core::services::StatusForPaths;
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+
+    let repo_id = RepoId(1);
+    repos.insert(repo_id, Arc::new(DummyRepo::new("/tmp/repo")));
+    let mut repo = RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    );
+    let entry = |path: &str, kind| FileStatus {
+        path: PathBuf::from(path),
+        kind,
+        conflict: None,
+    };
+    repo.set_status(Loadable::Ready(std::sync::Arc::new(RepoStatus {
+        unstaged: vec![
+            entry("dir/a.txt", FileStatusKind::Modified),
+            entry("dir/b.txt", FileStatusKind::Modified),
+        ],
+        staged: vec![],
+    })));
+    state.repos.push(repo);
+
+    // The request names the directory; the response expands it to its files.
+    let paths: std::sync::Arc<[PathBuf]> = vec![PathBuf::from("dir")].into();
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(InternalMsg::StatusForPathsLoaded {
+            repo_id,
+            paths,
+            result: Ok(StatusForPaths::Lists {
+                unstaged: vec![
+                    entry("dir/a.txt", FileStatusKind::Deleted),
+                    entry("dir/b.txt", FileStatusKind::Modified),
+                ],
+                staged: vec![],
+            }),
+        }),
+    );
+
+    let status = state.repos[0].status.ready().unwrap();
+    let listed: Vec<String> = status
+        .unstaged
+        .iter()
+        .map(|e| e.path.display().to_string())
+        .collect();
+    assert_eq!(
+        listed,
+        vec!["dir/a.txt".to_string(), "dir/b.txt".to_string()],
+        "each expanded file appears exactly once — no duplicate rows"
+    );
+    assert_eq!(
+        status.unstaged[0].kind,
+        FileStatusKind::Deleted,
+        "the freshly reported entry wins over the stale old one"
+    );
+}
+
 /// The merge patches both lanes (a staged path's unstaged half is replaced
 /// too), so it must finish both lanes' in-flight bits: a dispatch that holds
 /// the staged flag — the stage/unstage/commit completion refresh — would

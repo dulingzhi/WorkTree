@@ -1507,9 +1507,22 @@ fn commit_details_reports_merge_parents_and_file_changes() {
         "expected committed_at to be set"
     );
     assert_eq!(merge_details.parent_ids.len(), 2);
+    // A merge is rendered as the union of files that differ from *any* parent.
+    // (An empty list here is what used to blank the details pane for stashes,
+    // which are merge commits too.) This merge differs from `main` by the
+    // feature's file and from `feature` by main's file.
     assert!(
-        merge_details.files.is_empty(),
-        "merge commit details should match `git show` and omit file rows without `-m`"
+        merge_details.files.iter().any(
+            |f| f.path.as_path() == Path::new("feature.txt") && f.kind == FileStatusKind::Added
+        ),
+        "merge details must include the feature side's file"
+    );
+    assert!(
+        merge_details
+            .files
+            .iter()
+            .any(|f| f.path.as_path() == Path::new("main.txt")),
+        "merge details must include the main side's file"
     );
     assert!(
         feature_details.files.iter().any(|f| {

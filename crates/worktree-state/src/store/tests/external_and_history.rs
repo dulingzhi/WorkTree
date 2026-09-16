@@ -1861,6 +1861,86 @@ fn log_loaded_reconciles_commit_multi_selection() {
     assert_eq!(sel.anchor_log_rev, None);
 }
 
+/// A stash is opened by selecting its tip commit, but the default history scope
+/// never walks stash tips (they only join an `AllBranches` traversal). A page
+/// reload must therefore not treat the stash tip as "gone" and wipe the details
+/// pane — that is the flicker where a stash's changed files disappeared.
+#[test]
+fn log_reload_keeps_a_selected_stash_tip() {
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+    state.repos.push(RepoState::new_opening(
+        RepoId(1),
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    ));
+    state.active_repo = Some(RepoId(1));
+
+    let commit = |id: &str| Commit {
+        signed: false,
+        id: CommitId(id.into()),
+        parent_ids: worktree_core::domain::CommitParentIds::new(),
+        summary: "s".into(),
+        author: "a".into(),
+        time: SystemTime::UNIX_EPOCH,
+    };
+
+    let stash_tip = CommitId("stash0".into());
+    let repo_state = &mut state.repos[0];
+    repo_state.history_state.history_scope = LogScope::CurrentBranch;
+    repo_state.stashes = Loadable::Ready(Arc::new(vec![worktree_core::domain::StashEntry {
+        index: 0,
+        id: stash_tip.clone(),
+        message: Arc::from("wip"),
+        created_at: None,
+    }]));
+    repo_state.set_selected_commit(Some(stash_tip.clone()));
+    repo_state.set_commit_details(Loadable::Ready(Arc::new(commit_details_for(
+        &stash_tip, "wip",
+    ))));
+    repo_state.history_state.multi_selection = crate::model::CommitMultiSelection {
+        commits: vec![stash_tip.clone()],
+        anchor: None,
+        anchor_index: None,
+        anchor_log_rev: None,
+    };
+
+    let seq = expect_log_reply(&mut state.repos[0], LogScope::CurrentBranch, None, None);
+    let _effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::Internal(crate::msg::InternalMsg::LogLoaded {
+            repo_id: RepoId(1),
+            seq,
+            scope: LogScope::CurrentBranch,
+            cursor: None,
+            result: Ok(LogPage {
+                commits: vec![commit("other"), commit("another")],
+                next_cursor: None,
+            }),
+        }),
+    );
+
+    let repo_state = &state.repos[0];
+    assert_eq!(
+        repo_state.history_state.selected_commit.as_ref(),
+        Some(&stash_tip),
+        "the stash tip survives a page reload even though the page omits it"
+    );
+    assert_eq!(
+        repo_state.history_state.multi_selection.commits,
+        vec![stash_tip.clone()],
+        "the stash selection is not dropped from the multi-selection either"
+    );
+    assert!(
+        matches!(repo_state.history_state.commit_details, Loadable::Ready(_)),
+        "the details pane is not blanked for a still-selected stash"
+    );
+}
+
 /// A reveal asks git to resolve the reference before touching the selection, so
 /// an abbreviation lands on the full id and the details pane fills in without
 /// the log having paged anywhere near the commit.

@@ -1831,20 +1831,32 @@ impl RepoState {
         self.staged_status_rev = self.staged_status_rev.wrapping_add(1);
     }
 
-    /// Incremental patch: drop the previous entries for `paths` from both
-    /// lanes and splice in the fresh ones (which cover exactly those
-    /// paths), keeping the backend's path-then-kind-priority ordering so
-    /// the merged list is byte-identical in shape to a full scan's.
+    /// Incremental patch: replace the previous entries for the freshly reported
+    /// paths from both lanes and splice in the fresh ones, keeping the backend's
+    /// path-then-kind-priority ordering so the merged list is shaped exactly like
+    /// a full scan's.
+    ///
+    /// The authoritative "what am I replacing" set is the **fresh entries' paths**
+    /// unioned with the requested `paths` — not the requested paths alone. A
+    /// watcher can report a *directory* (git expands it, so the response lists
+    /// files the request never named), and a rename/untracked case can report
+    /// more than was asked for; filtering the old list by `paths` alone would
+    /// then leave the old copies of those freshly reported files in place and
+    /// append duplicates of them. The final sort-and-dedup is a belt-and-braces
+    /// guard mirroring `sort_and_dedup_status_entries` in the gix full scan.
     pub(crate) fn patch_status_for_paths(
         &mut self,
         paths: &[std::path::PathBuf],
         unstaged: Vec<FileStatus>,
         staged: Vec<FileStatus>,
     ) {
-        let status_unchanged = matches!(&self.status, Loadable::Ready(_));
-        if !status_unchanged {
+        if !matches!(&self.status, Loadable::Ready(_)) {
             return;
         }
+        let mut covered: FxHashSet<PathBuf> = paths.iter().cloned().collect();
+        covered.extend(unstaged.iter().map(|entry| entry.path.clone()));
+        covered.extend(staged.iter().map(|entry| entry.path.clone()));
+
         let next = {
             let Loadable::Ready(previous) = &self.status else {
                 unreachable!("checked above");
@@ -1852,19 +1864,19 @@ impl RepoState {
             let mut next_unstaged: Vec<FileStatus> = previous
                 .unstaged
                 .iter()
-                .filter(|entry| !paths.contains(&entry.path))
+                .filter(|entry| !covered.contains(&entry.path))
                 .cloned()
                 .collect();
             next_unstaged.extend(unstaged);
             let mut next_staged: Vec<FileStatus> = previous
                 .staged
                 .iter()
-                .filter(|entry| !paths.contains(&entry.path))
+                .filter(|entry| !covered.contains(&entry.path))
                 .cloned()
                 .collect();
             next_staged.extend(staged);
-            Self::sort_status_entries(&mut next_unstaged);
-            Self::sort_status_entries(&mut next_staged);
+            Self::sort_and_dedup_status_entries(&mut next_unstaged);
+            Self::sort_and_dedup_status_entries(&mut next_staged);
             RepoStatus {
                 unstaged: next_unstaged,
                 staged: next_staged,
@@ -1889,12 +1901,17 @@ impl RepoState {
         }
     }
 
-    fn sort_status_entries(entries: &mut [FileStatus]) {
+    // Sort by path, then highest kind-priority first, then drop duplicate paths
+    // (a second entry for a path is stale) — matching the gix backend's
+    // `sort_and_dedup_status_entries`, so a patched lane is shaped like a full
+    // scan's and can never carry the same path twice.
+    fn sort_and_dedup_status_entries(entries: &mut Vec<FileStatus>) {
         entries.sort_by(|a, b| {
             a.path.cmp(&b.path).then_with(|| {
                 Self::status_kind_priority(b.kind).cmp(&Self::status_kind_priority(a.kind))
             })
         });
+        entries.dedup_by(|a, b| a.path == b.path);
     }
 
     pub(crate) fn set_status(&mut self, status: Loadable<Shared<RepoStatus>>) {
