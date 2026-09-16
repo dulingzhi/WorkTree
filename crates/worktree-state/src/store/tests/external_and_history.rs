@@ -4572,3 +4572,183 @@ fn worktree_external_change_with_paths_uses_the_targeted_lane() {
         "no settled snapshot to merge onto — the coarse worktree lane answers"
     );
 }
+
+/// A change the watcher reports for a repo that is *not* the active one must be
+/// parked on the repo, not dispatched: refreshing a repo the user is not looking
+/// at wastes a scan, but dropping it (the old behaviour) made activation miss it.
+#[test]
+fn repo_externally_changed_while_inactive_parks_the_change() {
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let active = RepoId(1);
+    let inactive = RepoId(2);
+    let mut state = AppState::default();
+    state.repos.push(RepoState::new_opening(
+        active,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/active"),
+        },
+    ));
+    state.repos.push(RepoState::new_opening(
+        inactive,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/inactive"),
+        },
+    ));
+    state.repos[0].set_open(Loadable::Ready(()));
+    state.repos[1].set_open(Loadable::Ready(()));
+    state.active_repo = Some(active);
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::RepoExternallyChangedWhileInactive {
+            repo_id: inactive,
+            change: crate::msg::RepoExternalChange::GitState,
+            worktree_paths: None,
+        },
+    );
+
+    assert!(
+        effects.is_empty(),
+        "a non-active-repo change must not dispatch any load"
+    );
+    let inactive_state = state.repos.iter().find(|r| r.id == inactive).unwrap();
+    assert_eq!(
+        inactive_state.pending_external_change,
+        Some(crate::msg::RepoExternalChange::GitState)
+    );
+    assert_eq!(inactive_state.pending_external_rev, 1);
+    assert!(
+        state
+            .repos
+            .iter()
+            .find(|r| r.id == active)
+            .unwrap()
+            .pending_external_change
+            .is_none(),
+        "the active repo is untouched"
+    );
+}
+
+/// Successive inactive changes accumulate: the lane flags merge and the path
+/// sets union, so activation refreshes everything that changed while away.
+#[test]
+fn repo_externally_changed_while_inactive_accumulates_lanes_and_paths() {
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let repo_id = RepoId(1);
+    let other = RepoId(2);
+    let mut state = AppState::default();
+    state.repos.push(RepoState::new_opening(
+        other,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/other"),
+        },
+    ));
+    state.repos.push(RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    ));
+    state.active_repo = Some(other);
+
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::RepoExternallyChangedWhileInactive {
+            repo_id,
+            change: crate::msg::RepoExternalChange::Worktree,
+            worktree_paths: Some(Arc::from(vec![PathBuf::from("b.txt")])),
+        },
+    );
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::RepoExternallyChangedWhileInactive {
+            repo_id,
+            change: crate::msg::RepoExternalChange::GitState,
+            worktree_paths: Some(Arc::from(vec![PathBuf::from("a.txt")])),
+        },
+    );
+
+    let repo_state = state.repos.iter().find(|r| r.id == repo_id).unwrap();
+    let parked = repo_state
+        .pending_external_change
+        .expect("a change was recorded");
+    assert!(
+        parked.worktree && parked.git_state,
+        "both lanes are remembered, not the last one only"
+    );
+    assert_eq!(
+        repo_state.pending_external_rev, 2,
+        "each record advances the marker"
+    );
+    assert_eq!(
+        repo_state.pending_external_paths.as_deref(),
+        Some([PathBuf::from("a.txt"), PathBuf::from("b.txt")].as_slice()),
+        "path sets union and sort"
+    );
+}
+
+/// Activation (a tab switch) consumes the parked change: the refresh fan-out is
+/// driven by the switch itself, and the parked marker must clear so the "has
+/// un-synced external changes" indicator does not linger.
+#[test]
+fn set_active_repo_consumes_the_parked_external_change() {
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let active = RepoId(1);
+    let parked = RepoId(2);
+    let mut state = AppState::default();
+    state.repos.push(RepoState::new_opening(
+        active,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/active"),
+        },
+    ));
+    state.repos.push(RepoState::new_opening(
+        parked,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/parked"),
+        },
+    ));
+    state.repos[0].set_open(Loadable::Ready(()));
+    state.repos[1].set_open(Loadable::Ready(()));
+    state.active_repo = Some(active);
+
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::RepoExternallyChangedWhileInactive {
+            repo_id: parked,
+            change: crate::msg::RepoExternalChange::Index,
+            worktree_paths: None,
+        },
+    );
+    assert!(state.repos[1].pending_external_change.is_some());
+
+    reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::SetActiveRepo { repo_id: parked },
+    );
+
+    assert_eq!(state.active_repo, Some(parked));
+    let repo_state = state.repos.iter().find(|r| r.id == parked).unwrap();
+    assert!(
+        repo_state.pending_external_change.is_none(),
+        "switching to the repo supersedes the parked change"
+    );
+    assert!(repo_state.pending_external_paths.is_none());
+    assert_eq!(
+        repo_state.pending_external_rev, 0,
+        "the dirty marker clears"
+    );
+}

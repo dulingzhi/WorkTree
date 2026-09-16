@@ -947,28 +947,30 @@ fn repo_monitor_thread(
         })
     };
 
+    // Both flushes report the change regardless of whether this repo is active.
+    // The store decides: an active repo refreshes immediately; an inactive one is
+    // parked on `RepoState` (`RepoExternallyChangedWhileInactive`) so that
+    // activating it can refresh precisely instead of always scanning everything.
     let flush = |flushed: FlushedChange| {
         let active = active_repo_id.load(Ordering::Relaxed);
-        if active == repo_id.0 {
-            trace_repo_monitor_flush("flush", repo_id, flushed.change, active);
-            msg_tx.send_repo_monitor_or_log(
-                Msg::RepoExternallyChanged {
-                    repo_id,
-                    change: flushed.change,
-                    worktree_paths: relativize_paths(flushed.worktree_paths)
-                        .filter(|paths| !paths.is_empty())
-                        .map(std::sync::Arc::from),
-                },
-                "repo monitor flush",
-            );
-        } else {
-            repo_load_trace::trace!(
-                "repo_monitor_flush_gated_out source=flush repo_id={:?} active={} change={:?}",
+        trace_repo_monitor_flush("flush", repo_id, flushed.change, active);
+        let worktree_paths = relativize_paths(flushed.worktree_paths)
+            .filter(|paths| !paths.is_empty())
+            .map(std::sync::Arc::from);
+        let msg = if active == repo_id.0 {
+            Msg::RepoExternallyChanged {
                 repo_id,
-                active,
-                flushed.change
-            );
-        }
+                change: flushed.change,
+                worktree_paths,
+            }
+        } else {
+            Msg::RepoExternallyChangedWhileInactive {
+                repo_id,
+                change: flushed.change,
+                worktree_paths,
+            }
+        };
+        msg_tx.send_repo_monitor_or_log(msg, "repo monitor flush");
     };
 
     let flush_if_active = |pending: Option<FlushedChange>| {
@@ -976,26 +978,24 @@ fn repo_monitor_thread(
             return;
         };
         let active = active_repo_id.load(Ordering::Relaxed);
-        if active == repo_id.0 {
-            trace_repo_monitor_flush("flush_if_active", repo_id, flushed.change, active);
-            msg_tx.send_repo_monitor_or_log(
-                Msg::RepoExternallyChanged {
-                    repo_id,
-                    change: flushed.change,
-                    worktree_paths: relativize_paths(flushed.worktree_paths)
-                        .filter(|paths| !paths.is_empty())
-                        .map(std::sync::Arc::from),
-                },
-                "repo monitor flush_if_active",
-            );
-        } else {
-            repo_load_trace::trace!(
-                "repo_monitor_flush_gated_out source=flush_if_active repo_id={:?} active={} change={:?}",
+        trace_repo_monitor_flush("flush_if_active", repo_id, flushed.change, active);
+        let worktree_paths = relativize_paths(flushed.worktree_paths)
+            .filter(|paths| !paths.is_empty())
+            .map(std::sync::Arc::from);
+        let msg = if active == repo_id.0 {
+            Msg::RepoExternallyChanged {
                 repo_id,
-                active,
-                flushed.change
-            );
-        }
+                change: flushed.change,
+                worktree_paths,
+            }
+        } else {
+            Msg::RepoExternallyChangedWhileInactive {
+                repo_id,
+                change: flushed.change,
+                worktree_paths,
+            }
+        };
+        msg_tx.send_repo_monitor_or_log(msg, "repo monitor flush_if_active");
     };
 
     loop {

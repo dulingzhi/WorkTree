@@ -1,4 +1,5 @@
 use crate::msg::RepoCommandKind;
+use crate::msg::RepoExternalChange;
 use crate::msg::RepoPath;
 use crate::session;
 use rustc_hash::{FxHashMap, FxHashSet, FxHasher};
@@ -1340,6 +1341,21 @@ pub struct RepoState {
     /// "repo changed" indicator, or the history view via `history_cache_rev`)
     /// gets one subscription point instead of re-fingerprinting a dozen revs.
     pub content_rev: u64,
+    /// While this repo is NOT the active repo, an external (filesystem watcher)
+    /// change is recorded here instead of being dispatched, so that activating the
+    /// repo can refresh precisely what changed rather than always scanning
+    /// everything. `None` means "no external change was observed while inactive" —
+    /// in that case the activation full-refresh safety net (sandbox/Flatpak can
+    /// miss watcher events) still runs. Backs the tab/sidebar "has un-synced
+    /// external changes" indicator.
+    pub pending_external_change: Option<RepoExternalChange>,
+    /// Paths accompanying `pending_external_change`, for an incremental status
+    /// merge on activation (rather than a full status walk).
+    pub pending_external_paths: Option<Arc<[PathBuf]>>,
+    /// Bumped each time `pending_external_change` is (re)set, so UI can re-render
+    /// the dirty indicator without comparing the `Option` itself. Reset to 0 on
+    /// activation, when the pending change is consumed and the repo re-syncs.
+    pub pending_external_rev: u64,
     pub last_active_at: Option<SystemTime>,
 
     pub missing_on_disk: bool,
@@ -1461,6 +1477,9 @@ impl RepoState {
             open_rev: 0,
             ops_rev: 0,
             content_rev: 0,
+            pending_external_change: None,
+            pending_external_paths: None,
+            pending_external_rev: 0,
             last_active_at: None,
             missing_on_disk: false,
             last_error: None,
@@ -1473,6 +1492,53 @@ impl RepoState {
             push_pull_retry_pending: false,
             comparison_mark: None,
         }
+    }
+
+    /// Record an external (filesystem-watcher) change observed while this repo
+    /// was NOT the active repo. Merged into any previously recorded change; the
+    /// actual refresh is deferred until the repo is activated (see
+    /// `take_pending_external_change`). Replaces the old behaviour of silently
+    /// dropping non-active-repo external events.
+    pub(crate) fn record_external_change_while_inactive(
+        &mut self,
+        change: RepoExternalChange,
+        paths: Option<Arc<[PathBuf]>>,
+    ) {
+        let merged = match self.pending_external_change {
+            Some(existing) => RepoExternalChange {
+                worktree: existing.worktree || change.worktree,
+                index: existing.index || change.index,
+                git_state: existing.git_state || change.git_state,
+                tags: existing.tags || change.tags,
+            },
+            None => change,
+        };
+        self.pending_external_change = Some(merged);
+        let previous_paths = std::mem::replace(&mut self.pending_external_paths, None);
+        self.pending_external_paths = match (previous_paths, paths) {
+            (Some(a), Some(b)) => {
+                let mut union: Vec<PathBuf> = a.iter().chain(b.iter()).cloned().collect();
+                union.sort();
+                union.dedup();
+                Some(union.into())
+            }
+            (Some(a), None) => Some(a),
+            (None, Some(b)) => Some(b),
+            (None, None) => None,
+        };
+        self.pending_external_rev = self.pending_external_rev.wrapping_add(1);
+    }
+
+    /// Consume any recorded external change (called when the repo is activated).
+    /// Returns the merged `RepoExternalChange` and path set, or `None` if nothing
+    /// was recorded while inactive. Resets the dirty marker so the UI badge clears.
+    pub(crate) fn take_pending_external_change(
+        &mut self,
+    ) -> Option<(RepoExternalChange, Option<Arc<[PathBuf]>>)> {
+        let change = std::mem::replace(&mut self.pending_external_change, None);
+        let paths = std::mem::replace(&mut self.pending_external_paths, None);
+        self.pending_external_rev = 0;
+        change.map(|c| (c, paths))
     }
 
     pub fn set_spec(&mut self, spec: RepoSpec) {

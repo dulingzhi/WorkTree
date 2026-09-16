@@ -918,6 +918,21 @@ fn repo_action_clears_head_dependent_state(action: RepoActionKind) -> bool {
     )
 }
 
+/// Record (do not dispatch) an external change the filesystem watcher saw while
+/// this repo was not the active repo. The refresh is deferred to activation; see
+/// `RepoState::record_external_change_while_inactive`. Never produces effects.
+pub(super) fn record_repo_external_change_while_inactive(
+    state: &mut AppState,
+    repo_id: crate::model::RepoId,
+    change: RepoExternalChange,
+    worktree_paths: Option<std::sync::Arc<[std::path::PathBuf]>>,
+) -> Vec<Effect> {
+    if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+        repo_state.record_external_change_while_inactive(change, worktree_paths);
+    }
+    Vec::new()
+}
+
 pub(super) fn reduce_external_and_history(msg: Msg, state: &mut AppState) -> ReduceOutcome {
     let effects = match msg {
         Msg::ReloadRepo { repo_id } => external_and_history::reload_repo(state, repo_id),
@@ -927,6 +942,16 @@ pub(super) fn reduce_external_and_history(msg: Msg, state: &mut AppState) -> Red
             change,
             worktree_paths,
         } => external_and_history::repo_externally_changed(state, repo_id, change, worktree_paths),
+        Msg::RepoExternallyChangedWhileInactive {
+            repo_id,
+            change,
+            worktree_paths,
+        } => external_and_history::record_repo_external_change_while_inactive(
+            state,
+            repo_id,
+            change,
+            worktree_paths,
+        ),
         Msg::RepoWatchDegraded { repo_id: _, reason } => {
             let message = match reason {
                 crate::msg::RepoWatchDegradedReason::TooManyFolders { dir_count } => rust_i18n::t!(

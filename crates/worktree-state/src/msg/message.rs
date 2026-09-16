@@ -206,6 +206,18 @@ pub enum Msg {
         /// means refresh coarsely.
         worktree_paths: Option<std::sync::Arc<[std::path::PathBuf]>>,
     },
+    /// An external (filesystem-watcher) change for a repo that is NOT currently
+    /// active. The store records it on `RepoState` — it must not dispatch a refresh
+    /// for a repo the user is not looking at — so the repo can refresh precisely on
+    /// activation instead of always scanning everything. Replaces the old behaviour
+    /// of silently dropping such events.
+    RepoExternallyChangedWhileInactive {
+        repo_id: RepoId,
+        change: RepoExternalChange,
+        /// Same worktree-relative path set as `RepoExternallyChanged::worktree_paths`,
+        /// kept so activation can do an incremental status merge.
+        worktree_paths: Option<std::sync::Arc<[std::path::PathBuf]>>,
+    },
     /// The file-system watcher could not fully watch the worktree, so live change detection is
     /// degraded. The repository still refreshes when the window regains focus; the `reason` carries
     /// the detail for the user-facing warning.

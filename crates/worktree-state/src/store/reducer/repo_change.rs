@@ -310,9 +310,9 @@ mod tests {
             "IndexChanged must reload status"
         );
         assert!(
-            !effects
-                .iter()
-                .any(|e| matches!(e, Effect::LoadStatusForPaths { repo_id: id, .. } if *id == repo_id)),
+            !effects.iter().any(
+                |e| matches!(e, Effect::LoadStatusForPaths { repo_id: id, .. } if *id == repo_id)
+            ),
             "IndexChanged without paths must NOT use the targeted merge"
         );
         assert!(

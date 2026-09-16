@@ -255,7 +255,7 @@ Step A 把 P1 延后的「按 `RepoChange` variant 语义刷新」落地：`disp
 - 收益：① UI 标签页"外部变更待刷新"徽标；② 激活时只刷真正变化的车道，对"变了的非活跃仓"更省；③ 可选优化——`pending_external_change == None` 的非活跃仓激活时可跳过 primary 刷新（但须保守，不破坏沙箱安全网）。
 - 风险：须与 `repo_switch_can_use_primary_refresh`（`repo_management.rs:54`）+ `HOT_REPO_SWITCH_SECONDARY_REFRESH_WINDOW` 的热点切换判定协同，避免重复刷新。
 
-**建议**：Step D 作为独立实现任务排期，**建议等 Step B（把外部/action 路径收敛进 `dispatch_repo_change`）落地后再做**——届时精准刷新直接复用 `dispatch_repo_change(RepoChange::from_repo_external_change(change))`，避免再次出现"手挑刷新集合"漂移。本会话仅完成评估 + 设计，未实现。
+**建议**：Step D 作为独立实现任务排期，**建议等 Step B（把外部/action 路径收敛进 `dispatch_repo_change`）落地后再做**——届时精准刷新直接复用 `dispatch_repo_change(RepoChange::from_repo_external_change(change))`，避免再次出现"手挑刷新集合"漂移。本会话仅完成评估 + 设计，未实现。**（已于 2026-09-17 落地，见 §4.7。）**
 
 ---
 
@@ -363,6 +363,21 @@ Step A 把 P1 延后的「按 `RepoChange` variant 语义刷新」落地：`disp
 - 命令路径：取消 + 核心 = 原行为（race 修复保留）。
 
 **验证证据**：`cargo check -p worktree-state --tests` 通过（lib + 新增/改写单测均编译干净；仅余预存 `status_refresh_e2e.rs:745` `round` 未用警告，与本次无关）。本机 `cargo test` 仍被 Windows `os error 5` 写锁阻断（见 §6），实跑以 CI(Linux) 为准。
+
+---
+
+### 4.7 Step D 落地说明（2026-09-17）：非活跃仓轻量标脏 + 激活精准刷新
+
+按 §4.5 设计落地。§4.5 的两个可选实现里选了**新增 `Msg` 变体**（而非给 `RepoExternallyChanged` 加 `record_if_inactive` 字段）——后者会让 40+ 处 `Msg::RepoExternallyChanged { … }` 测试字面量全部需要补字段，前者只动 monitor 的两个 flush 闭包。
+
+- **新增 `Msg::RepoExternallyChangedWhileInactive { repo_id, change, worktree_paths }`**（`msg/message.rs`）。monitor 的 `flush` / `flush_if_active`（`store/repo_monitor.rs`）不再「非活跃仓即丢弃」，改为：活跃仓发 `RepoExternallyChanged`（立即刷新，行为不变），非活跃仓发新变体。两者共用一次 `relativize_paths`。
+- **`RepoState` 新增三个字段**（`model.rs`）：`pending_external_change: Option<RepoExternalChange>` + `pending_external_paths: Option<Arc<[PathBuf]>>` + `pending_external_rev: u64`；`new_opening` 初始化（所有构造点都委托 `new_opening`，无需改各字面构造）。配套方法 `record_external_change_while_inactive`（车道 OR 合并、路径并集排序去重、`rev` 自增）与 `take_pending_external_change`（取出 + 清空 + `rev` 归零）。用 `std::mem::replace` 而非 `Option::take`，避开 `Arc<[PathBuf]>` 无 `Default` 的问题。
+- **reducer 侧**：`reduce_external_and_history` 新增该变体 → `record_repo_external_change_while_inactive`（只记录、恒返回空 effects，因此**不派发任何 load**）；`repo_load_trace` 的 `msg_name`/`msg_repo_id`/`msg_external_change` 补三处匹配臂。**故意不加入 `msg_requires_available_git`**：记录不需要 git 可用（与真正要发 load 的 `RepoExternallyChanged` 不同语义）。
+- **激活消费（`store/mod.rs` 的 `Msg::RepoActivated`）**：先取 `take_pending_external_change()`——有 parked 变化就用它发**精准** `RepoExternallyChanged`（复用 Step B 的 `dispatch_repo_change`，含 `worktree` 车道增量 merge 路径），没有则回退 `RepoExternalChange::all()` 全刷。**全刷安全网保留**：沙箱/Flatpak 下 monitor 可能完全漏看变更（此时无 parked → 走全刷），精准刷新只是命中 parked 时的优化，不可替换全刷。
+- **`SetActiveRepo`（切仓）只清 parked，不改其刷新**（`repo_management.rs::fill_set_active_repo_inline_impl`，`changed` 时调 `take_pending_external_change()` 丢弃）。这是对 §4.5「`SetActiveRepo` 消费后改发精准刷新」的**有意收窄**：切仓本就有 full/primary 刷新扇出（`repo_switch_can_use_primary_refresh` + `HOT_REPO_SWITCH_SECONDARY_REFRESH_WINDOW` 热点判定），若再叠精准 dispatch 会与该逻辑纠缠且可能重复刷新；清 parked 只为及时清掉「外部变更待刷新」指示器，数据正确性由既有的切仓刷新保证。精准刷新优化实际作用于「同一仓重新聚焦」这一路径。
+- **验证**：`cargo check -p worktree-state --tests` 通过（仅余预存 `status_refresh_e2e.rs:745` 警告）；`cargo fmt --check` 干净（顺带修掉 Step B 遗留在 `repo_change.rs:310` 的一处换行）；新增 3 个单测锁定行为——`repo_externally_changed_while_inactive_parks_the_change`（记录且零 effects）、`repo_externally_changed_while_inactive_accumulates_lanes_and_paths`（车道 OR + 路径并集 + rev 自增两次）、`set_active_repo_consumes_the_parked_external_change`（切仓清 parked）。本机 `cargo test` 仍受 Windows `os error 5` 阻断，实跑以 CI(Linux) 为准。
+
+**未做（可后续）**：UI 侧「外部变更待刷新」徽标尚未接线——`pending_external_change.is_some()` / `pending_external_rev` 已是现成订阅点，接入标签页/侧边栏即可。
 
 ---
 

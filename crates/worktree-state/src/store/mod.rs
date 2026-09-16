@@ -717,7 +717,25 @@ impl AppStore {
                             repo_id,
                             repo_monitors.is_running(repo_id)
                         );
-                        let change = RepoExternalChange::all();
+                        // If the watcher recorded changes for this repo while it was
+                        // inactive, refresh precisely those lanes (optimisation);
+                        // otherwise fall back to the full sweep, which stays the
+                        // correctness safety net for sandboxed runs where the watcher
+                        // itself may have missed events entirely.
+                        let (change, worktree_paths) = {
+                            let mut app_state =
+                                thread_state.write().unwrap_or_else(|e| e.into_inner());
+                            let app_state = make_mut_state_with_diagnostics(&mut app_state);
+                            match app_state
+                                .repos
+                                .iter_mut()
+                                .find(|r| r.id == repo_id)
+                                .and_then(|repo_state| repo_state.take_pending_external_change())
+                            {
+                                Some((change, paths)) => (change, paths),
+                                None => (RepoExternalChange::all(), None),
+                            }
+                        };
                         let effects = {
                             let mut app_state =
                                 thread_state.write().unwrap_or_else(|e| e.into_inner());
@@ -730,7 +748,7 @@ impl AppStore {
                                 Msg::RepoExternallyChanged {
                                     repo_id,
                                     change,
-                                    worktree_paths: None,
+                                    worktree_paths,
                                 },
                             );
                             reducer_diagnostics::record_reducer_pass(reduce_started.elapsed());

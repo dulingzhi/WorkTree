@@ -761,6 +761,12 @@ fn fill_set_active_repo_inline_impl(
         append_cancel_repo_loads_effect_for_repo(state, previous_active, effects);
     }
     state.active_repo = Some(repo_id);
+    if changed {
+        // Switching to a repo supersedes any external change parked while it was
+        // inactive: the refresh fan-out below covers it, and dropping the parked
+        // marker also clears the "has un-synced external changes" indicator.
+        let _ = state.repos[repo_ix].take_pending_external_change();
+    }
     let persist_effect = (changed && persist_on_change)
         .then(|| persist_session_effect(state, Some(repo_id), "switching active repository"));
     let git_log_settings = state.git_log_settings;
