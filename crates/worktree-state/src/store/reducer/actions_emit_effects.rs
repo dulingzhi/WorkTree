@@ -1379,12 +1379,19 @@ pub(super) fn repo_command_finished(
             | RepoCommandKind::RemoveSubmodule { .. }
     ) && result.is_ok();
     let command_succeeded = result.is_ok();
+    // Tag CRUD refreshes the list, and so do the commands that can bring new
+    // tags in from a remote — a fetch or pull that adds tags used to leave the
+    // sidebar showing the stale list until something rewrote a tag locally.
     let refresh_tags = command_succeeded
         && matches!(
             &command,
             RepoCommandKind::CreateTag { .. }
                 | RepoCommandKind::DeleteTag { .. }
                 | RepoCommandKind::PruneLocalTags
+                | RepoCommandKind::FetchAll
+                | RepoCommandKind::AutoFetchAll
+                | RepoCommandKind::Pull { .. }
+                | RepoCommandKind::PullBranch { .. }
         );
     let mut clear_banner = false;
 
