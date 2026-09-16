@@ -1613,10 +1613,64 @@ impl DetailsPaneView {
 
 impl Render for DetailsPaneView {
     fn render(&mut self, _window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
+        let show_directory_diff = self
+            .active_repo()
+            .is_some_and(|repo| repo.diff_state.directory_diff_target.is_some());
+        if show_directory_diff {
+            return div().size_full().child(self.render_directory_diff(cx));
+        }
         div()
             .size_full()
             .child(self.commit_details_view(cx))
             .child(StatusSectionResizeTracker { view: cx.entity() })
+    }
+}
+
+impl DetailsPaneView {
+    /// Render the active directory diff (SmartGit-style folder comparison) in
+    /// the details pane. Minimal first cut: an indented tree of the
+    /// `DirectoryDiffResult` with per-node change kind and +/- counts.
+    fn render_directory_diff(&mut self, _cx: &mut gpui::Context<Self>) -> impl IntoElement {
+        let repo = self.active_repo();
+        let body = match repo {
+            Some(repo) => match &repo.diff_state.directory_diff {
+                worktree_state::model::Loadable::Ready(result) => {
+                    div().child(self.render_directory_tree(&result.root, 0))
+                }
+                worktree_state::model::Loadable::Loading => div().child("Loading directory diff…"),
+                worktree_state::model::Loadable::Error(err) => {
+                    div().child(format!("Directory diff failed: {err}"))
+                }
+                worktree_state::model::Loadable::NotLoaded => {
+                    div().child("No directory diff loaded")
+                }
+            },
+            None => div().child("No repository"),
+        };
+        div().size_full().p(px(12.0)).child(body)
+    }
+
+    fn render_directory_tree(
+        &self,
+        node: &worktree_core::diff_tree::DirectoryNode,
+        depth: usize,
+    ) -> impl IntoElement {
+        let indent = px(12.0 * depth as f32);
+        let label = match node.kind {
+            worktree_core::diff_tree::DirectoryNodeKind::Directory => format!(
+                "{}  ({} files, +{} -{})",
+                node.name, node.file_count, node.additions, node.deletions
+            ),
+            worktree_core::diff_tree::DirectoryNodeKind::File => {
+                format!("{}  +{} -{}", node.name, node.additions, node.deletions)
+            }
+        };
+        let row = div().flex().pl(indent).child(label);
+        div().child(row).children(
+            node.children
+                .iter()
+                .map(|child| self.render_directory_tree(child, depth + 1)),
+        )
     }
 }
 
