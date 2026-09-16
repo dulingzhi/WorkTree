@@ -127,6 +127,11 @@ pub(in super::super) struct DetailsPaneView {
 
     pub(in super::super) status_multi_selection: FxHashMap<RepoId, StatusMultiSelection>,
     pub(in super::super) status_multi_selection_last_status: FxHashMap<RepoId, (u64, u64)>,
+    /// Directories the user collapsed in the directory-diff tree. Empty means
+    /// everything is expanded. View-local on purpose: the tree is a read-only
+    /// projection of the loaded `DirectoryDiffResult`, so the store never needs
+    /// this state and collapsing one costs no reload.
+    directory_diff_collapsed: std::collections::HashSet<std::path::PathBuf>,
 
     pub(in super::super) commit_details_delay: Option<CommitDetailsDelayState>,
     pub(in super::super) commit_details_delay_seq: u64,
@@ -505,6 +510,7 @@ impl DetailsPaneView {
             commit_message_programmatic_change: false,
             status_multi_selection: FxHashMap::default(),
             status_multi_selection_last_status: FxHashMap::default(),
+            directory_diff_collapsed: std::collections::HashSet::default(),
             commit_details_delay: None,
             commit_details_delay_seq: 0,
             path_display_cache: std::cell::RefCell::new(path_display::PathDisplayCache::default()),
@@ -1628,9 +1634,9 @@ impl Render for DetailsPaneView {
 
 impl DetailsPaneView {
     /// Render the active directory diff (SmartGit-style folder comparison) in
-    /// the details pane. Minimal first cut: an indented tree of the
-    /// `DirectoryDiffResult` with per-node change kind and +/- counts.
-    fn render_directory_diff(&mut self, _cx: &mut gpui::Context<Self>) -> impl IntoElement {
+    /// the details pane: a stats bar plus an expandable/collapsible tree of the
+    /// `DirectoryDiffResult`.
+    fn render_directory_diff(&mut self, cx: &mut gpui::Context<Self>) -> impl IntoElement {
         let repo = self.active_repo();
         let body = match repo {
             Some(repo) => match &repo.diff_state.directory_diff {
@@ -1641,7 +1647,7 @@ impl DetailsPaneView {
                     );
                     div()
                         .child(stats)
-                        .child(self.render_directory_tree(&result.root, 0))
+                        .child(self.render_directory_tree(&result.root, 0, cx))
                 }
                 worktree_state::model::Loadable::Loading => div().child("Loading directory diff…"),
                 worktree_state::model::Loadable::Error(err) => {
@@ -1656,27 +1662,56 @@ impl DetailsPaneView {
         div().size_full().p(px(12.0)).child(body)
     }
 
+    /// One row of the directory tree plus, unless collapsed, its children.
+    /// `[-]`/`[+]` marks a directory's state; clicking toggles it.
     fn render_directory_tree(
         &self,
         node: &worktree_core::diff_tree::DirectoryNode,
         depth: usize,
-    ) -> impl IntoElement {
+        cx: &mut gpui::Context<Self>,
+    ) -> gpui::Div {
+        let is_dir = matches!(
+            node.kind,
+            worktree_core::diff_tree::DirectoryNodeKind::Directory
+        );
+        let collapsed = is_dir && self.directory_diff_collapsed.contains(node.path.as_path());
         let indent = px(12.0 * depth as f32);
-        let label = match node.kind {
-            worktree_core::diff_tree::DirectoryNodeKind::Directory => format!(
-                "{}  ({} files, +{} -{})",
-                node.name, node.file_count, node.additions, node.deletions
-            ),
-            worktree_core::diff_tree::DirectoryNodeKind::File => {
-                format!("{}  +{} -{}", node.name, node.additions, node.deletions)
-            }
+        let label = if is_dir {
+            let marker = if collapsed { "[+] " } else { "[-] " };
+            format!(
+                "{}{}  ({} files, +{} -{})",
+                marker, node.name, node.file_count, node.additions, node.deletions
+            )
+        } else {
+            format!("{}  +{} -{}", node.name, node.additions, node.deletions)
         };
-        let row = div().flex().pl(indent).child(label);
-        div().child(row).children(
-            node.children
-                .iter()
-                .map(|child| self.render_directory_tree(child, depth + 1)),
-        )
+
+        let row_id = gpui::ElementId::Name(gpui::SharedString::from(format!(
+            "directory-diff-row-{}",
+            node.path.display()
+        )));
+        let mut row = div().flex().pl(indent).child(label).id(row_id);
+        if is_dir {
+            let toggle_path = node.path.clone();
+            row = row
+                .cursor(gpui::CursorStyle::PointingHand)
+                .on_click(cx.listener(move |this, _event, _window, cx| {
+                    if !this.directory_diff_collapsed.remove(&toggle_path) {
+                        this.directory_diff_collapsed.insert(toggle_path.clone());
+                    }
+                    cx.notify();
+                }));
+        }
+
+        let mut container = div().child(row);
+        if !collapsed {
+            let mut children = Vec::with_capacity(node.children.len());
+            for child in &node.children {
+                children.push(self.render_directory_tree(child, depth + 1, &mut *cx));
+            }
+            container = container.children(children);
+        }
+        container
     }
 }
 
