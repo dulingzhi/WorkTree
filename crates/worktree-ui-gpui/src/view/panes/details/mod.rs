@@ -1635,7 +1635,13 @@ impl DetailsPaneView {
         let body = match repo {
             Some(repo) => match &repo.diff_state.directory_diff {
                 worktree_state::model::Loadable::Ready(result) => {
-                    div().child(self.render_directory_tree(&result.root, 0))
+                    let stats = format!(
+                        "{} files changed, +{} -{}",
+                        result.root.file_count, result.root.additions, result.root.deletions
+                    );
+                    div()
+                        .child(stats)
+                        .child(self.render_directory_tree(&result.root, 0))
                 }
                 worktree_state::model::Loadable::Loading => div().child("Loading directory diff…"),
                 worktree_state::model::Loadable::Error(err) => {
