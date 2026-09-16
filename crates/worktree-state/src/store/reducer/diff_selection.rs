@@ -545,6 +545,23 @@ pub(super) fn global_nav(
     effects
 }
 
+/// Leave directory-comparison mode: drop the loaded tree so the details pane
+/// shows whatever was just selected instead.
+///
+/// Without this the pane would keep rendering the directory tree forever —
+/// `directory_diff_target` is only ever set by an explicit "Compare
+/// Directory" request, so nothing else would ever clear it.
+pub(crate) fn clear_directory_diff_state(repo_state: &mut crate::model::RepoState) {
+    if repo_state.diff_state.directory_diff_target.is_none()
+        && matches!(repo_state.diff_state.directory_diff, Loadable::NotLoaded)
+    {
+        return;
+    }
+    repo_state.diff_state.directory_diff_target = None;
+    repo_state.diff_state.directory_diff = Loadable::NotLoaded;
+    repo_state.bump_diff_state_rev();
+}
+
 pub(super) fn fill_select_diff_inline(
     state: &mut AppState,
     repo_id: RepoId,
@@ -558,6 +575,7 @@ pub(super) fn fill_select_diff_inline(
 
     let content_preview = mode.is_content_view();
     clear_inline_submodule_diff_state(repo_state);
+    clear_directory_diff_state(repo_state);
     repo_state.diff_state.content_preview = content_preview;
     repo_state.diff_state.edit_mode = mode == ContentViewMode::Edit;
     if mode != ContentViewMode::Edit {

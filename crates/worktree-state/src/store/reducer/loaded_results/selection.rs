@@ -47,6 +47,10 @@ pub(in crate::store::reducer) fn select_commit_multi(
         return Vec::new();
     };
 
+    // Selecting a commit leaves directory-comparison mode, same as selecting
+    // any file diff does.
+    super::super::diff_selection::clear_directory_diff_state(repo_state);
+
     let log_rev = repo_state.history_state.log_rev;
     let mut sel = repo_state.history_state.multi_selection.clone();
 
