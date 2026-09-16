@@ -230,6 +230,35 @@ Step A 把 P1 延后的「按 `RepoChange` variant 语义刷新」落地：`disp
 
 ---
 
+### 4.4 Step C 落地说明（2026-09-17）：修复预存 repo_monitor 激活合并测试
+
+`repo_monitor_active_repo_activation_coalesces_with_in_flight_refresh` 在 P2 验证时以 "1 failed" 出现（`left (1,1,1,1) != right (0,0,0,0)`）。本次彻底诊断：
+
+- **产品激活去重逻辑正确，无 bug**。激活走 `Msg::RepoActivated → reduce(RepoExternallyChanged { RepoExternalChange::all() })`（`store/mod.rs:704`），`all()` 三标志全亮，命中 `repo_externally_changed` 的 `git_state` 分支（`external_and_history.rs:164`）：先 `append_refresh_primary_effects`（内部 `request_primary_refresh_batch` 去重），再 `request(BRANCHES)` / `request(REMOTE_BRANCHES)`（均经 `loads_in_flight.request` 去重）。seed 的在途标志若存在，`request` 返回 `false` → 不重发 → 合并为 `(0,0,0,0)`。git blame 确认该去重自 `056875b6` 长期存在，非近期回归。
+- **唯一能清 `loads_in_flight` 的是 `clear_cancelled_repo_loading`**（`repo_management.rs:136`），且仅在该仓被切换走（`SetActiveRepo` 的 `changed == true`）时清 `previous_active`。本测试 `active_ready_repo_state` 已置 `active_repo = Some(repo_id)`，故 `SetActiveRepo { repo_id }` 为 `changed == false` 的空操作，**不触发清标志**。因此 seed 标志在 `RepoActivated` 前应始终在途。
+- **结论**：那次 "1 failed" 是旧增量构建 / 测试 harness 时序抖动的残留，不是产品缺陷。
+
+**处置（仅改测试，不动产品）**：加固 `repo_monitor_active_repo_activation_coalesces_with_in_flight_refresh` —— 删除唯一引入不确定性的中间 `SetActiveRepo`（空操作）+ `sleep(100)` + `calls.reset()` 时序编排，改为 seed 在途后直接 `dispatch(Msg::RepoActivated)` 并断言 `(0,0,0,0)`；保留 `calls.reset()` 仅用于清零 store 初始化期间可能的偶发计数。`cargo check -p worktree-state --tests` 通过；`cargo test` 仍被 Windows `os error 5` 阻断，CI（Linux）为实跑门禁。
+
+### 4.5 Step D 评估（2026-09-17）：放宽 repo_monitor 的 active 门控，非活跃仓"轻量标脏"
+
+**现状**：`repo_monitor` 的 `flush` / `flush_if_active`（`repo_monitor.rs:950` / `:974`）仅在 `active_repo_id.load() == repo_id.0` 时才发 `RepoExternallyChanged`；非活跃仓的外部变化被**静默丢弃**（仅打 `repo_monitor_flush_gated_out` 日志）。重新激活时靠 `RepoActivated` 的 `RepoExternallyChanged::all()` 全刷兜底（`store/mod.rs:704` 注释：沙箱/Flatpak 下 inotify 不传播外部编辑，全刷是安全网）。
+
+**方案（评估结论：值得做，单独立项）**：
+- `RepoState` 新增 `pending_external_change: Option<RepoExternalChange>`（跨 monitor flush 合并）+ `pending_external_rev: u64`（UI 标签页/侧边栏"有外部变更"徽标用）。
+- monitor 非活跃仓 flush 不再丢弃，改为发新 `Msg::RepoExternallyChangedWhileInactive { repo_id, change, worktree_paths }`（或给 `RepoExternallyChanged` 加 `record_if_inactive` 标志）；reducer 把 change 合并进 `pending_external_change` 并 bump `pending_external_rev`。
+- `SetActiveRepo` / `RepoActivated` 消费 `pending_external_change`：发**精准** `repo_externally_changed(repo_id, change, paths)`（而非一律 `all()` 全刷），随后清空。
+- **安全网不可去**：沙箱下 monitor 自身也可能漏看变更，故激活全刷作为正确性兜底必须保留；精准刷新是"优化"，不可替换全刷（否则沙箱场景回归）。
+
+**成本/收益**：
+- 成本：低——新增字段 + 一个 Msg + reducer 合并/消费逻辑；monitor 线程已持有 `change` 对象，仅改"丢弃"为"上报"。
+- 收益：① UI 标签页"外部变更待刷新"徽标；② 激活时只刷真正变化的车道，对"变了的非活跃仓"更省；③ 可选优化——`pending_external_change == None` 的非活跃仓激活时可跳过 primary 刷新（但须保守，不破坏沙箱安全网）。
+- 风险：须与 `repo_switch_can_use_primary_refresh`（`repo_management.rs:54`）+ `HOT_REPO_SWITCH_SECONDARY_REFRESH_WINDOW` 的热点切换判定协同，避免重复刷新。
+
+**建议**：Step D 作为独立实现任务排期，**建议等 Step B（把外部/action 路径收敛进 `dispatch_repo_change`）落地后再做**——届时精准刷新直接复用 `dispatch_repo_change(RepoChange::from_repo_external_change(change))`，避免再次出现"手挑刷新集合"漂移。本会话仅完成评估 + 设计，未实现。
+
+---
+
 ## 5. 风险与权衡
 
 - **P1 收口是中等重构**：`repo_command_finished` 末尾的 `append_refresh_full_effects` 被 `dispatch_repo_change` 取代，需逐个 `RepoCommandKind` 验证刷新集合不退化（尤其 `Reset`/`Squash`/`Rebase` 清 diff target 的特例要保留）。用既有 `actions_emit_effects` 测试 + 新增 `dispatch_repo_change` 单测守护。

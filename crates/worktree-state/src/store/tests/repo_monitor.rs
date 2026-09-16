@@ -295,8 +295,11 @@ fn repo_monitor_active_repo_activation_coalesces_with_in_flight_refresh() {
     // Activation (window focus) now does a FULL refresh — the filesystem monitor cannot be the sole
     // trigger because it does not see external edits OR git-state changes in sandboxed/Flatpak runs.
     // But when those loads are already in flight, the activation refresh must coalesce rather than
-    // schedule duplicate status/log/branch loads. Seed every lane the full refresh touches as
-    // in-flight (the primary batch does not include branches/remote branches).
+    // schedule duplicate status/log/branch loads. Seed every lane the activation refresh touches as
+    // in-flight (the primary batch does not include branches/remote branches) and then activate;
+    // the activation `RepoExternallyChanged { all() }` path coalesces through `loads_in_flight`
+    // (primary batch via `request_primary_refresh_batch`, branches/remote branches via `request`),
+    // so no duplicate loads are scheduled.
     let repo_id = RepoId(21);
     let workdir = unique_repo_monitor_test_path("activation-coalesce");
     std::fs::create_dir_all(&workdir).expect("create activation coalesce workdir");
@@ -325,10 +328,9 @@ fn repo_monitor_active_repo_activation_coalesces_with_in_flight_refresh() {
         )),
     );
 
-    store.dispatch(Msg::SetActiveRepo { repo_id });
-    std::thread::sleep(std::time::Duration::from_millis(100));
+    // Seed the in-flight loads above; the activation must coalesce with them. `reset` zeroes any
+    // incidental counts from store setup so the assertion measures only the activation dispatch.
     calls.reset();
-
     store.dispatch(Msg::RepoActivated { repo_id });
     std::thread::sleep(std::time::Duration::from_millis(500));
 
