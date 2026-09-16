@@ -176,3 +176,18 @@ it/hooks` UI；另 rerere、Gitea 为次档。
   - reducer：`store/reducer/diff_selection.rs` 的 `RequestDirectoryDiff` 臂 + `directory_diff_loaded`（mirror `diff_loaded`）
 - 理由：`GitRepositoryDiff` trait 有数十个实现者，加 trait 方法会逼改所有 mock；在 state 层复用既有 `diff_range_files` + core 聚合零新 backend 接口，规避 P5 冻结风险。
 - 验证：`cargo check -p worktree-state -p worktree-ui-gpui -p worktree` 通过；`cargo test -p worktree-core --lib diff_tree` 17 passed。改动本地未提交。
+
+---
+
+## T-C / T-D / T-E 完成（2026-09-16，目录 diff 端到端可用）
+
+三个提交落地于 `dev` 分支（用户要求本地 commit，未 push；`.workbuddy/` 按约定不入库）：
+- `30a0857a` T-C 下半：`ContextMenuAction::CompareDirectory{repo_id,path}` + `file_browser_folder.rs` 右键「Compare Directory…」+ `impl_menu.rs` 中央 dispatcher 臂（复用活动 `CommitRange` diff target + 右键目录 path）。
+- `ba27f833` T-D：`DetailsPaneView::render` 在 `directory_diff_target` 置位时改渲染 `DirectoryDiffResult` 树（`render_directory_tree` 递归缩进 + 每节点 change kind / ± / 文件数；Ready/Loading/Error/NotLoaded 全处理）。
+- `fab82b80` T-E：`render_directory_diff` 顶部统计条「N files changed, +A -D」（取 root `DirectoryNode` 聚合）。
+
+验证：`cargo check -p worktree-ui-gpui` 通过（仅预存 user_survey warning）；`cargo fmt` 干净。
+
+目录 diff 特性状态：T-A✓ T-B✓ T-C✓ T-D✓ T-E✓；**T-F 大目录性能档位半段 = 推迟**：其优化需在 git-gix 给 `GitRepositoryDiff` trait 加 pathspec `root/` 前缀裁剪（改动 trait 签名 → 逼改数十 mock，撞 P5 冻结），与 T-B 已定的零新 backend 接口决策相悖；当前 `diff_range_files` 已返回全量路径、聚合正确，大目录靠 T6 虚拟化兜底。
+
+下一步（待用户指定）：堆叠分支 / Git Flow / 原生 hooks（均 P5+ 后，D-G1 决策）；或补 T-D 的目录展开/折叠、T-E 放置位置复核（details vs main pane）。
