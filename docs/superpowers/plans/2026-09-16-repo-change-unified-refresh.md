@@ -176,7 +176,7 @@ gpui 的惯用法是 `cx.notify()` + rev 缓存比较，不是事件订阅；引
 | 档 | 任务 | 改动面 | 价值 |
 |----|------|--------|------|
 | **P0** ✅已落地 | 修 commit-list race：`repo_command_finished` 末尾先 `append_cancel_repo_loads_effect_for_repo` 再 `append_refresh_full_effects`（注意提交走 `commit_finished` 本就有取消，缺口在仓库命令路径）；并修 `model.rs:218` 的 `request_log` 丢弃刷新分支（实际在 model.rs 而非 util.rs） | `actions_emit_effects.rs` + `model.rs` | 直接消除 Fetch/Pull/Push 等命令后 commit list 很久才刷；`cargo check` 通过 |
-| **P1** ✅已落地（命令路径收口） | 引入 `RepoChange` + `dispatch_repo_change()`，把 **`repo_command_finished` 仓库命令路径**收敛进来（外部 `repo_externally_changed` / `repo_action_finished` 路径延后到下一步）；`dispatch_repo_change` 当前为**统一 full refresh**（`append_cancel_repo_loads_effect_for_repo` + `append_refresh_full_effects`），按 `RepoChange` variant 收窄的语义刷新集合（见 2.1）留作下一步 | 新增 `msg/repo_change.rs` + `store/reducer/repo_change.rs`；改 `msg.rs`/`reducer.rs`/`actions_emit_effects.rs` 接线 | 仓库命令路径根除 race + 漂移；`cargo test -p worktree-state` 728 passed |
+| **P1** ✅已落地（命令路径收口） | 引入 `RepoChange` + `dispatch_repo_change()`，把 **`repo_command_finished` 仓库命令路径**收敛进来（外部 `repo_externally_changed` / `repo_action_finished` 路径延后到下一步）；`dispatch_repo_change` 先以**统一 full refresh**收口（根除 race），随后 **Step A（2026-09-17）已收窄为按 `RepoChange` variant 精准刷新集合**（见 2.1 `match change { … }` + §4.3），外部 `repo_externally_changed` / `repo_action_finished` 收敛仍延后 | 新增 `msg/repo_change.rs` + `store/reducer/repo_change.rs`；改 `msg.rs`/`reducer.rs`/`actions_emit_effects.rs` 接线 | 仓库命令路径根除 race + 漂移；`cargo test -p worktree-state` 728 passed |
 | **P2** ✅已落地 | 加 `content_rev` 粗粒度"仓库变了"统一 ping + `history_cache_rev()` 派生缓存键；`history.rs::notify_fingerprint_for` 改用派生键；四条变更分发路径统一 bump `content_rev` | `model.rs` + `repo_change.rs`/`external_and_history.rs`/`actions_emit_effects.rs` + `history.rs` | UI 侧统一感知、少维护 rev 列表；直接兑现用户"UI 统一感知"诉求 |
 | **P3** | 评估非活跃仓库外部事件：是否放宽 `repo_monitor` 的 active 门控做"轻量标脏"（不实时全刷，激活时再刷） | `repo_monitor.rs` + 激活刷新 | 多仓场景下其它仓也能感知变化（按需） |
 
@@ -207,7 +207,26 @@ P2 已落地并通过 `cargo check -p worktree-state -p worktree-ui-gpui`（仅�
 - **UI 侧改造**（`worktree-ui-gpui/src/view/panes/history.rs:143` `notify_fingerprint_for`）：由"内联混 12+ 个 rev"改为 `state.active_repo.hash(&mut hasher)` + `repo.history_cache_rev().hash(&mut hasher)`，仅当 `show_history_tags` 时额外 `repo.tags_rev.hash(&mut hasher)`。语义等价原 16 个 rev 混合列表，且今后新增的 repo 级变化源只需在 `history_cache_rev` 一处登记，UI 不可能再"漏订阅"。`model.rs` 需补 `use std::hash::{Hash, Hasher};`（首轮编译即此缺失）。
 - **`model.rs` 字段新增无需改 `RepoState { … }` 字面构造点**：`push_decision.rs::repo()`、`model.rs::new_repo()`、`actions_emit_effects.rs::repo_with_head_dependent_cached_state` / `repo_state_with_tags_loaded`、`util.rs::repo_state` 均委托 `new_opening`，故加 `content_rev` 字段自动随 `new_opening` 初始化，无需逐点补字段。
 
-> **剩余（用户 P0→P1→P2 指令之外的下一步）**：把外部 `repo_externally_changed` 与 `repo_action_finished` 也收敛进 `dispatch_repo_change`（当前仍各自手挑刷新集合）；把 `dispatch_repo_change` 从"统一 full refresh"收窄为按 `RepoChange` variant 的语义刷新集合（见 2.1 `match change { … }`）；`repo_monitor_active_repo_activation_coalesces_with_in_flight_refresh` 预存失败另立 issue 排查。P3 评估非活跃仓轻量标脏。
+> **剩余（用户 P0→P1→P2 指令之外的下一步）**：把外部 `repo_externally_changed` 与 `repo_action_finished` 也收敛进 `dispatch_repo_change`（当前仍各自手挑刷新集合，Step A 只动了命令路径）；`repo_monitor_active_repo_activation_coalesces_with_in_flight_refresh` 预存失败另立 issue 排查。P3 评估非活跃仓轻量标脏。
+
+---
+
+### 4.3 Step A 落地说明（2026-09-17）：dispatch_repo_change 按 variant 收窄刷新集合
+
+Step A 把 P1 延后的「按 `RepoChange` variant 语义刷新」落地：`dispatch_repo_change` 不再是统一 full refresh，而是按 variant 精准发 effect（仍先取消在途、仍 bump `content_rev`）。这是外部/action 路径收敛（Step B）的前置——只有 dispatch 懂 variant，外部路径才能安全复用而不丢失增量优化。
+
+- **刷新集合映射**（`store/reducer/repo_change.rs`）：
+  - `Anything` → `append_refresh_full_effects`（兜底，覆盖 submodule 指针 / 冲突工具 / export-archive-gc 等"未知"变体，保持全刷不漏）；
+  - `RefsChanged` → primary + `append_branch_list_effects`（branches/remotes/remote_branches）+ `append_tags_effects` + `set_recent_commit_messages(NotLoaded)`；
+  - `TagsChanged` → 仅 `append_tags_effects`；
+  - `HeadMoved` / `Committed` → primary + `append_branch_list_effects` + `set_recent_commit_messages(NotLoaded)`；
+  - `IndexChanged` / `StatusChanged` → `append_requested_status_refresh_effects`（双 lane status）；
+  - `WorktreeChanged` → `append_requested_status_refresh_effects`（双 lane status；file-browser / 活动 diff 由调用方 specialized extras 负责）；
+  - `BranchesChanged` → `append_branch_list_effects`。
+- **顺手修掉的隐患**：旧"统一 full refresh"其实**不含 tags**（`append_refresh_full_effects` 不发 `LoadTags`），而命令路径的 `refresh_tags` 又不含 `PushTag`/`DeleteRemoteTag` → PushTag 后标签侧栏陈旧。`RefsChanged` 现在补刷 tags，根治该隐患（与调用方 `refresh_tags` 经 `loads_in_flight` 去重，不重复发）。
+- **行为变化（命令路径）**：各 variant 从"无脑全量"变为"精准子集"——如 stage/unstage 不再触发 log 重载、建删 tag 不再触发 branches 重载。更省（大仓少发 load）、更快、不退化；调用方的 specialized extras（worktrees/submodules/active diff/blame）仍在 dispatch 之后运行不受影响。
+- **`append_branch_list_effects` / `append_tags_effects`**：新增私有辅助；branch 列表**不**按 `active_repo` 门控（保持收敛前命令路径 full refresh 对每仓都刷的行为）。
+- **验证**：`cargo test -p worktree-state --lib dispatch_repo_change` 在 Windows 被 `target/debug/deps` 的 `os error 5` 写锁阻断（环境，见 §6 下方说明），故以 `cargo check -p worktree-state --tests` **通过**（lib + 新增单测代码均编译干净）为编译证据；新增 4 个单测锁定 `Committed`/`TagsChanged`/`IndexChanged`/`HeadMoved` 的 effect 集合（含"精准、不全刷"的负向断言），由 CI（Linux）实际执行守护不退化。原有 2 个 dispatch 单测（cancel-in-flight + Anything 全刷）保留。
 
 ---
 
