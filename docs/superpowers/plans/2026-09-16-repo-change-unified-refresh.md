@@ -259,6 +259,113 @@ Step A 把 P1 延后的「按 `RepoChange` variant 语义刷新」落地：`disp
 
 ---
 
+### 4.6 Step B 设计（2026-09-17）：把外部 / action 路径收敛进 `dispatch_repo_change`
+
+**目标**：把第三条（`repo_externally_changed` 外部四车道）与第四条（`repo_action_finished` 本地 action）刷新决策路径也收口到单一 `dispatch_repo_change`，消除「命令 / 外部 / action」三套手挑刷新集合的漂移。命令路径（P1/Step A）已收敛；本步收口另两条。
+
+**必须保留的 specialized extras（收敛不可丢失的增量优化）**：
+- 增量 worktree merge：`LoadStatusForPaths`（已知路径集 + 无 coarse 扫描在途时并入已 settle 快照，而非全扫）—— 外部 `worktree` 事件（`external_and_history.rs:202`）与 action `stage/unstage`（`:871`）路径。
+- diff reload：`should_reload_diff`（WorkingTree / CommitRange-to-None 目标）随 `git_state/index/worktree` 重刷 patch（`:249`）。
+- blame 失效：`git_state` 事件 `invalidate_loaded_blame`（HEAD 移动但 patch 字节相同、attribution 变了）（`:285`）。
+- range-files refresh：激活的 commit↔working-tree 比较（`to == None`）随 `git_state/index/worktree` 重刷变更文件列表（`:307`）。
+- file-browser refresh：sidebar 显示此仓 Files 树时随 `worktree/index/git_state` 重刷（active 立即 / 否则 stale）（`:127`）。
+- action 路径专属状态：`local_actions_in_flight` 递减、`bump_ops_rev`、Ok 时 `clear_head_dependent_cached_state`、错误/banner（`last_error`/`push_diagnostic`/`clear_banner_error_for_repo`）、active 仓的 branch lists / sidebar data（worktrees/submodules/stashes）/ assume-unchanged reload / selected history reloads / conflict reload（`:832`–`:927`）。
+
+#### 4.6.1 两个必须解决的张力
+1. **取消策略不同**：命令路径 + action 路径先 `append_cancel_repo_loads_effect_for_repo`（取消全部在途 + 清 flag + `Loading→NotLoaded` + bump epoch）再重发；外部路径**不取消**，经 `loads_in_flight.request` 去重合并（保增量 merge）。`dispatch_repo_change` 当前「总是取消」（`repo_change.rs:40`）。
+2. **`RepoChange` 单 variant 表达力不足**：外部四车道可多 lane 同亮、且 `worktree` 事件带 `worktree_paths`、且依赖 `active_repo`/`diff_target`/`range_selection` 状态；action `stage/unstage` 带 `paths`。单 variant 会丢信息：如 `from_repo_external_change` 把 `git_state`→`HeadMoved` 会丢 `remote_branches` + `worktree_dirty`（外部 git_state 分支原含这两者，`:184`/`:118`）；`worktree` 增量 merge 会被 dispatch 的全量 `LoadStatus` 覆盖/重复。
+
+#### 4.6.2 推荐设计
+**`dispatch_repo_change` = 核心（按 variant 的精准刷新集），不取消、用 `request` 去重；调用方负责「取消策略」+「specialized extras」。**
+
+**(a) 取消移出 dispatch**：
+- `dispatch_repo_change` **不再 cancel**。
+- `repo_command_finished`：dispatch 前先 `append_cancel_repo_loads_effect_for_repo`（保留 commit-list race 修复）。
+- `repo_action_finished`：dispatch 前先 `append_cancel_repo_loads_effect_for_repo`（本就如此）。
+- `repo_externally_changed`：**不 cancel**（保留合并行为）。
+
+**(b) 给 dispatch 加增量状态刷新旋钮 `incremental_status_paths: Option<&[PathBuf]>`（默认 None）**：
+- 当 variant 刷新 status（`IndexChanged`/`StatusChanged`/`WorktreeChanged`）且 `incremental_status_paths` 有值、且 `WORKTREE_STATUS`/`STAGED_STATUS` 无 coarse 扫描在途 → 发 `LoadStatusForPaths`（merge）替代全量 `LoadStatus`。
+- 外部 `worktree`/`index` 事件传 `worktree_paths`；action `StagePath`/`UnstagePath` 传 `paths`。消除双刷、保留增量优化。
+- 命令路径 / 多数 action 传 `None`（全量 status）。
+
+**(c) 核心 variant 映射（与 Step A 一致，纯 variant→effects，`request` 去重）**：
+- `Committed` / `HeadMoved` → primary + branches + recent NotLoaded
+- `RefsChanged` → primary + branches + remotes + remote_branches + tags + recent NotLoaded
+- `TagsChanged` → tags
+- `IndexChanged` / `StatusChanged` / `WorktreeChanged` → status（双 lane；`WorktreeChanged` 经增量旋钮）
+- `BranchesChanged` → branches
+- `Anything` → full
+
+**(d) 调用方 extras（dispatch 之后追加，基于原始 trigger 的字段/状态，不走 variant）**：
+- **外部 `repo_externally_changed`**：
+  - `change.git_state` → 额外 `remote_branches` + `worktree_dirty`（原 git_state 分支有，核心 `HeadMoved` 不含）。
+  - `change.tags`（独立于 git_state）→ `append_tags_effects`（原逻辑 tags 单独处理，`:242`）。
+  - file-browser：`file_browser_refresh_for_external_change`（active 立即 / 否则 stale）。
+  - diff reload + blame：`should_reload_diff` + `if change.git_state { invalidate_loaded_blame }` + conflict/diff reload（`:249`–`:300`）。
+  - range-files：`request_range_files_refresh`（激活 commit↔working-tree 比较）。
+  - 原 `repo_externally_changed` 的 `bump_content_rev`（`:159`）由 dispatch 末尾统一做，外部 caller 不再单独 bump。
+  - `from_repo_external_change` 仍仅用于挑「核心 variant」；remote_branches/worktree_dirty/tags/file-browser/diff/blame/range-files 由外部 caller 直接读原始 `RepoExternalChange` 标志追加（避免 variant 丢信息）。
+- **本地 `repo_action_finished`**：
+  - 保留状态变更：`local_actions_in_flight` 递减、`bump_ops_rev`、Ok 时 `clear_head_dependent_cached_state`、错误/banner（`last_error`/`push_diagnostic`/`clear_banner_error_for_repo`）。
+  - `succeeded && paths` → 经 dispatch 增量旋钮做 targeted merge（不再单独调 `append_targeted_status_refresh`，避免与核心 status 双发）。
+  - `is_active` → branch lists（BRANCHES/REMOTE_BRANCHES）+ `append_ensure_sidebar_data_effects` + assume-unchanged reload + selected history reloads + diff/conflict reload（`:881`–`:927`）。
+  - dispatch 末尾 `bump_content_rev` 已覆盖原 `:831` 的 bump。
+
+#### 4.6.3 行为保真核对（关键不退化点）
+- 外部 `git_state`：`primary+branches`(+recent) + extras `remote_branches+worktree_dirty` + diff/blame/range/files = 与原 git_state 分支等价。
+- 外部 `worktree` 增量：核心经增量旋钮发 `LoadStatusForPaths`（merge），不再重复全量 `LoadStatus`。
+- 外部 `index`：`status`（双 lane）+ extras diff/file/range。
+- action `StagePath`：核心 `IndexChanged` status（经增量旋钮转 targeted merge）+ active extras。
+- action `CheckoutBranch`（`HeadMoved`）：核心 `primary+branches` + 取消 + active extras = 与原等价。
+- 命令路径：取消 + 核心 = 与原等价（race 修复保留）。
+
+#### 4.6.4 风险
+- 外部路径取消策略改为「不取消」是行为收敛，需 `external_and_history.rs` 既有集成测试守护：确认不退化、不出现 commit-list 陈旧回归。
+- `incremental_status_paths` 使 `dispatch_repo_change` 签名变（加参数）；所有调用点（命令/外部/action）更新；既有 dispatch 单测改为断言「不 cancel」+ 各 variant 核心集，cancel 断言移到命令/action caller 测试。
+- 增量旋钮与 action 现有 `append_targeted_status_refresh`（`:871`）可能重复：设计上统一走 dispatch 增量旋钮，action caller 不再单独调，避免双发。
+- `RepoChange` 保持 `Copy` 单 variant（不携 paths），paths 走 dispatch 参数 → 枚举语义不变、调用点改动小。
+
+#### 4.6.5 验证
+- `cargo check -p worktree-state --tests`（Windows 可用）+ CI(Linux) `cargo test`。
+- 新增/扩展单测：dispatch 各 variant 核心集 + 「不 cancel」；`external_and_history` 集成测试覆盖 git_state/index/worktree/tags 四车道 + 增量 merge + diff/blame/range/files extras；action 集成测试覆盖 stage/unstage/checkout 的 cancel + active extras。
+- 手动：大仓 up5client 外部提交 / 焦点切换 / stage 风暴，确认 commit-list 不陈旧、status 增量 merge 不退化、激活全刷仍正确。
+
+#### 4.6.6 实施顺序（落地时，待确认后执行）
+1. 改 `dispatch_repo_change`：去掉 cancel；加 `incremental_status_paths` 参数；status variant 走增量旋钮；更新 doc + 单测（cancel→不 cancel）。
+2. `repo_command_finished`：dispatch 前补 cancel（从 dispatch 挪出）。
+3. `repo_externally_changed`：核心走 `dispatch(variant, worktree_paths)`；移除原 cancel（本就无）；把 `remote_branches`/`worktree_dirty`/`tags`/file-browser/diff/blame/range-files 作为 extras 追加；去掉原 `bump_content_rev`。
+4. `repo_action_finished`：保留状态变更；cancel 保留在 dispatch 前；核心走 `dispatch(variant, paths)`；active extras 追加；去掉原 `bump_content_rev` 与 `append_targeted_status_refresh`（改由增量旋钮）。
+5. `cargo check --tests` + 提交 + 推送 + 本 § 补 §4.6.7 落地说明。
+
+### 4.6.7 Step B 落地说明（2026-09-17）：三条刷新路径收敛进 dispatch
+
+按 §4.6.6 顺序落地，外部 `repo_externally_changed` 与本地 `repo_action_finished`（外加命令路径 `repo_command_finished`）现都走单一 `dispatch_repo_change`，刷新集合只在 `repo_change.rs` 一处按 `RepoChange` variant 定义。
+
+- **`dispatch_repo_change` 不再取消在途加载**（取消防出）：删去 `append_cancel_repo_loads_effect_for_repo`，新增 `incremental_status_paths: Option<&[PathBuf]>` 旋钮。status variant（`IndexChanged`/`StatusChanged`/`WorktreeChanged`）在「有增量路径 + 无 coarse 扫描在途 + 状态已 settle」时经 `append_targeted_status_refresh` 发 `LoadStatusForPaths`（merge）替代全量 `LoadStatus`；否则回退 `append_requested_status_refresh_effects`。单测同步：原 `dispatch_cancels_in_flight_then_refreshes` 改为 `dispatch_does_not_cancel_in_flight`（断言**不** cancel），新增 3 个增量 merge / 回退单测锁定旋钮行为。
+- **命令路径**（`actions_emit_effects.rs:1523`）：取消移到 dispatch **之前**显式调用 `append_cancel_repo_loads_effect_for_repo`（保留 commit-list race 修复），随后 `dispatch_repo_change(..., None)`；命令 path 不传增量路径。
+- **外部路径**（`external_and_history.rs` `repo_externally_changed`）：核心经 `dispatch_repo_change(core, incremental)` 收敛——
+  - `core` 按四车道映射：`git_state→HeadMoved`、`index→IndexChanged`、`worktree→WorktreeChanged`、`tags→TagsChanged`、其余 `Anything`；
+  - `incremental` 仅当「`!git_state && !index && worktree`」时传 `worktree_paths`（命中增量 merge）；
+  - extras（保留，不经 variant，因单 variant 会丢信息）：`git_state` 额外补 `worktree_dirty`（核心 `HeadMoved` 的 branch list 已含 remote_branches，故不再单独补）；`tags` 在 `core != TagsChanged` 时单独 `set_tags(NotLoaded)+request(TAGS)`；file-browser diff/blame（git_state 时 `invalidate_loaded_blame`）/ range-files 维持原逻辑。**外部路径仍不取消**（保留 `loads_in_flight` 去重合并，保增量 merge）。
+  - 原 `bump_content_rev`（:159）由 dispatch 末尾统一做，外部 caller 不再单独 bump。
+- **本地 action 路径**（`repo_action_finished`）：保留状态变更（`local_actions_in_flight` 递减 / `bump_ops_rev` / 错误·banner / `clear_head_dependent_cached_state`）；取消仍在 dispatch 前；核心走 `dispatch_repo_change(variant, incremental)`（`variant = from_repo_action_kind(&action)`，`succeeded` 时传 `paths` 经增量旋钮，替代原 `append_targeted_status_refresh` 避免双发）；active extras（branch lists / sidebar data / assume-unchanged / selected history / diff·conflict reload）保留；原 `bump_content_rev`（:831）由 dispatch 覆盖。
+
+**一处对 §4.6.2(d) 设计的必要修正（行为正确性，非退化）**：本地 action 路径在 `dispatch_repo_change` 之后**仍保留 `append_refresh_primary_effects`**。原因——`append_cancel_repo_loads_effect_for_repo` 经 `clear_cancelled_repo_loading` 把**所有** `Loading` loadable 重置为 `NotLoaded` 并清全部 in-flight 标志，故取消会把在途的 head/log/divergence/rebase-merge 一并作废；若不重发 primary，这些面板会卡在 `NotLoaded`。既有集成测试 `repo_action_finished_reissues_inflight_non_status_loads` 正是断言「stage 后重发 HEAD_BRANCH / branch list」。因此 stage/unstage/discard 这类 `IndexChanged`/`WorktreeChanged` 动作**仍会刷新 primary panes**（log/head），§4.6.3 设想的「stage 不再刷 log」因取消回收需求未采用——这是为不退化而对设计做的收窄回退，`request_*` 去重保证 status 腿不与 dispatch 的增量 merge 双发。命令 / 外部路径的取消策略不变。
+
+**行为保真（与收敛前等价）**：
+- 外部 `git_state`：`HeadMoved` 核心（primary + branch list 含 remote_branches + recent NotLoaded）+ worktree_dirty extra + file-browser/diff/blame/range-files = 原 git_state 分支；仅多刷 REMOTES（原分支未刷，属无害补全）。
+- 外部 `worktree` 增量：核心经增量旋钮发 `LoadStatusForPaths`（merge），与原「已知路径 + 无 coarse 在途」分支等价；否则回退全量（含 `LoadWorktreeStatus` 单 lane，与原一致）。
+- 外部 `index`：`IndexChanged` → 双 lane status + diff/file/range extras = 原 index 分支。
+- 外部 `tags`：核心 `TagsChanged` 或 extra `set_tags(NotLoaded)+LoadTags` 覆盖（按 `core != TagsChanged` 去重，不双发）。
+- action `StagePath`：取消 + 核心 `IndexChanged`（增量 merge）+ primary 回收 + active extras = 原行为（含 primary 回收）。
+- action `CheckoutBranch`（`HeadMoved`）：核心 primary + branch list + 取消 + active extras = 原行为；`append_refresh_primary_effects` 因核心已含而经 `request` 去重，无副作用。
+- 命令路径：取消 + 核心 = 原行为（race 修复保留）。
+
+**验证证据**：`cargo check -p worktree-state --tests` 通过（lib + 新增/改写单测均编译干净；仅余预存 `status_refresh_e2e.rs:745` `round` 未用警告，与本次无关）。本机 `cargo test` 仍被 Windows `os error 5` 写锁阻断（见 §6），实跑以 CI(Linux) 为准。
+
+---
+
 ## 5. 风险与权衡
 
 - **P1 收口是中等重构**：`repo_command_finished` 末尾的 `append_refresh_full_effects` 被 `dispatch_repo_change` 取代，需逐个 `RepoCommandKind` 验证刷新集合不退化（尤其 `Reset`/`Squash`/`Rebase` 清 diff target 的特例要保留）。用既有 `actions_emit_effects` 测试 + 新增 `dispatch_repo_change` 单测守护。

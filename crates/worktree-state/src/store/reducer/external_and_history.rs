@@ -1,5 +1,6 @@
 use super::actions_emit_effects::invalidate_loaded_blame;
 use super::loaded_results::{append_ensure_sidebar_data_effects, select_commit_and_load_details};
+use super::repo_change::dispatch_repo_change;
 use super::repo_management::{
     append_cancel_repo_loads_effect_for_repo, append_selected_history_reload_effects,
     selected_history_reloads_for_activation,
@@ -7,16 +8,15 @@ use super::repo_management::{
 use super::util::{
     self, SelectedConflictTarget, append_auto_background_metadata_effects,
     append_diff_reload_effects, append_refresh_full_effects, append_refresh_primary_effects,
-    append_requested_status_refresh_effects, append_start_conflict_target_reload,
-    append_start_current_conflict_target_reload, append_targeted_status_refresh,
+    append_start_conflict_target_reload, append_start_current_conflict_target_reload,
     clear_banner_error_for_repo, push_diagnostic, refresh_full_effect_capacity,
-    refresh_primary_effect_capacity, selected_conflict_target,
+    selected_conflict_target,
 };
 use super::{ReduceOutcome, external_and_history};
 use crate::model::{
     AppState, DiagnosticKind, InteractiveRebaseSetup, Loadable, RepoLoadsInFlight, SidebarMode,
 };
-use crate::msg::{Effect, Msg, RepoActionKind, RepoExternalChange};
+use crate::msg::{Effect, Msg, RepoActionKind, RepoChange, RepoExternalChange};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::sync::Arc;
 use worktree_core::domain::{DiffArea, DiffTarget, LogCursor, LogPage, LogScope};
@@ -152,89 +152,60 @@ pub(super) fn repo_externally_changed(
 ) -> Vec<Effect> {
     let sidebar_shows_this_files_tree =
         state.sidebar_mode == SidebarMode::Files && state.active_repo == Some(repo_id);
-    let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
-        return Vec::new();
+    // Translate the raw four-lane `RepoExternalChange` into the single semantic
+    // `RepoChange` the dispatch point understands. `git_state` is the broadest
+    // lane (a commit / checkout / fetch can move HEAD, branches, tags, divergence)
+    // so it maps to `HeadMoved`; `tags` alone maps to `TagsChanged`; `index` /
+    // `worktree` map to their status variants. The dispatch issues only what the
+    // core variant implies, deduped through `loads_in_flight`.
+    let core = if change.git_state {
+        RepoChange::HeadMoved
+    } else if change.index {
+        RepoChange::IndexChanged
+    } else if change.worktree {
+        RepoChange::WorktreeChanged
+    } else if change.tags {
+        RepoChange::TagsChanged
+    } else {
+        RepoChange::Anything
     };
-    // Coarse "repo changed" ping so UI can uniformly sense external changes.
-    repo_state.bump_content_rev();
+    // External events never cancel in-flight loads: cancelling would discard the
+    // incremental worktree merge that `loads_in_flight` dedups into one scan.
+    // When a worktree event carries its path set and no coarse scan is in flight,
+    // route the status refresh through the targeted merge instead of a full walk.
+    let incremental = if !change.git_state && !change.index && change.worktree {
+        worktree_paths.as_deref()
+    } else {
+        None
+    };
+    let mut effects = super::repo_change::dispatch_repo_change(state, repo_id, core, incremental);
 
-    let file_browser_effect =
-        file_browser_refresh_for_external_change(repo_state, change, sidebar_shows_this_files_tree);
+    let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
+        return effects;
+    };
 
-    // Coalesce refreshes while a refresh is already in flight.
-    let mut effects = if change.git_state {
-        // A git-state watcher event can be produced by the safety fetch that
-        // prepared a pending force-push lease. Preserve that offer; the force
-        // push command validates the branch and HEAD again before pushing.
-        repo_state.set_recent_commit_messages(Loadable::NotLoaded);
-        let mut effects = Vec::with_capacity(refresh_primary_effect_capacity());
-        append_refresh_primary_effects(repo_state, &mut effects);
-        if repo_state
-            .loads_in_flight
-            .request(RepoLoadsInFlight::BRANCHES)
-        {
-            effects.push(Effect::LoadBranches { repo_id });
-        }
-        if repo_state
-            .loads_in_flight
-            .request(RepoLoadsInFlight::REMOTE_BRANCHES)
-        {
-            effects.push(Effect::LoadRemoteBranches { repo_id });
-        }
+    // `git_state` core (`HeadMoved`) refreshes the branch / remote-branch lists
+    // but not the worktree-dirty summary, so re-issue that one extra.
+    if change.git_state {
         if let Some(effect) = super::loaded_results::request_worktree_dirty_effect(repo_state) {
             effects.push(effect);
         }
-        effects
-    } else {
-        let mut effects = Vec::new();
-        if change.index {
-            // The index is one side of BOTH the staged (HEAD↔index) and unstaged (index↔worktree)
-            // diffs, so an index change must refresh both lanes — even when no worktree file
-            // changed. An external `git add` / `git reset` / `git restore --staged` moves a file
-            // between the staged and unstaged sections; refreshing only the staged lane would
-            // leave the file lingering (stale) in the unstaged section (or vice-versa).
-            append_requested_status_refresh_effects(repo_state, &mut effects);
-        } else if change.worktree {
-            // A small, purely worktree-side burst with a known path set
-            // merges into the settled snapshot instead of rescanning the
-            // whole worktree; the lane manages the same in-flight bit and
-            // falls back to a full scan by itself when it cannot merge.
-            let incremental = worktree_paths
-                .as_ref()
-                .is_some_and(|paths| !paths.is_empty())
-                && matches!(repo_state.status, Loadable::Ready(_));
-            if incremental
-                && !repo_state
-                    .loads_in_flight
-                    .is_in_flight(RepoLoadsInFlight::WORKTREE_STATUS)
-                && !repo_state
-                    .loads_in_flight
-                    .is_in_flight(RepoLoadsInFlight::STAGED_STATUS)
-            {
-                // The merge replaces a covered path's staged half too, so it
-                // holds both lane flags; a coarse scan still running on either
-                // lane would otherwise land after it and bury the merged half.
-                repo_state
-                    .loads_in_flight
-                    .request(RepoLoadsInFlight::WORKTREE_STATUS);
-                repo_state
-                    .loads_in_flight
-                    .request(RepoLoadsInFlight::STAGED_STATUS);
-                effects.push(Effect::LoadStatusForPaths {
-                    repo_id,
-                    paths: worktree_paths.clone().unwrap_or_default(),
-                });
-            } else if repo_state
-                .loads_in_flight
-                .request(RepoLoadsInFlight::WORKTREE_STATUS)
-            {
-                effects.push(Effect::LoadWorktreeStatus { repo_id });
-            }
+    }
+    // Tag reloads are driven by the `tags` flag alone, independent of `git_state`.
+    // A tags-only change already refreshed via the core `TagsChanged` dispatch, so
+    // only re-issue here when the core variant did not already cover tags.
+    if change.tags && !matches!(core, RepoChange::TagsChanged) {
+        repo_state.set_tags(Loadable::NotLoaded);
+        if repo_state.loads_in_flight.request(RepoLoadsInFlight::TAGS) {
+            effects.push(Effect::LoadTags { repo_id });
         }
-        effects
-    };
+    }
 
-    effects.extend(file_browser_effect);
+    effects.extend(file_browser_refresh_for_external_change(
+        repo_state,
+        change,
+        sidebar_shows_this_files_tree,
+    ));
 
     // Tag reloads are driven by the `tags` flag alone, independent of
     // `git_state`, so any change that sets `tags` refreshes them regardless of
@@ -827,8 +798,6 @@ pub(super) fn repo_action_finished(
     let succeeded = result.is_ok();
     let mut clear_banner = false;
     if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
-        // Coarse "repo changed" ping so UI can uniformly sense local actions.
-        repo_state.bump_content_rev();
         repo_state.local_actions_in_flight = repo_state.local_actions_in_flight.saturating_sub(1);
         repo_state.bump_ops_rev();
         match result {
@@ -858,21 +827,28 @@ pub(super) fn repo_action_finished(
     let mut effects: Vec<Effect> = Vec::new();
     append_cancel_repo_loads_effect_for_repo(state, Some(repo_id), &mut effects);
 
+    // Converge the refresh through the single dispatch point: translate the action into its
+    // semantic `RepoChange` and let `dispatch_repo_change` issue the precise set — the status merge
+    // for a path-scoped succeeded stage/unstage via the incremental knob, the primary panes +
+    // branch lists for checkout/stash, and so on. It also bumps `content_rev`. The cancel above
+    // already ran, so the dispatch only *issues* — it never cancels.
+    let variant = RepoChange::from_repo_action_kind(&action);
+    let incremental = if succeeded {
+        paths.as_ref().map(|p| p.as_slice())
+    } else {
+        None
+    };
+    effects.extend(dispatch_repo_change(state, repo_id, variant, incremental));
+
     let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
         return effects;
     };
 
-    // A path-scoped action that succeeded (stage/unstage) knows exactly which
-    // files moved between the lanes. Take both status flags for the targeted
-    // scan before the primary refresh below runs, so its status leg coalesces
-    // away instead of racing the merge with a full worktree walk the index
-    // rewrite just made unavoidable.
-    if succeeded && let Some(paths) = paths.as_ref() {
-        append_targeted_status_refresh(repo_state, &mut effects, paths.as_slice());
-    }
-
-    // Re-issue the primary panes (head branch, ahead/behind, rebase/merge, status, log). The flags
-    // were just cleared, so request_* dispatches fresh loads under the new epoch.
+    // The cancel above stranded every in-flight load (`clear_cancelled_repo_loading` resets all
+    // `Loading` loadables to `NotLoaded`), so the primary panes must be re-issued even when the
+    // semantic change does not touch them — otherwise a mid-flight head/log/divergence/rebase-merge
+    // load would stay `NotLoaded`. `request_*` dedupes against the status flags the dispatch above
+    // already took, so the status leg coalesces away instead of racing the merge with a full walk.
     append_refresh_primary_effects(repo_state, &mut effects);
 
     // Selected views (branch lists, history, diff) only matter for the repo the user is viewing. A

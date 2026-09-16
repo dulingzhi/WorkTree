@@ -627,11 +627,14 @@ pub(super) fn append_requested_status_refresh_effects(
 /// Does nothing unless the flags are free and a settled snapshot exists to
 /// merge onto — the merge requires one, and a stranded flag would coalesce
 /// every later refresh of that lane.
+/// Returns `true` if the targeted merge effect was emitted, `false` if it was
+/// skipped (empty paths / no settled snapshot / a coarse scan already in flight)
+/// and the caller should fall back to a full status refresh.
 pub(in crate::store::reducer) fn append_targeted_status_refresh(
     repo_state: &mut RepoState,
     effects: &mut impl EffectAccumulator,
     paths: &[std::path::PathBuf],
-) {
+) -> bool {
     if paths.is_empty()
         || !matches!(repo_state.status, Loadable::Ready(_))
         || repo_state
@@ -641,7 +644,7 @@ pub(in crate::store::reducer) fn append_targeted_status_refresh(
             .loads_in_flight
             .is_in_flight(RepoLoadsInFlight::STAGED_STATUS)
     {
-        return;
+        return false;
     }
     repo_state
         .loads_in_flight
@@ -654,6 +657,7 @@ pub(in crate::store::reducer) fn append_targeted_status_refresh(
         repo_id,
         paths: paths.to_vec().into(),
     });
+    true
 }
 
 fn push_rebase_and_merge_refresh_effect(effects: &mut impl EffectAccumulator, repo_id: RepoId) {

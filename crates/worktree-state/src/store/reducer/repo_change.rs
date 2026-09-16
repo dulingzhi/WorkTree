@@ -1,24 +1,39 @@
 //! The single dispatch point that turns a [`RepoChange`] into the concrete set
 //! of panel-refresh effects. See
-//! `docs/superpowers/plans/2026-09-16-repo-change-unified-refresh.md`.
+//! `docs/superpowers/plans/2026-09-16-repo-change-unified-refresh.md` §4.6.
+//!
+//! **`dispatch_repo_change` does NOT cancel in-flight loads.** Cancellation is a
+//! caller concern, because the three trigger paths disagree on it: the command
+//! path and the local-action path cancel (so a slow log walk in flight cannot
+//! swallow a refresh — the "commit list is stale after fetch/pull/push" race),
+//! but the external-monitor path must NOT cancel, or it would lose the
+//! incremental worktree merge that `loads_in_flight` dedups into a single scan.
+//! Each caller decides its own cancel policy and calls `dispatch_repo_change`
+//! afterwards; see `repo_command_finished` / `repo_action_finished` /
+//! `repo_externally_changed`.
 
 use crate::model::{AppState, Loadable, RepoId, RepoLoadsInFlight, RepoState};
 use crate::msg::{Effect, RepoChange};
 
-use super::repo_management::append_cancel_repo_loads_effect_for_repo;
 use super::util::{
     append_refresh_full_effects, append_refresh_primary_effects,
-    append_requested_status_refresh_effects, refresh_full_effect_capacity,
+    append_requested_status_refresh_effects, append_targeted_status_refresh,
+    refresh_full_effect_capacity,
 };
+use std::path::PathBuf;
 
 /// Emit the effects needed to bring the relevant panels back in sync after
 /// `change`, narrowing the refresh to what the semantic change actually touched.
 ///
-/// Always cancels in-flight loads first (mirroring `repo_action_finished`): a
-/// repo change makes every prior load stale, and a slow log walk in flight
-/// would otherwise swallow the refresh and leave the commit list stale for tens
-/// of seconds on a large repository. This is the fix for the "commit list is
-/// stale after a fetch/pull/push" race.
+/// Cancellation is the caller's responsibility (see the module docs): this
+/// function only issues the effects the `change` variant implies, deduped
+/// through `loads_in_flight` so an already-in-flight load is coalesced rather
+/// than re-issued. `incremental_status_paths` is the targeted-status knob: when
+/// a status variant (`IndexChanged` / `StatusChanged` / `WorktreeChanged`) knows
+/// exactly which paths moved, and no coarse status scan is in flight against a
+/// settled snapshot, the refresh is answered by a `LoadStatusForPaths` merge
+/// instead of a full worktree walk — keeping external save storms and path-scoped
+/// stage/unstage actions from rescanning the whole tree.
 ///
 /// The refresh set is keyed on the `RepoChange` variant, not on how the change
 /// was triggered (command / external / action): every caller translates its raw
@@ -32,12 +47,9 @@ pub(super) fn dispatch_repo_change(
     state: &mut AppState,
     repo_id: RepoId,
     change: RepoChange,
+    incremental_status_paths: Option<&[PathBuf]>,
 ) -> Vec<Effect> {
     let mut effects = Vec::with_capacity(refresh_full_effect_capacity());
-    // Cancel every in-flight load before re-issuing: the bumped epoch drops the
-    // stale replies, the cleared flags let the refresh dispatch fresh loads, and
-    // the effect cancels the orphaned worker tasks.
-    append_cancel_repo_loads_effect_for_repo(state, Some(repo_id), &mut effects);
     let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
         return effects;
     };
@@ -80,17 +92,21 @@ pub(super) fn dispatch_repo_change(
             append_branch_list_effects(repo_state, &mut effects);
             repo_state.set_recent_commit_messages(Loadable::NotLoaded);
         }
-        // Index changed (stage/unstage/restore --staged) or status changed:
-        // refresh both status lanes. The active diff / blame invalidation is the
-        // caller's responsibility (see `repo_command_finished`).
-        RepoChange::IndexChanged | RepoChange::StatusChanged => {
-            append_requested_status_refresh_effects(repo_state, &mut effects);
-        }
-        // Working-tree content changed (save file / .gitignore / add-remove
-        // worktree): refresh status (both lanes). File-browser and the active
-        // diff are the caller's specialized extras.
-        RepoChange::WorktreeChanged => {
-            append_requested_status_refresh_effects(repo_state, &mut effects);
+        // Index changed (stage/unstage/restore --staged) / status changed /
+        // working-tree content changed (save file / .gitignore / add-remove
+        // worktree): refresh the status lanes. When the exact paths are known
+        // and no coarse scan is in flight against a settled snapshot, merge them
+        // through `LoadStatusForPaths` instead of a full walk; otherwise fall back
+        // to the requested full status refresh. The active diff / blame
+        // invalidation is the caller's specialized extra (see
+        // `repo_command_finished` / `repo_externally_changed`).
+        RepoChange::IndexChanged | RepoChange::StatusChanged | RepoChange::WorktreeChanged => {
+            let merged = incremental_status_paths.is_some_and(|paths| {
+                append_targeted_status_refresh(repo_state, &mut effects, paths)
+            });
+            if !merged {
+                append_requested_status_refresh_effects(repo_state, &mut effects);
+            }
         }
         // Local branch set changed (prune merged): refresh the branch lists.
         RepoChange::BranchesChanged => {
@@ -143,15 +159,16 @@ fn append_tags_effects(repo_state: &mut RepoState, effects: &mut Vec<Effect>) {
 mod tests {
     use super::*;
     use crate::model::{Loadable, RepoId, RepoLoadsInFlight, RepoState};
+    use std::path::PathBuf;
     use std::sync::Arc;
-    use worktree_core::domain::{LogPage, RepoSpec};
+    use worktree_core::domain::{LogPage, RepoSpec, RepoStatus};
 
     fn state_with_ready_repo(repo_id: RepoId) -> AppState {
         let mut state = AppState::default();
         let mut repo_state = RepoState::new_opening(
             repo_id,
             RepoSpec {
-                workdir: std::path::PathBuf::from("/tmp/repo"),
+                workdir: PathBuf::from("/tmp/repo"),
             },
         );
         repo_state.history_state.log = Loadable::Ready(Arc::new(LogPage {
@@ -163,8 +180,14 @@ mod tests {
         state
     }
 
+    fn state_with_ready_status(repo_id: RepoId) -> AppState {
+        let mut state = state_with_ready_repo(repo_id);
+        state.repos[0].status = Loadable::Ready(Arc::new(RepoStatus::default()));
+        state
+    }
+
     #[test]
-    fn dispatch_cancels_in_flight_then_refreshes() {
+    fn dispatch_does_not_cancel_in_flight() {
         let repo_id = RepoId(1);
         let mut state = state_with_ready_repo(repo_id);
         // Simulate a log walk already in flight.
@@ -172,19 +195,19 @@ mod tests {
             .loads_in_flight
             .request(RepoLoadsInFlight::LOG);
 
-        let effects = dispatch_repo_change(&mut state, repo_id, RepoChange::RefsChanged);
+        let effects = dispatch_repo_change(&mut state, repo_id, RepoChange::RefsChanged, None);
 
         assert!(
-            effects.iter().any(
+            !effects.iter().any(
                 |e| matches!(e, Effect::CancelRepoLoads { repo_id: id, .. } if *id == repo_id)
             ),
-            "dispatch must cancel in-flight loads before refreshing"
+            "dispatch must NOT cancel in-flight loads (callers own the cancel policy)"
         );
         assert!(
             effects
                 .iter()
                 .any(|e| matches!(e, Effect::LoadLog { repo_id: id, .. } if *id == repo_id)),
-            "dispatch must re-issue the log load after cancelling the stale one"
+            "dispatch must still re-issue the log load"
         );
     }
 
@@ -193,7 +216,7 @@ mod tests {
         let repo_id = RepoId(1);
         let mut state = state_with_ready_repo(repo_id);
 
-        let effects = dispatch_repo_change(&mut state, repo_id, RepoChange::Anything);
+        let effects = dispatch_repo_change(&mut state, repo_id, RepoChange::Anything, None);
 
         assert!(
             effects
@@ -212,13 +235,13 @@ mod tests {
             .loads_in_flight
             .request(RepoLoadsInFlight::LOG);
 
-        let effects = dispatch_repo_change(&mut state, repo_id, RepoChange::Committed);
+        let effects = dispatch_repo_change(&mut state, repo_id, RepoChange::Committed, None);
 
         assert!(
-            effects.iter().any(
+            !effects.iter().any(
                 |e| matches!(e, Effect::CancelRepoLoads { repo_id: id, .. } if *id == repo_id)
             ),
-            "Committed must cancel in-flight loads before refreshing"
+            "dispatch must NOT cancel in-flight loads"
         );
         assert!(
             effects
@@ -251,7 +274,7 @@ mod tests {
         let repo_id = RepoId(1);
         let mut state = state_with_ready_repo(repo_id);
 
-        let effects = dispatch_repo_change(&mut state, repo_id, RepoChange::TagsChanged);
+        let effects = dispatch_repo_change(&mut state, repo_id, RepoChange::TagsChanged, None);
 
         assert!(
             effects
@@ -278,13 +301,19 @@ mod tests {
         let repo_id = RepoId(1);
         let mut state = state_with_ready_repo(repo_id);
 
-        let effects = dispatch_repo_change(&mut state, repo_id, RepoChange::IndexChanged);
+        let effects = dispatch_repo_change(&mut state, repo_id, RepoChange::IndexChanged, None);
 
         assert!(
             effects
                 .iter()
                 .any(|e| matches!(e, Effect::LoadStatus { repo_id: id, .. } if *id == repo_id)),
             "IndexChanged must reload status"
+        );
+        assert!(
+            !effects
+                .iter()
+                .any(|e| matches!(e, Effect::LoadStatusForPaths { repo_id: id, .. } if *id == repo_id)),
+            "IndexChanged without paths must NOT use the targeted merge"
         );
         assert!(
             !effects
@@ -299,7 +328,7 @@ mod tests {
         let repo_id = RepoId(1);
         let mut state = state_with_ready_repo(repo_id);
 
-        let effects = dispatch_repo_change(&mut state, repo_id, RepoChange::HeadMoved);
+        let effects = dispatch_repo_change(&mut state, repo_id, RepoChange::HeadMoved, None);
 
         assert!(
             effects
@@ -318,6 +347,82 @@ mod tests {
                 .iter()
                 .any(|e| matches!(e, Effect::LoadTags { repo_id: id, .. } if *id == repo_id)),
             "HeadMoved must NOT reload tags (precise, not full)"
+        );
+    }
+
+    #[test]
+    fn dispatch_worktree_changed_with_paths_merges_targeted() {
+        let repo_id = RepoId(1);
+        let mut state = state_with_ready_status(repo_id);
+        let paths = vec![PathBuf::from("/tmp/repo/foo.txt")];
+
+        let effects = dispatch_repo_change(
+            &mut state,
+            repo_id,
+            RepoChange::WorktreeChanged,
+            Some(&paths),
+        );
+
+        assert!(
+            effects.iter().any(
+                |e| matches!(e, Effect::LoadStatusForPaths { repo_id: id, .. } if *id == repo_id)
+            ),
+            "WorktreeChanged with known paths must merge through LoadStatusForPaths"
+        );
+        assert!(
+            !effects
+                .iter()
+                .any(|e| matches!(e, Effect::LoadStatus { repo_id: id, .. } if *id == repo_id)),
+            "WorktreeChanged with known paths must NOT also issue a full LoadStatus"
+        );
+    }
+
+    #[test]
+    fn dispatch_worktree_changed_falls_back_to_full_without_paths() {
+        let repo_id = RepoId(1);
+        let mut state = state_with_ready_status(repo_id);
+
+        let effects = dispatch_repo_change(&mut state, repo_id, RepoChange::WorktreeChanged, None);
+
+        assert!(
+            effects
+                .iter()
+                .any(|e| matches!(e, Effect::LoadStatus { repo_id: id, .. } if *id == repo_id)),
+            "WorktreeChanged without paths must fall back to a full status refresh"
+        );
+        assert!(
+            !effects.iter().any(
+                |e| matches!(e, Effect::LoadStatusForPaths { repo_id: id, .. } if *id == repo_id)
+            ),
+            "WorktreeChanged without paths must NOT use the targeted merge"
+        );
+    }
+
+    #[test]
+    fn dispatch_worktree_changed_falls_back_to_full_when_status_not_settled() {
+        let repo_id = RepoId(1);
+        // status is NotLoaded (no settled snapshot to merge onto).
+        let mut state = state_with_ready_repo(repo_id);
+        let paths = vec![PathBuf::from("/tmp/repo/foo.txt")];
+
+        let effects = dispatch_repo_change(
+            &mut state,
+            repo_id,
+            RepoChange::WorktreeChanged,
+            Some(&paths),
+        );
+
+        assert!(
+            effects
+                .iter()
+                .any(|e| matches!(e, Effect::LoadStatus { repo_id: id, .. } if *id == repo_id)),
+            "WorktreeChanged with paths but no settled snapshot must fall back to full"
+        );
+        assert!(
+            !effects.iter().any(
+                |e| matches!(e, Effect::LoadStatusForPaths { repo_id: id, .. } if *id == repo_id)
+            ),
+            "no settled snapshot means no targeted merge"
         );
     }
 }

@@ -1509,10 +1509,10 @@ pub(super) fn repo_command_finished(
     }
 
     // A completed repo command (fetch/pull/push/...) mutated the repository.
-    // Translate the raw trigger into a semantic `RepoChange` and let the single
-    // dispatch point decide which panels to refresh — cancelling stale in-flight
-    // loads first so a slow log walk does not swallow the refresh (the
-    // "commit list is stale after a fetch/pull/push" race). This mirrors the
+    // Cancel stale in-flight loads first so a slow log walk does not swallow the
+    // refresh (the "commit list is stale after a fetch/pull/push" race), then
+    // translate the raw trigger into a semantic `RepoChange` and let the single
+    // dispatch point decide which panels to refresh. This mirrors the
     // invalidation repo_action_finished performs for local actions.
     //
     // The cancel runs BEFORE the command-specific refreshes below: the cancel's
@@ -1520,11 +1520,14 @@ pub(super) fn repo_command_finished(
     // diff back to `NotLoaded`, and the blocks that follow re-raise those flags
     // for the panels the full refresh does not cover. Running them in the other
     // order would let the cancel wipe the `Loading` flags these blocks set.
-    let mut effects = super::repo_change::dispatch_repo_change(
+    let mut effects = Vec::new();
+    append_cancel_repo_loads_effect_for_repo(state, Some(repo_id), &mut effects);
+    effects.extend(super::repo_change::dispatch_repo_change(
         state,
         repo_id,
         RepoChange::from_repo_command_kind(&command),
-    );
+        None,
+    ));
 
     // Command-specific refreshes the full refresh does not cover (worktrees /
     // submodules / tags / the active diff). These run AFTER the cancel so the
