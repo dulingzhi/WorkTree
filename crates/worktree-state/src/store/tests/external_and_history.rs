@@ -67,6 +67,89 @@ fn test_recent_commit_message() -> worktree_core::domain::RecentCommitMessage {
 }
 
 #[test]
+fn repo_externally_changed_all_coalesces_with_in_flight_refresh() {
+    // Deterministic (no store thread, no auto-fetch follow-up) mirror of
+    // `repo_monitor_active_repo_activation_coalesces_with_in_flight_refresh`:
+    // seeds `loads_in_flight` exactly like that test and reduces the
+    // activation's `RepoExternallyChanged::all()` directly. Because the seed is
+    // in scope here, the dispatch must coalesce every lane it touches and emit
+    // no fresh `LoadStatus` / `LoadLog` / `LoadBranches` / `LoadRemoteBranches`.
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let repo_id = RepoId(21);
+    let mut state = AppState::default();
+    state.repos.push(RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    ));
+    state.repos[0].set_open(Loadable::Ready(()));
+    state.active_repo = Some(repo_id);
+
+    let loads = &mut state.repos[0].loads_in_flight;
+    loads.request_primary_refresh_batch(crate::model::PendingLogLoad {
+        scope: worktree_core::domain::HistoryMode::FullReachable,
+        author: None,
+        refs: Vec::new(),
+        limit: 200,
+        cursor: None,
+    });
+    loads.request(crate::model::RepoLoadsInFlight::BRANCHES);
+    loads.request(crate::model::RepoLoadsInFlight::REMOTE_BRANCHES);
+    assert!(
+        loads.is_in_flight(crate::model::RepoLoadsInFlight::WORKTREE_STATUS),
+        "seed: worktree status must be in flight"
+    );
+    assert!(
+        loads.is_in_flight(crate::model::RepoLoadsInFlight::LOG),
+        "seed: log must be in flight"
+    );
+    assert!(
+        loads.is_in_flight(crate::model::RepoLoadsInFlight::BRANCHES),
+        "seed: branches must be in flight"
+    );
+    assert!(
+        loads.is_in_flight(crate::model::RepoLoadsInFlight::REMOTE_BRANCHES),
+        "seed: remote branches must be in flight"
+    );
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::RepoExternallyChanged {
+            repo_id,
+            change: crate::msg::RepoExternalChange::all(),
+            worktree_paths: None,
+        },
+    );
+
+    let reloads_status = effects
+        .iter()
+        .any(|e| matches!(e, Effect::LoadStatus { repo_id: id, .. } if *id == repo_id));
+    let reloads_log = effects
+        .iter()
+        .any(|e| matches!(e, Effect::LoadLog { repo_id: id, .. } if *id == repo_id));
+    let reloads_branches = effects
+        .iter()
+        .any(|e| matches!(e, Effect::LoadBranches { repo_id: id, .. } if *id == repo_id));
+    let reloads_remote_branches = effects
+        .iter()
+        .any(|e| matches!(e, Effect::LoadRemoteBranches { repo_id: id, .. } if *id == repo_id));
+
+    eprintln!(
+        "DIAGNOSTIC activation-all effects: status={reloads_status} log={reloads_log} \
+         branches={reloads_branches} remote_branches={reloads_remote_branches} :: {effects:?}"
+    );
+
+    assert!(
+        !reloads_status && !reloads_log && !reloads_branches && !reloads_remote_branches,
+        "activation while primary+branch refreshes are in flight must coalesce, not duplicate"
+    );
+}
+
+#[test]
 fn repo_activated_is_reducer_noop_by_itself() {
     let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
     let id_alloc = AtomicU64::new(1);

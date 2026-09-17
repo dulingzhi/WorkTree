@@ -86,6 +86,15 @@ impl GitRepositoryRemotes for RepoActivationRecordingRepo {
     }
 
     fn fetch_all(&self) -> Result<()> {
+        // Intentionally never completes within a test's measurement window:
+        // activation follows its full refresh with an automatic "fetch all"
+        // (see `Msg::RepoActivated` in `store/mod.rs`), and when that fetch
+        // lands `repo_command_finished` cancels in-flight loads and re-refreshes
+        // — correct product behaviour, but it would defeat the coalesce
+        // assertion below by scheduling a second, legitimate refresh. Sleeping
+        // here keeps the auto-fetch's completion out of the window so the test
+        // measures only the activation refresh's own coalescing.
+        std::thread::sleep(std::time::Duration::from_secs(5));
         Ok(())
     }
 
@@ -299,7 +308,10 @@ fn repo_monitor_active_repo_activation_coalesces_with_in_flight_refresh() {
     // in-flight (the primary batch does not include branches/remote branches) and then activate;
     // the activation `RepoExternallyChanged { all() }` path coalesces through `loads_in_flight`
     // (primary batch via `request_primary_refresh_batch`, branches/remote branches via `request`),
-    // so no duplicate loads are scheduled.
+    // so no duplicate loads are scheduled. Activation also kicks off an automatic "fetch all" whose
+    // completion legitimately re-refreshes (it cancels in-flight loads first); that follow-up is kept
+    // out of the measurement window by `RepoActivationRecordingRepo::fetch_all` blocking, so this test
+    // measures only the activation refresh's own coalescing.
     let repo_id = RepoId(21);
     let workdir = unique_repo_monitor_test_path("activation-coalesce");
     std::fs::create_dir_all(&workdir).expect("create activation coalesce workdir");
