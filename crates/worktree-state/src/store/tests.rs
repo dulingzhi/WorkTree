@@ -305,11 +305,22 @@ fn git_runtime_probe_count(probe_log: &Path) -> usize {
         .count()
 }
 
+/// Whether the effects refresh the worktree status lane.
+///
+/// Accepts `LoadStatus` as well as `LoadWorktreeStatus`. The unified dispatch
+/// point answers a status refresh through `append_requested_status_refresh_effects`,
+/// which picks the *combined* `LoadStatus` whenever both lanes are free — one
+/// `repo.status()` call covering both lanes, where the per-lane variant covers
+/// only one. `LoadStatus` is therefore a strict superset of the worktree variant
+/// and satisfies every caller that wants the worktree lane refreshed.
 fn has_worktree_status_effect(effects: &[Effect], repo_id: RepoId) -> bool {
     effects.iter().any(|effect| {
         matches!(
             effect,
             Effect::LoadWorktreeStatus { repo_id: candidate } if *candidate == repo_id
+        ) || matches!(
+            effect,
+            Effect::LoadStatus { repo_id: candidate } if *candidate == repo_id
         )
     })
 }

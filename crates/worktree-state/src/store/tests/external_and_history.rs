@@ -940,13 +940,18 @@ fn external_worktree_refresh_replays_coalesced_change_then_settles() {
     // coalesced while it ran. That event is a genuine external change the load may have read just
     // before it landed, so the coalesced refresh must be replayed (not dropped) — otherwise the
     // uncommitted view keeps showing stale entries.
+    //
+    // Completed with `StatusLoaded`, not `WorktreeStatusLoaded`: the dispatch answers a free
+    // status refresh with the combined `LoadStatus` (both lanes in one backend call), and only
+    // `StatusLoaded` finishes both lanes. Completing with the per-lane message would leave the
+    // staged lane armed forever, which is not what the real effect does.
     let effects = reduce(
         &mut repos,
         &id_alloc,
         &mut state,
-        Msg::Internal(crate::msg::InternalMsg::WorktreeStatusLoaded {
+        Msg::Internal(crate::msg::InternalMsg::StatusLoaded {
             repo_id,
-            result: Ok(Vec::new()),
+            result: Ok(RepoStatus::default()),
         }),
     );
     assert!(
@@ -966,9 +971,9 @@ fn external_worktree_refresh_replays_coalesced_change_then_settles() {
         &mut repos,
         &id_alloc,
         &mut state,
-        Msg::Internal(crate::msg::InternalMsg::WorktreeStatusLoaded {
+        Msg::Internal(crate::msg::InternalMsg::StatusLoaded {
             repo_id,
-            result: Ok(Vec::new()),
+            result: Ok(RepoStatus::default()),
         }),
     );
     assert!(
