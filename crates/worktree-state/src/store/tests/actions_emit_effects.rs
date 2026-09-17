@@ -748,6 +748,64 @@ fn commit_fixup_refuses_a_target_whose_page_is_not_loaded() {
 }
 
 #[test]
+fn preview_merge_emits_a_load_effect_for_the_current_head() {
+    let mut state = AppState::default();
+    let mut repos = push_repo_with_log(&mut state, &[("head", "HEAD commit")]);
+    state.repos[0].set_detached_head_commit(Some(CommitId("head".into())));
+    let id_alloc = AtomicU64::new(1);
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::PreviewMerge {
+            repo_id: RepoId(1),
+            other: CommitId("other".into()),
+        },
+    );
+
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::LoadMergePreview { repo_id: RepoId(1), head, other }]
+            if head.as_ref() == "head" && other.as_ref() == "other"
+    ));
+    assert!(matches!(
+        state.repos[0].history_state.merge_preview,
+        Loadable::Loading
+    ));
+}
+
+#[test]
+fn preview_merge_of_head_itself_warns_and_emits_nothing() {
+    let mut state = AppState::default();
+    let mut repos = push_repo_with_log(&mut state, &[("head", "HEAD commit")]);
+    state.repos[0].set_detached_head_commit(Some(CommitId("head".into())));
+    let id_alloc = AtomicU64::new(1);
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::PreviewMerge {
+            repo_id: RepoId(1),
+            other: CommitId("head".into()),
+        },
+    );
+
+    assert!(
+        effects.is_empty(),
+        "previewing HEAD into itself must not run git"
+    );
+    assert!(
+        state
+            .notifications
+            .iter()
+            .any(|note| note.message.contains("preview")),
+        "the user has to be told nothing happened"
+    );
+}
+
+#[test]
 fn checkout_conflict_base_emits_effect() {
     let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
     let id_alloc = AtomicU64::new(1);

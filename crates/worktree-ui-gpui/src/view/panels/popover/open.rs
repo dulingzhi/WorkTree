@@ -186,6 +186,7 @@ impl PopoverHost {
             | Some(PopoverKind::CreateTagPrompt { .. })
             | Some(PopoverKind::SquashPrompt { .. })
             | Some(PopoverKind::AutosquashConfirm { .. })
+            | Some(PopoverKind::MergePreview { .. })
             | Some(PopoverKind::CheckoutRemoteBranchPrompt { .. })
             | Some(PopoverKind::PushSetUpstreamPrompt { .. })
             | Some(PopoverKind::RepoSettingsPrompt { .. })
@@ -581,6 +582,17 @@ impl PopoverHost {
                 self.store.dispatch(Msg::Autosquash {
                     repo_id: *repo_id,
                     base: base.clone(),
+                });
+            }
+        }
+        if matches!(&kind, PopoverKind::MergePreview { .. }) {
+            // Run the preview against live HEAD on every open; a result left
+            // behind by an earlier visit (or a head that has since moved) must
+            // never survive into the panel.
+            if let PopoverKind::MergePreview { repo_id, other } = &kind {
+                self.store.dispatch(Msg::PreviewMerge {
+                    repo_id: *repo_id,
+                    other: other.clone(),
                 });
             }
         }

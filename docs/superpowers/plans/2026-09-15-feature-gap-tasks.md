@@ -201,3 +201,16 @@ DiffDetails` 模式：按 `DirectoryNode.children` 递归渲染文件行（path 
 - 关键修复：`compute_autosquash` 原漏 fixup 提交于 rebase todo，导致真实 rebase 后端 commit-set guard 报错「branch changed since the rebase was set up」；fixup 现以 `Fixup` action 留在 todo 原位。
 
 门禁：`cargo fmt --check` 干净；`cargo test -p worktree-core --lib squash` 53 passed；`cargo test -p worktree-state --lib` 754 passed；`cargo test -p worktree-git-gix --test squash_integration autosquash` 2 passed；UI crate C 盘 target check 通过。CI billing 仍停摆，本地门禁为准。
+
+> **更正（2026-09-17，merge-tree 那轮发现）**：上面「UI crate check 通过」**不成立**。`popover.rs` 始终缺 `mod autosquash_confirm;`（`84ae999d` 提交了 `autosquash_confirm.rs` 却没改 `popover.rs`），即 `84ae999d` 上 `worktree-ui-gpui` **编不过**。本轮补上声明并首次真正编译通过。教训：UI 层门禁要以命令 rc=0 为准，不能只扫「改动的文件有没有报错」。
+
+## 特性 6：merge-tree 预演合并 — 完成（2026-09-17）
+
+原列于生态缺口 S 档第 2 项。完整落地于计划 `2026-09-17-merge-tree-preview.md`，commit `8511682e`（后端）+ 本轮 state/UI 提交。
+
+- 提交右键「Preview merging `<sha>` into `<branch>`」→ 只读弹窗：干净则列「改了哪些文件 +A −D」，冲突则列冲突文件与类型。**不碰工作区/索引/refs**。
+- 后端：`git merge-tree --write-tree`（Git 2.38+，exit≠0 即冲突）；干净时再 `git diff --numstat` 取变更清单。
+- P5 冻结零影响：`GitRepositoryHistory` 用 **default method**（`Unsupported`）加 `merge_tree_preview`，gix 侧覆写；未动 `GitRepositoryDiff`。
+
+门禁：`cargo fmt --check` 干净；`cargo test -p worktree-core --lib squash` 53 passed；`cargo test -p worktree-state --lib` **760 passed / 0 failed**；`cargo test -p worktree-git-gix --test merge_tree_integration` 3 passed；UI crate C 盘 target check 无 error。
+UI 层无自动化测试：该 crate 无 `tests/`，popover 面板需 `PopoverHost` 脚手架（仓库内无先例），完备性由编译器穷尽匹配兜底。

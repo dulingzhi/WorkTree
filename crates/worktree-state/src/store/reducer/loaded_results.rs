@@ -7,6 +7,7 @@ use crate::msg::Msg;
 mod autosquash;
 mod conflict;
 mod history_loads;
+mod merge_preview;
 mod selection;
 mod sidebar_browser;
 mod squash;
@@ -22,6 +23,7 @@ pub(super) use history_loads::{
     load_file_history, load_hover_commit_message, load_recent_commit_messages, load_reflog,
     load_stashes, recent_commit_messages_loaded, reflog_loaded, search_commits, stashes_loaded,
 };
+pub(super) use merge_preview::merge_preview_loaded;
 pub(super) use selection::{
     ComparisonSource, clear_commit_selection, clear_comparison, clear_comparison_mark,
     commit_details_loaded, commit_reveal_resolved, compare_range, compare_with_marked,
@@ -355,6 +357,11 @@ pub(super) fn reduce_loaded_results(msg: Msg, state: &mut AppState) -> ReduceOut
             base,
             result,
         }) => loaded_results::autosquash_rebase_setup_loaded(state, repo_id, base, result),
+        Msg::Internal(crate::msg::InternalMsg::MergePreviewLoaded {
+            repo_id,
+            head,
+            result,
+        }) => loaded_results::merge_preview_loaded(state, repo_id, head, result),
         Msg::Internal(crate::msg::InternalMsg::RecentCommitMessagesLoaded {
             repo_id,
             request_rev,

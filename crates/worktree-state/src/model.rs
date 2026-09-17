@@ -16,8 +16,8 @@ use worktree_core::diff_tree::DirectoryDiffResult;
 use worktree_core::domain::*;
 use worktree_core::process::GitRuntimeState;
 use worktree_core::services::{
-    BisectState, BlameLine, ForcePushLease, InteractiveRebaseEntry, SafePushAfterCommitContext,
-    SequencerState, SubmoduleTrustTarget,
+    BisectState, BlameLine, ForcePushLease, InteractiveRebaseEntry, MergeTreePreview,
+    SafePushAfterCommitContext, SequencerState, SubmoduleTrustTarget,
 };
 use worktree_core::squash::AutosquashPlan;
 
@@ -888,6 +888,11 @@ pub struct HistoryState {
     /// no `fixup!`/`squash!` commit was eligible to fold.
     pub autosquash_preview: Loadable<AutosquashPlan>,
     pub autosquash_preview_rev: u64,
+    /// The merge preview shown in the `MergePreview` popover: the tree the
+    /// merge would produce plus any conflicts, or `NotLoaded`/`Loading` while
+    /// `git merge-tree` runs.
+    pub merge_preview: Loadable<MergeTreePreview>,
+    pub merge_preview_rev: u64,
 }
 
 impl Default for HistoryState {
@@ -926,6 +931,8 @@ impl Default for HistoryState {
             squash_preview_pending: None,
             autosquash_preview: Loadable::NotLoaded,
             autosquash_preview_rev: 0,
+            merge_preview: Loadable::NotLoaded,
+            merge_preview_rev: 0,
         }
     }
 }
@@ -2347,6 +2354,11 @@ impl RepoState {
         self.history_state.autosquash_preview = v;
         self.history_state.autosquash_preview_rev =
             self.history_state.autosquash_preview_rev.wrapping_add(1);
+    }
+
+    pub(crate) fn set_merge_preview(&mut self, v: Loadable<MergeTreePreview>) {
+        self.history_state.merge_preview = v;
+        self.history_state.merge_preview_rev = self.history_state.merge_preview_rev.wrapping_add(1);
     }
 
     /// Resolves the commit HEAD points at: the current branch's target when

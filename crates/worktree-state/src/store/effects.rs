@@ -1328,6 +1328,13 @@ fn send_unavailable_git_effect_result(
                 result: Err(git_unavailable_error(runtime)),
             },
         )),
+        Effect::LoadMergePreview { repo_id, head, .. } => {
+            send(Msg::Internal(crate::msg::InternalMsg::MergePreviewLoaded {
+                repo_id,
+                head,
+                result: Err(git_unavailable_error(runtime)),
+            }))
+        }
         Effect::LoadInteractiveCherryPickMessages { repo_id, ids } => send(Msg::Internal(
             crate::msg::InternalMsg::InteractiveCherryPickMessagesLoaded {
                 repo_id,
@@ -2807,6 +2814,13 @@ pub(super) fn schedule_effect(
         }
         Effect::LoadAutosquashSetup { repo_id, base } => {
             repo_load::schedule_load_autosquash_setup(executor, repos, msg_tx, repo_id, base);
+        }
+        Effect::LoadMergePreview {
+            repo_id,
+            head,
+            other,
+        } => {
+            repo_load::schedule_load_merge_preview(executor, repos, msg_tx, repo_id, head, other);
         }
         Effect::LoadInteractiveCherryPickMessages { repo_id, ids } => {
             repo_load::schedule_load_interactive_cherry_pick_messages(

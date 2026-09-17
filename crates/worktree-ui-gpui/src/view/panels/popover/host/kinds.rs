@@ -135,6 +135,13 @@ pub(in crate::view) enum PopoverKind {
         repo_id: RepoId,
         base: String,
     },
+    /// Read-only merge preview: shows what merging `other` into the current
+    /// HEAD would produce (`git merge-tree --write-tree`), without touching the
+    /// worktree, index or refs.
+    MergePreview {
+        repo_id: RepoId,
+        other: CommitId,
+    },
     CreateTagPrompt {
         repo_id: RepoId,
         target: String,

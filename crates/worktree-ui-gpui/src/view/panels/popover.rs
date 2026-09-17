@@ -34,6 +34,7 @@ mod host;
 mod hunk_explanation;
 mod merge_abort_confirm;
 mod merge_commit_confirm;
+mod merge_preview;
 pub(in crate::view) mod merge_request_push;
 mod merge_request_push_description;
 mod open;

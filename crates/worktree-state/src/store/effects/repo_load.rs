@@ -2610,6 +2610,49 @@ pub(super) fn schedule_load_autosquash_setup(
     );
 }
 
+/// Previews merging `other` into `head` (`git merge-tree --write-tree`).
+/// Read-only: never touches the worktree, index or refs.
+pub(super) fn schedule_load_merge_preview(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    head: worktree_core::domain::CommitId,
+    other: worktree_core::domain::CommitId,
+) {
+    let head_for_call = head.clone();
+    let other_for_call = other.clone();
+    let head_for_err = head;
+    spawn_detached_with_repo_or_else(
+        executor,
+        "load-merge-preview",
+        repos,
+        repo_id,
+        msg_tx,
+        move |repo, msg_tx| {
+            let result = repo.merge_tree_preview(head_for_call.as_ref(), other_for_call.as_ref());
+            send_or_log(
+                &msg_tx,
+                Msg::Internal(crate::msg::InternalMsg::MergePreviewLoaded {
+                    repo_id,
+                    head: head_for_call,
+                    result,
+                }),
+            );
+        },
+        move |msg_tx| {
+            send_or_log(
+                &msg_tx,
+                Msg::Internal(crate::msg::InternalMsg::MergePreviewLoaded {
+                    repo_id,
+                    head: head_for_err,
+                    result: Err(missing_repo_error(repo_id)),
+                }),
+            );
+        },
+    );
+}
+
 #[cfg(test)]
 mod worktree_dirty_tests {
     use super::*;

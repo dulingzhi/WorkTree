@@ -632,6 +632,30 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
     // is already part of HEAD's history (including HEAD itself), so it is
     // disabled rather than letting git reject it as "Already up to date".
     let merge_into_current_disabled = commit_is_ancestor_of_head(this, repo_id, commit_id);
+
+    // "Preview merge" runs `git merge-tree --write-tree` and reports whether
+    // the merge would conflict — without touching the worktree, index or refs.
+    // Sharing the ancestor guard keeps it off for merges that would no-op
+    // anyway (a preview of "Already up to date" is noise).
+    items.push(ContextMenuItem::Entry {
+        label: crate::i18n::t!(
+            "cm.commit.merge_preview",
+            short = short,
+            current = current_branch
+        )
+        .to_string()
+        .into(),
+        icon: Some("icons/git_merge.svg".into()),
+        shortcut: None,
+        disabled: merge_into_current_disabled,
+        action: Box::new(ContextMenuAction::OpenPopover {
+            kind: PopoverKind::MergePreview {
+                repo_id,
+                other: commit_id.clone(),
+            },
+        }),
+    });
+
     items.push(ContextMenuItem::Entry {
         label: crate::i18n::t!(
             "cm.commit.merge_into_current",

@@ -153,6 +153,9 @@ impl PopoverHost {
             PopoverKind::AutosquashConfirm { repo_id, base } => {
                 autosquash_confirm::panel(self, repo_id, base, cx)
             }
+            PopoverKind::MergePreview { repo_id, other } => {
+                merge_preview::panel(self, repo_id, other, cx)
+            }
             PopoverKind::CreateTagPrompt { repo_id, target } => {
                 create_tag_prompt::panel(self, repo_id, target, cx)
             }

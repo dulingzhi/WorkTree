@@ -122,6 +122,9 @@ fn merge_tree_preview_reports_conflicts() {
     assert_eq!(preview.conflicts.len(), 1, "{:?}", preview.conflicts);
     assert_eq!(preview.conflicts[0].path, "file.txt");
     assert!(!preview.conflicts[0].conflict_type.is_empty());
+    // The conflicted result tree holds conflict markers, so it carries no
+    // change list — the conflict list is the answer here.
+    assert!(preview.files.is_empty(), "{:?}", preview.files);
 }
 
 #[test]

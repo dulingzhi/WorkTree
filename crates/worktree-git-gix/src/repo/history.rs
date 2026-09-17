@@ -11,7 +11,7 @@ use worktree_core::domain::CommitId;
 use worktree_core::error::{Error, ErrorKind};
 use worktree_core::services::{
     BisectState, BisectVerdict, CommandOutput, InteractiveRebaseAction, InteractiveRebaseEntry,
-    MergeConflictFile, MergeTreePreview, ResetMode, Result, SequencerState,
+    MergeChangedFile, MergeConflictFile, MergeTreePreview, ResetMode, Result, SequencerState,
 };
 
 /// Returns the HEAD commit id, or `None` when HEAD is unborn / empty.
@@ -997,10 +997,21 @@ impl GixRepo {
             .lines()
             .filter_map(parse_merge_tree_conflict)
             .collect::<Vec<_>>();
+
+        // What the merge would change, diffed against HEAD's tree. Skipped for
+        // a conflicted result: its tree carries conflict markers, so the line
+        // counts would describe the markers rather than the merge's effect.
+        let files = if conflicts.is_empty() {
+            merge_tree_changed_files(&self.spec.workdir, head, &result_tree)?
+        } else {
+            Vec::new()
+        };
+
         Ok(MergeTreePreview {
             result_tree,
             has_conflict: !conflicts.is_empty(),
             conflicts,
+            files,
         })
     }
 
@@ -1515,6 +1526,27 @@ fn parse_merge_tree_conflict(line: &str) -> Option<MergeConflictFile> {
         path,
         conflict_type,
     })
+}
+
+/// Diffs HEAD's tree against the tree the previewed merge produced, one entry
+/// per changed file. `head` and `result_tree` are both tree-ish, so the shared
+/// range-numstat helper handles the quoting/rename parsing for us.
+fn merge_tree_changed_files(
+    workdir: &Path,
+    head: &str,
+    result_tree: &str,
+) -> Result<Vec<MergeChangedFile>> {
+    let head_tree = CommitId(format!("{head}^{{tree}}").into());
+    let result = CommitId(result_tree.into());
+    let counts = super::submodules::git_range_numstat_counts(workdir, &head_tree, Some(&result))?;
+    Ok(counts
+        .into_iter()
+        .map(|(path, (additions, deletions))| MergeChangedFile {
+            path: path.to_string_lossy().into_owned(),
+            additions,
+            deletions,
+        })
+        .collect())
 }
 
 /// Parses `git log -z --format=%H%x00%s%x00%B` output: a flat sequence of

@@ -15,9 +15,9 @@ use worktree_core::process::GitRuntimeState;
 use worktree_core::services::GitRepository;
 use worktree_core::services::{
     BisectState, BisectVerdict, CommandOutput, CommitOperationOutcome, ConflictSide,
-    ForcePushLease, InteractiveRebaseEntry, MergeRequestPushOptions, PullMode, RemoteUrlKind,
-    ResetMode, SafePushAfterCommitContext, SafePushAfterCommitDecision, SafePushAfterCommitTarget,
-    SequencerState, SubmoduleTrustDecision, SubmoduleTrustTarget,
+    ForcePushLease, InteractiveRebaseEntry, MergeRequestPushOptions, MergeTreePreview, PullMode,
+    RemoteUrlKind, ResetMode, SafePushAfterCommitContext, SafePushAfterCommitDecision,
+    SafePushAfterCommitTarget, SequencerState, SubmoduleTrustDecision, SubmoduleTrustTarget,
 };
 
 use super::repo_command_kind::RepoCommandKind;
@@ -790,6 +790,17 @@ pub enum Msg {
     CancelAutosquash {
         repo_id: RepoId,
     },
+    /// Preview merging `other` into the current HEAD without touching the
+    /// worktree, index or refs (`git merge-tree --write-tree`), then open the
+    /// `MergePreview` popover with the result and any conflicts.
+    PreviewMerge {
+        repo_id: RepoId,
+        other: CommitId,
+    },
+    /// Dismiss the `MergePreview` popover and discard the pending preview.
+    CancelMergePreview {
+        repo_id: RepoId,
+    },
     SafePushAfterCommit {
         repo_id: RepoId,
         context: SafePushAfterCommitContext,
@@ -1314,6 +1325,14 @@ pub enum InternalMsg {
         repo_id: RepoId,
         base: String,
         result: Result<Vec<InteractiveRebaseEntry>, Error>,
+    },
+    /// Reply to `Effect::LoadMergePreview`: `head` is the commit the merge was
+    /// previewed into (compared against the live HEAD to abandon a stale
+    /// preview), `result` the tree git would produce plus any conflicts.
+    MergePreviewLoaded {
+        repo_id: RepoId,
+        head: CommitId,
+        result: Result<MergeTreePreview, Error>,
     },
     /// Repository-ordered selected commit ids with their full `%B` messages.
     /// `requested_ids` identifies the setup that launched the detached load

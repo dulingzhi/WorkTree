@@ -93,3 +93,5 @@ panels:
     stop: "停止"
     retry: 重试
     close: 关闭
+  merge_preview:
+    close: 关闭

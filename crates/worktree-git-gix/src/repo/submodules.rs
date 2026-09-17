@@ -23,7 +23,7 @@ use worktree_core::services::{
 };
 
 type NumstatLineCounts = (Option<u32>, Option<u32>);
-type NumstatCounts = BTreeMap<PathBuf, NumstatLineCounts>;
+pub(super) type NumstatCounts = BTreeMap<PathBuf, NumstatLineCounts>;
 
 const SUBMODULE_HISTORY_UNAVAILABLE_REASON: &str = "Submodule history is not available locally.";
 const SUBMODULE_POINTER_SIDE_UNAVAILABLE_REASON: &str =
@@ -1065,7 +1065,11 @@ fn git_range_status_changes(
     Ok(changes)
 }
 
-fn git_range_numstat_counts(
+/// Per-file line counts for `from..to` (or `from..worktree` when `to` is
+/// omitted), keyed and sorted by path. Renames are followed, so a moved file
+/// is reported once at its new path. Shared with the merge preview, which
+/// diffs HEAD's tree against the tree `git merge-tree` produced.
+pub(super) fn git_range_numstat_counts(
     workdir: &Path,
     from: &CommitId,
     to: Option<&CommitId>,

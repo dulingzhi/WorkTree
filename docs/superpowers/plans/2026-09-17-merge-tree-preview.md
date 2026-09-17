@@ -1,6 +1,6 @@
 # merge-tree 预演合并（Merge Preview）
 
-状态：**范围待确认（2026-09-17）**。生态缺口 S 档第 2 项（fixup/autosquash 之后），差异化强、开源侧稀缺、低风险（shell out 到 git，不碰 gix 不成熟 merge / 不碰 P5 冻结的 trait）。
+状态：**已完成（2026-09-17）**。生态缺口 S 档第 2 项（fixup/autosquash 之后），差异化强、开源侧稀缺、低风险（shell out 到 git，不碰 gix 不成熟 merge / 不碰 P5 冻结的 trait）。落地详情见文末「落地说明」。
 
 实测确认的命令语义（Git 2.53，`git merge-tree --write-tree <b1> <b2>` 把 b2 合并进 b1，写树不碰工作区/索引）：
 
@@ -27,14 +27,16 @@
 ## §1 数据流（右键提交 X → 预览「merge X 进 HEAD」）
 
 ```
-UI: 提交行右键 → "Preview merge into HEAD" → ContextMenuAction::PreviewMerge { repo_id, other: CommitId }
-  → Msg::PreviewMerge { repo_id, other }
-  → reducer: head = current HEAD commit; 校验 other 不是 head 祖先（否则合并即快进/无变化，无意义）
+UI: 提交行右键 → "Preview merging <sha> into <branch>"
+  → ContextMenuAction::OpenPopover { kind: PopoverKind::MergePreview { repo_id, other: CommitId } }
+  → 打开弹窗时 dispatch Msg::PreviewMerge { repo_id, other }
+  → reducer: head = current HEAD commit; head == other 则警告且不发请求
   → Effect::LoadMergePreview { repo_id, head, other }
   → git-gix: git merge-tree --write-tree <head> <other>   // 只读
       → 解析：result_tree(OID) + conflicts[path] + has_conflict(exit!=0)
-  → InternalMsg::MergePreviewLoaded { repo_id, other, result }
-  → reducer: 存 HistoryState::merge_preview; 打开 PopoverKind::MergePreview
+      → 干净时再跑 git diff --numstat -z <head>^{tree} <result_tree> → files[]
+  → InternalMsg::MergePreviewLoaded { repo_id, head, result }
+  → reducer: 存 HistoryState::merge_preview（head 漂移则丢弃 + 警告）
 ```
 
 - **预览只展示，不执行合并**：弹窗只有「关闭」，无「真的合并」按钮（真实合并走既有 `Msg::MergeRef`，不在本特性范围）。
@@ -75,19 +77,19 @@ pub fn merge_tree_preview(&self, head: &str, other: &str) -> Result<MergeTreePre
 
 ## §4 UX 细节
 
-- **菜单项**：commit 右键 history-rewrite 组（紧邻 `Autosquash from here` / `SquashSelectedCommits`）。
-  - label `cm.commit.merge_preview`（short）；icon 复用 `icons/git_merge.svg`（若已有）或 `git_commit.svg`。
-  - `disabled`：current HEAD 为 detached 且无可合并目标时、或 `other` 是 HEAD 祖先时（合并即空操作）。
-  - `action: ContextMenuAction::PreviewMerge { repo_id, other: commit_id }`。
+- **菜单项**：commit 右键 history-rewrite 组（紧邻 `Merge into current`）。
+  - label `cm.commit.merge_preview`（`%{short}` + `%{current}`）；icon `icons/git_merge.svg`。
+  - `disabled`：与 `Merge into current` 同一判据（`commit_is_ancestor_of_head` —— 祖先是空操作，预览「已是最新」是噪音）。
+  - `action: ContextMenuAction::OpenPopover { kind: PopoverKind::MergePreview { repo_id, other } }`（不新增 action variant；参数随 kind 走，同 `AutosquashConfirm`）。
 - **弹窗 `PopoverKind::MergePreview { repo_id, other }`**：照 `AutosquashConfirm` / `SquashPrompt` 的 8 处注册模式（`host/kinds.rs` / `popover.rs` mod / `dispatch.rs` / `fingerprint.rs` 3 臂 / `geometry.rs` / `open.rs` dismiss+打开时 dispatch `Msg::PreviewMerge` / `dialog.rs`）。
 - **面板 `merge_preview.rs`**：从 `history_state.merge_preview` 读 `Loadable`。
   - `Loading` → 加载中。
-  - `NotLoaded` → 空提示。
+  - `NotLoaded` / `Error(_)` → 不可用提示（`Error` 打印 git 原文，如 unrelated histories）。
   - `Ready(preview)`：
-    - `preview.has_conflict` → 标题「合并将产生冲突」+ 红色警告 + 冲突文件列表（每行 `path` + `conflict_type`）。
-    - 否则 → 标题「合并预览」+ 结果树 vs HEAD 树 diff 摘要（N files changed, +A −D，取自 gix `diff_tree_to_tree(head_tree, result_tree)` 聚合）+ 变更文件清单（path + ±）。
+    - `preview.has_conflict` → 红色冲突文件列表（每行 `path` + `conflict_type`）+ 计数。
+    - 否则 →「无冲突」+ 变更文件清单（每行 `path  +A −D`，二进制打 `(binary)`）+ 计数；`files` 为空 → 「不会带来改动」。
   - 按钮：仅「关闭」（`Msg::CancelMergePreview { repo_id }` 清 preview + close）。不做真实合并按钮（留待既有 Merge 流程）。
-- **i18n**：`context_menu_dynamic.en/zh-CN` 加 `commit.merge_preview`；`prompts.en/zh-CN` 加 `merge_preview:` 块（title / conflict_title / conflict_line / changed_files / loading / empty）。
+- **i18n**：`context_menu_dynamic.en/zh-CN` 加 `commit.merge_preview`；`prompts.en/zh-CN` 加 `merge_preview:` 块（title / target / loading / empty / clean / no_changes / changed_count / file_row / file_row_binary / conflict_count / conflict_row）；`panels.en/zh-CN` 加 `merge_preview.close`。
 
 ---
 
@@ -117,6 +119,43 @@ pub fn merge_tree_preview(&self, head: &str, other: &str) -> Result<MergeTreePre
 
 ---
 
-## 落地说明
+## 落地说明（2026-09-17 完成）
 
-（待确认范围后落地）
+**Step 1 后端** — `8511682e feat(git-gix): read-only merge preview via merge-tree`
+- `GixRepo::merge_tree_preview(head, other)`：`git merge-tree --write-tree`（`run_git_raw_output` 容忍 exit≠0），首行 40-hex → `result_tree`，`CONFLICT (…)` 行 → `conflicts`；无 tree OID → `git_command_failed_error`（覆盖 unrelated histories，exit 128）。
+- `crates/worktree-git-gix/tests/merge_tree_integration.rs` 新建，3 测试（干净 / 冲突 / 无共同历史）。
+- `GitRepositoryHistory::merge_tree_preview` 以 **default method**（返回 `Unsupported`）加到 trait，gix 侧经 `delegate_git_repository!` 覆写 → **P5 冻结零影响**，未动 `GitRepositoryDiff`。
+
+**Step 2–3 state** — 与 autosquash 同构
+- `Msg::PreviewMerge { repo_id, other }` / `Msg::CancelMergePreview { repo_id }`；`InternalMsg::MergePreviewLoaded { repo_id, head, result }`（**去掉了设计里的 `other` 字段**：面板从 `PopoverKind` 已拿到 `other`，回传是冗余）。
+- `HistoryState::merge_preview: Loadable<MergeTreePreview>` + `merge_preview_rev`。
+- `preview_merge` reducer：`head == other` 或拿不到 HEAD → Warning「不可预览」，**不发 Effect**；否则置 `Loading` + 发 `Effect::LoadMergePreview`。
+- `merge_preview_loaded`：head 漂移 → `NotLoaded` + Warning；`Ok` → `Ready`；`Err` → 诊断 toast + `NotLoaded`。
+
+**Step 4 UI**
+- `PopoverKind::MergePreview { repo_id, other }` 8 处注册齐备；`open.rs` 打开时 dispatch `Msg::PreviewMerge`（同 `AutosquashConfirm` 范式，每次打开按 live HEAD 重算）。
+- `merge_preview.rs` 面板：**只有「关闭」**（回顾性只读工具，不提供真实合并按钮）。
+- 菜单项插在 `Merge into current` **之前**，共用 `commit_is_ancestor_of_head` 判据；i18n 三处（`context_menu_dynamic` / `prompts` / `panels`）。
+- **偏差**：设计里的 `ContextMenuAction::PreviewMerge` 未新增，改用既有的 `ContextMenuAction::OpenPopover { kind }`（参数随 kind 走，与 `AutosquashConfirm` 一致，少一个 variant）。
+
+**补充（干净合并的变更清单）** — 设计 §4 要求干净时给出「改了哪些文件」
+- `MergeTreePreview` 增 `files: Vec<MergeChangedFile>`（`path` + `additions`/`deletions`，二进制为 `None`）。
+- 取数**复用 `submodules::git_range_numstat_counts`**（`pub(super)` 放开），跑 `git diff --numstat -z --find-renames <head>^{tree} <result_tree>`；**没有**走 gix `diff_tree_to_tree`——同一解析器已在用，避免第二套。
+- **仅干净合并填充**：冲突时结果树里是 conflict markers，行数会描述 marker 而不是合并效果 → `files` 留空，冲突列表才是答案（集成测试钉死这一点）。
+
+**顺带修的真 bug（构建级）**
+- `crates/worktree-ui-gpui/src/view/panels/popover.rs` **缺 `mod autosquash_confirm;`**：`autosquash_confirm.rs` 在 `84ae999d` 已提交，但模块声明从未落盘（`84ae999d` 未触碰 `popover.rs`）。即 **HEAD 上 `worktree-ui-gpui` 编不过** —— fixup/autosquash 那次「UI 门禁通过」的结论不成立。本轮补上声明并首次真正编译通过。
+- 教训：UI 层的 `check` 不能只看「改的文件有没有报错」，必须以 rc=0 为准。
+
+**门禁（本轮实测，CI billing 停摆 → 本地为准）**
+
+| 命令 | 结果 |
+|---|---|
+| `cargo fmt --check` | clean |
+| `cargo check -p worktree-state --tests` | 无 error |
+| `CARGO_TARGET_DIR=<C盘> cargo check -p worktree-ui-gpui --tests` | 无 error |
+| `cargo test -p worktree-core --lib squash` | 53 passed |
+| `cargo test -p worktree-state --lib` | **760 passed / 0 failed** |
+| `cargo test -p worktree-git-gix --test merge_tree_integration` | 3 passed |
+
+**未做（明说）**：UI 侧无法加菜单/面板自动化测试——`worktree-ui-gpui` 没有 `tests/`，popover 面板需要重量级 `PopoverHost` 脚手架，仓库内无先例。UI 的正确性靠**编译器**兜底（8 处注册点的 `match` 臂 + `PopoverKind` 新增变体会强制穷尽匹配），行为正确性由 state 层测试承担。技能/惯例：若后续要补 UI 测试，得先建 `PopoverHost` 测试脚手架，那是独立任务。

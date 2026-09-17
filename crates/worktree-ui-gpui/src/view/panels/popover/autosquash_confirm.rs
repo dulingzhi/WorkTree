@@ -72,11 +72,8 @@ pub(super) fn panel(
             dialog = dialog.section(div().flex().flex_col().gap_1().children(rows));
             dialog = dialog.note(
                 theme,
-                crate::i18n::t!(
-                    "prompts.autosquash.count_line",
-                    count = plan.folded_count()
-                )
-                .into_owned(),
+                crate::i18n::t!("prompts.autosquash.count_line", count = plan.folded_count())
+                    .into_owned(),
             );
         }
         None => {

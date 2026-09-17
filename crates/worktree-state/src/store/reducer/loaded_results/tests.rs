@@ -4,8 +4,8 @@ use super::{
     browse_repository_at_commit, clear_commit_selection, commit_details_loaded,
     conflict_file_loaded, ensure_sidebar_data, file_browser_loaded, file_history_loaded,
     head_branch_loaded, load_blame, load_conflict_file, load_file_browser, load_file_history,
-    load_reflog, load_stashes, load_submodules, load_tags, load_worktrees, reflog_loaded,
-    refresh_branches, remote_branches_loaded, remote_tags_loaded, remotes_loaded,
+    load_reflog, load_stashes, load_submodules, load_tags, load_worktrees, merge_preview_loaded,
+    reflog_loaded, refresh_branches, remote_branches_loaded, remote_tags_loaded, remotes_loaded,
     reset_browse_to_live, reveal_file_browser_path, select_commit, select_commit_multi,
     set_file_browser_search, set_file_browser_source, set_sidebar_mode,
     squash_message_preview_loaded, staged_status_loaded, stashes_loaded, status_loaded,
@@ -27,7 +27,10 @@ use worktree_core::domain::{
     UpstreamDivergence,
 };
 use worktree_core::error::{Error, ErrorKind};
-use worktree_core::services::{InteractiveRebaseAction, InteractiveRebaseEntry};
+use worktree_core::services::{
+    InteractiveRebaseAction, InteractiveRebaseEntry, MergeChangedFile, MergeConflictFile,
+    MergeTreePreview,
+};
 
 fn backend_error(message: &str) -> Error {
     Error::new(ErrorKind::Backend(message.to_string()))
@@ -1127,6 +1130,111 @@ fn autosquash_preview_cleared_on_load_error() {
     let repo = repo_mut(&mut state, repo_id);
     assert!(matches!(
         repo.history_state.autosquash_preview,
+        Loadable::NotLoaded
+    ));
+    let notice = state.notifications.last().expect("an error notice");
+    assert_eq!(notice.kind, AppNotificationKind::Error);
+}
+
+#[test]
+fn merge_preview_ready_when_head_unchanged() {
+    let repo_id = RepoId(1);
+    let mut state = new_state_with_repo(repo_id);
+    let head = CommitId("head0000".into());
+    repo_mut(&mut state, repo_id).set_detached_head_commit(Some(head.clone()));
+
+    let preview = MergeTreePreview {
+        result_tree: "a".repeat(40),
+        has_conflict: false,
+        conflicts: Vec::new(),
+        files: vec![MergeChangedFile {
+            path: "src/lib.rs".to_string(),
+            additions: Some(3),
+            deletions: Some(1),
+        }],
+    };
+    let effects = merge_preview_loaded(&mut state, repo_id, head, Ok(preview.clone()));
+    assert!(effects.is_empty());
+
+    let repo = repo_mut(&mut state, repo_id);
+    match &repo.history_state.merge_preview {
+        Loadable::Ready(stored) => assert_eq!(stored, &preview),
+        other => panic!("expected a ready merge preview, got {other:?}"),
+    }
+    // A real preview just opens the popover; no notice.
+    assert!(state.notifications.is_empty());
+}
+
+#[test]
+fn merge_preview_stores_conflicts() {
+    let repo_id = RepoId(1);
+    let mut state = new_state_with_repo(repo_id);
+    let head = CommitId("head0000".into());
+    repo_mut(&mut state, repo_id).set_detached_head_commit(Some(head.clone()));
+
+    let preview = MergeTreePreview {
+        result_tree: "b".repeat(40),
+        has_conflict: true,
+        conflicts: vec![MergeConflictFile {
+            path: "file.txt".to_string(),
+            conflict_type: "add/add".to_string(),
+        }],
+        // A conflicted result carries no changed-file list: its tree holds
+        // conflict markers, so line counts there would be meaningless.
+        files: Vec::new(),
+    };
+    merge_preview_loaded(&mut state, repo_id, head, Ok(preview));
+
+    let repo = repo_mut(&mut state, repo_id);
+    match &repo.history_state.merge_preview {
+        Loadable::Ready(stored) => {
+            assert!(stored.has_conflict);
+            assert_eq!(stored.conflicts[0].path, "file.txt");
+            assert_eq!(stored.conflicts[0].conflict_type, "add/add");
+        }
+        other => panic!("expected a ready merge preview, got {other:?}"),
+    }
+}
+
+#[test]
+fn merge_preview_cancelled_when_head_drifted() {
+    let repo_id = RepoId(1);
+    let mut state = new_state_with_repo(repo_id);
+    // The preview was computed against a HEAD that has since moved.
+    repo_mut(&mut state, repo_id).set_detached_head_commit(Some(CommitId("newhead0".into())));
+
+    let effects = merge_preview_loaded(
+        &mut state,
+        repo_id,
+        CommitId("oldhead0".into()),
+        Ok(MergeTreePreview {
+            result_tree: "c".repeat(40),
+            has_conflict: false,
+            conflicts: Vec::new(),
+            files: Vec::new(),
+        }),
+    );
+    assert!(effects.is_empty());
+    assert!(matches!(
+        repo_mut(&mut state, repo_id).history_state.merge_preview,
+        Loadable::NotLoaded
+    ));
+    let notice = state.notifications.last().expect("a warning notice");
+    assert_eq!(notice.kind, AppNotificationKind::Warning);
+}
+
+#[test]
+fn merge_preview_cleared_on_load_error() {
+    let repo_id = RepoId(1);
+    let mut state = new_state_with_repo(repo_id);
+    let head = CommitId("head0000".into());
+    repo_mut(&mut state, repo_id).set_detached_head_commit(Some(head.clone()));
+    repo_mut(&mut state, repo_id).set_merge_preview(Loadable::Loading);
+
+    let effects = merge_preview_loaded(&mut state, repo_id, head, Err(backend_error("disk error")));
+    assert!(effects.is_empty());
+    assert!(matches!(
+        repo_mut(&mut state, repo_id).history_state.merge_preview,
         Loadable::NotLoaded
     ));
     let notice = state.notifications.last().expect("an error notice");

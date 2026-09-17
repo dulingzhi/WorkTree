@@ -24,6 +24,7 @@ cm:
     merge_into_current: "将 %{short} 合并到 %{current}"
     autosquash: "从 %{short} 自动合并"
     fixup: "修复提交到 %{short}"
+    merge_preview: "预演将 %{short} 合并进 %{current}"
   group:
     branch_count_one: "1 个分支"
     branch_count: "%{count} 个分支"

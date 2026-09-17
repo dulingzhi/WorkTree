@@ -631,6 +631,13 @@ pub enum Effect {
         repo_id: RepoId,
         base: String,
     },
+    /// Preview merging `other` into `head` (`git merge-tree --write-tree`),
+    /// read-only: the worktree, index and refs are untouched.
+    LoadMergePreview {
+        repo_id: RepoId,
+        head: CommitId,
+        other: CommitId,
+    },
     InteractiveRebase {
         repo_id: RepoId,
         base: String,

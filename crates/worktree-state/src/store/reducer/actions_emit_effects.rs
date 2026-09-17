@@ -882,6 +882,49 @@ pub(super) fn cancel_autosquash(state: &mut AppState, repo_id: RepoId) -> Vec<Ef
     Vec::new()
 }
 
+/// Loads a read-only merge preview — merging `other` into the current HEAD —
+/// and opens the `MergePreview` popover with the result. Nothing is rewritten.
+/// With no HEAD to merge into, or when `other` is HEAD itself, a warning is
+/// shown instead of running git.
+pub(super) fn preview_merge(state: &mut AppState, repo_id: RepoId, other: CommitId) -> Vec<Effect> {
+    let (head, unavailable) = {
+        let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
+            return Vec::new();
+        };
+        match repo_state.head_commit_id() {
+            Some(head) if head.as_ref() != other.as_ref() => {
+                repo_state.set_merge_preview(Loadable::Loading);
+                (Some(head), false)
+            }
+            _ => (None, true),
+        }
+    };
+    if unavailable {
+        super::util::push_notification(
+            state,
+            crate::model::AppNotificationKind::Warning,
+            rust_i18n::t!("store.reducer.merge_preview_unavailable").to_string(),
+        );
+        return Vec::new();
+    }
+    match head {
+        Some(head) => vec![Effect::LoadMergePreview {
+            repo_id,
+            head,
+            other,
+        }],
+        None => Vec::new(),
+    }
+}
+
+/// Discards the pending merge preview without touching the repository.
+pub(super) fn cancel_merge_preview(state: &mut AppState, repo_id: RepoId) -> Vec<Effect> {
+    if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+        repo_state.set_merge_preview(Loadable::NotLoaded);
+    }
+    Vec::new()
+}
+
 pub(super) fn interactive_rebase(
     repo_id: RepoId,
     base: String,
@@ -2173,6 +2216,12 @@ pub(super) fn reduce_actions_emit_effects(
         }
         Msg::CancelAutosquash { repo_id } => {
             actions_emit_effects::cancel_autosquash(state, repo_id)
+        }
+        Msg::PreviewMerge { repo_id, other } => {
+            actions_emit_effects::preview_merge(state, repo_id, other)
+        }
+        Msg::CancelMergePreview { repo_id } => {
+            actions_emit_effects::cancel_merge_preview(state, repo_id)
         }
         Msg::SafePushAfterCommit { repo_id, context } => {
             actions_emit_effects::safe_push_after_commit(repo_id, context)

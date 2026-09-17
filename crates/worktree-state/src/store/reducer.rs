@@ -204,6 +204,7 @@ pub(crate) fn msg_requires_available_git(msg: &Msg) -> bool {
             | Msg::SquashCommits { .. }
             | Msg::Autosquash { .. }
             | Msg::ConfirmAutosquash { .. }
+            | Msg::PreviewMerge { .. }
             | Msg::Rebase { .. }
             | Msg::RebaseContinue { .. }
             | Msg::RebaseAbort { .. }

@@ -160,6 +160,7 @@ fn repo_for_popover<'a>(state: &'a AppState, popover: &PopoverKind) -> Option<&'
         | PopoverKind::ResetPrompt { repo_id, .. }
         | PopoverKind::SquashPrompt { repo_id }
         | PopoverKind::AutosquashConfirm { repo_id, .. }
+        | PopoverKind::MergePreview { repo_id, .. }
         | PopoverKind::CheckoutRemoteBranchPrompt { repo_id, .. }
         | PopoverKind::StashDropConfirm { repo_id, .. }
         | PopoverKind::StashMenu { repo_id, .. }
@@ -458,6 +459,14 @@ fn hash_repo_for_popover<H: Hasher>(repo: &RepoState, popover: &PopoverKind, has
             repo.branches_rev.hash(hasher);
         }
 
+        // The merge preview tracks its own preview rev plus HEAD, the commit
+        // the merge would land on.
+        PopoverKind::MergePreview { .. } => {
+            repo.history_state.merge_preview_rev.hash(hasher);
+            repo.head_branch_rev.hash(hasher);
+            repo.branches_rev.hash(hasher);
+        }
+
         PopoverKind::TagMenu { .. } | PopoverKind::TagRefMenu { .. } => {
             repo.tags_rev.hash(hasher);
             repo.remotes_rev.hash(hasher);
@@ -658,6 +667,11 @@ fn hash_popover_kind<H: Hasher>(kind: &PopoverKind, hasher: &mut H) {
             76u8.hash(hasher);
             repo_id.hash(hasher);
             base.hash(hasher);
+        }
+        PopoverKind::MergePreview { repo_id, other } => {
+            77u8.hash(hasher);
+            repo_id.hash(hasher);
+            other.hash(hasher);
         }
         PopoverKind::CreateTagPrompt { repo_id, target } => {
             8u8.hash(hasher);

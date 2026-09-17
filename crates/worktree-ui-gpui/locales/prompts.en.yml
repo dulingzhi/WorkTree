@@ -51,6 +51,18 @@ prompts:
     fold_row: "%{fixup} → folds into %{sha} %{summary}"
     count_line: "%{count} commit(s) will be merged"
     confirm: "Autosquash"
+  merge_preview:
+    title: "Merge preview"
+    target: "Merging %{other} into HEAD"
+    loading: "Computing the merge…"
+    clean: "No conflicts — the merge applies cleanly."
+    no_changes: "The merge would change nothing (already up to date)."
+    changed_count: "%{count} file(s) would change"
+    file_row: "%{path}  +%{added} −%{removed}"
+    file_row_binary: "%{path}  (binary)"
+    conflict_count: "%{count} file(s) would conflict"
+    conflict_row: "%{path} — %{kind}"
+    empty: "No preview available for this merge."
   create_tag:
     title: "Create tag"
     target_line: "Target: %{target}"

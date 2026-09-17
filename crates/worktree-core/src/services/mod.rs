@@ -275,6 +275,17 @@ pub struct MergeConflictFile {
     pub conflict_type: String,
 }
 
+/// One file the previewed merge would change, relative to the current HEAD.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MergeChangedFile {
+    /// Repo-relative path.
+    pub path: String,
+    /// Lines added; `None` for a binary file (git reports `-`).
+    pub additions: Option<u32>,
+    /// Lines deleted; `None` for a binary file (git reports `-`).
+    pub deletions: Option<u32>,
+}
+
 /// Read-only result of previewing a merge (`git merge-tree --write-tree <head>
 /// <other>`): the toplevel tree the merge *would* produce — conflicted files
 /// carry conflict markers — plus the conflict list. Never touches the worktree,
@@ -287,6 +298,13 @@ pub struct MergeTreePreview {
     pub has_conflict: bool,
     /// Conflicted paths, in git's reporting order.
     pub conflicts: Vec<MergeConflictFile>,
+    /// What the merge would change against the current HEAD, sorted by path.
+    ///
+    /// Only populated for a clean merge: a conflicted result tree contains
+    /// conflict markers, so its line counts would describe the marker blocks
+    /// rather than the change the merge introduces. Empty when
+    /// `has_conflict` is true.
+    pub files: Vec<MergeChangedFile>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -96,3 +96,5 @@ panels:
     stop: "Stop"
     retry: Retry
     close: Close
+  merge_preview:
+    close: Close

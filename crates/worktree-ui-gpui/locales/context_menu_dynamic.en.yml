@@ -30,6 +30,7 @@ cm:
     merge_into_current: "Merge %{short} into %{current}"
     autosquash: "Autosquash from %{short}"
     fixup: "Fixup into %{short}"
+    merge_preview: "Preview merging %{short} into %{current}"
   group:
     branch_count_one: "1 branch"
     branch_count: "%{count} branches"

@@ -235,6 +235,16 @@ impl std::fmt::Debug for InternalMsg {
                 .field("base", base)
                 .field("ok", &result.is_ok())
                 .finish(),
+            InternalMsg::MergePreviewLoaded {
+                repo_id,
+                head,
+                result,
+            } => f
+                .debug_struct("MergePreviewLoaded")
+                .field("repo_id", repo_id)
+                .field("head", head)
+                .field("ok", &result.is_ok())
+                .finish(),
             InternalMsg::InteractiveCherryPickMessagesLoaded {
                 repo_id,
                 requested_ids,
