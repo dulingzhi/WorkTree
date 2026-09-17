@@ -292,6 +292,7 @@ impl PopoverHost {
                 | Some(PopoverKind::CloneRepo)
                 | Some(PopoverKind::CreateTagPrompt { .. })
                 | Some(PopoverKind::SquashPrompt { .. })
+                | Some(PopoverKind::AutosquashConfirm { .. })
                 | Some(PopoverKind::PushSetUpstreamPrompt { .. })
                 | Some(PopoverKind::RepoSettingsPrompt { .. })
                 | Some(PopoverKind::Repo {

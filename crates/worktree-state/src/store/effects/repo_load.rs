@@ -2568,6 +2568,48 @@ pub(super) fn schedule_load_interactive_rebase_setup(
     );
 }
 
+/// Lists `base..HEAD` so the reducer can fold `fixup!`/`squash!` commits into
+/// their targets for the autosquash confirmation. Reuses the same git call as
+/// the interactive-rebase editor; only the reply message differs.
+pub(super) fn schedule_load_autosquash_setup(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    base: String,
+) {
+    let base_for_call = base.clone();
+    let base_for_err = base.clone();
+    spawn_detached_with_repo_or_else(
+        executor,
+        "load-autosquash-setup",
+        repos,
+        repo_id,
+        msg_tx,
+        move |repo, msg_tx| {
+            let result = repo.list_commits_for_interactive_rebase(&base_for_call);
+            send_or_log(
+                &msg_tx,
+                Msg::Internal(crate::msg::InternalMsg::AutosquashSetupLoaded {
+                    repo_id,
+                    base,
+                    result,
+                }),
+            );
+        },
+        move |msg_tx| {
+            send_or_log(
+                &msg_tx,
+                Msg::Internal(crate::msg::InternalMsg::AutosquashSetupLoaded {
+                    repo_id,
+                    base: base_for_err,
+                    result: Err(missing_repo_error(repo_id)),
+                }),
+            );
+        },
+    );
+}
+
 #[cfg(test)]
 mod worktree_dirty_tests {
     use super::*;

@@ -127,6 +127,14 @@ pub(in crate::view) enum PopoverKind {
     SquashPrompt {
         repo_id: RepoId,
     },
+    /// Confirm an autosquash: folds every `fixup!`/`squash!` commit in
+    /// `base..HEAD` into its matching target commit. `base` is the commit the
+    /// user right-clicked ("Autosquash from here"); `repo_id` identifies the
+    /// repo whose `autosquash_preview` the panel renders.
+    AutosquashConfirm {
+        repo_id: RepoId,
+        base: String,
+    },
     CreateTagPrompt {
         repo_id: RepoId,
         target: String,

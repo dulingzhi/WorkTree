@@ -841,6 +841,47 @@ pub(super) fn load_interactive_rebase_setup(
     vec![Effect::LoadInteractiveRebaseSetup { repo_id, base }]
 }
 
+/// Kicks off an autosquash: marks the preview loading and lists `base..HEAD`
+/// so the fold result can be shown for confirmation. No history is rewritten
+/// until the user confirms the plan in the `AutosquashConfirm` popover.
+pub(super) fn autosquash(state: &mut AppState, repo_id: RepoId, base: String) -> Vec<Effect> {
+    if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+        repo_state.set_autosquash_preview(Loadable::Loading);
+    }
+    vec![Effect::LoadAutosquashSetup { repo_id, base }]
+}
+
+/// Confirms the pending autosquash plan and rewrites history non-interactively
+/// (`git rebase -i` with the folded todo installed, no editor). If no plan is
+/// ready — the popover was dismissed, the load failed, or nothing was
+/// eligible — it just clears the stale preview and emits nothing.
+pub(super) fn confirm_autosquash(state: &mut AppState, repo_id: RepoId) -> Vec<Effect> {
+    let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
+        return Vec::new();
+    };
+    let Loadable::Ready(plan) = &repo_state.history_state.autosquash_preview else {
+        repo_state.set_autosquash_preview(Loadable::NotLoaded);
+        return Vec::new();
+    };
+    let plan = plan.clone();
+    repo_state.set_autosquash_preview(Loadable::NotLoaded);
+    begin_local_action(state, repo_id);
+    vec![Effect::InteractiveRebase {
+        repo_id,
+        base: plan.base,
+        entries: plan.entries,
+        interactive: false,
+    }]
+}
+
+/// Discards the pending autosquash plan without rewriting history.
+pub(super) fn cancel_autosquash(state: &mut AppState, repo_id: RepoId) -> Vec<Effect> {
+    if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+        repo_state.set_autosquash_preview(Loadable::NotLoaded);
+    }
+    Vec::new()
+}
+
 pub(super) fn interactive_rebase(
     repo_id: RepoId,
     base: String,
@@ -2126,6 +2167,13 @@ pub(super) fn reduce_actions_emit_effects(
             target,
             push_after_commit,
         } => actions_emit_effects::commit_fixup(state, repo_id, target, push_after_commit),
+        Msg::Autosquash { repo_id, base } => actions_emit_effects::autosquash(state, repo_id, base),
+        Msg::ConfirmAutosquash { repo_id } => {
+            actions_emit_effects::confirm_autosquash(state, repo_id)
+        }
+        Msg::CancelAutosquash { repo_id } => {
+            actions_emit_effects::cancel_autosquash(state, repo_id)
+        }
         Msg::SafePushAfterCommit { repo_id, context } => {
             actions_emit_effects::safe_push_after_commit(repo_id, context)
         }

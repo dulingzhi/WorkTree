@@ -150,6 +150,9 @@ impl PopoverHost {
                 mode,
             } => reset_prompt::panel(self, repo_id, target, mode, cx),
             PopoverKind::SquashPrompt { repo_id } => squash_prompt::panel(self, repo_id, cx),
+            PopoverKind::AutosquashConfirm { repo_id, base } => {
+                autosquash_confirm::panel(self, repo_id, base, cx)
+            }
             PopoverKind::CreateTagPrompt { repo_id, target } => {
                 create_tag_prompt::panel(self, repo_id, target, cx)
             }

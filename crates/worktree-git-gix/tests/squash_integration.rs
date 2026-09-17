@@ -1,5 +1,6 @@
 use worktree_core::domain::CommitId;
 use worktree_core::services::{GitBackend, GitRepository, InteractiveRebaseAction};
+use worktree_core::squash::{AutosquashMode, build_autosquash_plan};
 use worktree_git_gix::GixBackend;
 #[path = "support/test_git_env.rs"]
 mod test_git_env;
@@ -1068,4 +1069,78 @@ fn interactive_rebase_preserves_later_reword_message_across_conflict() {
         git_stdout(&repo, &["log", "-1", "--format=%B"]),
         "Later message preserved"
     );
+}
+
+#[test]
+fn autosquash_folds_fixup_commit_into_target_end_to_end() {
+    let dir = tempfile::tempdir().expect("create tempdir");
+    let repo = dir.path().join("repo");
+    init_repo(&repo);
+    commit_file(&repo, "file.txt", "root\n", "Root commit");
+    let root = rev_parse(&repo, "HEAD");
+    commit_file(&repo, "file.txt", "feature\n", "Feature X");
+    let feature = rev_parse(&repo, "HEAD");
+    // The fixup sits on top of HEAD and changes the same file.
+    commit_file(&repo, "file.txt", "feature fixed\n", "fixup! Feature X");
+
+    let backend = open_backend(&repo);
+    let entries = backend
+        .list_commits_for_interactive_rebase(&root)
+        .expect("list commits for interactive rebase");
+    // Oldest-first: [Feature X, fixup! Feature X].
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries[0].commit_id, feature);
+
+    // The same fold the store produces before opening the confirm popover.
+    let plan = build_autosquash_plan(&entries, AutosquashMode::ToTop, root.clone())
+        .expect("a fold must be produced");
+    assert_eq!(plan.folded_count(), 1);
+    // The surviving todo keeps Feature X as Pick and includes the fixup as a
+    // Fixup step, so the plan covers every commit in base..HEAD.
+    assert_eq!(plan.entries.len(), 2);
+    assert_eq!(plan.entries[0].commit_id, feature);
+    assert_eq!(plan.entries[0].action, InteractiveRebaseAction::Pick);
+    assert_eq!(plan.entries[1].action, InteractiveRebaseAction::Fixup);
+
+    // Apply the fold: non-interactive rebase of base..HEAD with the plan todo.
+    backend
+        .interactive_rebase_with_output(&root, &plan.entries)
+        .expect("autosquash rebase");
+
+    // The fixup commit is gone from history; only root and the folded feature
+    // remain, and the folded commit carries the fixup's content.
+    assert_eq!(
+        git_stdout(&repo, &["rev-list", "--count", "HEAD"]),
+        "2".to_string()
+    );
+    assert_eq!(rev_parse(&repo, "HEAD^"), root);
+    assert_eq!(
+        fs::read_to_string(repo.join("file.txt")).unwrap(),
+        "feature fixed\n"
+    );
+    assert_eq!(
+        git_stdout(&repo, &["log", "-1", "--format=%s"]),
+        "Feature X"
+    );
+}
+
+#[test]
+fn autosquash_plan_is_none_when_no_fixup_commits() {
+    let dir = tempfile::tempdir().expect("create tempdir");
+    let repo = dir.path().join("repo");
+    init_repo(&repo);
+    commit_file(&repo, "file.txt", "root\n", "Root commit");
+    let root = rev_parse(&repo, "HEAD");
+    commit_file(&repo, "file.txt", "a\n", "First");
+    commit_file(&repo, "file.txt", "b\n", "Second");
+
+    let backend = open_backend(&repo);
+    let entries = backend
+        .list_commits_for_interactive_rebase(&root)
+        .expect("list commits for interactive rebase");
+
+    // No fixup!/squash! commit shares a subject with an unprefixed sibling, so
+    // the confirm popover would never open — the store surfaces a notice and
+    // leaves history untouched.
+    assert!(build_autosquash_plan(&entries, AutosquashMode::ToTop, root).is_none());
 }

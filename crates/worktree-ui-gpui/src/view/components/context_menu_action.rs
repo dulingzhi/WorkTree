@@ -243,6 +243,13 @@ pub(in crate::view) enum ContextMenuAction {
         repo_id: RepoId,
         commit_id: CommitId,
     },
+    /// Produce a `fixup! <target subject>` commit on top of HEAD, targeting the
+    /// right-clicked commit. Rides the ordinary commit path; the next autosquash
+    /// folds it back into `commit_id`. Never pushes on its own.
+    FixupCommit {
+        repo_id: RepoId,
+        commit_id: CommitId,
+    },
     /// Opens the squash confirmation prompt for the current multi-selection.
     SquashSelectedCommits {
         repo_id: RepoId,

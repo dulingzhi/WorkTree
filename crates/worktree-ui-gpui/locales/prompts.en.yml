@@ -43,6 +43,14 @@ prompts:
     commit_message: "Commit message"
     description: "Description"
     submit: "Squash"
+  autosquash:
+    title: "Autosquash commits"
+    title_count: "Autosquash %{count} commit(s)"
+    loading: "Computing commits to fold…"
+    empty: "No fixup!/squash! commits to fold into this range."
+    fold_row: "%{fixup} → folds into %{sha} %{summary}"
+    count_line: "%{count} commit(s) will be merged"
+    confirm: "Autosquash"
   create_tag:
     title: "Create tag"
     target_line: "Target: %{target}"

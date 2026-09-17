@@ -474,9 +474,11 @@ pub fn autosquash_folds(
     folded_into
 }
 
-/// Applies `mode` to `original`, producing the collapsed entry list (one row
-/// per surviving/untouched commit) plus the survivor-id → folded-fixup map.
-/// The folded map is empty when nothing was eligible.
+/// Applies `mode` to `original`, producing the rebase todo (`collapsed`) plus
+/// the survivor-id → folded-fixup map. `collapsed` preserves `original`'s
+/// order: survivors and untouched commits stay `Pick`, and every commit that
+/// folds into another is kept in place as a `Fixup` step. The folded map is
+/// empty when nothing was eligible.
 pub fn compute_autosquash(
     original: &[InteractiveRebaseEntry],
     mode: AutosquashMode,
@@ -494,6 +496,11 @@ pub fn compute_autosquash(
                 let mut fixup = e.clone();
                 fixup.action = InteractiveRebaseAction::Fixup;
                 fixup.new_message = None;
+                // The fixup stays in the todo (as a `Fixup` step) so the plan
+                // covers every commit in `base..HEAD` — git's rebase guard
+                // rejects a todo whose commit set differs from the live range,
+                // and a dropped fixup would rewrite history wrong.
+                collapsed.push(fixup.clone());
                 folded
                     .entry(original[survivor].commit_id.clone())
                     .or_default()
@@ -503,6 +510,79 @@ pub fn compute_autosquash(
         }
     }
     (collapsed, folded)
+}
+
+/// One commit that will absorb one or more `fixup!`/`squash!` commits during an
+/// autosquash. `fixups` carries the folded-away entries (with their original
+/// subjects) so the confirmation popover can list `fixup! … → 折叠进 <target>`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AutosquashFold {
+    pub target_commit_id: String,
+    pub target_summary: String,
+    /// The `fixup!`/`squash!` entries folded into `target_commit_id`.
+    pub fixups: Vec<InteractiveRebaseEntry>,
+}
+
+/// Result of folding a commit range for autosquash. `entries` is the
+/// ready-to-run rebase todo (survivors left as `Pick`, folded commits marked
+/// `Fixup`) handed to `Effect::InteractiveRebase`; `folds` is the human-readable
+/// view shown in the confirmation popover. `None` when nothing was eligible —
+/// no `fixup!`/`squash!` commit sharing a subject with an unprefixed sibling.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AutosquashPlan {
+    pub base: String,
+    pub entries: Vec<InteractiveRebaseEntry>,
+    pub folds: Vec<AutosquashFold>,
+}
+
+impl AutosquashPlan {
+    /// Total number of commits that will be folded away (rewritten out of
+    /// existence) when this plan is applied.
+    pub fn folded_count(&self) -> usize {
+        self.folds.iter().map(|f| f.fixups.len()).sum()
+    }
+}
+
+/// Folds `entries` (oldest-first, as produced by
+/// `list_commits_for_interactive_rebase`) for autosquash and builds the plan
+/// shown before the history rewrite. Returns `None` when no `fixup!`/`squash!`
+/// commit groups with an unprefixed sibling, so callers can skip the
+/// confirmation step entirely.
+pub fn build_autosquash_plan(
+    entries: &[InteractiveRebaseEntry],
+    mode: AutosquashMode,
+    base: String,
+) -> Option<AutosquashPlan> {
+    let (collapsed, folded) = compute_autosquash(entries, mode);
+    if folded.is_empty() {
+        return None;
+    }
+    // Survivors (and untouched commits) stay in `collapsed` with their commit
+    // ids intact; resolve each target's display subject from there.
+    let summary_by_id: FxHashMap<&str, &str> = collapsed
+        .iter()
+        .map(|e| (e.commit_id.as_str(), e.summary.as_str()))
+        .collect();
+    let folds = folded
+        .into_iter()
+        .map(|(target_id, fixups)| {
+            let target_summary = summary_by_id
+                .get(target_id.as_str())
+                .copied()
+                .unwrap_or_default()
+                .to_string();
+            AutosquashFold {
+                target_commit_id: target_id,
+                target_summary,
+                fixups,
+            }
+        })
+        .collect();
+    Some(AutosquashPlan {
+        base,
+        entries: collapsed,
+        folds,
+    })
 }
 
 #[cfg(test)]
@@ -954,7 +1034,9 @@ mod tests {
         ];
         let (collapsed, folded) = compute_autosquash(&entries, AutosquashMode::ToTop);
         let ids: Vec<&str> = collapsed.iter().map(|e| e.commit_id.as_str()).collect();
-        assert_eq!(ids, vec!["T", "W"]);
+        // F stays in the todo as a `Fixup` step (original position) so the plan
+        // covers every commit in `base..HEAD`.
+        assert_eq!(ids, vec!["T", "W", "F"]);
         assert_eq!(
             folded["T"]
                 .iter()
@@ -962,6 +1044,46 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["F"]
         );
+    }
+
+    #[test]
+    fn build_autosquash_plan_folds_fixup_into_target_with_subject() {
+        let entries = vec![
+            sc("T", "add feature"),
+            sc("W", "unrelated"),
+            sc("F", &fixup_message("add feature")),
+        ];
+        let plan = build_autosquash_plan(&entries, AutosquashMode::ToTop, "T".to_string())
+            .expect("one foldable group");
+        assert_eq!(plan.base, "T");
+        assert_eq!(plan.folded_count(), 1);
+        let fold = &plan.folds[0];
+        assert_eq!(fold.target_commit_id, "T");
+        assert_eq!(fold.target_summary, "add feature");
+        assert_eq!(fold.fixups.len(), 1);
+        assert_eq!(fold.fixups[0].commit_id, "F");
+        // The executable todo keeps the target and the unrelated commit as
+        // `Pick`, and includes the fixup as a `Fixup` step (it must stay in the
+        // todo so the plan covers every commit in `base..HEAD`).
+        let actions: Vec<_> = plan
+            .entries
+            .iter()
+            .map(|e| (e.commit_id.as_str(), e.action))
+            .collect();
+        assert_eq!(
+            actions,
+            vec![
+                ("T", InteractiveRebaseAction::Pick),
+                ("W", InteractiveRebaseAction::Pick),
+                ("F", InteractiveRebaseAction::Fixup),
+            ]
+        );
+    }
+
+    #[test]
+    fn build_autosquash_plan_is_none_when_nothing_folds() {
+        let entries = vec![sc("T", "add feature"), sc("W", "unrelated")];
+        assert!(build_autosquash_plan(&entries, AutosquashMode::ToTop, "T".to_string()).is_none());
     }
 
     #[test]
@@ -1086,9 +1208,10 @@ mod tests {
             sc("F", "fix"),
         ];
         let (collapsed, folded) = compute_autosquash(&original, AutosquashMode::ToBottom);
-        // Only B (oldest "fix") and C survive.
+        // Only B (oldest "fix") and C survive; D and F stay as `Fixup` steps in
+        // their original positions so the todo covers every commit.
         let ids: Vec<&str> = collapsed.iter().map(|e| e.commit_id.as_str()).collect();
-        assert_eq!(ids, vec!["B", "C"]);
+        assert_eq!(ids, vec!["B", "C", "D", "F"]);
         let into_b = &folded["B"];
         assert_eq!(
             into_b
@@ -1116,7 +1239,8 @@ mod tests {
         ];
         let (collapsed, folded) = compute_autosquash(&original, AutosquashMode::ToTop);
         let ids: Vec<&str> = collapsed.iter().map(|e| e.commit_id.as_str()).collect();
-        assert_eq!(ids, vec!["A", "B"]);
+        // C stays as a `Fixup` step after B so the todo covers every commit.
+        assert_eq!(ids, vec!["A", "B", "C"]);
         assert_eq!(
             folded["A"]
                 .iter()
@@ -1140,7 +1264,8 @@ mod tests {
         ];
         let (collapsed, folded) = compute_autosquash(&original, AutosquashMode::Neighbor);
         let ids: Vec<&str> = collapsed.iter().map(|e| e.commit_id.as_str()).collect();
-        assert_eq!(ids, vec!["A", "C"]);
+        // B stays as a `Fixup` step between A and C so the todo covers every commit.
+        assert_eq!(ids, vec!["A", "B", "C"]);
         assert_eq!(
             folded["A"]
                 .iter()
@@ -1159,9 +1284,10 @@ mod tests {
             sc("F", "fix"),
         ];
         let (collapsed, folded) = compute_autosquash(&original, AutosquashMode::ToTop);
-        // F (newest "fix") and C survive; F keeps its slot (after C).
+        // F (newest "fix") and C survive; B and D stay as `Fixup` steps in their
+        // original positions so the todo covers every commit.
         let ids: Vec<&str> = collapsed.iter().map(|e| e.commit_id.as_str()).collect();
-        assert_eq!(ids, vec!["C", "F"]);
+        assert_eq!(ids, vec!["B", "C", "D", "F"]);
         assert_eq!(
             folded["F"]
                 .iter()
@@ -1181,9 +1307,10 @@ mod tests {
             sc("E", "fix"),
         ];
         let (collapsed, folded) = compute_autosquash(&original, AutosquashMode::Neighbor);
-        // B stays (not adjacent to another "fix"); D survives its run, E folds in.
+        // B stays (not adjacent to another "fix"); D survives its run, E folds in
+        // as a `Fixup` step after D so the todo covers every commit.
         let ids: Vec<&str> = collapsed.iter().map(|e| e.commit_id.as_str()).collect();
-        assert_eq!(ids, vec!["B", "C", "D"]);
+        assert_eq!(ids, vec!["B", "C", "D", "E"]);
         assert_eq!(
             folded["D"]
                 .iter()

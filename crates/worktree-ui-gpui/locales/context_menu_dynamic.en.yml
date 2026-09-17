@@ -28,6 +28,8 @@ cm:
     interactive_rebase_child: "Interactive rebase %{count} child of %{short}"
     interactive_rebase_children: "Interactive rebase %{count} children of %{short}"
     merge_into_current: "Merge %{short} into %{current}"
+    autosquash: "Autosquash from %{short}"
+    fixup: "Fixup into %{short}"
   group:
     branch_count_one: "1 branch"
     branch_count: "%{count} branches"

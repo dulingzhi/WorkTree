@@ -225,6 +225,16 @@ impl std::fmt::Debug for InternalMsg {
                 .field("base", base)
                 .field("ok", &result.is_ok())
                 .finish(),
+            InternalMsg::AutosquashSetupLoaded {
+                repo_id,
+                base,
+                result,
+            } => f
+                .debug_struct("AutosquashSetupLoaded")
+                .field("repo_id", repo_id)
+                .field("base", base)
+                .field("ok", &result.is_ok())
+                .finish(),
             InternalMsg::InteractiveCherryPickMessagesLoaded {
                 repo_id,
                 requested_ids,

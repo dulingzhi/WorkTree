@@ -775,6 +775,13 @@ impl PopoverHost {
                 self.store
                     .dispatch(Msg::RevertCommit { repo_id, commit_id });
             }
+            ContextMenuAction::FixupCommit { repo_id, commit_id } => {
+                self.store.dispatch(Msg::CommitFixup {
+                    repo_id,
+                    target: commit_id,
+                    push_after_commit: false,
+                });
+            }
             ContextMenuAction::SquashSelectedCommits { repo_id } => {
                 // PrepareSquash and the eventual SquashCommits are both
                 // discarded silently when the git runtime is unavailable, which

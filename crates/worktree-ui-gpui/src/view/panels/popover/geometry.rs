@@ -219,7 +219,8 @@ pub(in crate::view) fn popover_width_spec(kind: &PopoverKind) -> Option<PopoverW
         | PopoverKind::StashPickerPrompt { .. }
         | PopoverKind::CloneRepo
         | PopoverKind::CreateTagPrompt { .. }
-        | PopoverKind::SquashPrompt { .. } => Some(DIALOG_420_WIDTH),
+        | PopoverKind::SquashPrompt { .. }
+        | PopoverKind::AutosquashConfirm { .. } => Some(DIALOG_420_WIDTH),
         PopoverKind::MergeRequestPushPrompt { .. } => Some(DIALOG_440_WIDTH),
         PopoverKind::AgentSessions { .. } => Some(DIALOG_440_WIDTH),
         PopoverKind::RepoSettingsPrompt { .. } => Some(DIALOG_440_WIDTH),

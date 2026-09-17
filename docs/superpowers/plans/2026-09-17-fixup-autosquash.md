@@ -217,10 +217,50 @@ fixup 09a1aca # fixup! add feature: 初版
 - `CARGO_TARGET_DIR=<C盘> cargo check -p worktree-ui-gpui --tests` → 无 error。
 - `cargo fmt --check` 干净。
 
-### 待办（后续步骤）
+### Step 2 — core 的 fixup message 纯函数 + 单测（已完成）
 
-- Step 2：core 的 fixup message 构造纯函数 + 单测。
-- Step 3：`Msg` / reducer（照 `loaded_results/squash.rs` 模板）+ 单测。
-- Step 4：Autosquash 预览确认弹窗（`PopoverKind::AutosquashConfirm`）。
-- Step 5：右键菜单 2 项 + dispatcher + i18n + 菜单测试。
-- Step 6：`squash_integration.rs` 端到端用例。
+- `worktree-core/src/squash.rs::fixup_message(target_subject)` 构造 `fixup! <subject>`。逐字节等价于 `git commit --fixup=<target>`（§3 已实测），故走普通 `Msg::Commit` 路径、后端零改动。
+- 单测：`fixup_message_matches_gits_prefix`（中英/带单双引号 subject）、`fixup_message_keeps_only_the_first_line`（多行只取首行）、`fixup_message_folds_back_into_its_target`（构造出的 message 必须被 `autosquash_group_key` 归回 target）。全过。
+
+### Step 3 — `Msg` / reducer（照 `loaded_results/squash.rs` 模板）+ 单测（已完成）
+
+- `Msg::CommitFixup { repo_id, target: CommitId, push_after_commit: bool }`（`msg/message.rs:770`）—— 走 §3「拼 message + 复用 `Msg::Commit`」路线，不新增任何 git trait 方法。
+- `Msg::Autosquash { repo_id, base }` / `ConfirmAutosquash { repo_id }` / `CancelAutosquash { repo_id }`（`msg/message.rs:779/785/790`）。
+- `InternalMsg::AutosquashSetupLoaded { repo_id, base, result }`（`msg/message.rs:1313`）。
+- `Effect::LoadAutosquashSetup { repo_id, base }`（`msg/effect.rs:630`）。
+- `HistoryState::autosquash_preview: Loadable<AutosquashPlan>` + `autosquash_preview_rev: u64`（`model.rs:889-890`）；`set_autosquash_preview` 推进 rev（`model.rs:2346`）。
+- reducer `autosquash` / `confirm_autosquash` / `cancel_autosquash`（`actions_emit_effects.rs:847/858/878`）：`confirm` 复用 `begin_local_action` + `Effect::InteractiveRebase { interactive: false }`，与 squash 执行路径同构；无 Ready plan 时只清 preview、不发 Effect。
+- `loaded_results::autosquash_rebase_setup_loaded`（`loaded_results/autosquash.rs`）：块作用域解决借用冲突；HEAD 漂移 → 放弃 + `Warning` 通知；无可折叠 → `NotLoaded` + `Info`；`Err` → `NotLoaded` + `Error`。
+- 单测 4 个（`loaded_results/tests.rs:1017` 起）：`autosquash_preview_ready_when_fixup_folds_into_target` / `_cancelled_when_head_drifted` / `_nothing_to_fold_notice` / `_cleared_on_load_error`，全过。
+
+**🔴 本轮修的真实 bug（`compute_autosquash` todo 漏 fixup）**：
+- 原 `Some(survivor)` 分支只把 fixup 塞进 `folded`（人看视图）、只把 survivor 推入 `collapsed`（rebase todo）。→ `plan.entries` 不含 fixup 提交。
+- `worktree-git-gix/src/repo/history.rs` 的 `interactive_rebase_with_output`（约 969-996）在真正 rebase 前会 re-list `base..HEAD` 的 commit-id 集合，并与 plan todo 的 commit-id 集合排序后比较；**两者不一致即报错「branch changed since the rebase was set up」并中止**——漏 fixup 必然触发该 guard，且会错误丢弃 fixup。
+- **修复**：fixup 也以 `InteractiveRebaseAction::Fixup` 留在 `collapsed`（todo）原位（注释见 `compute_autosquash`）。`plan.entries` 现在覆盖 `base..HEAD` 中每一个提交，guard 通过。
+- 同步更新的测试：`build_autosquash_plan_folds_fixup_into_target_with_subject`（todo 断言补 `("F", Fixup)`）+ 6 个 `compute_autosquash` 单测的 `collapsed` id 列表（补上 fixup 提交 id，原位）。
+
+### Step 4 — Autosquash 预览确认弹窗（已完成）
+
+- `PopoverKind::AutosquashConfirm { repo_id, base }`（`host/kinds.rs`），照 `SquashPrompt` 的注册模式补全 8 处：`host/kinds.rs` / `popover.rs`(mod) / `dispatch.rs` / `fingerprint.rs`(repo_id 提取链 + preview-rev 哈希 + 类型判别哈希) / `geometry.rs`(`DIALOG_420_WIDTH`) / `open.rs`(dismiss 链 + 打开时 dispatch `Msg::Autosquash`) / `dialog.rs`(modal 链)。
+- 新面板 `autosquash_confirm.rs`：从 `autosquash_preview` 读 `Loadable`；仅 `Ready(plan)` 且 `folded_count()>0` 渲染 fold 行（`fixup → 合并进 sha summary`）+ count 行；`Loading`/`NotLoaded` 显示加载中/空提示；确认按钮 `disabled` 当 plan 为空。确认 `ConfirmAutosquash` + close，取消 `CancelAutosquash` + close；标题按有无 fold 用 `title_count` / `title`。
+- i18n：`prompts.en.yml` / `prompts.zh-CN.yml` 加 `autosquash:` 块（title / title_count / loading / empty / fold_row / count_line / confirm）。
+
+### Step 5 — 右键菜单 2 项 + dispatcher + i18n（已完成）
+
+- ① `Fixup into this commit`：`ContextMenuAction::FixupCommit { repo_id, commit_id }`（`context_menu_action.rs`），`commit.rs` 加菜单项（`git_commit.svg`，受 `history_rewrite_disabled` 约束），`impl_menu.rs` 加 dispatch 臂 → `Msg::CommitFixup { target: commit_id, push_after_commit: false }`。
+- ② `Autosquash from here`：`commit.rs` 加菜单项（`git_commit.svg`，受 `history_rewrite_disabled` 约束，仅 `!is_head_commit` 时显示），`action: OpenPopover { kind: AutosquashConfirm { repo_id, base: sha } }`；走既有 `OpenPopover` 统一臂，无新增 dispatch。
+- i18n：`context_menu_dynamic.en.yml` / `.zh-CN.yml` 加 `commit.autosquash` / `commit.fixup`（`%{short}` 插值）。
+
+### Step 6 — `squash_integration.rs` 端到端用例（已完成）
+
+- `autosquash_folds_fixup_commit_into_target_end_to_end`：造 `root → Feature X → fixup! Feature X`；`list_commits_for_interactive_rebase(&root)` → `build_autosquash_plan(entries, ToTop, root)` → `interactive_rebase_with_output(&root, &plan.entries)` → 断言历史 2 提交、`HEAD^ == root`、内容含 `feature fixed`、subject `Feature X`。全过。
+- `autosquash_plan_is_none_when_no_fixup_commits`：First/Second 无可折叠 → `build_autosquash_plan(...).is_none()`。全过。
+- 这两个 case 是暴露 Step 3「todo 漏 fixup」bug 的关键：纯 `build_autosquash_plan` 单测只看 `folds` 视图，没覆盖真实 rebase 后端的 commit-set guard。
+
+### 剩余 / 遗留
+
+- 命令面板带参命令（`Autosquash from here` 需 base 参数，不适合无参 palette）：按 §4 计划留待「palette 支持带参命令」时再议。
+- §3 待确认项（合并提交 target 禁用、特殊字符 subject 拼接）已随 `fixup_message` 单测 + `history_rewrite_disabled` 约束消解。
+- 统一刷新重构遗留的 `repo_monitor_active_repo_activation_coalesces_with_in_flight_refresh` flaky 不在本次范围。
+
+**门禁结果（2026-09-17）**：`cargo fmt --check` 干净；`cargo check -p worktree-state --tests` 无 error；`CARGO_TARGET_DIR=<C盘> cargo check -p worktree-ui-gpui --tests` 无 error；`cargo test -p worktree-core --lib squash` **53 passed**；`cargo test -p worktree-state --lib` 全过；`cargo test -p worktree-git-gix --test squash_integration autosquash` **2 passed**。CI billing 停摆，本地门禁为准。

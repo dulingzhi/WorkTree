@@ -36,6 +36,14 @@ prompts:
     commit_message: "提交信息"
     description: "详细描述"
     submit: "压缩"
+  autosquash:
+    title: "自动合并提交"
+    title_count: "自动合并 %{count} 个提交"
+    loading: "正在计算可合并的提交…"
+    empty: "该范围内没有可合并的 fixup!/squash! 提交。"
+    fold_row: "%{fixup} → 合并进 %{sha} %{summary}"
+    count_line: "将合并 %{count} 个提交"
+    confirm: "自动合并"
   create_tag:
     title: "创建标签"
     target_line: "目标：%{target}"

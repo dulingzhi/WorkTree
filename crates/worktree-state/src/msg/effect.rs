@@ -624,6 +624,13 @@ pub enum Effect {
         repo_id: RepoId,
         base: String,
     },
+    /// List `base..HEAD` (`git log --reverse --no-merges`) so the reducer can
+    /// fold `fixup!`/`squash!` commits into their targets for the autosquash
+    /// confirmation. Reuses the same git call as the interactive-rebase editor.
+    LoadAutosquashSetup {
+        repo_id: RepoId,
+        base: String,
+    },
     InteractiveRebase {
         repo_id: RepoId,
         base: String,

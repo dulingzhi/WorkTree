@@ -772,6 +772,24 @@ pub enum Msg {
         target: CommitId,
         push_after_commit: bool,
     },
+    /// List `base..HEAD`, fold every `fixup!`/`squash!` commit into its target,
+    /// and open the `AutosquashConfirm` popover with the resulting plan. Left
+    /// with no eligible fold, the reducer surfaces a "nothing to fold" notice
+    /// instead of rewriting history.
+    Autosquash {
+        repo_id: RepoId,
+        base: String,
+    },
+    /// Confirm the pending autosquash plan: rewrite history non-interactively
+    /// (`git rebase -i` with the folded todo installed, no editor).
+    ConfirmAutosquash {
+        repo_id: RepoId,
+    },
+    /// Dismiss the `AutosquashConfirm` popover and discard the pending plan
+    /// without rewriting history.
+    CancelAutosquash {
+        repo_id: RepoId,
+    },
     SafePushAfterCommit {
         repo_id: RepoId,
         context: SafePushAfterCommitContext,
@@ -1285,6 +1303,14 @@ pub enum InternalMsg {
         result: Result<Option<BisectState>, Error>,
     },
     InteractiveRebaseSetupLoaded {
+        repo_id: RepoId,
+        base: String,
+        result: Result<Vec<InteractiveRebaseEntry>, Error>,
+    },
+    /// Reply to `Effect::LoadAutosquashSetup`: the `base..HEAD` range listed for
+    /// folding. The reducer turns it into an `AutosquashPlan` (or a "nothing to
+    /// fold" notice) and opens the confirmation popover.
+    AutosquashSetupLoaded {
         repo_id: RepoId,
         base: String,
         result: Result<Vec<InteractiveRebaseEntry>, Error>,

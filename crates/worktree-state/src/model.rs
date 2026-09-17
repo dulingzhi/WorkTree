@@ -19,6 +19,7 @@ use worktree_core::services::{
     BisectState, BlameLine, ForcePushLease, InteractiveRebaseEntry, SafePushAfterCommitContext,
     SequencerState, SubmoduleTrustTarget,
 };
+use worktree_core::squash::AutosquashPlan;
 
 pub type Shared<T> = Arc<T>;
 
@@ -881,6 +882,12 @@ pub struct HistoryState {
     /// plan is transiently invalid (e.g. HEAD momentarily unresolved during a
     /// concurrent reload), as long as the range still matches what was asked.
     pub squash_preview_pending: Option<(CommitId, CommitId)>,
+    /// The autosquash fold plan awaiting confirmation in the
+    /// `AutosquashConfirm` popover, or `NotLoaded`/`Loading` while the
+    /// `base..HEAD` range is being listed and folded. `None` (empty plan) means
+    /// no `fixup!`/`squash!` commit was eligible to fold.
+    pub autosquash_preview: Loadable<AutosquashPlan>,
+    pub autosquash_preview_rev: u64,
 }
 
 impl Default for HistoryState {
@@ -917,6 +924,8 @@ impl Default for HistoryState {
             squash_preview: Loadable::NotLoaded,
             squash_preview_rev: 0,
             squash_preview_pending: None,
+            autosquash_preview: Loadable::NotLoaded,
+            autosquash_preview_rev: 0,
         }
     }
 }
@@ -2332,6 +2341,12 @@ impl RepoState {
         self.history_state.squash_preview = v;
         self.history_state.squash_preview_rev =
             self.history_state.squash_preview_rev.wrapping_add(1);
+    }
+
+    pub(crate) fn set_autosquash_preview(&mut self, v: Loadable<AutosquashPlan>) {
+        self.history_state.autosquash_preview = v;
+        self.history_state.autosquash_preview_rev =
+            self.history_state.autosquash_preview_rev.wrapping_add(1);
     }
 
     /// Resolves the commit HEAD points at: the current branch's target when

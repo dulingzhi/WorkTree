@@ -22,6 +22,8 @@ cm:
     interactive_rebase_child: "交互式变基 %{short} 的 %{count} 个子提交"
     interactive_rebase_children: "交互式变基 %{short} 的 %{count} 个子提交"
     merge_into_current: "将 %{short} 合并到 %{current}"
+    autosquash: "从 %{short} 自动合并"
+    fixup: "修复提交到 %{short}"
   group:
     branch_count_one: "1 个分支"
     branch_count: "%{count} 个分支"

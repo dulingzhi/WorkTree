@@ -185,6 +185,7 @@ impl PopoverHost {
             Some(PopoverKind::CloneRepo)
             | Some(PopoverKind::CreateTagPrompt { .. })
             | Some(PopoverKind::SquashPrompt { .. })
+            | Some(PopoverKind::AutosquashConfirm { .. })
             | Some(PopoverKind::CheckoutRemoteBranchPrompt { .. })
             | Some(PopoverKind::PushSetUpstreamPrompt { .. })
             | Some(PopoverKind::RepoSettingsPrompt { .. })
@@ -571,6 +572,17 @@ impl PopoverHost {
             // Every open starts a fresh request; a previous answer (or error)
             // never carries over.
             self.hunk_explanation = None;
+        }
+        if matches!(&kind, PopoverKind::AutosquashConfirm { .. }) {
+            // Recompute the fold from live history on every open; a plan left
+            // behind by an earlier visit (or a head that has since moved) must
+            // never survive into the confirmation.
+            if let PopoverKind::AutosquashConfirm { repo_id, base } = &kind {
+                self.store.dispatch(Msg::Autosquash {
+                    repo_id: *repo_id,
+                    base: base.clone(),
+                });
+            }
         }
         self.menu_invoker_focus =
             if matches!(&kind, PopoverKind::AppMenu | PopoverKind::AddRepoMenu) {

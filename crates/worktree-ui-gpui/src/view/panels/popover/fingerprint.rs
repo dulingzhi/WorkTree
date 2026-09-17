@@ -159,6 +159,7 @@ fn repo_for_popover<'a>(state: &'a AppState, popover: &PopoverKind) -> Option<&'
         | PopoverKind::RenameBranchPrompt { repo_id, .. }
         | PopoverKind::ResetPrompt { repo_id, .. }
         | PopoverKind::SquashPrompt { repo_id }
+        | PopoverKind::AutosquashConfirm { repo_id, .. }
         | PopoverKind::CheckoutRemoteBranchPrompt { repo_id, .. }
         | PopoverKind::StashDropConfirm { repo_id, .. }
         | PopoverKind::StashMenu { repo_id, .. }
@@ -448,6 +449,15 @@ fn hash_repo_for_popover<H: Hasher>(repo: &RepoState, popover: &PopoverKind, has
             repo.branches_rev.hash(hasher);
         }
 
+        // The autosquash confirm tracks the folded plan preview plus the log
+        // and HEAD, which decide whether the range is still foldable.
+        PopoverKind::AutosquashConfirm { .. } => {
+            repo.history_state.autosquash_preview_rev.hash(hasher);
+            repo.history_state.log_rev.hash(hasher);
+            repo.head_branch_rev.hash(hasher);
+            repo.branches_rev.hash(hasher);
+        }
+
         PopoverKind::TagMenu { .. } | PopoverKind::TagRefMenu { .. } => {
             repo.tags_rev.hash(hasher);
             repo.remotes_rev.hash(hasher);
@@ -643,6 +653,11 @@ fn hash_popover_kind<H: Hasher>(kind: &PopoverKind, hasher: &mut H) {
         PopoverKind::SquashPrompt { repo_id } => {
             75u8.hash(hasher);
             repo_id.hash(hasher);
+        }
+        PopoverKind::AutosquashConfirm { repo_id, base } => {
+            76u8.hash(hasher);
+            repo_id.hash(hasher);
+            base.hash(hasher);
         }
         PopoverKind::CreateTagPrompt { repo_id, target } => {
             8u8.hash(hasher);

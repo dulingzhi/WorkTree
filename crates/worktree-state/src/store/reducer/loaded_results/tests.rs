@@ -1,19 +1,20 @@
 use super::sidebar_browser::browse_open_content_path;
 use super::{
-    author_emails_loaded, blame_loaded, branches_loaded, browse_repository_at_commit,
-    clear_commit_selection, commit_details_loaded, conflict_file_loaded, ensure_sidebar_data,
-    file_browser_loaded, file_history_loaded, head_branch_loaded, load_blame, load_conflict_file,
-    load_file_browser, load_file_history, load_reflog, load_stashes, load_submodules, load_tags,
-    load_worktrees, reflog_loaded, refresh_branches, remote_branches_loaded, remote_tags_loaded,
-    remotes_loaded, reset_browse_to_live, reveal_file_browser_path, select_commit,
-    select_commit_multi, set_file_browser_search, set_file_browser_source, set_sidebar_mode,
+    author_emails_loaded, autosquash_rebase_setup_loaded, blame_loaded, branches_loaded,
+    browse_repository_at_commit, clear_commit_selection, commit_details_loaded,
+    conflict_file_loaded, ensure_sidebar_data, file_browser_loaded, file_history_loaded,
+    head_branch_loaded, load_blame, load_conflict_file, load_file_browser, load_file_history,
+    load_reflog, load_stashes, load_submodules, load_tags, load_worktrees, reflog_loaded,
+    refresh_branches, remote_branches_loaded, remote_tags_loaded, remotes_loaded,
+    reset_browse_to_live, reveal_file_browser_path, select_commit, select_commit_multi,
+    set_file_browser_search, set_file_browser_source, set_sidebar_mode,
     squash_message_preview_loaded, staged_status_loaded, stashes_loaded, status_loaded,
     submodules_loaded, tags_loaded, toggle_file_browser_dir, upstream_divergence_loaded,
     worktree_status_loaded, worktrees_loaded,
 };
 use crate::model::{
-    AppState, ConflictFile, ConflictFileLoadMode, Loadable, RepoId, RepoLoadsInFlight, RepoState,
-    SidebarDataRequest, SidebarMode,
+    AppNotificationKind, AppState, ConflictFile, ConflictFileLoadMode, Loadable, RepoId,
+    RepoLoadsInFlight, RepoState, SidebarDataRequest, SidebarMode,
 };
 use crate::msg::{CommitSelectMode, Effect};
 use rustc_hash::FxHashMap;
@@ -26,6 +27,7 @@ use worktree_core::domain::{
     UpstreamDivergence,
 };
 use worktree_core::error::{Error, ErrorKind};
+use worktree_core::services::{InteractiveRebaseAction, InteractiveRebaseEntry};
 
 fn backend_error(message: &str) -> Error {
     Error::new(ErrorKind::Backend(message.to_string()))
@@ -54,6 +56,18 @@ fn commit_details_for(id: CommitId) -> CommitDetails {
         parent_ids: Vec::new(),
         files: Vec::new(),
         signed: false,
+    }
+}
+
+/// A one-line interactive-rebase entry (oldest-first ordering is the caller's
+/// responsibility; the last entry is treated as the live HEAD by the loader).
+fn rebase_entry(commit_id: &str, summary: &str) -> InteractiveRebaseEntry {
+    InteractiveRebaseEntry {
+        action: InteractiveRebaseAction::Pick,
+        commit_id: commit_id.to_string(),
+        summary: summary.to_string(),
+        message: summary.to_string(),
+        new_message: None,
     }
 }
 
@@ -998,6 +1012,125 @@ fn squash_preview_dropped_when_request_range_differs() {
         Loadable::Loading
     ));
     assert!(repo.history_state.squash_preview_pending.is_some());
+}
+
+#[test]
+fn autosquash_preview_ready_when_fixup_folds_into_target() {
+    let repo_id = RepoId(1);
+    let mut state = new_state_with_repo(repo_id);
+    let base = "base0000".to_string();
+    // oldest-first: the unprefixed target, then a fixup! sitting on top (HEAD).
+    let target_id = "abc1234";
+    let fixup_id = "def5678";
+    let entries = vec![
+        rebase_entry(target_id, "Add feature X"),
+        rebase_entry(fixup_id, "fixup! Add feature X"),
+    ];
+    // HEAD is the last entry, so the list is still current when it lands.
+    repo_mut(&mut state, repo_id).set_detached_head_commit(Some(CommitId(fixup_id.into())));
+
+    let effects = autosquash_rebase_setup_loaded(&mut state, repo_id, base.clone(), Ok(entries));
+    assert!(effects.is_empty());
+
+    let repo = repo_mut(&mut state, repo_id);
+    match &repo.history_state.autosquash_preview {
+        Loadable::Ready(plan) => {
+            assert_eq!(plan.base, base);
+            // The survivor is a `Pick`; the fixup stays as a `Fixup` step so the
+            // todo covers every commit in `base..HEAD` (the rebase guard rejects a
+            // todo whose commit set differs from the live range).
+            assert_eq!(plan.entries.len(), 2);
+            assert_eq!(plan.entries[0].commit_id, target_id);
+            assert_eq!(plan.entries[0].action, InteractiveRebaseAction::Pick);
+            assert_eq!(plan.entries[1].commit_id, fixup_id);
+            assert_eq!(plan.entries[1].action, InteractiveRebaseAction::Fixup);
+            assert_eq!(plan.folded_count(), 1);
+            let fold = plan.folds.first().expect("one fold");
+            assert_eq!(fold.target_commit_id, target_id);
+            assert_eq!(fold.target_summary, "Add feature X");
+            assert_eq!(fold.fixups.len(), 1);
+            assert_eq!(fold.fixups[0].commit_id, fixup_id);
+            assert_eq!(fold.fixups[0].action, InteractiveRebaseAction::Fixup);
+        }
+        other => panic!("expected Ready autosquash preview, got {other:?}"),
+    }
+    // No notice: a real fold just opens the confirmation popover.
+    assert!(state.notifications.is_empty());
+}
+
+#[test]
+fn autosquash_preview_cancelled_when_head_drifted() {
+    let repo_id = RepoId(1);
+    let mut state = new_state_with_repo(repo_id);
+    let target_id = "abc1234";
+    let fixup_id = "def5678";
+    let entries = vec![
+        rebase_entry(target_id, "Add feature X"),
+        rebase_entry(fixup_id, "fixup! Add feature X"),
+    ];
+    // HEAD no longer matches the last listed entry — history moved while the
+    // list was in flight, so folding now would rewrite the wrong range.
+    repo_mut(&mut state, repo_id).set_detached_head_commit(Some(CommitId("other9999".into())));
+
+    let effects =
+        autosquash_rebase_setup_loaded(&mut state, repo_id, "base0000".to_string(), Ok(entries));
+    assert!(effects.is_empty());
+
+    let repo = repo_mut(&mut state, repo_id);
+    assert!(matches!(
+        repo.history_state.autosquash_preview,
+        Loadable::NotLoaded
+    ));
+    let notice = state.notifications.last().expect("a warning notice");
+    assert_eq!(notice.kind, AppNotificationKind::Warning);
+}
+
+#[test]
+fn autosquash_preview_nothing_to_fold_notice() {
+    let repo_id = RepoId(1);
+    let mut state = new_state_with_repo(repo_id);
+    // No fixup!/squash! commit — nothing eligible for a fold.
+    let entries = vec![
+        rebase_entry("aaa1111", "First commit"),
+        rebase_entry("bbb2222", "Second commit"),
+    ];
+    repo_mut(&mut state, repo_id).set_detached_head_commit(Some(CommitId("bbb2222".into())));
+
+    let effects =
+        autosquash_rebase_setup_loaded(&mut state, repo_id, "base0000".to_string(), Ok(entries));
+    assert!(effects.is_empty());
+
+    let repo = repo_mut(&mut state, repo_id);
+    assert!(matches!(
+        repo.history_state.autosquash_preview,
+        Loadable::NotLoaded
+    ));
+    let notice = state.notifications.last().expect("an info notice");
+    assert_eq!(notice.kind, AppNotificationKind::Info);
+}
+
+#[test]
+fn autosquash_preview_cleared_on_load_error() {
+    let repo_id = RepoId(1);
+    let mut state = new_state_with_repo(repo_id);
+    repo_mut(&mut state, repo_id).set_detached_head_commit(Some(CommitId("head1234".into())));
+    repo_mut(&mut state, repo_id).set_autosquash_preview(Loadable::Loading);
+
+    let effects = autosquash_rebase_setup_loaded(
+        &mut state,
+        repo_id,
+        "base0000".to_string(),
+        Err(backend_error("disk error")),
+    );
+    assert!(effects.is_empty());
+
+    let repo = repo_mut(&mut state, repo_id);
+    assert!(matches!(
+        repo.history_state.autosquash_preview,
+        Loadable::NotLoaded
+    ));
+    let notice = state.notifications.last().expect("an error notice");
+    assert_eq!(notice.kind, AppNotificationKind::Error);
 }
 
 #[test]

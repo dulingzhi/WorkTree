@@ -235,6 +235,26 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
         });
         items.push(ContextMenuItem::Separator);
     }
+    // "Autosquash from here" folds every fixup!/squash! commit in `base..HEAD`
+    // into its matching target commit. Hidden on HEAD (the range would be
+    // empty) and disabled while a history rewrite owns git's sequencer.
+    if !is_head_commit {
+        items.push(ContextMenuItem::Entry {
+            label: crate::i18n::t!("cm.commit.autosquash", short = short)
+                .to_string()
+                .into(),
+            icon: Some("icons/git_commit.svg".into()),
+            shortcut: None,
+            disabled: history_rewrite_disabled,
+            action: Box::new(ContextMenuAction::OpenPopover {
+                kind: PopoverKind::AutosquashConfirm {
+                    repo_id,
+                    base: sha.clone(),
+                },
+            }),
+        });
+        items.push(ContextMenuItem::Separator);
+    }
     if !is_head_commit && let Some((entries, source_colors)) = multi_cherry_pick_plan {
         let label = crate::i18n::t!("cm.commit.cherry_pick", count = entries.len())
             .to_string()
@@ -492,6 +512,21 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
         shortcut: Some("R".into()),
         disabled: history_rewrite_disabled,
         action: Box::new(ContextMenuAction::RevertCommit {
+            repo_id,
+            commit_id: commit_id.clone(),
+        }),
+    });
+    // "Fixup into this commit" creates a `fixup! <subject>` commit on top of
+    // HEAD targeting the right-clicked commit; the next autosquash folds it
+    // back. Disabled while a history rewrite owns git's sequencer.
+    items.push(ContextMenuItem::Entry {
+        label: crate::i18n::t!("cm.commit.fixup", short = short)
+            .to_string()
+            .into(),
+        icon: Some("icons/git_commit.svg".into()),
+        shortcut: None,
+        disabled: history_rewrite_disabled,
+        action: Box::new(ContextMenuAction::FixupCommit {
             repo_id,
             commit_id: commit_id.clone(),
         }),

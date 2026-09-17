@@ -4,6 +4,7 @@ use super::{
 use crate::model::{AppState, Loadable};
 use crate::msg::Msg;
 
+mod autosquash;
 mod conflict;
 mod history_loads;
 mod selection;
@@ -14,6 +15,7 @@ mod worktrees;
 
 pub(super) use conflict::{conflict_file_loaded, load_conflict_file};
 
+pub(super) use autosquash::autosquash_rebase_setup_loaded;
 pub(super) use history_loads::{
     ai_commit_context_loaded, author_emails_loaded, blame_loaded, commits_searched,
     file_history_loaded, hover_commit_message_loaded, load_ai_commit_context, load_blame,
@@ -348,6 +350,11 @@ pub(super) fn reduce_loaded_results(msg: Msg, state: &mut AppState) -> ReduceOut
             count,
             result,
         ),
+        Msg::Internal(crate::msg::InternalMsg::AutosquashSetupLoaded {
+            repo_id,
+            base,
+            result,
+        }) => loaded_results::autosquash_rebase_setup_loaded(state, repo_id, base, result),
         Msg::Internal(crate::msg::InternalMsg::RecentCommitMessagesLoaded {
             repo_id,
             request_rev,
