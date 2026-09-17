@@ -19,8 +19,8 @@ use worktree_core::services::{
     CommitOperationOutcome, ConflictFileStages, ConflictSide, ForcePushLease, GitRepository,
     GitRepositoryDiff, GitRepositoryHistory, GitRepositoryLog, GitRepositoryPorcelain,
     GitRepositoryRemotes, GitRepositoryStatus, GitRepositoryWorktree, InteractiveRebaseEntry,
-    MergeRequestPushOptions, MergetoolResult, PullMode, RemoteUrlKind, ResetMode, Result,
-    SafePushAfterCommitContext, SafePushAfterCommitDecision, SafePushAfterCommitTarget,
+    MergeRequestPushOptions, MergeTreePreview, MergetoolResult, PullMode, RemoteUrlKind, ResetMode,
+    Result, SafePushAfterCommitContext, SafePushAfterCommitDecision, SafePushAfterCommitTarget,
     SequencerState, SubmoduleTrustDecision, SubmoduleTrustTarget,
 };
 
@@ -454,6 +454,8 @@ impl GitRepositoryHistory for GixRepo {
             &self,
             entries: &[InteractiveRebaseEntry],
         ) -> Result<CommandOutput>;
+
+        fn merge_tree_preview(&self, head: &str, other: &str) -> Result<MergeTreePreview>;
 
         fn merge_abort_with_output(&self) -> Result<CommandOutput>;
 

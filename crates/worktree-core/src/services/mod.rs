@@ -263,6 +263,32 @@ pub struct InteractiveRebaseEntry {
     pub new_message: Option<String>,
 }
 
+/// One conflicted path reported by `git merge-tree --write-tree`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MergeConflictFile {
+    /// Repo-relative path git named for the conflict (`Merge conflict in
+    /// <path>`). Falls back to the full conflict detail for kinds git does not
+    /// phrase that way (e.g. rename/rename).
+    pub path: String,
+    /// Git's conflict classification, e.g. `add/add`, `content`,
+    /// `rename/rename`, `modify/delete`.
+    pub conflict_type: String,
+}
+
+/// Read-only result of previewing a merge (`git merge-tree --write-tree <head>
+/// <other>`): the toplevel tree the merge *would* produce — conflicted files
+/// carry conflict markers — plus the conflict list. Never touches the worktree,
+/// index or refs.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MergeTreePreview {
+    /// The 40-hex toplevel tree OID the merge would produce.
+    pub result_tree: String,
+    /// True when the merge would leave conflicts (git exited non-zero).
+    pub has_conflict: bool,
+    /// Conflicted paths, in git's reporting order.
+    pub conflicts: Vec<MergeConflictFile>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SubmoduleTrustTarget {
     pub submodule_path: PathBuf,

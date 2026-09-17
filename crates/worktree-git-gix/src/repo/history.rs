@@ -11,7 +11,7 @@ use worktree_core::domain::CommitId;
 use worktree_core::error::{Error, ErrorKind};
 use worktree_core::services::{
     BisectState, BisectVerdict, CommandOutput, InteractiveRebaseAction, InteractiveRebaseEntry,
-    ResetMode, Result, SequencerState,
+    MergeConflictFile, MergeTreePreview, ResetMode, Result, SequencerState,
 };
 
 /// Returns the HEAD commit id, or `None` when HEAD is unborn / empty.
@@ -966,6 +966,44 @@ impl GixRepo {
         parse_interactive_rebase_log(&output)
     }
 
+    /// Previews merging `other` into `head` without touching the worktree,
+    /// index or refs (`git merge-tree --write-tree <head> <other>`). Git prints
+    /// the resulting toplevel tree first; a clean merge prints only that line,
+    /// while a conflicted merge appends the stage blobs and `CONFLICT (...)`
+    /// lines and exits non-zero. A fatal run (e.g. unrelated histories) prints
+    /// no tree at all and is surfaced as a command failure.
+    pub(super) fn merge_tree_preview(&self, head: &str, other: &str) -> Result<MergeTreePreview> {
+        validate_ref_like_arg(head, "merge preview head")?;
+        validate_ref_like_arg(other, "merge preview commit")?;
+
+        let label = format!("git merge-tree --write-tree {head} {other}");
+        let mut cmd = self.git_workdir_cmd();
+        cmd.args(["merge-tree", "--write-tree"])
+            .arg(head)
+            .arg(other);
+        let output = run_git_raw_output(cmd, &label)?;
+        let stdout = bytes_to_text_preserving_utf8(&output.stdout);
+
+        let Some(result_tree) = stdout
+            .lines()
+            .map(str::trim)
+            .find(|line| line.len() == 40 && line.bytes().all(|b| b.is_ascii_hexdigit()))
+            .map(str::to_string)
+        else {
+            return Err(git_command_failed_error(&label, output));
+        };
+
+        let conflicts = stdout
+            .lines()
+            .filter_map(parse_merge_tree_conflict)
+            .collect::<Vec<_>>();
+        Ok(MergeTreePreview {
+            result_tree,
+            has_conflict: !conflicts.is_empty(),
+            conflicts,
+        })
+    }
+
     pub(super) fn interactive_rebase_with_output(
         &self,
         base: &str,
@@ -1457,6 +1495,26 @@ fn rebase_pending_message_edit(git_dir: &Path) -> bool {
         }
     }
     false
+}
+
+/// Parses one `CONFLICT (<type>): <detail>` line from `git merge-tree
+/// --write-tree` output. Returns `None` for any other line. Content conflicts
+/// read `Merge conflict in <path>`; other kinds (rename/rename, …) keep the
+/// full detail as the path so nothing is dropped.
+fn parse_merge_tree_conflict(line: &str) -> Option<MergeConflictFile> {
+    let rest = line.trim().strip_prefix("CONFLICT (")?;
+    let close = rest.find(')')?;
+    let conflict_type = rest[..close].to_string();
+    let detail = rest[close + 1..].trim_start_matches([':', ' ']);
+    let path = detail
+        .strip_prefix("Merge conflict in ")
+        .map(str::trim)
+        .unwrap_or(detail)
+        .to_string();
+    Some(MergeConflictFile {
+        path,
+        conflict_type,
+    })
 }
 
 /// Parses `git log -z --format=%H%x00%s%x00%B` output: a flat sequence of

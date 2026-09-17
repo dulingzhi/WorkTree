@@ -3,7 +3,7 @@
 
 use super::{
     BisectState, BisectVerdict, CancellationToken, CommandOutput, InteractiveRebaseEntry,
-    ResetMode, Result, SequencerState,
+    MergeTreePreview, ResetMode, Result, SequencerState,
 };
 use crate::domain::CommitId;
 use crate::error::{Error, ErrorKind};
@@ -65,6 +65,15 @@ pub trait GitRepositoryHistory {
     ) -> Result<CommandOutput> {
         Err(Error::new(ErrorKind::Unsupported(
             "interactive cherry-pick is not implemented for this backend",
+        )))
+    }
+
+    /// Previews merging `other` into `head` without touching the worktree,
+    /// index or refs (`git merge-tree --write-tree <head> <other>`). Returns the
+    /// tree the merge would produce plus any conflicts.
+    fn merge_tree_preview(&self, _head: &str, _other: &str) -> Result<MergeTreePreview> {
+        Err(Error::new(ErrorKind::Unsupported(
+            "merge preview is not implemented for this backend",
         )))
     }
 
