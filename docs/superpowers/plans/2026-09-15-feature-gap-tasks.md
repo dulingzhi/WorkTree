@@ -189,3 +189,15 @@ DiffDetails` 模式：按 `DirectoryNode.children` 递归渲染文件行（path 
 **验证**：`cargo check -p worktree-state --tests` + `CARGO_TARGET_DIR=<C盘> cargo check -p worktree-ui-gpui --tests` 通过；`cargo fmt --check` 干净。（`worktree-ui-gpui` 在本机默认 D 盘 target 编不过——tree-sitter C 语法 `C1056`，需 C 盘 target 目录，见项目 MEMORY。）
 
 **仍未做**：大目录虚拟化（T-F 半段，需动 `GitRepositoryDiff` trait 的 pathspec 裁剪，撞 P5 冻结，见上节）。
+
+---
+
+## 特性 5：fixup + autosquash — 完成（2026-09-17）
+
+原列于 2026-09-17 功能探索的生态缺口 S 档首位（差异化机会最大，开源侧少见）。完整落地于计划 `2026-09-17-fixup-autosquash.md`，commit `84ae999d`（已 push `7c7c34b3..84ae999d`）。
+
+- 右键「Fixup into this commit」→ 当前改动提交为 `fixup! <subject>`（复用 `Msg::Commit`，后端零改动）。
+- 右键「Autosquash from here…」→ 预览确认弹窗 → 非交互 rebase 归并 `base..HEAD` 内 `fixup!`/`squash!` 提交。
+- 关键修复：`compute_autosquash` 原漏 fixup 提交于 rebase todo，导致真实 rebase 后端 commit-set guard 报错「branch changed since the rebase was set up」；fixup 现以 `Fixup` action 留在 todo 原位。
+
+门禁：`cargo fmt --check` 干净；`cargo test -p worktree-core --lib squash` 53 passed；`cargo test -p worktree-state --lib` 754 passed；`cargo test -p worktree-git-gix --test squash_integration autosquash` 2 passed；UI crate C 盘 target check 通过。CI billing 仍停摆，本地门禁为准。
