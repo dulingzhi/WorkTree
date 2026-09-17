@@ -13,6 +13,20 @@ use super::{RepoActionKind, RepoCommandKind, RepoExternalChange};
 /// (a user command, a local action, or an external file-system event).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RepoChange {
+    /// Nothing changed.
+    ///
+    /// Used for a command that failed without leaving any state behind — a tag
+    /// command that was rejected, say. Dispatching it emits no refresh at all,
+    /// which is the point: translating the command kind alone would schedule a
+    /// refresh the failure never warranted, and visibly undo state the user is
+    /// still looking at (a failed "create tag" used to blank the tag list).
+    ///
+    /// Deliberately rare. Most commands refresh even when they fail, because a
+    /// failure can leave real state behind — a rebase that stops on a conflict
+    /// still rewrote HEAD and opened a sequencer session, so its failure must
+    /// refresh. Only map a failing command here when its failure provably left
+    /// nothing to re-read.
+    None,
     /// A commit was created or rewritten (HEAD advanced with new history).
     Committed,
     /// Branches / tags / remotes changed, including refs brought in by a
@@ -36,7 +50,15 @@ pub enum RepoChange {
 
 impl RepoChange {
     /// Translate a completed repo command into the semantic change it produced.
-    pub fn from_repo_command_kind(kind: &RepoCommandKind) -> Self {
+    /// Translate a finished repo command into the semantic change it produced.
+    ///
+    /// `succeeded` is the command's own result. It only matters for commands
+    /// whose failure provably leaves nothing to re-read — currently tag CRUD,
+    /// which is why a rejected `CreateTag` maps to [`RepoChange::None`] instead
+    /// of clearing the tag list. Every other arm ignores it on purpose: a
+    /// failed rebase / merge / cherry-pick still moved HEAD or left a sequencer
+    /// session behind, so those must refresh either way.
+    pub fn from_repo_command_kind(kind: &RepoCommandKind, succeeded: bool) -> Self {
         use RepoCommandKind::*;
         match kind {
             // Ref-affecting network / branch operations.
@@ -62,8 +84,16 @@ impl RepoChange {
             | SetRemoteUrl { .. }
             | SetRemoteSshKey { .. } => RepoChange::RefsChanged,
 
-            // Tag set changes.
-            CreateTag { .. } | DeleteTag { .. } | PruneLocalTags => RepoChange::TagsChanged,
+            // Tag set changes. A rejected tag command changed nothing — in
+            // particular it must not clear the list the user is looking at, so
+            // the failure is a no-op rather than a TagsChanged refresh.
+            CreateTag { .. } | DeleteTag { .. } | PruneLocalTags => {
+                if succeeded {
+                    RepoChange::TagsChanged
+                } else {
+                    RepoChange::None
+                }
+            }
 
             // HEAD / history rewrites.
             MergeRef { .. }
@@ -162,5 +192,83 @@ impl RepoChange {
                 RepoChange::Anything
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_tag() -> RepoCommandKind {
+        RepoCommandKind::CreateTag {
+            name: "v2.0.0".to_string(),
+            target: "HEAD".to_string(),
+            message: None,
+            annotated: false,
+        }
+    }
+
+    /// A rejected tag command changed nothing, so it must not schedule a tag
+    /// refresh — that would blank the list the user is still looking at. Only
+    /// the outcome decides; the command kind alone cannot tell.
+    #[test]
+    fn a_failed_tag_command_requests_no_refresh() {
+        assert_eq!(
+            RepoChange::from_repo_command_kind(&create_tag(), true),
+            RepoChange::TagsChanged
+        );
+        assert_eq!(
+            RepoChange::from_repo_command_kind(&create_tag(), false),
+            RepoChange::None
+        );
+        assert_eq!(
+            RepoChange::from_repo_command_kind(
+                &RepoCommandKind::DeleteTag {
+                    name: "v2.0.0".to_string(),
+                },
+                false,
+            ),
+            RepoChange::None
+        );
+        assert_eq!(
+            RepoChange::from_repo_command_kind(&RepoCommandKind::PruneLocalTags, false),
+            RepoChange::None
+        );
+    }
+
+    /// Most commands must refresh even when they fail: a rebase that stops on a
+    /// conflict has already moved HEAD and left a sequencer session behind, and
+    /// the panels stay stale until they re-read it. Pinned so the tag-CRUD
+    /// special case above is never generalised into "failures never refresh".
+    #[test]
+    fn a_failed_history_command_still_requests_a_refresh() {
+        for kind in [
+            RepoCommandKind::Rebase {
+                onto: "origin/main".to_string(),
+            },
+            RepoCommandKind::RebaseContinue,
+            RepoCommandKind::CherryPick {
+                commit_id: worktree_core::domain::CommitId("abc".into()),
+                commit: true,
+                mainline: None,
+                summary: "s".to_string(),
+            },
+        ] {
+            assert_eq!(
+                RepoChange::from_repo_command_kind(&kind, false),
+                RepoChange::HeadMoved,
+                "{kind:?} must refresh even when it fails"
+            );
+        }
+    }
+
+    /// A failing command that only ever touched refs keeps its refresh: a
+    /// half-finished fetch may well have moved some.
+    #[test]
+    fn a_failed_ref_command_keeps_its_refresh() {
+        assert_eq!(
+            RepoChange::from_repo_command_kind(&RepoCommandKind::FetchAll, false),
+            RepoChange::RefsChanged
+        );
     }
 }

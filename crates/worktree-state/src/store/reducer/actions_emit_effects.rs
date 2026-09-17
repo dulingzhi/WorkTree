@@ -1574,7 +1574,7 @@ pub(super) fn repo_command_finished(
     effects.extend(super::repo_change::dispatch_repo_change(
         state,
         repo_id,
-        RepoChange::from_repo_command_kind(&command),
+        RepoChange::from_repo_command_kind(&command, command_succeeded),
         None,
     ));
 

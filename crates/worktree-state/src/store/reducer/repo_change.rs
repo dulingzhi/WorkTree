@@ -53,9 +53,18 @@ pub(super) fn dispatch_repo_change(
     let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
         return effects;
     };
+    // A no-op change must not so much as bump the coarse signal: the whole
+    // point of `None` is that nothing happened, and `content_rev` drives UI
+    // recomputation on every subscriber.
+    if matches!(change, RepoChange::None) {
+        return effects;
+    }
     let git_log_settings = state.git_log_settings;
 
     match change {
+        // Unreachable: `None` returned above, before the coarse-signal bump.
+        // Kept so the match stays exhaustive.
+        RepoChange::None => {}
         // A rescan / forced full refresh: the exact superset the callers did
         // before converging here. Keeps the "unknown" variants (submodule
         // pointer changes, conflict tooling, export/archive/gc) on a full
