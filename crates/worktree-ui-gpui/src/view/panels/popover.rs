@@ -7,6 +7,7 @@ mod agent_sessions;
 mod app_menu;
 mod assume_unchanged_manager;
 mod author_filter;
+mod autosquash_confirm;
 mod branch_picker;
 mod checkout_remote_branch_prompt;
 mod cherry_pick_commit_confirm;
