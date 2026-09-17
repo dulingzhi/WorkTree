@@ -1,66 +1,49 @@
 
 ---
 
-## T-C 实施（2026-09-15 已落地命令面板入口，#18 半）
+## A 档补漏：接线缺口与测试加固（2026-09-17）
 
-目录 diff 的 UI 入口第一步：命令面板 `compare-directory`。复用已落地的 T-B 管线（`Msg::RequestDirectoryDiff` → `Effect::LoadDirectoryDiff` → `schedule_load_directory_diff`）。
+CI 因 GitHub 账号 billing 全 failure（详见当日 memory），本机 `cargo check` 是唯一门禁，因此优先清「能防止未来漏接线」的低风险项。
 
-落点文件：
-- `crates/worktree-ui-gpui/src/view/command_palette.rs`：COMMANDS 表新增 `compare-directory`（category `palette.cat.history`，keywords 便于检索）；同步加入 `every_command_has_a_registered_handler` 测试期望清单（该测试对表/清单强一致，缺臂会 fail）。
-- `crates/worktree-ui-gpui/src/view/mod.rs`：`execute_command` 新增 `"compare-directory"` 臂，复用 `active_diff_target(&self.state)`：
-  - 命中 `DiffTarget::CommitRange { from, to, path }` → 原样转发 `Msg::RequestDirectoryDiff`（path 即目录根，空=仓库根），并弹 Success toast「正在对比目录变更…」。
-  - 否则（WorkingTree / Commit / 无活动 diff）→ Error toast「对比目录需在提交区间对比视图中使用」。
-- `crates/worktree-ui-gpui/locales/palette.en.yml` / `palette.zh-CN.yml`：新增 `compare-directory` / `compare-directory-started` / `compare-directory-needs-range` 三键（中英文）。
+### 1. `fetch_prune_deleted_remote_tracking_branches` UI 接线
 
-设计要点 / 局限：
-- 当前只支持「提交区间（CommitRange）对比视图」内发起；工作区（WorkingTree）/ 单提交对比暂不支持，因 T-B 后端 `schedule_load_directory_diff` 仅处理 `CommitRange`（与计划 D-G2 一致：base/target 默认取选中两 commit）。
-- 范围（path）直接沿用活动 diff 的 path；sidebar 右键指定具体文件夹的入口待补（T-C 下半）。
-- 验证：`cargo check -p worktree-ui-gpui` 通过（仅预存 user_survey 死代码 warning）。`cargo test` 因 tree-sitter 原生语法构建在本机报 C1056/C1056 os error 5 时间戳权限错无法运行（环境问题，非本改动所致）；handler 测试为结构性断言，COMMANDS 表与期望清单已同步。
+**缺口**：字段在 `RepoState`（`model.rs:1224`）已加载 / 持久化 / 真正参与 fetch 决策（`actions_emit_effects.rs:377`），`Msg::SetFetchPruneDeletedRemoteTrackingBranches` 与 reducer（`repo_management.rs:889`）齐备且有单测——**唯独没有任何 UI 能触发它**，等于一个只能手改 `session.json` 的设置。即上一轮探索报的"A 档①"。
 
-待办（T-C 下半 / T-D / T-E）：
-- T-C 下半：sidebar 右键文件夹 → 弹 `compare-directory`（带具体 path）。
-- T-D（#19）：`DirectoryDiffDetails` 渲染 `DirectoryDiffResult` 树（逐文件展开）。
-- T-E（#20）：目录增删行数 / 文件数统计条。
-- 三项均依赖 P5 收口后的 UI crate 热文件改动。
-it/hooks` UI；另 rerere、Gitea 为次档。
+**改动**（纯 UI 层，state 侧零改动）：
+- `popover/host/state.rs`：`RepoSettingsState` 加 `repo_settings_fetch_prune: bool`。注释点明它与同组 `user.*` / `commit.gpgsign` 字段的**语义差别**——后者是本地 `git config` 覆盖（三态可继承），此字段是 WorkTree 自身偏好（持久化在 `session.json`），**只有开/关**，无"继承"态。
+- `popover/host/impl_new.rs`：初值 `true`（与 `RepoState::new_opening` 的默认一致）。
+- `popover/open.rs`：打开仓库设置时从 `state.repos[i].fetch_prune_deleted_remote_tracking_branches` 播种草稿（`is_none_or(...)` 兜"仓已消失"场景为 true，与初值同）。
+- `popover/repo_settings.rs`：加一行 toggle（镜像既有 sign 行的 `debug_selector` 结构），并在 `submit_repo_settings` 里**在写入 plan 之外**dispatch——因为它不是 git-config key，不能进 `repo_settings_apply_plan`（那个 plan 的契约是"按 config key 收敛差异"）。仅当值与 `RepoState` 现值不同才 dispatch，reducer 自带 no-op 与 session 持久化。**关键**：dispatch 放在 `plan.is_empty()` 提前返回**之前**，否则"只改该开关、不动 config 字段"的提交会被早退吞掉。
+- `locales/inputs.{en,zh-CN}.yml`：`fetch_prune_label` / `fetch_prune_on` / `fetch_prune_off`。
 
-## 四项任务拆解总览
+### 2. handler 测试加固（`every_command_has_a_registered_handler`）
 
-| 特性 | 归属 | 与 P5/Wave2 冲突 | TaskCreate |
-|---|---|---|---|
-| 目录级对比 diff | **迭代 06 Wave2（与 T6 同波次）** | 强协同、非冲突 | #16–#21（已建） |
-| 堆叠分支 / Stacked-PR | 迭代 07 | 高 | 待立项 |
-| Git Flow 图形化 | 迭代 08 / P5 收口后小迭代 | 中高 | 待立项 |
-| 原生 `.git/hooks` UI | P5+Wave2 收口后 | 中 | 待立项 |
+**缺口**：原测试把一份**硬编码 id 清单**与 `COMMANDS` 比对——它只能发现"`COMMANDS` 变了"，**完全不能发现"`execute_command` 漏了分支"**（清单是人手抄的，不是从 match 派生的）。即"A 档③"的实质：`execute_command` 的 `_ => {}` 会静默吞掉未接线的 id，用户看到命令、能点、什么都不发生。
 
----
+**改动**（`command_palette.rs`）：
+- 新增 `pub(crate) const REGISTERED_COMMAND_HANDLERS: &[&str]`——手工维护的"已接线 id"单一事实源（Rust 无法反射 match 分支，只能手工，但手工表**放在源码里**就成了可对账的声明）。
+- 删除原快照测试（其职责被新测试完全覆盖）。
+- 新测试 `every_palette_command_has_a_registered_handler` 双向校验：`COMMANDS\handlers` 非空 → 死命令（真 bug）；`handlers\COMMANDS` 非豁免项非空 → 未声明的外部调用点。豁免表当前仅 `apply-patch`（工作区右键菜单 dispatch，非面板命令），注释说明"加进这张表 = 声明存在非面板调用点"。
+- 新测试 `every_command_label_is_a_translation_key`：所有 `label` / `category` 必须以 `palette.` 开头。
+- 新测试 `every_command_key_resolves_in_both_catalogs`：每个键在 en / zh-CN 目录都必须解析得到（`t!(key) != key`），把"漏翻译"从运行时静默回退变成测试失败。
 
-## 特性 1：目录级对比 diff（SmartGit Folder Comparison 式）— 进迭代 06
+### 3. `show-reflog` 补国际化（A 档②）
 
-底层数据已齐：`CommitFileChange{path,additions,deletions}`（`worktree-core/src/domain.rs:154`）、`diff_range_files`（`worktree-git-gix/src/repo/log.rs:565`）、`FileBrowser`、`render_range_file_rows` 均存在。仅缺「按目录前缀聚合树 + 目录树 UI 入口 + 统计条」。
+`COMMANDS` 里 `id: "show-reflog"` 的 `label` / `category` 是**字面英文**（`"Show Reflog"` / `"History"`），而同表其余 73 条全是 `palette.cmd.*` / `palette.cat.*` 键——中文构建下这一条会突兀地显示英文。改为 `palette.cmd.show-reflog` + `palette.cat.history`（后者已存在），补 en / zh-CN 两个 `show-reflog` 字符串。新增的 `every_command_label_is_a_translation_key` 测试即为此设的回归网。
 
-### TaskCreate 已建（#16–#21）
+### 核账结果（本次实测）
 
-**#16 目录变更聚合模型 (T-A)** `S`
-- 新增类型 `DiffEndpoint` / `DirectoryDiffRequest{repo_id,base,target,root}` / `DirectoryNode{name,path,kind,additions,deletions,file_count,children:Vec<DirectoryNode>}`（递归）/ `DirectoryDiffResult{root: DirectoryNode}`。
-- 纯函数 `aggregate_to_tree(changes: &[CommitFileChange], root: &Path) -> DirectoryNode`、`filter_by_prefix(nodes, prefix) -> DirectoryNode`。
-- 落点：`worktree-core/src/domain.rs` 或新 `worktree-state/src/diff_tree.rs`。
-- 单测验证多层嵌套下 file_count / additions / deletions 聚合正确。
-- **core 层可先于 P5 开工**。
+- `COMMANDS` 74 条 ⇔ `execute_command` 75 个已接线 id（多出的 `apply-patch` 已在豁免表声明）。原以为 `stash-drop` 漏接线，实为它与 `stash-pop`/`stash-apply`/`stash-branch` 共用 `|` 分支——用朴素正则逐行扫描会误判，**对账脚本必须支持或分支**。
+- 除 `show-reflog` 外无其它未国际化的 label / category。
 
-**#17 后端取目录树 diff (T-B)** `M`
-- 新增 `repo.diff_endpoint_tree_changes(base, target, root)`（`worktree-git-gix/src/repo/diff.rs` 或 `log.rs`）：gix `diff_tree_to_tree` + pathspec 前缀 `root/`（`build_unified_diff_command` 的 `path` 字段作 `-- path` 传入，天然支持目录前缀）。
-- 新增 `Effect::LoadDirectoryDiff`（`worktree-state/src/msg/effect.rs`）+ reducer `directory_diff_loaded`；`model.rs` 加 `directory_diff: Loadable<Shared<DirectoryDiffResult>>` + rev。
-- 复用 `COMMIT_STATS_MAX_FILES` 阈值（大目录截断保护）。
-- **与 T6 协同**。
+**验证**：
+- `cargo check -p worktree-state --tests` 通过。
+- `CARGO_TARGET_DIR=<C盘> cargo check -p worktree-ui-gpui --tests` 通过。
+- `CARGO_TARGET_DIR=<C盘> cargo test -p worktree-ui-gpui --lib command_palette` → **22 passed, 0 failed**（含 3 个新测试）。
+- `cargo fmt --check` 干净。
 
-**#18 目录树 UI 入口 (T-C)** `M`
-- `view/panels/sidebar.rs` 的 FileBrowser 目录节点（`FileEntry.kind == Directory`）右键菜单加 "Compare directory…"；`view/command_palette.rs` 加 `compare-directory` 命令（repo_id + 目录前缀 root）。
-- 新增 `Msg::RequestDirectoryDiff { repo_id, base: Refish, target: Refish, root: PathBuf }`（`msg/message.rs`，紧邻 `RequestRangeDiff`）。
-- 依赖 T-A（类型）、T-B（Effect+reducer）。
-
-**#19 逐文件展开复用 (T-D)** `M`
-- `view/panes/details.rs` 增 `DirectoryDiffDetails` 模式：按 `DirectoryNode.children` 递归渲染文件行（path + 增删计数）。
+**新发现（值得记）**：`worktree-ui-gpui` 的**单元测试也能跑**（不只有 `check`）——只要用 C 盘 `CARGO_TARGET_DIR`，首次链接约 12 分钟，之后增量。此前 MEMORY 只记了"用 C 盘 target 跑 check"，实测 `cargo test` 同样可用，本机验证能力比预想强。
+DiffDetails` 模式：按 `DirectoryNode.children` 递归渲染文件行（path + 增删计数）。
 - 文件行点击 → 复用 `view/panes/main/diff_text.rs` 逐文件 unified diff（`render_range_file_rows` 现有逻辑），不新写文本 diff。
 - 目录行点击 → 递归下钻一层。
 - 大目录套用 T6 虚拟列表。

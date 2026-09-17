@@ -611,9 +611,9 @@ pub(crate) const COMMANDS: &[CommandEntry] = &[
     },
     CommandEntry {
         id: "show-reflog",
-        label: "Show Reflog",
+        label: "palette.cmd.show-reflog",
         shortcut: Shortcut::None,
-        category: "History",
+        category: "palette.cat.history",
         keywords: "reflog log restore reset recover",
         requires_repo: true,
     },
@@ -638,6 +638,96 @@ pub(crate) const COMMANDS: &[CommandEntry] = &[
     // TODO: "keyboard-shortcuts" - Keyboard Shortcuts (Help)
     // TODO: "file-history"     - File History (History)
     // TODO: "search-commits"   - Search Commits (Navigation)
+];
+
+/// Every command id `WorkTreeView::execute_command` has an arm for.
+///
+/// `execute_command`'s `_ => {}` arm makes a missing handler silent — the
+/// command shows in the palette, runs, and does nothing — so this list is
+/// the only place that gap is visible. Kept as a plain sorted array rather
+/// than derived from the match (a `match` arm list is not introspectable)
+/// so the test below can pin it against [`COMMANDS`] and fail loudly when a
+/// new entry is added without its arm.
+///
+/// This list also carries ids the palette never shows, which is why it is
+/// not simply `COMMANDS`' ids: `apply-patch` is dispatched from the working
+/// copy's context menu, not from the palette.
+pub(crate) const REGISTERED_COMMAND_HANDLERS: &[&str] = &[
+    "add-remote",
+    "add-submodule",
+    "add-worktree",
+    "agent-changes",
+    "agent-claude",
+    "agent-codex",
+    "agent-sessions",
+    "apply-patch",
+    "back",
+    "blame",
+    "checkout-branch",
+    "checkout-remote-branch",
+    "cleanup-repository",
+    "clear-coverage",
+    "clone-repository",
+    "close-repo-tab",
+    "close-window",
+    "commit",
+    "compare-directory",
+    "create-branch",
+    "create-pr",
+    "create-tag",
+    "decrease-ui-scale",
+    "delete-branch",
+    "delete-remote-branch",
+    "delete-tag",
+    "discard-all",
+    "edit-remote-url",
+    "fetch-all",
+    "force-push",
+    "forward",
+    "import-coverage",
+    "increase-ui-scale",
+    "locate-file-in-explorer",
+    "manage-assume-unchanged",
+    "merge",
+    "minimize-window",
+    "new-window",
+    "next-repo-tab",
+    "open-active-view-search",
+    "open-repository",
+    "open-settings",
+    "previous-repo-tab",
+    "pull",
+    "push",
+    "quit",
+    "rebase",
+    "reload-repository",
+    "remove-remote",
+    "remove-submodule",
+    "remove-worktree",
+    "rename-branch",
+    "repo-settings",
+    "reset-ui-scale",
+    "search-commits",
+    "show-reflog",
+    "show-statistics",
+    "stage-all",
+    "stash",
+    "stash-apply",
+    "stash-branch",
+    "stash-drop",
+    "stash-pop",
+    "switch-repository",
+    "toggle-details",
+    "toggle-diff-view",
+    "toggle-diff-word-wrap",
+    "toggle-fullscreen",
+    "toggle-line-numbers",
+    "toggle-sidebar",
+    "toggle-whitespace-chars",
+    "undo-last-action",
+    "unstage-all",
+    "update-submodules",
+    "zoom-window",
 ];
 
 /// A palette entry that survived filtering, plus the label byte positions the
@@ -1307,110 +1397,108 @@ fn fuzzy_subsequence_match(label: &str, query: &str) -> Option<(i32, Vec<usize>)
 mod tests {
     use super::*;
 
-    /// The ids every palette entry must have. `execute_command`'s `_ => {}`
-    /// arm makes a missing dispatch handler silent — the command shows, runs,
-    /// and does nothing — so this list pins the wired set: adding a
-    /// `CommandEntry` without its handler arm breaks this snapshot, and the
-    /// break is the reminder to wire (or hold back) the entry.
+    /// Every palette entry must have a dispatch arm in `execute_command`.
+    ///
+    /// `execute_command`'s `_ => {}` arm swallows an unhandled id: the
+    /// command renders, the user can pick it, and nothing happens. The only
+    /// cheap guard is the explicit [`REGISTERED_COMMAND_HANDLERS`] table, so
+    /// this test pins both directions of the relationship:
+    ///
+    /// * a `COMMANDS` entry with no registered handler is a real bug (the
+    ///   user sees a dead command), and
+    /// * a registered handler that no palette entry reaches must be a
+    ///   *declared* exemption, so a command wired to a context menu is not
+    ///   silently forgotten and a palette entry is not silently dropped.
+    ///
+    /// It cannot introspect the `match` itself (Rust has no reflection over
+    /// arms), so the table is hand-kept — but a stale table now fails here
+    /// rather than shipping as a command that does nothing.
     #[test]
-    fn every_command_has_a_registered_handler() {
-        let expected: &[&str] = &[
-            // Edit / working copy
-            "commit",
-            "stage-all",
-            "discard-all",
-            "unstage-all",
-            // Branches
-            "create-branch",
-            "checkout-branch",
-            "delete-branch",
-            "rename-branch",
-            "rebase",
-            "merge",
-            "checkout-remote-branch",
-            "delete-remote-branch",
-            // Remotes
-            "pull",
-            "push",
-            "force-push",
-            "remove-remote",
-            "edit-remote-url",
-            "add-remote",
-            // Stashes
-            "stash",
-            "stash-pop",
-            "stash-apply",
-            "stash-drop",
-            "stash-branch",
-            // Repositories
-            "open-repository",
-            "switch-repository",
-            "clone-repository",
-            "close-repo-tab",
-            "reload-repository",
-            "fetch-all",
-            "cleanup-repository",
-            "manage-assume-unchanged",
-            "show-statistics",
-            "import-coverage",
-            "repo-settings",
-            "create-pr",
-            "agent-claude",
-            "agent-sessions",
-            "agent-codex",
-            "agent-changes",
-            "clear-coverage",
-            "undo-last-action",
-            // View toggles
-            "toggle-sidebar",
-            "toggle-details",
-            "toggle-diff-view",
-            "toggle-diff-word-wrap",
-            "toggle-line-numbers",
-            "toggle-whitespace-chars",
-            // Tabs and navigation
-            "previous-repo-tab",
-            "next-repo-tab",
-            "locate-file-in-explorer",
-            "open-active-view-search",
-            "back",
-            "forward",
-            // Tags
-            "create-tag",
-            "delete-tag",
-            // Submodules
-            "remove-submodule",
-            "add-submodule",
-            "update-submodules",
-            // Worktrees
-            "remove-worktree",
-            "add-worktree",
-            // History
-            "blame",
-            "search-commits",
-            "compare-directory",
-            "show-reflog",
-            // Window and app
-            "new-window",
-            "open-settings",
-            "quit",
-            "minimize-window",
-            "zoom-window",
-            "toggle-fullscreen",
-            "increase-ui-scale",
-            "decrease-ui-scale",
-            "reset-ui-scale",
-            "close-window",
-        ];
-
-        let mut ids = COMMANDS.iter().map(|entry| entry.id).collect::<Vec<_>>();
-        ids.sort_unstable();
-        let mut expected = expected.to_vec();
-        expected.sort_unstable();
+    fn every_palette_command_has_a_registered_handler() {
+        let handlers: std::collections::BTreeSet<&str> =
+            REGISTERED_COMMAND_HANDLERS.iter().copied().collect();
         assert_eq!(
-            ids, expected,
-            "COMMANDS and the handler registration test must stay in step"
+            handlers.len(),
+            REGISTERED_COMMAND_HANDLERS.len(),
+            "REGISTERED_COMMAND_HANDLERS has duplicates: {:?}",
+            duplicates(REGISTERED_COMMAND_HANDLERS)
         );
+
+        let palette: std::collections::BTreeSet<&str> =
+            COMMANDS.iter().map(|entry| entry.id).collect();
+
+        let dead: Vec<&str> = palette.difference(&handlers).copied().collect();
+        assert!(
+            dead.is_empty(),
+            "these palette commands have no `execute_command` arm and would \
+             silently do nothing: {dead:?}"
+        );
+
+        // Reached from somewhere other than the palette, by design. Adding
+        // an id here is a claim that a non-palette call site (a context
+        // menu, a shortcut, a deep link) dispatches it.
+        const NON_PALETTE_HANDLERS: &[&str] = &["apply-patch"];
+        let extra: Vec<&str> = handlers
+            .difference(&palette)
+            .copied()
+            .filter(|id| !NON_PALETTE_HANDLERS.contains(id))
+            .collect();
+        assert!(
+            extra.is_empty(),
+            "these handlers have no palette entry and are not declared as \
+             non-palette call sites: {extra:?}"
+        );
+    }
+
+    /// Every `label` / `category` must be a translation key, not literal
+    /// English. A literal renders untranslated in Chinese builds — the
+    /// palette ends up half-translated — but nothing else catches it, since
+    /// the label simply resolves to itself.
+    #[test]
+    fn every_command_label_is_a_translation_key() {
+        for entry in COMMANDS {
+            assert!(
+                entry.label.starts_with("palette."),
+                "`{}` has a literal label {:?}; use a `palette.cmd.*` key",
+                entry.id,
+                entry.label
+            );
+            assert!(
+                entry.category.starts_with("palette."),
+                "`{}` has a literal category {:?}; use a `palette.cat.*` key",
+                entry.id,
+                entry.category
+            );
+        }
+    }
+
+    /// Both catalogs must carry every key `COMMANDS` references, so a
+    /// missing Chinese string is a test failure rather than a silent
+    /// fall-back to English at runtime.
+    #[test]
+    fn every_command_key_resolves_in_both_catalogs() {
+        for entry in COMMANDS {
+            for key in [entry.label, entry.category] {
+                for locale in ["en", "zh-CN"] {
+                    assert_ne!(
+                        crate::i18n::t!(key, locale = locale),
+                        key,
+                        "{key} is missing from the {locale} catalog"
+                    );
+                }
+            }
+        }
+    }
+
+    fn duplicates<'a>(ids: &[&'a str]) -> Vec<&'a str> {
+        let mut seen = std::collections::BTreeSet::new();
+        let mut dupes = Vec::new();
+        for id in ids {
+            if !seen.insert(*id) {
+                dupes.push(*id);
+            }
+        }
+        dupes
     }
 
     #[test]

@@ -6,15 +6,15 @@ use super::kinds::{
     WorktreePopoverKind,
 };
 
-impl AutosquashMode {
-    pub(in crate::view) fn label(self) -> &'static str {
-        match self {
-            AutosquashMode::ToTop => crate::i18n::tr_str("ui.label.autosquash.to_top_commit"),
-            AutosquashMode::Neighbor => {
-                crate::i18n::tr_str("ui.label.autosquash.neighboring_commit")
-            }
-            AutosquashMode::ToBottom => crate::i18n::tr_str("ui.label.autosquash.to_bottom_commit"),
-        }
+/// Menu label for one auto-squash strategy. A free function rather than an
+/// inherent method because `AutosquashMode` is defined in `worktree-core` (the
+/// reducer needs the folding rules, so they cannot live in the view layer) and
+/// the orphan rule forbids an inherent impl on a foreign type.
+pub(in crate::view) fn autosquash_mode_label(mode: AutosquashMode) -> &'static str {
+    match mode {
+        AutosquashMode::ToTop => crate::i18n::tr_str("ui.label.autosquash.to_top_commit"),
+        AutosquashMode::Neighbor => crate::i18n::tr_str("ui.label.autosquash.neighboring_commit"),
+        AutosquashMode::ToBottom => crate::i18n::tr_str("ui.label.autosquash.to_bottom_commit"),
     }
 }
 
@@ -244,6 +244,11 @@ pub(in crate::view::panels::popover) struct RepoSettingsState {
     pub(in crate::view::panels::popover) repo_settings_user_input: Entity<components::TextInput>,
     pub(in crate::view::panels::popover) repo_settings_email_input: Entity<components::TextInput>,
     pub(in crate::view::panels::popover) repo_settings_sign_commits: Option<bool>,
+    /// Fetch-time pruning of deleted remote-tracking branches. Unlike the
+    /// git-config fields above this one is a WorkTree preference persisted in
+    /// `session.json`, not a local `git config` key, so it has no "inherit"
+    /// state — just a checkbox.
+    pub(in crate::view::panels::popover) repo_settings_fetch_prune: bool,
     pub(in crate::view::panels::popover) repo_settings_error: Option<SharedString>,
     /// The local/global snapshot consumed by the next panel render; taken by
     /// the panel so it is re-read on every open, never between renders.

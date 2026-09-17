@@ -41,6 +41,9 @@ input:
     sign_inherit: "继承全局设置"
     sign_on: "在本仓库始终开启"
     sign_off: "在本仓库关闭"
+    fetch_prune_label: "拉取时清理已删除的远程跟踪分支"
+    fetch_prune_on: "已启用"
+    fetch_prune_off: "已禁用"
     apply: "应用"
   stash:
     title: "创建贮藏"

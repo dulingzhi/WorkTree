@@ -316,6 +316,176 @@ pub fn build_squash_message(messages_oldest_first: &[String]) -> String {
     out
 }
 
+/// Auto-squash strategy: which commit in each identical-message group survives,
+/// the others being folded (fixup) into it.
+///
+/// Lives here rather than in the UI because the folding rules it selects
+/// between are domain rules, and the reducer needs them without depending on
+/// the view layer.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AutosquashMode {
+    /// Fold each duplicate group into its newest (top) commit.
+    ToTop,
+    /// Only merge duplicates that are already adjacent in the list.
+    Neighbor,
+    /// Fold each duplicate group into its oldest (bottom) commit.
+    ToBottom,
+}
+
+/// Subject used to group commits for auto-squash. Strips leading `fixup! ` /
+/// `squash! ` / `amend! ` prefixes (git's autosquash convention, which SmartGit
+/// follows) so a `fixup! foo` commit groups with `foo`.
+pub fn autosquash_group_key(summary: &str) -> &str {
+    let mut s = summary;
+    loop {
+        match s
+            .strip_prefix("fixup! ")
+            .or_else(|| s.strip_prefix("squash! "))
+            .or_else(|| s.strip_prefix("amend! "))
+        {
+            Some(rest) => s = rest,
+            None => return s,
+        }
+    }
+}
+
+/// Whether a subject carries an auto-squash prefix — such a commit is not kept
+/// as the survivor when an unprefixed sibling exists, so the folded commit's
+/// message doesn't leak into the result.
+pub fn is_autosquash_prefixed(summary: &str) -> bool {
+    autosquash_group_key(summary) != summary
+}
+
+pub fn choose_autosquash_survivor(
+    entries: &[InteractiveRebaseEntry],
+    mode: AutosquashMode,
+    candidates: impl Iterator<Item = usize> + Clone,
+) -> usize {
+    let unprefixed = candidates
+        .clone()
+        .filter(|&ix| !is_autosquash_prefixed(entries[ix].summary.as_str()));
+    let unprefixed_survivor = match mode {
+        // Highest index = newest commit; lowest = oldest.
+        AutosquashMode::ToTop => unprefixed.max(),
+        _ => unprefixed.min(),
+    };
+
+    unprefixed_survivor.unwrap_or_else(|| {
+        match mode {
+            AutosquashMode::ToTop => candidates.max(),
+            _ => candidates.min(),
+        }
+        .expect("autosquash groups are non-empty")
+    })
+}
+
+/// The commit ids folded into each survivor for a given auto-squash `mode`.
+/// Groups commits by their [`autosquash_group_key`] (so `fixup!`/`squash!`
+/// commits fold into their target); the surviving commit per group is chosen by
+/// the mode, preferring an unprefixed commit so its message is kept. Empty
+/// summaries are never eligible. `entries` are ordered oldest-first (index 0 =
+/// oldest).
+///
+/// Returns `folded_into[i] = Some(survivor_index)` for every commit that is
+/// folded away, and `None` for survivors and untouched commits.
+pub fn autosquash_folds(
+    entries: &[InteractiveRebaseEntry],
+    mode: AutosquashMode,
+) -> Vec<Option<usize>> {
+    let n = entries.len();
+    let mut folded_into: Vec<Option<usize>> = vec![None; n];
+    match mode {
+        AutosquashMode::ToTop | AutosquashMode::ToBottom => {
+            // Group indices by normalized summary, preserving first-seen order.
+            let mut order: Vec<&str> = Vec::with_capacity(entries.len());
+            let mut groups = FxHashMap::with_capacity_and_hasher(entries.len(), Default::default());
+            for (i, e) in entries.iter().enumerate() {
+                let key = autosquash_group_key(e.summary.as_str());
+                if key.trim().is_empty() {
+                    continue;
+                }
+                groups
+                    .entry(key)
+                    .or_insert_with(|| {
+                        order.push(key);
+                        Vec::new()
+                    })
+                    .push(i);
+            }
+            for key in order {
+                let indices = &groups[key];
+                if indices.len() < 2 {
+                    continue;
+                }
+                let survivor = choose_autosquash_survivor(entries, mode, indices.iter().copied());
+                for &i in indices {
+                    if i != survivor {
+                        folded_into[i] = Some(survivor);
+                    }
+                }
+            }
+        }
+        AutosquashMode::Neighbor => {
+            // Collapse each maximal run of adjacent commits with the same
+            // normalized summary into one survivor (an unprefixed member if any,
+            // else the run's oldest).
+            let mut i = 0;
+            while i < n {
+                let key = autosquash_group_key(entries[i].summary.as_str());
+                if key.trim().is_empty() {
+                    i += 1;
+                    continue;
+                }
+                let mut j = i + 1;
+                while j < n && autosquash_group_key(entries[j].summary.as_str()) == key {
+                    j += 1;
+                }
+                if j - i >= 2 {
+                    let survivor = choose_autosquash_survivor(entries, mode, i..j);
+                    for (k, destination) in folded_into.iter_mut().enumerate().take(j).skip(i) {
+                        if k != survivor {
+                            *destination = Some(survivor);
+                        }
+                    }
+                }
+                i = j;
+            }
+        }
+    }
+    folded_into
+}
+
+/// Applies `mode` to `original`, producing the collapsed entry list (one row
+/// per surviving/untouched commit) plus the survivor-id → folded-fixup map.
+/// The folded map is empty when nothing was eligible.
+pub fn compute_autosquash(
+    original: &[InteractiveRebaseEntry],
+    mode: AutosquashMode,
+) -> (
+    Vec<InteractiveRebaseEntry>,
+    FxHashMap<String, Vec<InteractiveRebaseEntry>>,
+) {
+    let folded_into = autosquash_folds(original, mode);
+    let mut collapsed = Vec::with_capacity(original.len());
+    let mut folded: FxHashMap<String, Vec<InteractiveRebaseEntry>> =
+        FxHashMap::with_capacity_and_hasher(original.len(), Default::default());
+    for (i, e) in original.iter().enumerate() {
+        match folded_into[i] {
+            Some(survivor) => {
+                let mut fixup = e.clone();
+                fixup.action = InteractiveRebaseAction::Fixup;
+                fixup.new_message = None;
+                folded
+                    .entry(original[survivor].commit_id.clone())
+                    .or_default()
+                    .push(fixup);
+            }
+            None => collapsed.push(e.clone()),
+        }
+    }
+    (collapsed, folded)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -806,5 +976,142 @@ mod tests {
         }
         assert_eq!(InteractiveRebaseAction::from_todo_word("merge"), None);
         assert_eq!(InteractiveRebaseAction::from_todo_word("exec"), None);
+    }
+
+    // Commit with an explicit summary, for auto-squash grouping tests.
+    // Order is oldest-first (index 0 = oldest), matching the entries vector.
+    fn sc(id: &str, summary: &str) -> InteractiveRebaseEntry {
+        InteractiveRebaseEntry {
+            action: InteractiveRebaseAction::Pick,
+            commit_id: id.to_string(),
+            summary: summary.to_string(),
+            message: summary.to_string(),
+            new_message: None,
+        }
+    }
+
+    #[test]
+    fn autosquash_to_bottom_folds_into_oldest() {
+        // oldest→newest: B "fix", C "wip", D "fix", F "fix"
+        let original = vec![
+            sc("B", "fix"),
+            sc("C", "wip"),
+            sc("D", "fix"),
+            sc("F", "fix"),
+        ];
+        let (collapsed, folded) = compute_autosquash(&original, AutosquashMode::ToBottom);
+        // Only B (oldest "fix") and C survive.
+        let ids: Vec<&str> = collapsed.iter().map(|e| e.commit_id.as_str()).collect();
+        assert_eq!(ids, vec!["B", "C"]);
+        let into_b = &folded["B"];
+        assert_eq!(
+            into_b
+                .iter()
+                .map(|e| e.commit_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["D", "F"]
+        );
+        assert!(
+            into_b
+                .iter()
+                .all(|e| e.action == InteractiveRebaseAction::Fixup)
+        );
+    }
+
+    #[test]
+    fn autosquash_fixup_prefix_folds_into_target() {
+        // `fixup! add feature` groups with `add feature` even though the exact
+        // subjects differ; the unprefixed commit survives (so its clean message
+        // is kept) even under ToTop, which would otherwise keep the newest.
+        let original = vec![
+            sc("A", "add feature"),
+            sc("B", "unrelated"),
+            sc("C", "fixup! add feature"),
+        ];
+        let (collapsed, folded) = compute_autosquash(&original, AutosquashMode::ToTop);
+        let ids: Vec<&str> = collapsed.iter().map(|e| e.commit_id.as_str()).collect();
+        assert_eq!(ids, vec!["A", "B"]);
+        assert_eq!(
+            folded["A"]
+                .iter()
+                .map(|e| e.commit_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["C"]
+        );
+        assert!(
+            folded["A"]
+                .iter()
+                .all(|e| e.action == InteractiveRebaseAction::Fixup)
+        );
+    }
+
+    #[test]
+    fn autosquash_neighbor_folds_adjacent_fixup_prefix() {
+        let original = vec![
+            sc("A", "add feature"),
+            sc("B", "fixup! add feature"),
+            sc("C", "unrelated"),
+        ];
+        let (collapsed, folded) = compute_autosquash(&original, AutosquashMode::Neighbor);
+        let ids: Vec<&str> = collapsed.iter().map(|e| e.commit_id.as_str()).collect();
+        assert_eq!(ids, vec!["A", "C"]);
+        assert_eq!(
+            folded["A"]
+                .iter()
+                .map(|e| e.commit_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["B"]
+        );
+    }
+
+    #[test]
+    fn autosquash_to_top_folds_into_newest() {
+        let original = vec![
+            sc("B", "fix"),
+            sc("C", "wip"),
+            sc("D", "fix"),
+            sc("F", "fix"),
+        ];
+        let (collapsed, folded) = compute_autosquash(&original, AutosquashMode::ToTop);
+        // F (newest "fix") and C survive; F keeps its slot (after C).
+        let ids: Vec<&str> = collapsed.iter().map(|e| e.commit_id.as_str()).collect();
+        assert_eq!(ids, vec!["C", "F"]);
+        assert_eq!(
+            folded["F"]
+                .iter()
+                .map(|e| e.commit_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["B", "D"]
+        );
+    }
+
+    #[test]
+    fn autosquash_neighbor_only_merges_adjacent() {
+        // Two "fix" are adjacent (D,E); a separate "fix" (B) is not.
+        let original = vec![
+            sc("B", "fix"),
+            sc("C", "wip"),
+            sc("D", "fix"),
+            sc("E", "fix"),
+        ];
+        let (collapsed, folded) = compute_autosquash(&original, AutosquashMode::Neighbor);
+        // B stays (not adjacent to another "fix"); D survives its run, E folds in.
+        let ids: Vec<&str> = collapsed.iter().map(|e| e.commit_id.as_str()).collect();
+        assert_eq!(ids, vec!["B", "C", "D"]);
+        assert_eq!(
+            folded["D"]
+                .iter()
+                .map(|e| e.commit_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["E"]
+        );
+        assert!(!folded.contains_key("B"));
+    }
+
+    #[test]
+    fn autosquash_no_duplicates_yields_empty_fold() {
+        let original = vec![sc("A", "one"), sc("B", "two"), sc("C", "three")];
+        let (_, folded) = compute_autosquash(&original, AutosquashMode::ToBottom);
+        assert!(folded.is_empty());
     }
 }

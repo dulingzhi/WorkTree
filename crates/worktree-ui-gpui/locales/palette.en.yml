@@ -94,6 +94,7 @@ palette:
     compare-directory: Compare Directory…
     compare-directory-started: Comparing directory changes…
     compare-directory-needs-range: Compare Directory works from a commit-range compare view
+    show-reflog: Show Reflog
     back: Navigate Back
     forward: Navigate Forward
 

@@ -388,6 +388,7 @@ impl PopoverHost {
             repo_settings_user_input,
             repo_settings_email_input,
             repo_settings_sign_commits: None,
+            repo_settings_fetch_prune: true,
             repo_settings_error: None,
             repo_settings_current: None,
             #[cfg(test)]

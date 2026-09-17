@@ -48,6 +48,9 @@ input:
     sign_inherit: "Inherits global setting"
     sign_on: "Always on in this repository"
     sign_off: "Off in this repository"
+    fetch_prune_label: "Prune deleted remote-tracking branches on fetch"
+    fetch_prune_on: "Enabled"
+    fetch_prune_off: "Disabled"
     apply: "Apply"
   stash:
     title: "Create stash"

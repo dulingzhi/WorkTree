@@ -31,16 +31,10 @@ pub(in crate::view) enum StashPickerPurpose {
 }
 
 /// Auto-squash strategy: which commit in each identical-message group survives,
-/// the others being folded (fixup) into it.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(in crate::view) enum AutosquashMode {
-    /// Fold each duplicate group into its newest (top) commit.
-    ToTop,
-    /// Only merge duplicates that are already adjacent in the list.
-    Neighbor,
-    /// Fold each duplicate group into its oldest (bottom) commit.
-    ToBottom,
-}
+/// the others being folded (fixup) into it. Defined in core (the folding rules
+/// it selects between are domain rules the reducer also needs) and re-exported
+/// here so the view layer's existing imports keep working.
+pub(in crate::view) use worktree_core::squash::AutosquashMode;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(in crate::view) enum PopoverKind {

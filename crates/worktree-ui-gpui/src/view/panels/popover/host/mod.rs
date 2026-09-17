@@ -21,3 +21,4 @@ pub(in crate::view) use popover_host::PopoverHost;
 pub(in crate::view) use popover_host::RemoteRow;
 #[cfg(feature = "benchmarks")]
 pub(in crate::view) use popover_host::{benchmark_branch_checkout_rows, benchmark_workspace_rows};
+pub(in crate::view) use state::autosquash_mode_label;

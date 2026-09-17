@@ -164,6 +164,23 @@ impl PopoverHost {
             .take()
             .unwrap_or_else(|| self.load_repo_settings_current(&workdir));
         let plan = repo_settings_apply_plan(&draft, &current);
+        // The fetch-prune preference is not a git-config key, so it rides
+        // outside the write plan: dispatch it, and the reducer persists to
+        // the session file and no-ops when the value is unchanged.
+        let prune = self.repo_settings.repo_settings_fetch_prune;
+        if self
+            .state
+            .repos
+            .iter()
+            .find(|repo| repo.id == repo_id)
+            .is_some_and(|repo| repo.fetch_prune_deleted_remote_tracking_branches != prune)
+        {
+            self.store
+                .dispatch(Msg::SetFetchPruneDeletedRemoteTrackingBranches {
+                    repo_id,
+                    enabled: prune,
+                });
+        }
         if plan.is_empty() {
             self.dismiss_prompt_popover_window(cx);
             return;
@@ -320,6 +337,45 @@ pub(super) fn panel(
                     .text_xs()
                     .text_color(theme.colors.foreground.secondary)
                     .child(crate::i18n::tr(sign_row(sign_state))),
+            ),
+    );
+
+    // Fetch-time pruning is a WorkTree preference (persisted in the session
+    // file), not a local git-config key, so it is a plain on/off checkbox
+    // rather than the tri-state cycle the config overrides use.
+    let prune_row = |enabled: bool| -> &'static str {
+        match enabled {
+            true => "input.repo_settings.fetch_prune_on",
+            false => "input.repo_settings.fetch_prune_off",
+        }
+    };
+    let prune_state = this.repo_settings.repo_settings_fetch_prune;
+    body = body.child(
+        div()
+            .id("repo_settings_fetch_prune_row")
+            .debug_selector(|| "repo_settings_fetch_prune_toggle".to_string())
+            .flex()
+            .items_center()
+            .gap(scaled_px(6.0))
+            .px_1()
+            .cursor(gpui::CursorStyle::PointingHand)
+            .on_click(cx.listener(move |this, _e: &ClickEvent, _w, cx| {
+                this.repo_settings.repo_settings_fetch_prune =
+                    !this.repo_settings.repo_settings_fetch_prune;
+                cx.notify();
+            }))
+            .child(
+                div()
+                    .text_sm()
+                    .text_color(theme.colors.foreground.primary)
+                    .child(crate::i18n::tr("input.repo_settings.fetch_prune_label")),
+            )
+            .child(div().flex_1())
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(theme.colors.foreground.secondary)
+                    .child(crate::i18n::tr(prune_row(prune_state))),
             ),
     );
 

@@ -253,7 +253,7 @@ pub(super) fn interactive_rebase_autosquash_menu_model() -> ContextMenuModel {
     // Auto Squash is a one-shot action: pick a strategy and it folds the
     // duplicate-message commits, no persisted on/off state to display.
     let entry = |mode: AutosquashMode| ContextMenuItem::Entry {
-        label: mode.label().into(),
+        label: super::super::host::autosquash_mode_label(mode).into(),
         icon: None,
         shortcut: None,
         disabled: false,

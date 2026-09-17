@@ -1177,6 +1177,12 @@ impl PopoverHost {
                             cx.notify();
                         });
                     self.repo_settings.repo_settings_sign_commits = current.sign_commits;
+                    self.repo_settings.repo_settings_fetch_prune = self
+                        .state
+                        .repos
+                        .iter()
+                        .find(|repo| repo.id == *repo_id)
+                        .is_none_or(|repo| repo.fetch_prune_deleted_remote_tracking_branches);
                     self.repo_settings.repo_settings_error = None;
                     self.repo_settings.repo_settings_current = Some(current);
                     // Land in the first field, like every other prompt dialog.
