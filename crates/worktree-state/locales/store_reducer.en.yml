@@ -177,6 +177,7 @@ store:
     push_after_commit_blocked: "Push after commit blocked: %{summary}"
     start_of_history: "start of history"
     squash_rebase_load_failed: "Failed to load commits for squash rebase: %{error}"
+    fixup_target_not_loaded: "Fixup cancelled: the target commit is not in the loaded history."
     commit_reveal_failed: "Could not find commit %{reference}: %{error}"
     folder_not_a_repo: "Folder is not a git repository: %{path}"
     invalid_cherry_pick_selection: "Repository returned an invalid ordered cherry-pick selection"

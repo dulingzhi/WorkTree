@@ -177,6 +177,7 @@ store:
     push_after_commit_blocked: "提交后推送被阻止：%{summary}"
     start_of_history: "历史起点"
     squash_rebase_load_failed: "加载用于压缩变基的提交失败：%{error}"
+    fixup_target_not_loaded: "修补已取消：目标提交不在已加载的历史中。"
     commit_reveal_failed: "找不到提交 %{reference}：%{error}"
     folder_not_a_repo: "该文件夹不是 git 仓库：%{path}"
     invalid_cherry_pick_selection: "仓库返回了无效的有序拣选选择"

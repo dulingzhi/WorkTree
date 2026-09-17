@@ -178,6 +178,7 @@ pub(crate) fn msg_requires_available_git(msg: &Msg) -> bool {
             | Msg::AppendGitignorePatterns { .. }
             | Msg::Commit { .. }
             | Msg::CommitAmend { .. }
+            | Msg::CommitFixup { .. }
             | Msg::SafePushAfterCommit { .. }
             | Msg::FetchAll { .. }
             | Msg::AutoFetchAll { .. }

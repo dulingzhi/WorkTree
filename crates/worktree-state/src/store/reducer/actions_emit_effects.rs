@@ -25,7 +25,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use worktree_core::auth::StagedGitAuth;
 use worktree_core::conflict_session::{ConflictRegionResolution, ConflictResolverStrategy};
-use worktree_core::domain::{DiffTarget, FileConflictKind};
+use worktree_core::domain::{CommitId, DiffTarget, FileConflictKind};
 use worktree_core::error::Error;
 use worktree_core::external_merge_tool::ExternalMergeToolSelection;
 use worktree_core::services::{
@@ -298,6 +298,55 @@ pub(super) fn commit_amend(repo_id: RepoId, message: String) -> Vec<Effect> {
         message,
         auth: None,
     }]
+}
+
+/// The subject of `target` from the loaded log page, or `None` when the commit
+/// is not in the page. The only caller is reached from a history row, so the
+/// target is normally present; a miss means the page moved under the click.
+fn commit_subject(state: &AppState, repo_id: RepoId, target: &CommitId) -> Option<String> {
+    let repo_state = state.repos.iter().find(|r| r.id == repo_id)?;
+    let Loadable::Ready(page) = &repo_state.log else {
+        return None;
+    };
+    page.commits
+        .iter()
+        .find(|commit| &commit.id == target)
+        .map(|commit| commit.summary.to_string())
+}
+
+/// Commit the staged changes as a `fixup!` commit for `target`, so the next
+/// autosquash folds it in.
+///
+/// The message comes from core's [`worktree_core::squash::fixup_message`],
+/// which reproduces `git commit --fixup=<target>` exactly — so this rides the
+/// ordinary commit path rather than adding a backend operation. Everything
+/// downstream (the in-flight bookkeeping, the auth-retry replay, the
+/// post-commit push) is the same as a plain commit.
+pub(super) fn commit_fixup(
+    state: &mut AppState,
+    repo_id: RepoId,
+    target: CommitId,
+    push_after_commit: bool,
+) -> Vec<Effect> {
+    let Some(subject) = commit_subject(state, repo_id, &target) else {
+        super::util::push_notification(
+            state,
+            crate::model::AppNotificationKind::Warning,
+            rust_i18n::t!("store.reducer.fixup_target_not_loaded").to_string(),
+        );
+        return Vec::new();
+    };
+
+    let message = worktree_core::squash::fixup_message(&subject);
+    begin_commit_action(state, repo_id);
+    if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+        repo_state.pending_commit_retry = Some(PendingCommitRetry {
+            message: message.clone(),
+            amend: false,
+            push_after_commit,
+        });
+    }
+    commit(repo_id, message)
 }
 
 pub(super) fn safe_push_after_commit(
@@ -2072,6 +2121,11 @@ pub(super) fn reduce_actions_emit_effects(
             }
             actions_emit_effects::commit_amend(repo_id, message)
         }
+        Msg::CommitFixup {
+            repo_id,
+            target,
+            push_after_commit,
+        } => actions_emit_effects::commit_fixup(state, repo_id, target, push_after_commit),
         Msg::SafePushAfterCommit { repo_id, context } => {
             actions_emit_effects::safe_push_after_commit(repo_id, context)
         }

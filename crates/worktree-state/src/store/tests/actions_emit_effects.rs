@@ -618,6 +618,135 @@ fn commit_emits_effect() {
     ));
 }
 
+/// Seeds a repo whose loaded log page holds exactly the commits given, so a
+/// fixup can resolve its target's subject the way the UI's history rows can.
+fn push_repo_with_log(
+    state: &mut AppState,
+    commits: &[(&str, &str)],
+) -> FxHashMap<RepoId, Arc<dyn GitRepository>> {
+    let repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    state.repos.push(RepoState::new_opening(
+        RepoId(1),
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    ));
+    state.active_repo = Some(RepoId(1));
+    state.repos[0].log = Loadable::Ready(Arc::new(LogPage {
+        commits: commits
+            .iter()
+            .map(|(id, summary)| Commit {
+                signed: false,
+                id: CommitId((*id).into()),
+                parent_ids: worktree_core::domain::CommitParentIds::new(),
+                summary: (*summary).into(),
+                author: "a".into(),
+                time: SystemTime::UNIX_EPOCH,
+            })
+            .collect(),
+        next_cursor: None,
+    }));
+    repos
+}
+
+#[test]
+fn commit_fixup_emits_the_git_fixup_message() {
+    let mut state = AppState::default();
+    let mut repos = push_repo_with_log(&mut state, &[("c1", "add feature")]);
+    let id_alloc = AtomicU64::new(1);
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::CommitFixup {
+            repo_id: RepoId(1),
+            target: CommitId("c1".into()),
+            push_after_commit: false,
+        },
+    );
+
+    // Exactly what `git commit --fixup=c1` would write — no backend involved.
+    assert!(matches!(
+        effects.as_slice(),
+        [Effect::Commit { repo_id: RepoId(1), message, .. } ] if message == "fixup! add feature"
+    ));
+    // The retry replay (auth prompt, signing) must keep the prefix, or a
+    // retried fixup would land as an ordinary commit that never folds.
+    let retry = state.repos[0]
+        .pending_commit_retry
+        .as_ref()
+        .expect("fixup records a retry");
+    assert_eq!(retry.message, "fixup! add feature");
+    assert!(!retry.amend);
+    assert_eq!(state.repos[0].commit_in_flight, 1);
+}
+
+#[test]
+fn commit_fixup_for_an_unloaded_target_warns_and_commits_nothing() {
+    let mut state = AppState::default();
+    // The target is not in the loaded page — the page moved under the click.
+    let mut repos = push_repo_with_log(&mut state, &[("c1", "add feature")]);
+    let id_alloc = AtomicU64::new(1);
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::CommitFixup {
+            repo_id: RepoId(1),
+            target: CommitId("missing".into()),
+            push_after_commit: false,
+        },
+    );
+
+    assert!(
+        effects.is_empty(),
+        "no commit may be emitted without a target"
+    );
+    assert!(
+        state
+            .notifications
+            .iter()
+            .any(|note| note.message.contains("Fixup cancelled")),
+        "the user has to be told why nothing happened"
+    );
+    assert!(
+        state.repos[0].pending_commit_retry.is_none(),
+        "a cancelled fixup must not leave a retry behind"
+    );
+    assert_eq!(state.repos[0].commit_in_flight, 0);
+}
+
+#[test]
+fn commit_fixup_refuses_a_target_whose_page_is_not_loaded() {
+    let mut state = AppState::default();
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    state.repos.push(RepoState::new_opening(
+        RepoId(1),
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    ));
+    state.active_repo = Some(RepoId(1));
+    // `log` stays NotLoaded: first load still in flight.
+    let id_alloc = AtomicU64::new(1);
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::CommitFixup {
+            repo_id: RepoId(1),
+            target: CommitId("c1".into()),
+            push_after_commit: false,
+        },
+    );
+
+    assert!(effects.is_empty());
+    assert!(state.repos[0].pending_commit_retry.is_none());
+}
+
 #[test]
 fn checkout_conflict_base_emits_effect() {
     let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();

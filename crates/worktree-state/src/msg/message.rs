@@ -760,6 +760,18 @@ pub enum Msg {
         message: String,
         push_after_commit: bool,
     },
+    /// Commit the staged changes as a `fixup!` commit for `target`.
+    ///
+    /// `git commit --fixup=<target>` is byte-for-byte `-m "fixup! <target
+    /// subject>"`, and the subject is already in the loaded log page, so this
+    /// derives the message here and rides the ordinary commit path — no
+    /// backend support and no extra git invocation. The resulting commit is
+    /// folded back by the next autosquash.
+    CommitFixup {
+        repo_id: RepoId,
+        target: CommitId,
+        push_after_commit: bool,
+    },
     SafePushAfterCommit {
         repo_id: RepoId,
         context: SafePushAfterCommitContext,

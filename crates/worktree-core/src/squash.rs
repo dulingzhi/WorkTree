@@ -151,6 +151,25 @@ pub fn split_subject_body(message: &str) -> (String, String) {
     }
 }
 
+/// The commit message `git commit --fixup=<target>` writes for a target whose
+/// subject is `target_subject`: the literal `fixup! ` prefix followed by that
+/// subject, verbatim.
+///
+/// The point of matching git's format exactly is that the resulting commit is
+/// then reachable by *both* autosquash implementations — git's own
+/// `rebase --autosquash` and this crate's [`autosquash_folds`], which pairs
+/// commits by [`autosquash_group_key`]. So a commit made through this helper
+/// folds back into its target whichever path later consumes the history, and
+/// no backend has to shell out to `git commit --fixup`.
+///
+/// Only the first line of the input is used. Pairing compares single-line
+/// subjects (git's `%s`), so a multi-line input would produce a `fixup!` line
+/// that matches nothing and the commit would silently survive the fold.
+pub fn fixup_message(target_subject: &str) -> String {
+    let subject = target_subject.lines().next().unwrap_or("");
+    format!("fixup! {subject}")
+}
+
 /// Index of the entry whose editor invocation determines the final message of
 /// the squash run folding into the reword target at `ix`, when that run
 /// contains at least one `squash`.
@@ -876,6 +895,73 @@ mod tests {
         let (subject, body) = split_subject_body("Fix parser\nhandle CRLF");
         assert_eq!(subject, "Fix parser");
         assert_eq!(body, "handle CRLF");
+    }
+
+    #[test]
+    fn fixup_message_matches_gits_prefix() {
+        // Byte-for-byte what `git commit --fixup=<target>` writes.
+        assert_eq!(
+            fixup_message("add feature: 初版"),
+            "fixup! add feature: 初版"
+        );
+        // An unusual but legal subject survives untouched, quotes and all.
+        assert_eq!(
+            fixup_message("subject with 'quote' and \"dquote\""),
+            "fixup! subject with 'quote' and \"dquote\""
+        );
+        // Degenerate input still mirrors git: a prefix and nothing after it.
+        assert_eq!(fixup_message(""), "fixup! ");
+    }
+
+    #[test]
+    fn fixup_message_keeps_only_the_first_line() {
+        // Pairing compares single-line subjects; a newline would break it.
+        assert_eq!(
+            fixup_message("add feature\n\nlong body"),
+            "fixup! add feature"
+        );
+    }
+
+    /// The reason the helper exists: a message it builds must be grouped with
+    /// the target by the autosquash folding rules, so a `fixup!` commit made
+    /// through it actually folds back into its target instead of surviving as
+    /// a stray commit.
+    #[test]
+    fn fixup_message_folds_back_into_its_target() {
+        for subject in ["add feature", "fix: 修一个 bug", "refactor(core): split"] {
+            let fixup = fixup_message(subject);
+            assert_eq!(
+                autosquash_group_key(&fixup),
+                autosquash_group_key(subject),
+                "{fixup:?} must group with its target {subject:?}"
+            );
+            assert!(
+                is_autosquash_prefixed(&fixup),
+                "{fixup:?} must be recognized as a fixup commit"
+            );
+        }
+    }
+
+    /// A fixup commit is born already prefixed, so the target must win the
+    /// survivor slot — otherwise the fold would keep the `fixup! …` message
+    /// and throw the real one away.
+    #[test]
+    fn fixup_commit_folds_into_the_unprefixed_target() {
+        let entries = vec![
+            sc("T", "add feature"),
+            sc("W", "unrelated"),
+            sc("F", &fixup_message("add feature")),
+        ];
+        let (collapsed, folded) = compute_autosquash(&entries, AutosquashMode::ToTop);
+        let ids: Vec<&str> = collapsed.iter().map(|e| e.commit_id.as_str()).collect();
+        assert_eq!(ids, vec!["T", "W"]);
+        assert_eq!(
+            folded["T"]
+                .iter()
+                .map(|e| e.commit_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["F"]
+        );
     }
 
     #[test]
