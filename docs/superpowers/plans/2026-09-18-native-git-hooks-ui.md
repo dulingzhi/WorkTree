@@ -22,7 +22,7 @@
 
 ```
 用户打开仓库「Manage Hooks…」(context menu)
-  → Msg::LoadRepoHooks { repo_id }
+  → Msg::RequestRepoHooks { repo_id }
   → reducer: 置 model.repo_hooks = Loadable::Loading
   → Effect::LoadRepoHooks { repo_id }
   → effects 调度器 spawn_with_repo(repo) → worktree_core::hooks::list_hooks(repo.spec().workdir)
@@ -78,7 +78,7 @@ UI PopoverKind::RepoHooks { repo_id } 读 model.repo_hooks 渲染：
 
 **Step 3 — state 层（worktree-state）**
 
-- `msg/message.rs`：`Msg::LoadRepoHooks { repo_id }`、`Msg::SetRepoHookEnabled { repo_id, name, enabled }`、`Msg::CreateRepoHook { repo_id, name, from_sample }`、`Msg::DeleteRepoHook { repo_id, name }`、`Msg::CancelRepoHooks { repo_id }`（关闭清 Loading）。
+- `msg/message.rs`：`Msg::RequestRepoHooks { repo_id }`、`Msg::SetRepoHookEnabled { repo_id, name, enabled }`、`Msg::CreateRepoHook { repo_id, name, from_sample }`、`Msg::DeleteRepoHook { repo_id, name }`、`Msg::CancelRepoHooks { repo_id }`（关闭清 Loading）。
 - `msg/message.rs` `InternalMsg` 加 `RepoHooksLoaded { repo_id, result: Result<Arc<RepoHookList>, String> }`（仿 `DirectoryDiffLoaded`）。
 - `msg/effect.rs`：`Effect::LoadRepoHooks { repo_id }`、`Effect::SetRepoHookEnabled { repo_id, name, enabled }`、`Effect::CreateRepoHook { .. }`、`Effect::DeleteRepoHook { .. }`（仿 `LoadMergePreview`）。
 - `store/effects/repo_load.rs` 或新 `schedule_load_repo_hooks`：仿 `schedule_load_directory_diff:2091` 用 `spawn_with_repo` 调 `worktree_core::hooks::list_hooks(repo.spec().workdir)`，回 `InternalMsg::RepoHooksLoaded`。`set/create/delete` 走 `spawn_with_repo` 后重列或就地更新。
@@ -147,6 +147,22 @@ UI PopoverKind::RepoHooks { repo_id } 读 model.repo_hooks 渲染：
 - `CARGO_TARGET_DIR="C:/Users/81468/AppData/Local/Temp/gc-target" cargo check -p worktree-ui-gpui --tests` 通过（rc=0，无 error）
 - `cargo test -p worktree-core --lib` / `-p worktree-state --lib` 全绿
 
-## 落地说明（待填）
+## 落地说明
 
-（每步落地后在此补 commit + 验证结果）
+- **Step 1** — commit `3d020080` `feat(hooks): add RepoHook* domain types (Step 1)`。
+  `worktree-core/src/domain.rs` 加 `RepoHookName`(newtype + `STANDARD_NAMES` 19 个常量 + `AsRef/Display/From`)、`RepoHook`、`RepoHookList`(`iter()`)。`cargo check -p worktree-core` 通过。
+- **Step 2** — commit `0740bb31` `feat(hooks): add pure std::fs hook backend (Step 2)`。
+  `worktree-core/src/hooks.rs` 纯 `std::fs` 后端（`list_hooks`/`set_hook_enabled`/`create_hook`/`delete_hook` + 执行位跨平台近似）+ `lib.rs` 加 `pub mod hooks;`。8 个单测全绿（`cargo test -p worktree-core --lib hooks` → 8 passed）。
+- **Step 3** — commit `b2236a5e` `feat(hooks): wire state layer for native hooks UI (Step 3)`。
+  - 命名实落：`Msg::RequestRepoHooks`（plan 原写 `LoadRepoHooks`，以代码为准；`Effect` 仍用 `LoadRepoHooks`/`SetRepoHookEnabled`/`CreateRepoHook`/`DeleteRepoHook`）。
+  - `msg/message.rs`：`Msg` 5 个 variant + `InternalMsg::RepoHooksLoaded { repo_id, result: Result<Arc<RepoHookList>, String> }`。
+  - `msg/effect.rs`：4 个 `Effect` variant；`msg/message_debug.rs`：`RepoHooksLoaded` Debug 臂。
+  - `model.rs`：`RepoState.repo_hooks: Loadable<Shared<RepoHookList>>` + `repo_hooks_rev: u64`（new_opening 初值 `NotLoaded`/`0`）。
+  - `store/reducer/repo_hooks.rs`：`reduce_repo_hooks` / `set_loading` / `repo_hooks_loaded`（**未走 `actions_emit_effects`**，reducer 直接返回 `Vec<Effect>`，镜像 `Msg::RequestDirectoryDiff`）；`reducer.rs` 加 `mod repo_hooks;` 并在 `reduce_inner` 分发链插入（置于 `conflict_interactions` 之后）。
+  - `store/effects.rs`：分发 4 个 hook effect → `repo_load::schedule_*`；并在 `send_unavailable_git_effect_result` 的穷举 match 补 4 臂（git 不可用时回 `RepoHooksLoaded{Err}`）。
+  - `store/effects/repo_load.rs`：`schedule_load_repo_hooks`/`set_repo_hook_enabled`/`create_repo_hook`/`delete_repo_hook`，均 `spawn_with_repo` + `repo.spec().workdir.clone()` + `worktree_core::hooks::*`。
+  - **偏差**：plan §4 原写「在 `actions_emit_effects.rs:911` 发射」——实际改为 reducer 直接发射（更贴近 `RequestDirectoryDiff` 惯例），`actions_emit_effects.rs` 未改动。
+  - **验证**：`cargo check -p worktree-state --tests` 通过（rc=0）；`cargo test -p worktree-state --lib` 全绿 **768 passed / 0 failed**（新增 8 个 reducer 单测：request→effect+Loading、cancel→清 Loading、set/create/delete→effect、loaded Ready/Error、unknown→NotHandled）；`cargo fmt --check` 干净。
+  - **踩坑**：① 穷举 `match Effect` 有两处（分发 + `send_unavailable_git_effect_result`），后者漏加臂会编译失败；② `repo.spec().workdir` 是 `PathBuf` 字段访问（经 `&RepoSpec`），须 `.clone()`；③ `create_hook` 返回 `PathBuf`，`and_then` 闭包须绑定该值（非 `()`）；④ `RepoSpec` 不能从 `crate::model` 经 glob 再导出路径引用，单测须 `use worktree_core::domain::RepoSpec;`。
+
+**下一步**：Step 4（UI popover）`view/panels/popover/repo_hooks.rs` + `mod repo_hooks;` + `PopoverKind::RepoHooks { repo_id }` 八处注册 + 仓库菜单「Manage Hooks…」。
