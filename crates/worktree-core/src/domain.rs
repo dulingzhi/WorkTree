@@ -1349,6 +1349,95 @@ index 0000000..1111111 100644
     }
 }
 
+/// A git hook name, e.g. `pre-commit`, `pre-push`, `commit-msg`.
+///
+/// Wrapped in a newtype (rather than a bare `String`) so call sites are
+/// explicit about passing a hook name vs. an arbitrary path, and so we can keep
+/// a curated list of the standard hook names alongside any user-defined ones.
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub struct RepoHookName(pub String);
+
+impl RepoHookName {
+    /// The canonical set of hook names git itself recognizes in `.git/hooks`.
+    ///
+    /// Listed so the UI can show a stable, well-known set even when a repository
+    /// has none of them defined, and still surface any extra user-defined hook
+    /// files the curated list does not cover.
+    pub const STANDARD_NAMES: &'static [&'static str] = &[
+        "applypatch-msg",
+        "pre-applypatch",
+        "post-applypatch",
+        "pre-commit",
+        "pre-merge-commit",
+        "prepare-commit-msg",
+        "commit-msg",
+        "post-commit",
+        "pre-rebase",
+        "post-checkout",
+        "post-merge",
+        "pre-push",
+        "pre-receive",
+        "update",
+        "post-receive",
+        "post-update",
+        "pre-auto-gc",
+        "post-rewrite",
+        "push-to-checkout",
+    ];
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl AsRef<str> for RepoHookName {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for RepoHookName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<String> for RepoHookName {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl From<&str> for RepoHookName {
+    fn from(value: &str) -> Self {
+        Self(value.to_string())
+    }
+}
+
+/// One git hook as discovered on disk in a repository's `.git/hooks` directory.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RepoHook {
+    /// The hook's file name within `.git/hooks` (e.g. `pre-commit`).
+    pub name: RepoHookName,
+    /// A file named `name` exists in `.git/hooks` (regardless of executability).
+    pub defined: bool,
+    /// The hook file exists and has its executable bit set, so git will run it.
+    pub enabled: bool,
+    /// A `<name>.sample` template exists, usable for "create from sample".
+    pub has_sample: bool,
+}
+
+/// The set of hooks known for a repository: the curated standard names plus any
+/// extra non-`.sample` files found in `.git/hooks`.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct RepoHookList(pub Vec<RepoHook>);
+
+impl RepoHookList {
+    pub fn iter(&self) -> std::slice::Iter<'_, RepoHook> {
+        self.0.iter()
+    }
+}
+
 #[cfg(test)]
 mod file_status_count_tests {
     use super::*;
