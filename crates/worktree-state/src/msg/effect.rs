@@ -236,6 +236,23 @@ pub enum Effect {
         repo_id: RepoId,
         target: DiffTarget,
     },
+    LoadRepoHooks {
+        repo_id: RepoId,
+    },
+    SetRepoHookEnabled {
+        repo_id: RepoId,
+        name: RepoHookName,
+        enabled: bool,
+    },
+    CreateRepoHook {
+        repo_id: RepoId,
+        name: RepoHookName,
+        from_sample: bool,
+    },
+    DeleteRepoHook {
+        repo_id: RepoId,
+        name: RepoHookName,
+    },
     LoadDiffFile {
         repo_id: RepoId,
         target: DiffTarget,

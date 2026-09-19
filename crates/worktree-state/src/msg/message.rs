@@ -1170,6 +1170,36 @@ pub enum Msg {
     LoadRepoStatistics {
         repo_id: RepoId,
     },
+    /// Open the repository's native `.git/hooks` manager: list every standard
+    /// hook plus any user-defined hook, with defined/enabled/sample flags.
+    /// Backed by a pure `std::fs` scan of the repo's `hooks` directory.
+    RequestRepoHooks {
+        repo_id: RepoId,
+    },
+    /// Close the hooks manager. Clears the loading state so the panel does not
+    /// linger in `Loading` if it is dismissed mid-load.
+    CancelRepoHooks {
+        repo_id: RepoId,
+    },
+    /// Enable or disable a single hook by toggling its executable bit (unix)
+    /// or read-only attribute (windows). No-op when the hook file is undefined.
+    SetRepoHookEnabled {
+        repo_id: RepoId,
+        name: RepoHookName,
+        enabled: bool,
+    },
+    /// Create a hook file from its `.sample` template, or a blank skeleton when
+    /// no template exists. The created hook starts enabled.
+    CreateRepoHook {
+        repo_id: RepoId,
+        name: RepoHookName,
+        from_sample: bool,
+    },
+    /// Delete a hook file (and its `.sample` template, when present).
+    DeleteRepoHook {
+        repo_id: RepoId,
+        name: RepoHookName,
+    },
     Internal(InternalMsg),
 }
 
@@ -1537,6 +1567,12 @@ pub enum InternalMsg {
         repo_id: RepoId,
         command: RepoCommandKind,
         result: Result<CommandOutput, Error>,
+    },
+    /// The native `.git/hooks` scan finished. Carries the full hook list (or a
+    /// human-readable error string). Mirrors `DirectoryDiffLoaded`.
+    RepoHooksLoaded {
+        repo_id: RepoId,
+        result: Result<Arc<RepoHookList>, String>,
     },
 }
 

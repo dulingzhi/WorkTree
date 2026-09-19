@@ -456,6 +456,11 @@ impl std::fmt::Debug for InternalMsg {
                 .field("target", target)
                 .field("ok", &result.is_ok())
                 .finish(),
+            InternalMsg::RepoHooksLoaded { repo_id, result } => f
+                .debug_struct("RepoHooksLoaded")
+                .field("repo_id", repo_id)
+                .field("ok", &result.is_ok())
+                .finish(),
             InternalMsg::DiffFileLoaded {
                 repo_id,
                 target,

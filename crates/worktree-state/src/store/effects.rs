@@ -880,6 +880,15 @@ fn send_unavailable_git_effect_result(
                 result: Err(git_unavailable_error(runtime)),
             },
         )),
+        Effect::LoadRepoHooks { repo_id }
+        | Effect::SetRepoHookEnabled { repo_id, .. }
+        | Effect::CreateRepoHook { repo_id, .. }
+        | Effect::DeleteRepoHook { repo_id, .. } => {
+            send(Msg::Internal(crate::msg::InternalMsg::RepoHooksLoaded {
+                repo_id,
+                result: Err(git_unavailable_error(runtime).to_string()),
+            }))
+        }
         Effect::CloneRepo { url, dest, .. } => {
             send(Msg::Internal(crate::msg::InternalMsg::CloneRepoFinished {
                 url,
@@ -2249,6 +2258,51 @@ pub(super) fn schedule_effect(
                 repo_load_context(thread_state, repo_task_tokens, msg_tx, repo_id)
             {
                 repo_load::schedule_load_directory_diff(executor, repos, msg_tx, repo_id, target);
+            }
+        }
+        Effect::LoadRepoHooks { repo_id } => {
+            if let Some((msg_tx, _)) =
+                repo_load_context(thread_state, repo_task_tokens, msg_tx, repo_id)
+            {
+                repo_load::schedule_load_repo_hooks(executor, repos, msg_tx, repo_id);
+            }
+        }
+        Effect::SetRepoHookEnabled {
+            repo_id,
+            name,
+            enabled,
+        } => {
+            if let Some((msg_tx, _)) =
+                repo_load_context(thread_state, repo_task_tokens, msg_tx, repo_id)
+            {
+                repo_load::schedule_set_repo_hook_enabled(
+                    executor, repos, msg_tx, repo_id, name, enabled,
+                );
+            }
+        }
+        Effect::CreateRepoHook {
+            repo_id,
+            name,
+            from_sample,
+        } => {
+            if let Some((msg_tx, _)) =
+                repo_load_context(thread_state, repo_task_tokens, msg_tx, repo_id)
+            {
+                repo_load::schedule_create_repo_hook(
+                    executor,
+                    repos,
+                    msg_tx,
+                    repo_id,
+                    name,
+                    from_sample,
+                );
+            }
+        }
+        Effect::DeleteRepoHook { repo_id, name } => {
+            if let Some((msg_tx, _)) =
+                repo_load_context(thread_state, repo_task_tokens, msg_tx, repo_id)
+            {
+                repo_load::schedule_delete_repo_hook(executor, repos, msg_tx, repo_id, name);
             }
         }
         Effect::LoadDiffFile { repo_id, target } => {

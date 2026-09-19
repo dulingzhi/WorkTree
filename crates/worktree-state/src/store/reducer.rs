@@ -4,6 +4,7 @@ mod diff_selection;
 mod external_and_history;
 mod loaded_results;
 mod repo_change;
+mod repo_hooks;
 mod repo_management;
 mod util;
 
@@ -917,6 +918,11 @@ fn reduce_inner(
     };
 
     let msg = match conflict_interactions::reduce_conflict_interactions(msg, state) {
+        ReduceOutcome::Handled(effects) => return effects,
+        ReduceOutcome::NotHandled(msg) => msg,
+    };
+
+    let msg = match repo_hooks::reduce_repo_hooks(msg, state) {
         ReduceOutcome::Handled(effects) => return effects,
         ReduceOutcome::NotHandled(msg) => msg,
     };

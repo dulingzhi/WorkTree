@@ -9,8 +9,8 @@ use std::time::Instant;
 use worktree_core::conflict_session::{ConflictPayload, ConflictSession, ConflictStageParts};
 use worktree_core::diff_tree::DirectoryDiffResult;
 use worktree_core::domain::{
-    DiffArea, DiffPreviewTextSide, DiffTarget, FileDiffImage, LogCursor, LogScope, RepoStatus,
-    Worktree, WorktreeDirtySummary, count_file_statuses,
+    DiffArea, DiffPreviewTextSide, DiffTarget, FileDiffImage, LogCursor, LogScope, RepoHookName,
+    RepoStatus, Worktree, WorktreeDirtySummary, count_file_statuses,
 };
 use worktree_core::error::{Error, ErrorKind};
 use worktree_core::mergetool_trace::{
@@ -2116,6 +2116,86 @@ pub(super) fn schedule_load_directory_diff(
                 target,
                 result,
             }),
+        );
+    });
+}
+
+/// Schedule a native `.git/hooks` scan for the repo. Pure `std::fs` backend
+/// (`worktree_core::hooks`), no new git trait method. The result replaces the
+/// repo's `RepoHookList` via `InternalMsg::RepoHooksLoaded`.
+pub(super) fn schedule_load_repo_hooks(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+) {
+    spawn_with_repo(executor, repos, repo_id, msg_tx, move |repo, msg_tx| {
+        let workdir = repo.spec().workdir.clone();
+        let result = worktree_core::hooks::list_hooks(&workdir).map(Arc::new);
+        send_or_log(
+            &msg_tx,
+            Msg::Internal(crate::msg::InternalMsg::RepoHooksLoaded { repo_id, result }),
+        );
+    });
+}
+
+/// Enable/disable a hook (toggle its executable bit), then re-scan so the
+/// panel reflects the new state. Returns an error when the hook is undefined.
+pub(super) fn schedule_set_repo_hook_enabled(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    name: RepoHookName,
+    enabled: bool,
+) {
+    spawn_with_repo(executor, repos, repo_id, msg_tx, move |repo, msg_tx| {
+        let workdir = repo.spec().workdir.clone();
+        let result = worktree_core::hooks::set_hook_enabled(&workdir, &name, enabled)
+            .and_then(|()| worktree_core::hooks::list_hooks(&workdir).map(Arc::new));
+        send_or_log(
+            &msg_tx,
+            Msg::Internal(crate::msg::InternalMsg::RepoHooksLoaded { repo_id, result }),
+        );
+    });
+}
+
+/// Create a hook from its `.sample` template (or a blank skeleton), then
+/// re-scan. The created hook starts enabled.
+pub(super) fn schedule_create_repo_hook(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    name: RepoHookName,
+    from_sample: bool,
+) {
+    spawn_with_repo(executor, repos, repo_id, msg_tx, move |repo, msg_tx| {
+        let workdir = repo.spec().workdir.clone();
+        let result = worktree_core::hooks::create_hook(&workdir, &name, from_sample)
+            .and_then(|_created| worktree_core::hooks::list_hooks(&workdir).map(Arc::new));
+        send_or_log(
+            &msg_tx,
+            Msg::Internal(crate::msg::InternalMsg::RepoHooksLoaded { repo_id, result }),
+        );
+    });
+}
+
+/// Delete a hook file (and its `.sample` template), then re-scan.
+pub(super) fn schedule_delete_repo_hook(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    name: RepoHookName,
+) {
+    spawn_with_repo(executor, repos, repo_id, msg_tx, move |repo, msg_tx| {
+        let workdir = repo.spec().workdir.clone();
+        let result = worktree_core::hooks::delete_hook(&workdir, &name)
+            .and_then(|()| worktree_core::hooks::list_hooks(&workdir).map(Arc::new));
+        send_or_log(
+            &msg_tx,
+            Msg::Internal(crate::msg::InternalMsg::RepoHooksLoaded { repo_id, result }),
         );
     });
 }

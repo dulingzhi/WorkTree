@@ -1394,6 +1394,12 @@ pub struct RepoState {
     /// starts a range comparison (mark = base, target = tip). `None` when
     /// nothing is marked.
     pub comparison_mark: Option<ComparisonMark>,
+    /// Native `.git/hooks` manager state: the scanned hook list (or loading /
+    /// error), refreshed when the hooks panel opens or a hook is mutated.
+    pub repo_hooks: Loadable<Shared<RepoHookList>>,
+    /// Bumped whenever `repo_hooks` changes (loading → ready/error, or a
+    /// create/enable/delete round-trip), so the panel can react to refreshes.
+    pub repo_hooks_rev: u64,
 }
 
 /// A point marked for comparison via the "Mark for comparison" context-menu
@@ -1507,6 +1513,8 @@ impl RepoState {
             push_pull_retry_armed: false,
             push_pull_retry_pending: false,
             comparison_mark: None,
+            repo_hooks: Loadable::NotLoaded,
+            repo_hooks_rev: 0,
         }
     }
 
