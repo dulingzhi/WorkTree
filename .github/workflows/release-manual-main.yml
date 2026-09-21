@@ -156,6 +156,147 @@ jobs:
       release_id: ${{ needs.create_release.outputs.release_id }}
     secrets: inherit
 
+  # Iteration 06 T3 (second half): give scripts/compare-perf-runs.sh a delivery
+  # path. Every release archives its own measured run, compares it against the
+  # previous release's archive, and attaches both the comparison and the new
+  # baseline to the release.
+  #
+  # Design constraints, driven by the account running out of hosted Actions
+  # minutes in September 2026:
+  #   - `if: vars.PERF_RUNNER != ''` — only ever runs on the self-hosted perf
+  #     runner, so a release never consumes hosted minutes.
+  #   - `continue-on-error: true` — a perf failure reports but never blocks or
+  #     rolls back a release.
+  #   - `needs: [validate, create_release]` — runs alongside build_and_upload
+  #     instead of serialising behind it.
+  perf_comparison:
+    name: Performance comparison vs previous release
+    needs: [validate, create_release]
+    if: vars.PERF_RUNNER != ''
+    runs-on: ${{ vars.PERF_RUNNER }}
+    continue-on-error: true
+    timeout-minutes: 180
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      WORKTREE_PERF_REAL_REPO_ROOT: ${{ vars.PERF_REAL_REPO_ROOT }}
+      WORKTREE_PERF_RUNNER_CLASS: ${{ vars.PERF_RUNNER }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Preflight perf comparison tooling
+        run: |
+          set -euo pipefail
+          missing=0
+          for tool in jq tar git cargo; do
+            if ! command -v "$tool" >/dev/null 2>&1; then
+              echo "::error title=Missing perf comparison tool::'$tool' is required on the perf runner labelled '${{ vars.PERF_RUNNER }}'."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+          jq --version
+          cargo --version
+
+      - name: Archive this release's performance run
+        id: archive
+        env:
+          RUN_ID: release-${{ needs.validate.outputs.version }}
+        run: |
+          set -euo pipefail
+          archive_status=0
+          bash scripts/archive-perf-run.sh --run-id "$RUN_ID" --profile full --strict || archive_status=$?
+          echo "archive_status=${archive_status}" >> "$GITHUB_OUTPUT"
+          if [ "$archive_status" -ne 0 ]; then
+            echo "::warning title=Perf suite reported a failure::archive-perf-run.sh exited ${archive_status}. The archive is still uploaded; see budget-report.md inside it."
+          fi
+          if [ ! -f "tmp/perf-records/${RUN_ID}/benchmark-metrics.jsonl" ]; then
+            echo "::error title=Perf archive incomplete::Missing tmp/perf-records/${RUN_ID}/benchmark-metrics.jsonl; nothing to compare or upload."
+            exit 1
+          fi
+          tar -czf perf-record.tar.gz \
+            -C "tmp/perf-records/${RUN_ID}" \
+            benchmark-metrics.jsonl \
+            benchmark-metrics.log \
+            budget-report.md \
+            metadata.txt
+          echo "run_dir=tmp/perf-records/${RUN_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch the previous release's performance record
+        id: base
+        env:
+          TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/perf-base
+          # TAG is normalised semver (vX.Y.Z) by the validate job, so it is safe
+          # to interpolate into the jq query.
+          prev_tag="$(
+            gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --limit 20 \
+              --json tagName,isPrerelease \
+              --jq "[.[] | select(.tagName != \"${TAG}\" and (.isPrerelease | not))] | .[0].tagName // empty"
+          )"
+          if [ -z "$prev_tag" ]; then
+            echo "::warning title=No perf baseline::No earlier release found. This release becomes the first perf baseline."
+            echo "dir=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Previous release: ${prev_tag}"
+          if ! gh release download "$prev_tag" --repo "$GITHUB_REPOSITORY" \
+              --pattern 'perf-record.tar.gz' --dir tmp/perf-base --clobber; then
+            echo "::warning title=No perf baseline::${prev_tag} has no perf-record.tar.gz asset. This release becomes the baseline for the next one."
+            echo "dir=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          mkdir -p "tmp/perf-records/base-${prev_tag}"
+          tar -xzf tmp/perf-base/perf-record.tar.gz -C "tmp/perf-records/base-${prev_tag}"
+          echo "tag=${prev_tag}" >> "$GITHUB_OUTPUT"
+          echo "dir=tmp/perf-records/base-${prev_tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Compare against the previous release
+        env:
+          RUN_ID: release-${{ needs.validate.outputs.version }}
+          BASE_DIR: ${{ steps.base.outputs.dir }}
+          BASE_TAG: ${{ steps.base.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ -z "$BASE_DIR" ]; then
+            {
+              echo "# Performance comparison"
+              echo
+              echo "No previous release performance record was available, so no"
+              echo "comparison was produced. This release's archive"
+              echo "(\`perf-record.tar.gz\`) is the baseline for the next release."
+            } > perf-comparison.md
+          else
+            bash scripts/compare-perf-runs.sh \
+              --sort regression \
+              "$BASE_DIR" "tmp/perf-records/${RUN_ID}" > perf-comparison.md
+            {
+              echo "# Performance comparison: ${BASE_TAG} -> ${{ needs.validate.outputs.tag }}"
+              echo
+            } | cat - perf-comparison.md > perf-comparison.tmp
+            mv perf-comparison.tmp perf-comparison.md
+          fi
+          cat perf-comparison.md
+          cat perf-comparison.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Attach performance assets to the release
+        env:
+          TAG: ${{ needs.validate.outputs.tag }}
+        run: |
+          set -euo pipefail
+          assets=(perf-record.tar.gz)
+          if [ -f perf-comparison.md ]; then
+            assets+=(perf-comparison.md)
+          fi
+          gh release upload "$TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+
   publish_release:
     name: Publish GitHub release
     runs-on: ubuntu-22.04

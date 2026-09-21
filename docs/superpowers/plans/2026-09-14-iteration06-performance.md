@@ -4,7 +4,7 @@
 - 上位方案：[docs/roadmap-long-term.md](../../roadmap-long-term.md) §3 迭代 06
 - 前置：roadmap 迭代 01–05 全部完成；重构 P0–P4 已合入 dev，**P5 进行中**（本迭代与 P5 并行，见「并行约束」）
 - 执行模式：SDD（实现者 agent + 独立评审 agent + 台账 + 修复循环），沿用 P4 纪律
-- 状态：**待批准**
+- 状态：**进行中**（Wave 1 已落地，Wave 2 未开工；2026-09-21 复核后更新，见文末「2026-09-21 复核」）
 
 ## 背景：初稿判断已被实测修正
 
@@ -175,11 +175,74 @@ P0 修复 CI 健康度（新增，最高优先）→ Wave 1 数字出仓 → Wav
 - `tmp/perf-real-repo/` 已 git-ignore，只提交小的 manifest，多 GB 克隆留本地。
 - 修复（已进脚本）：ref 解析容错（`origin/<ref>` / `refs/tags/<ref>` 回退）；`branch_count` glob 改 `refs/remotes/origin/*`；**冲突场景需要 `conflict_merge_ref` 作为 `source.git` 的本地分支**（否则 bench clone 只带 `refs/heads/*`，worktree 里没有 `origin/stable`，`git merge origin/stable` 报 "not something we can merge"）。脚本现自动 `git branch <ref> origin/<ref>`。
 
-## T3 实施进展（2026-09-15，进行中）
+## T3 实施进展（2026-09-15 落地；2026-09-21 补完后半）
 
-README（中英双版）已新增 `## Performance` / `## 性能` 节 + 4 行场景表，单元格暂填占位 `_benchmark running_` / `_基准运行中_`。
-- 已测得两路（2026-09-15 本地，native Windows 路径 `D:/...` 否则 Rust bench 二进制不识别 Git-Bash 的 `/mnt/d/...` 虚拟路径）：
-  - `monorepo_open_and_history_load`：mean ≈ **10.76 s**（`[10.626 s 10.757 s 10.928 s]`）
-  - `deep_history_open_and_scroll`：mean ≈ **514.4 ms**（`[507.39 ms 514.42 ms 520.98 ms]`）
-- `mid_merge_conflict_list_and_open` 与 `large_file_diff_open` 待补：上一轮因 `merge_ref` 写成 `origin/stable` 导致 harness 解析失败 panic；已修正 `source.git` 本地分支 + `merge_ref` 改裸分支名 `stable`（或 `beta`，以实测冲突为准），重跑 `cargo bench ... real_repo` 取数后回填两表并 commit T3。
-- 注意：本地 Windows 跑 `cargo bench` 须 `WORKTREE_PERF_REAL_REPO_ROOT="$(pwd -W)/tmp/perf-real-repo/rust"`（native 路径）。
+### 第 1 件：README 中英双版实测表（已完成，commit `7764cb7c`）
+
+README.md / README.zh-CN.md 均新增 `## Performance` / `## 性能` 节，4 场景表已填实测数字：
+
+| 场景 | 实测 mean |
+| --- | --- |
+| `monorepo_open_and_history_load` | 8.87 s |
+| `deep_history_open_and_scroll` | 532 ms |
+| `mid_merge_conflict_list_and_open` | 15.30 s |
+| `large_file_diff_open` | 587 ms |
+
+- 已修正：原 `merge_ref` 写成 `origin/stable` 导致 harness 解析失败 panic；改裸分支名 `stable`，并在 `source.git` 里建本地分支。
+- 本地 Windows 跑 bench 必须用 native 路径：`WORKTREE_PERF_REAL_REPO_ROOT="$(pwd -W)/tmp/perf-real-repo/rust"`，Git-Bash 的 `/mnt/d/...` 虚拟路径 Rust bench 二进制不识别。
+
+### 第 2 件：release 性能对比（2026-09-21 已接线，未经 CI 实跑）
+
+`release-manual-main.yml` 新增 `perf_comparison` job，把 `scripts/compare-perf-runs.sh` 接进发布流程：
+
+1. 在自托管 perf runner 上跑 `scripts/archive-perf-run.sh --run-id release-<version> --profile full --strict`，产出本版基线。
+2. 把 `benchmark-metrics.jsonl` / `benchmark-metrics.log` / `budget-report.md` / `metadata.txt` 打包成 `perf-record.tar.gz`（**不含 criterion/ 目录**，否则资产过大）。
+3. 用 `gh release list` 找上一个 release，`gh release download --pattern perf-record.tar.gz` 拿它的资产，解包成扁平 run 目录当 base。
+4. `scripts/compare-perf-runs.sh --sort regression <base> <candidate>` 产出 `perf-comparison-<内容>.md`。
+5. `gh release upload` 把 `perf-record.tar.gz` + `perf-comparison.md` 挂到本次 release。
+
+三条设计约束（直接针对账户 Actions 额度耗尽这一现状）：
+
+- `if: vars.PERF_RUNNER != ''` → 只在自托管 runner 上跑，**不消耗 hosted 分钟**
+- `continue-on-error: true` → 性能对比失败只告警，不阻断、不回滚发布
+- `needs: [validate, create_release]`，与 `build_and_upload` 并行，不拖长发布链路
+
+首次发布若无上一版资产，会写成「本版成为首个基线」的说明而不是报错。
+
+**未验证**：CI 自 2026-09-16 起因额度问题所有 job 无法启动，本 job 从未实跑。已做的验证只有：
+- YAML 结构解析通过（job/steps/if/runs-on 均按预期）
+- 冒烟测试过 tar 打包 → 解包 → `compare-perf-runs.sh` 全链路：用两个构造的假存档跑出了 `reg 25.00%` 的对比表，确认扁平 run 目录布局能被脚本正确识别
+
+---
+
+## 2026-09-21 复核：看板与文档落后于代码
+
+本次对账发现三件事，已同步到事项看板：
+
+### 1. T0/T1/T2/T3 实际已落地，看板仍标「未开始」
+
+| 事项 | commit | 落地内容 |
+| --- | --- | --- |
+| T1 | `0ef47dfd`、`82374c82` | `scripts/generate-perf-target-manifest.sh` + `benches/performance/real_repo_target.json`（rust-lang/rust @ `a8a1e6fd`，340,056 commits / 1.4 GB） |
+| T2 | `0cb41933` | perf.yml 新增 `pull_request` 触发器 + 拆成 PR 子集 / 周全量两个 job |
+| T3-1 | `7764cb7c` | README 中英双版实测表填数 |
+
+### 2. P0「CI 停摆」的根因判断已作废，真实根因是额度耗尽
+
+- `gh api repos/dulingzhi/WorkTree/actions/permissions` → `{"enabled":true,"allowed_actions":"all"}` —— **Actions 开关已开**，原「需授权开启」这条待办不存在了。
+- 但 `actions/runs` 显示 **53 次运行 conclusion 全部 failure，0 次 success**。
+- 2026-09-16 04:18 的运行 job 还有完整 steps；**12:18 起所有 job `steps=0`、1~3 秒内 failure**，三平台一致，`runner_name` 为空 → hosted runner 根本没起来。
+- HEAD `acf6dbab` 的 commit message 本人写明「CI is down from billing」。
+- 8-26 那次的 Clippy/Rustfmt 失败早已被本地 `cargo fmt --all` 与 clippy 验证修复，那两个失败现在已不存在。
+
+修法三选一（需拍板）：等账单周期重置 / 加支付方式提额 / **转自托管 runner**（顺带解决 `PERF_RUNNER` 未配的问题）。
+
+### 3. strict 门控至今一次都没生效过
+
+`actions/variables` `total_count: 0` → `PERF_RUNNER`、`PERF_REAL_REPO_ROOT` 均未配置；`actions/runners` `total_count: 0`。因此 perf.yml 无论哪条路径都走 `--skip-missing` + `continue-on-error: true`。
+
+**T2 只能算「结构完成」，不能算「门控生效」。** 在配好自托管 perf runner 之前，「性能可证明」里的「证明」二字不成立。
+
+### 剩余工作
+
+Wave 2 全部未开工：T4 冷启动四连、T5 history cache 纵深、T6 大文件/大 diff、T7 增量 status 收尾（T7 的 index-lane 在 `crates/` 里 grep 不到任何痕迹，确认未动）。
