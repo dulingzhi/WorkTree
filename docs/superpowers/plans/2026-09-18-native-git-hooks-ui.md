@@ -177,4 +177,27 @@ UI PopoverKind::RepoHooks { repo_id } 读 model.repo_hooks 渲染：
   - **方法**：先加 `mod repo_hooks;` + enum variant，然后**一次性编译**让编译器报出全部 5 处非穷尽 match（dispatch/geometry/fingerprint×3），比逐个读文件确定位置更快更准。
   - **踩坑**：① `fingerprint` 第三个 match 的 `u8` 判别式在**同一 block 内已重复**（77 被 MergePreview 与 InteractiveRebase 复用），故选未使用的 **120u8** 避免哈希歧义；② `rows()` 初版带未使用的 `this` 参数，已移除（连同调用点）。
 
-**下一步**：Step 5（命令面板 `edit-hook` / `toggle-hook`，须入 `COMMANDS` + `REGISTERED_COMMAND_HANDLERS`，label 以 `palette.` 开头），随后 Step 7 收尾门禁。Step 6 仅剩 palette 键。
+- **Step 5** — commit `0b4db73f` `feat(hooks): add 'Manage hooks' palette command (Step 5)`（4 文件，+18）。
+  - `CommandEntry { id: "manage-hooks", label: "palette.cmd.manage-hooks", category: "palette.cat.repository", requires_repo: true }`，keywords 覆盖 `git hooks` / `pre-commit` / `pre-push` / `commit-msg`。
+  - `REGISTERED_COMMAND_HANDLERS` 同步（双向对账测试绿）；`execute_command` 臂 `open_popover_centered(PopoverKind::RepoHooks { repo_id })`，镜像 `repo-settings` / `manage-assume-unchanged`。
+  - i18n：`palette.cmd.manage-hooks` en「Manage hooks…」/ zh-CN「管理钩子…」。**Step 6 至此全部完成。**
+  - **偏差（重要，已征询式留档）**：plan 写的是两个命令 `edit-hook` / `toggle-hook`。实际合为一个 `manage-hooks`。理由：两个命令都**需要一个钩子名**，而唯一的选择器就是管理器 popover 本体；两个 palette 条目打开同一个 popover 属于死重量。若确实要按意图分两个别名，加回来成本极低（一行 `CommandEntry` + 一行 handler 表）。
+- **Step 6** — 已在 Step 4（prompts / panels / context_menu 三处 en+zh-CN）与 Step 5（palette 键）分批完成，无独立提交。
+- **Step 7（终局门禁）** — 全部通过：
+  - `cargo fmt --check` 干净。
+  - `cargo test -p worktree-core --lib` → **582 passed / 0 failed**。
+  - `cargo test -p worktree-state --lib` → **768 passed / 0 failed**。
+  - `CARGO_TARGET_DIR="C:/Users/81468/AppData/Local/Temp/gc-target" cargo check -p worktree-ui-gpui --tests` → **Finished，rc=0**。
+  - mod 审计脚本无 MISSING。
+  - ⚠️ **`cargo test -p worktree-ui-gpui --lib` → 3444 passed / 4 failed，4 个失败均为特性 5（fixup/autosquash）遗留、与钩子特性无关**：
+    - `view::panels::popover::tests::context_shortcuts::context_menu_default_actions_do_not_render_enter_shortcuts`（断言 commit 右键菜单首项是 `"Open diff"`，实际为 `"Autosquash from 01234567"`）
+    - `view::panels::tests::shortcuts::file_and_diff_context_menu_shortcuts_match_expected_actions`（Enter 快捷键 action 不符）
+    - `view::panes::main::interactive_rebase::tests::expand_folded_drops_fixups_with_dropped_survivor`
+    - `view::panes::main::interactive_rebase::tests::expand_folded_reinserts_fixups_after_survivor`
+    判定依据：4 个全部落在特性 5 域（autosquash / fixup 排序），钩子特性的 diff 从未触及 `context_menu/commit.rs` 与 interactive rebase 逻辑；且特性 5 当时的 UI 门禁只跑了 `cargo check`（CI 因 billing 停摆），UI 单测从未被验证过，故这些失败此前无人发现。**这是需要单独处理的遗留项**：要么测试过期（应更新期望），要么特性 5 把 Autosquash 顶到了 commit 菜单首位、挤掉了 Enter 的默认动作「Open diff」（那会是真实的 UX 回退）。**本特性未改动它们。**
+
+## 状态
+
+**特性 4（原生 `.git/hooks` UI）Step 1–7 全部落地完毕**（commit `3d020080` → `0740bb31` → `b2236a5e` → `efc48617` → `0b4db73f`）。功能链路完整：仓库标签右键「Manage hooks…」或命令面板「Manage hooks…」→ 打开管理器 → 列出全部钩子（标准 19 个 + 用户自定义）→ 创建（带/不带 `.sample` 模板）/ 启用禁用 / 外部编辑器编辑 / 删除，每次变更后自动重列。
+
+**遗留（不属于本特性，需单独立项）**：上述 4 个特性 5 遗留 UI 失败。
