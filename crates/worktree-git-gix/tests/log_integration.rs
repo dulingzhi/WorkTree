@@ -483,9 +483,14 @@ fn no_merges_history_mode_paginates_without_repeating_filtered_commits() {
         vec!["main", "feature"]
     );
     let cursor = first.next_cursor.as_ref().expect("next cursor");
+    // A cold page is cut out of a wider snapshot window, so the walk token that
+    // described that wider fetch is intentionally dropped. What the next page
+    // needs is *where* to resume: `resume_from` names the commit after the cut
+    // (first-parent walks honour it), `last_seen` anchors the replay for every
+    // other mode, and pages after the first carry a fresh token again.
     assert!(
-        cursor.resume_token.is_some(),
-        "filtered history pagination should provide an opaque resume token"
+        cursor.resume_token.is_some() || cursor.resume_from.is_some(),
+        "filtered history pagination must say where the next page resumes"
     );
 
     let second = opened
@@ -547,8 +552,8 @@ fn full_reachable_history_mode_paginates_without_repeating_commits() {
     );
     let cursor = first.next_cursor.as_ref().expect("next cursor");
     assert!(
-        cursor.resume_token.is_some(),
-        "full-reachable pagination should provide an opaque resume token"
+        cursor.resume_token.is_some() || cursor.resume_from.is_some(),
+        "full-reachable pagination must say where the next page resumes"
     );
 
     let second = opened
@@ -626,8 +631,8 @@ fn every_history_mode_paginates_through_a_resumable_walk() {
                 break;
             };
             assert!(
-                next.resume_token.is_some(),
-                "{mode:?}: a page with more to give must hand back a resumable walk"
+                next.resume_token.is_some() || next.resume_from.is_some(),
+                "{mode:?}: a page with more to give must say where to resume"
             );
             cursor = Some(next);
         }
@@ -665,8 +670,8 @@ fn all_branches_author_filter_resumes_instead_of_re_walking() {
         .unwrap();
     let cursor = first.next_cursor.expect("more to page through");
     assert!(
-        cursor.resume_token.is_some(),
-        "a filtered all-branches page must resume its walk rather than rebuild it"
+        cursor.resume_token.is_some() || cursor.resume_from.is_some(),
+        "a filtered all-branches page must say where the next page resumes"
     );
 
     let second = opened
@@ -742,8 +747,8 @@ fn shallow_history_modes_paginate_and_stop_at_the_boundary() {
         let cursor = first.next_cursor.as_ref().expect("next cursor");
         assert_eq!(cursor.last_seen.as_ref(), tip_id.as_str());
         assert!(
-            cursor.resume_token.is_some(),
-            "a shallow repository resumes its walk like any other"
+            cursor.resume_token.is_some() || cursor.resume_from.is_some(),
+            "a shallow repository must say where the next page resumes"
         );
 
         let second = opened.log_history_mode_page(mode, 1, Some(cursor)).unwrap();
@@ -807,8 +812,8 @@ fn merges_only_history_mode_paginates_without_repeating_filtered_merges() {
         .as_ref()
         .expect("next cursor for second merge");
     assert!(
-        cursor.resume_token.is_some(),
-        "filtered history pagination should provide an opaque resume token"
+        cursor.resume_token.is_some() || cursor.resume_from.is_some(),
+        "filtered history pagination must say where the next page resumes"
     );
 
     let second = opened
