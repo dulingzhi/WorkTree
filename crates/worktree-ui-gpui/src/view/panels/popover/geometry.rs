@@ -228,6 +228,7 @@ pub(in crate::view) fn popover_width_spec(kind: &PopoverKind) -> Option<PopoverW
         PopoverKind::UndoLastActionPrompt { .. } => Some(DIALOG_440_WIDTH),
         PopoverKind::AssumeUnchangedManager { .. } => Some(DIALOG_540_WIDTH),
         PopoverKind::Statistics { .. } => Some(DIALOG_540_WIDTH),
+        PopoverKind::RepoHooks { .. } => Some(DIALOG_540_WIDTH),
         // The explanation reads like prose, not a form; give it the wide
         // dialog so a normal paragraph wraps once, not three times.
         PopoverKind::HunkExplanation { .. } => Some(DIALOG_540_WIDTH),

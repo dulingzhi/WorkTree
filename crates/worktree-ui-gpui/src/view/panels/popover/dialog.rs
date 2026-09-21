@@ -294,6 +294,7 @@ impl PopoverHost {
                 | Some(PopoverKind::SquashPrompt { .. })
                 | Some(PopoverKind::AutosquashConfirm { .. })
                 | Some(PopoverKind::MergePreview { .. })
+                | Some(PopoverKind::RepoHooks { .. })
                 | Some(PopoverKind::PushSetUpstreamPrompt { .. })
                 | Some(PopoverKind::RepoSettingsPrompt { .. })
                 | Some(PopoverKind::Repo {

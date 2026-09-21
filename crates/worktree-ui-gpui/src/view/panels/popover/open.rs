@@ -187,6 +187,7 @@ impl PopoverHost {
             | Some(PopoverKind::SquashPrompt { .. })
             | Some(PopoverKind::AutosquashConfirm { .. })
             | Some(PopoverKind::MergePreview { .. })
+            | Some(PopoverKind::RepoHooks { .. })
             | Some(PopoverKind::CheckoutRemoteBranchPrompt { .. })
             | Some(PopoverKind::PushSetUpstreamPrompt { .. })
             | Some(PopoverKind::RepoSettingsPrompt { .. })
@@ -467,6 +468,7 @@ impl PopoverHost {
             PopoverKind::AssumeUnchangedManager { repo_id } => Some(*repo_id),
             PopoverKind::Statistics { repo_id } => Some(*repo_id),
             PopoverKind::UndoLastActionPrompt { repo_id } => Some(*repo_id),
+            PopoverKind::RepoHooks { repo_id } => Some(*repo_id),
             PopoverKind::BranchPicker { .. } => self.state.active_repo,
             _ => None,
         };
@@ -498,6 +500,14 @@ impl PopoverHost {
             if matches!(repo.statistics, Loadable::NotLoaded | Loadable::Error(_)) {
                 self.store.dispatch(Msg::LoadRepoStatistics { repo_id });
             }
+            return;
+        }
+
+        if matches!(kind, PopoverKind::RepoHooks { .. }) {
+            // Always re-scan rather than reusing a cached list: hooks are plain
+            // files under `.git/hooks` that git itself, a package manager or
+            // the user's shell can change without GitComet observing it.
+            self.store.dispatch(Msg::RequestRepoHooks { repo_id });
             return;
         }
 

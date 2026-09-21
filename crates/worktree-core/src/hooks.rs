@@ -164,6 +164,16 @@ pub fn create_hook(
     Ok(path)
 }
 
+/// Absolute path of a hook file, whether or not it currently exists.
+///
+/// The UI needs this to hand a hook script to the external editor
+/// (`Msg::OpenFileEditor`) and should never re-derive the hooks directory
+/// itself — `hooks_dir_for_workdir` carries the workdir/`.git` and bare-repo
+/// resolution rules.
+pub fn hook_path(workdir: &Path, name: &RepoHookName) -> PathBuf {
+    hooks_dir_for_workdir(workdir).join(&name.0)
+}
+
 /// Delete a hook file. Errors if it does not exist.
 pub fn delete_hook(workdir: &Path, name: &RepoHookName) -> Result<(), String> {
     let path = hooks_dir_for_workdir(workdir).join(&name.0);
@@ -306,5 +316,17 @@ mod tests {
         assert!(custom.is_some(), "user-defined hook should appear");
         let custom = custom.unwrap();
         assert!(custom.defined && custom.enabled && !custom.has_sample);
+    }
+
+    #[test]
+    fn hook_path_points_inside_the_hooks_directory() {
+        let dir = tempdir().expect("temp dir");
+        let hooks = fake_repo_hooks_dir(dir.path());
+        let name = RepoHookName::from("pre-commit");
+        let path = hook_path(dir.path(), &name);
+        assert_eq!(path, hooks.join("pre-commit"));
+        // Resolves even when the file does not exist yet — the UI asks for the
+        // path before creating the hook.
+        assert!(!path.exists());
     }
 }

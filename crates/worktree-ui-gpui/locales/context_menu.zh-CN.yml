@@ -4,6 +4,7 @@
 # time. English is the fallback, hence no `*.en.yml` companion.
 "Activate": "激活"
 "Repository settings…": "仓库设置…"
+"Manage hooks…": "管理钩子…"
 "Auto Squash": "自动压缩"
 "Add remote…": "添加远程仓库…"
 "Add submodule…": "添加子模块…"

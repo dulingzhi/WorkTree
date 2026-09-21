@@ -142,6 +142,12 @@ pub(in crate::view) enum PopoverKind {
         repo_id: RepoId,
         other: CommitId,
     },
+    /// Native `.git/hooks` manager: lists the repo's hooks and offers enable /
+    /// disable / edit / create / delete. The list is requested on open through
+    /// `Msg::RequestRepoHooks` and rendered from `repo.repo_hooks`.
+    RepoHooks {
+        repo_id: RepoId,
+    },
     CreateTagPrompt {
         repo_id: RepoId,
         target: String,

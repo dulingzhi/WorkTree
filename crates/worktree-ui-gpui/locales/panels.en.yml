@@ -96,5 +96,7 @@ panels:
     stop: "Stop"
     retry: Retry
     close: Close
+  repo_hooks:
+    close: Close
   merge_preview:
     close: Close

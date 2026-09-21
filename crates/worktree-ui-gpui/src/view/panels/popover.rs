@@ -49,6 +49,7 @@ mod remote_picker;
 mod remote_remove_confirm;
 mod remote_ssh_key_prompt;
 mod rename_branch_prompt;
+mod repo_hooks;
 mod repo_picker;
 mod repo_settings;
 mod reset_prompt;
