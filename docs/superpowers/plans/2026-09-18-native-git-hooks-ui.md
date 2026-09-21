@@ -165,4 +165,16 @@ UI PopoverKind::RepoHooks { repo_id } 读 model.repo_hooks 渲染：
   - **验证**：`cargo check -p worktree-state --tests` 通过（rc=0）；`cargo test -p worktree-state --lib` 全绿 **768 passed / 0 failed**（新增 8 个 reducer 单测：request→effect+Loading、cancel→清 Loading、set/create/delete→effect、loaded Ready/Error、unknown→NotHandled）；`cargo fmt --check` 干净。
   - **踩坑**：① 穷举 `match Effect` 有两处（分发 + `send_unavailable_git_effect_result`），后者漏加臂会编译失败；② `repo.spec().workdir` 是 `PathBuf` 字段访问（经 `&RepoSpec`），须 `.clone()`；③ `create_hook` 返回 `PathBuf`，`and_then` 闭包须绑定该值（非 `()`）；④ `RepoSpec` 不能从 `crate::model` 经 glob 再导出路径引用，单测须 `use worktree_core::domain::RepoSpec;`。
 
-**下一步**：Step 4（UI popover）`view/panels/popover/repo_hooks.rs` + `mod repo_hooks;` + `PopoverKind::RepoHooks { repo_id }` 八处注册 + 仓库菜单「Manage Hooks…」。
+- **Step 4** — commit `efc48617` `feat(hooks): add native hooks manager popover (Step 4)`（15 文件，+352）。
+  - `worktree-core/src/hooks.rs` 加 **`pub fn hook_path(workdir, name) -> PathBuf`**：编辑需绝对钩子路径，UI 不能自己重算 hooks 目录（拼目录的规则归 core 私有）。+1 单测（core hooks 累计 **9 passed**）。
+  - 新文件 `view/panels/popover/repo_hooks.rs`：读 `repo.repo_hooks`，每行 = 钩子名 + 状态标签（enabled/disabled/not_defined）+ 按钮。**已定义**行给 Disable/Enable（`Msg::SetRepoHookEnabled`）、Edit（`Msg::OpenFileEditor`，路径来自 `hook_path`）、Delete；**未定义**行只给 Create（`from_sample = has_sample`）。模板仿 `assume_unchanged_manager.rs`（列表 + 打开加载 + 每次变更后重列），非 `ConfirmDialog`。
+  - `PopoverKind::RepoHooks { repo_id }`（`host/kinds.rs`）+ 八处注册全齐：`geometry`（`DIALOG_540_WIDTH`）、`fingerprint`×3（repo id 提取 / `repo_hooks_rev` 追踪 / hash 判别式 **120u8**）、`dispatch`、`dialog::prompt_tab_navigation_enabled`、`open::dismiss_prompt_popover` 的 close 组、`open::request_lazy_popover_repo_data`（打开即 `Msg::RequestRepoHooks`）。
+  - `popover.rs` 加 `mod repo_hooks;`（已跑 mod 审计脚本，无 MISSING）。
+  - 仓库标签菜单（右键 repo tab）加「**Manage hooks…**」，紧随「Repository settings…」，复用 `ContextMenuAction::OpenPopover`。
+  - i18n：**Step 6 的绝大部分已在本步落地** —— `prompts.{en,zh-CN}.yml` 的 `repo_hooks:` 块（title/loading/empty/hint/enabled/disabled/not_defined/create/edit/delete/enable/disable）、`panels.{en,zh-CN}.yml` 的 `repo_hooks.close`、`context_menu.zh-CN.yml` 的 `"Manage hooks…"`。剩余 Step 6 只剩 Step 5 命令面板需要的 palette 键。
+  - **设计决策**：打开时**无条件重扫**（不复用 `Ready` 缓存）——钩子是 `.git/hooks` 下的普通文件，可被 git 自身 / 包管理器 / 用户在 shell 里改掉，GitComet 观察不到，缓存不可信。与 `assume_unchanged` / `statistics` 的「已加载就跳过」不同，这是刻意的。
+  - **验证**：`CARGO_TARGET_DIR="C:/Users/81468/AppData/Local/Temp/gc-target" cargo check -p worktree-ui-gpui --tests` → **`Finished`，rc=0**；mod 审计脚本无 MISSING；`cargo fmt --check` 干净。
+  - **方法**：先加 `mod repo_hooks;` + enum variant，然后**一次性编译**让编译器报出全部 5 处非穷尽 match（dispatch/geometry/fingerprint×3），比逐个读文件确定位置更快更准。
+  - **踩坑**：① `fingerprint` 第三个 match 的 `u8` 判别式在**同一 block 内已重复**（77 被 MergePreview 与 InteractiveRebase 复用），故选未使用的 **120u8** 避免哈希歧义；② `rows()` 初版带未使用的 `this` 参数，已移除（连同调用点）。
+
+**下一步**：Step 5（命令面板 `edit-hook` / `toggle-hook`，须入 `COMMANDS` + `REGISTERED_COMMAND_HANDLERS`，label 以 `palette.` 开头），随后 Step 7 收尾门禁。Step 6 仅剩 palette 键。
