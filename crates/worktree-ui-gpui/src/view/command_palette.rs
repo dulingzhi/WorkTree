@@ -281,6 +281,14 @@ pub(crate) const COMMANDS: &[CommandEntry] = &[
         requires_repo: true,
     },
     CommandEntry {
+        id: "manage-hooks",
+        label: "palette.cmd.manage-hooks",
+        shortcut: Shortcut::None,
+        category: "palette.cat.repository",
+        keywords: "git hooks pre-commit pre-push commit-msg enable disable edit scripts",
+        requires_repo: true,
+    },
+    CommandEntry {
         id: "create-pr",
         label: "palette.cmd.create-pr",
         shortcut: Shortcut::None,
@@ -688,6 +696,7 @@ pub(crate) const REGISTERED_COMMAND_HANDLERS: &[&str] = &[
     "increase-ui-scale",
     "locate-file-in-explorer",
     "manage-assume-unchanged",
+    "manage-hooks",
     "merge",
     "minimize-window",
     "new-window",

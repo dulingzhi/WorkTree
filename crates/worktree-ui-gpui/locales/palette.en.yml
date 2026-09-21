@@ -54,6 +54,7 @@ palette:
     agent-sessions: "Agent: Sessions…"
     create-pr: "Create pull request on the web…"
     repo-settings: "Repository settings…"
+    manage-hooks: "Manage hooks…"
     clear-coverage: "Clear coverage overlay"
     import-coverage-prompt: "Choose an lcov / llvm-cov export"
     coverage-imported: "Coverage imported: %{files} files, %{lines} lines%{percent} — annotated in the diff gutter"
