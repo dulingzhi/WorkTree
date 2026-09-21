@@ -2,6 +2,10 @@ use std::fs;
 #[cfg(unix)]
 use std::fs::Permissions;
 use std::io::Write;
+// `Permissions::from_mode` comes from this trait, not from `std::fs::Permissions`.
+// Without it the unix-only blocks below fail to compile on Linux CI (E0599).
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::OnceLock;

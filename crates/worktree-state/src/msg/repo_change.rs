@@ -184,9 +184,7 @@ impl RepoChange {
 
             StagePath | StagePaths | UnstagePath | UnstagePaths => RepoChange::IndexChanged,
 
-            DiscardWorktreeChangesPath { .. } | DiscardWorktreeChangesPaths { .. } => {
-                RepoChange::WorktreeChanged
-            }
+            DiscardWorktreeChangesPath | DiscardWorktreeChangesPaths => RepoChange::WorktreeChanged,
 
             Stash | ApplyStash | PopStash | DropStash | StashBranch | SetAssumeUnchanged => {
                 RepoChange::Anything

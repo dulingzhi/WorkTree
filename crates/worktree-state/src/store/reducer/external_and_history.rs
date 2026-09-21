@@ -186,10 +186,10 @@ pub(super) fn repo_externally_changed(
 
     // `git_state` core (`HeadMoved`) refreshes the branch / remote-branch lists
     // but not the worktree-dirty summary, so re-issue that one extra.
-    if change.git_state {
-        if let Some(effect) = super::loaded_results::request_worktree_dirty_effect(repo_state) {
-            effects.push(effect);
-        }
+    if change.git_state
+        && let Some(effect) = super::loaded_results::request_worktree_dirty_effect(repo_state)
+    {
+        effects.push(effect);
     }
     // Tag reloads are driven by the `tags` flag alone, independent of `git_state`.
     // A tags-only change already refreshed via the core `TagsChanged` dispatch, so

@@ -1538,7 +1538,7 @@ impl RepoState {
             None => change,
         };
         self.pending_external_change = Some(merged);
-        let previous_paths = std::mem::replace(&mut self.pending_external_paths, None);
+        let previous_paths = self.pending_external_paths.take();
         self.pending_external_paths = match (previous_paths, paths) {
             (Some(a), Some(b)) => {
                 let mut union: Vec<PathBuf> = a.iter().chain(b.iter()).cloned().collect();
@@ -1559,8 +1559,8 @@ impl RepoState {
     pub(crate) fn take_pending_external_change(
         &mut self,
     ) -> Option<(RepoExternalChange, Option<Arc<[PathBuf]>>)> {
-        let change = std::mem::replace(&mut self.pending_external_change, None);
-        let paths = std::mem::replace(&mut self.pending_external_paths, None);
+        let change = self.pending_external_change.take();
+        let paths = self.pending_external_paths.take();
         self.pending_external_rev = 0;
         change.map(|c| (c, paths))
     }

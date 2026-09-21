@@ -837,6 +837,10 @@ mod tests {
 
     #[test]
     fn git_config_global_round_trip() {
+        // `git_command()` resolves through the process-wide git runtime, which
+        // sibling tests swap out for probe scripts. Without this lock a probe
+        // can win the race and every read below comes back empty.
+        let _lock = lock_git_runtime_test();
         let dir = tempfile::tempdir().unwrap();
         let config_path = dir.path().join("gitconfig");
         fs::write(&config_path, b"").unwrap();
@@ -870,6 +874,7 @@ mod tests {
 
     #[test]
     fn git_config_global_pairs_reads_keys_in_one_pass() {
+        let _lock = lock_git_runtime_test();
         let dir = tempfile::tempdir().unwrap();
         let config_path = dir.path().join("gitconfig");
         fs::write(&config_path, b"").unwrap();

@@ -307,6 +307,11 @@ mod tests {
         assert_eq!(contents, "first\nsecond\n");
     }
 
+    // The expectation is a Windows path literal, and `PathBuf::join` on unix
+    // would append "worktree/log" with forward slashes to the verbatim
+    // `C:\State` component. The join shape is what is under test, not the
+    // separator, so keep it where the literal is meaningful.
+    #[cfg(windows)]
     #[test]
     fn log_dir_joins_worktree_log_under_the_state_base() {
         assert_eq!(
