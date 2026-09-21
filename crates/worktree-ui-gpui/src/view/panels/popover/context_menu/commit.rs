@@ -235,26 +235,6 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
         });
         items.push(ContextMenuItem::Separator);
     }
-    // "Autosquash from here" folds every fixup!/squash! commit in `base..HEAD`
-    // into its matching target commit. Hidden on HEAD (the range would be
-    // empty) and disabled while a history rewrite owns git's sequencer.
-    if !is_head_commit {
-        items.push(ContextMenuItem::Entry {
-            label: crate::i18n::t!("cm.commit.autosquash", short = short)
-                .to_string()
-                .into(),
-            icon: Some("icons/git_commit.svg".into()),
-            shortcut: None,
-            disabled: history_rewrite_disabled,
-            action: Box::new(ContextMenuAction::OpenPopover {
-                kind: PopoverKind::AutosquashConfirm {
-                    repo_id,
-                    base: sha.clone(),
-                },
-            }),
-        });
-        items.push(ContextMenuItem::Separator);
-    }
     if !is_head_commit && let Some((entries, source_colors)) = multi_cherry_pick_plan {
         let label = crate::i18n::t!("cm.commit.cherry_pick", count = entries.len())
             .to_string()
@@ -285,6 +265,29 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
             },
         }),
     });
+    // "Autosquash from here" folds every fixup!/squash! commit in `base..HEAD`
+    // into its matching target commit. Hidden on HEAD (the range would be
+    // empty) and disabled while a history rewrite owns git's sequencer.
+    //
+    // Kept *after* "Open diff" on purpose: the first entry is what Enter
+    // activates, and opening a commit's diff is far more common than rewriting
+    // its history — an autosquash kicked off by a stray Enter destroys work.
+    if !is_head_commit {
+        items.push(ContextMenuItem::Entry {
+            label: crate::i18n::t!("cm.commit.autosquash", short = short)
+                .to_string()
+                .into(),
+            icon: Some("icons/git_commit.svg".into()),
+            shortcut: None,
+            disabled: history_rewrite_disabled,
+            action: Box::new(ContextMenuAction::OpenPopover {
+                kind: PopoverKind::AutosquashConfirm {
+                    repo_id,
+                    base: sha.clone(),
+                },
+            }),
+        });
+    }
     // Bisect: while no session runs, the right-clicked commit can seed one as
     // the known-bad end (the good end is marked afterwards from another
     // commit's menu — git checks out no candidate until both ends exist).

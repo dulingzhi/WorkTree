@@ -29,15 +29,26 @@ fn entry_is_squash_target(entries: &[InteractiveRebaseEntry], ix: usize) -> bool
 /// A dropped survivor takes its folded commits with it — they are emitted as
 /// `drop` entries rather than omitted, because the executor revalidates that
 /// the planned entries cover the live range exactly.
+///
+/// The folded commits are *moved*, not copied: `entries` already carries them
+/// (in their original positions, which is what the editor shows), so emitting
+/// them twice would both break the revalidation — the planned set would no
+/// longer equal the live range — and make each one fold into whatever commit
+/// happens to sit above it there instead of into its real target, since git
+/// folds a `fixup` into the `pick` immediately preceding it.
 fn expand_folded(
     entries: &[InteractiveRebaseEntry],
     folded: &FxHashMap<String, Vec<InteractiveRebaseEntry>>,
 ) -> Vec<InteractiveRebaseEntry> {
-    let capacity = folded.values().fold(entries.len(), |len, fixups| {
-        len.saturating_add(fixups.len())
-    });
-    let mut out = Vec::with_capacity(capacity);
+    let folded_ids: Vec<&str> = folded
+        .values()
+        .flat_map(|fixups| fixups.iter().map(|f| f.commit_id.as_str()))
+        .collect();
+    let mut out = Vec::with_capacity(entries.len());
     for e in entries {
+        if folded_ids.contains(&e.commit_id.as_str()) {
+            continue;
+        }
         out.push(e.clone());
         if let Some(fixups) = folded.get(&e.commit_id) {
             let action = if e.action == InteractiveRebaseAction::Drop {
