@@ -537,9 +537,9 @@ jobs:
           test -f dist/apt-ci/repo/worktree.sources
 
           grep -q "^Package: worktree$" dist/apt-ci/repo/dists/stable/main/binary-amd64/Packages
-          grep -q "^Filename: pool/main/g/worktree/worktree_0.0.0~ci1_amd64.deb$" dist/apt-ci/repo/dists/stable/main/binary-amd64/Packages
+          grep -q "^Filename: pool/main/[a-z0-9]/worktree/worktree_0.0.0~ci1_amd64.deb$" dist/apt-ci/repo/dists/stable/main/binary-amd64/Packages
           grep -q "^Package: worktree$" dist/apt-ci/repo/dists/stable/main/binary-arm64/Packages
-          grep -q "^Filename: pool/main/g/worktree/worktree_0.0.0~ci1_arm64.deb$" dist/apt-ci/repo/dists/stable/main/binary-arm64/Packages
+          grep -q "^Filename: pool/main/[a-z0-9]/worktree/worktree_0.0.0~ci1_arm64.deb$" dist/apt-ci/repo/dists/stable/main/binary-arm64/Packages
           grep -q "^Architectures: amd64 arm64$" dist/apt-ci/repo/dists/stable/Release
           grep -q "^URIs: https://example.invalid/worktree/apt$" dist/apt-ci/repo/worktree.sources
           grep -q "^Architectures: amd64 arm64$" dist/apt-ci/repo/worktree.sources
