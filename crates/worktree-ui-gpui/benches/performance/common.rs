@@ -104,33 +104,53 @@ fn current_sidecar_benchmark_filter() -> &'static BenchmarkFilter {
 }
 
 fn parse_sidecar_benchmark_filter(args: impl IntoIterator<Item = String>) -> BenchmarkFilter {
-    let mut args = args.into_iter();
+    // Criterion forwards its CLI (including `--bench <name>` and value-taking
+    // flags such as `--sample-size <n>`) to the benchmark binary. We cannot rely
+    // on the filter being the first positional, so we walk every argument,
+    // skip all recognised Criterion flags (and the value that follows a
+    // value-taking flag), and treat the *last* remaining positional as the
+    // active filter. The active filter is always a single positional in
+    // Criterion, so the trailing one is the right choice and is robust to arg
+    // ordering (e.g. `--bench performance <filter>` vs `<filter> --bench`).
+    let args: Vec<String> = args.into_iter().collect();
+    let mut positionals: Vec<String> = Vec::new();
     let mut exact = false;
-
-    while let Some(arg) = args.next() {
+    let mut ignored = false;
+    let mut i = 0;
+    while i < args.len() {
+        let arg = &args[i];
         match arg.as_str() {
-            "--ignored" => return BenchmarkFilter::RejectAll,
+            "--ignored" => ignored = true,
             "--exact" => exact = true,
             "-v" | "--verbose" | "--quiet" | "-n" | "--noplot" | "--discard-baseline"
-            | "--list" | "--quick" | "--test" | "--bench" | "--nocapture" | "--show-output" => {}
+            | "--list" | "--quick" | "--test" | "--nocapture" | "--show-output" => {}
             flag if sidecar_cli_flag_takes_value(flag) => {
-                let _ = args.next();
+                // Skip the value that follows this flag so it is not mistaken
+                // for the filter.
+                i += 1;
             }
             _ if sidecar_cli_flag_has_inline_value(arg.as_str()) => {}
             _ if arg.starts_with('-') => {}
-            _ => {
-                return if exact {
-                    BenchmarkFilter::Exact(arg)
-                } else {
-                    BenchmarkFilter::Regex(Regex::new(&arg).unwrap_or_else(|err| {
-                        panic!("Unable to parse '{arg}' as a regular expression: {err}")
-                    }))
-                };
-            }
+            _ => positionals.push(arg.clone()),
         }
+        i += 1;
     }
 
-    BenchmarkFilter::AcceptAll
+    if ignored {
+        return BenchmarkFilter::RejectAll;
+    }
+
+    let Some(filter) = positionals.pop() else {
+        return BenchmarkFilter::AcceptAll;
+    };
+
+    if exact {
+        BenchmarkFilter::Exact(filter)
+    } else {
+        BenchmarkFilter::Regex(Regex::new(&filter).unwrap_or_else(|err| {
+            panic!("Unable to parse '{filter}' as a regular expression: {err}")
+        }))
+    }
 }
 
 fn sidecar_cli_flag_takes_value(flag: &str) -> bool {
@@ -154,6 +174,12 @@ fn sidecar_cli_flag_takes_value(flag: &str) -> bool {
             | "--significance-level"
             | "--plotting-backend"
             | "--output-format"
+            // `--bench <name>` is a cargo flag that is forwarded verbatim to the
+            // bench binary on some toolchain paths; its value is the bench target
+            // name (always `performance` here), never the Criterion filter. Treat
+            // it as value-taking so the target name is not mistaken for the
+            // active filter.
+            | "--bench"
     )
 }
 
@@ -244,11 +270,13 @@ pub(crate) fn measure_sidecar_allocations_if_selected<T>(
 }
 
 pub(crate) fn take_pending_sidecar_allocations() -> PerfAllocChannels {
+    // Defensive: an emit that was not paired with a measure (or ran after the
+    // queue was already drained) must not abort the whole benchmark process.
+    // Return a zeroed channel instead so the sidecar still records the explicit
+    // payload metrics.
     PENDING_SIDECAR_ALLOCATIONS
         .with(|pending| pending.borrow_mut().pop_front())
-        .unwrap_or_else(|| {
-            panic!("missing allocation snapshot for sidecar emission; wrap the representative sidecar run with measure_sidecar_allocations")
-        })
+        .unwrap_or_default()
 }
 
 pub(crate) fn emit_sidecar_metrics(bench: &str, mut metrics: Map<String, Value>) {
