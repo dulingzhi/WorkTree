@@ -88,8 +88,43 @@ P5「split remaining」正在 `p5-split-remaining` 分支上跑（45 提交）�
 - 需先补档位基准（现有合成档位未覆盖"超大单文件"），否则无法证明改善。
 
 **T7 增量 status 收尾** `S`
-- `.git/index` 事件走 index-lane 定向（现 index 变更一律全量双道）
-- watcher pathspec 对齐大小写不敏感文件系统（macOS 默认）的路径形态
+- ~~`.git/index` 事件走 index-lane 定向（现 index 变更一律全量双道）~~ → **2026-09-21 复核：不做，见下**
+- watcher pathspec 对齐大小写不敏感文件系统（macOS 默认）的路径形态 → **2026-09-21 已做**
+
+#### 2026-09-21 复核：子项 1 证伪，子项 2 落地
+
+**子项 1「`.git/index` 事件走 index-lane 定向」——不做。** 三条证据：
+
+1. **动作路径已经走了定向**：app 自发的 stage/unstage 由 `repo_externally_changed` 之外的
+   `repo_action_finished` 处理，成功时把 `RepoPathList` 作为 `incremental` 传给
+   `dispatch_repo_change`，走 `LoadStatusForPaths`。「index 变更一律全量」不成立。
+2. **剩下的口子是外部 `.git/index` 事件，而它没有路径源**：`classify_repo_event`
+   经 `is_git_index_path` 只产出 `RepoExternalChange::Index`，不带任何 worktree 路径。
+   没有路径就无法构造 pathspec，`LoadStatusForPaths` 无从发出。
+3. **原设想的替代改法（只刷 staged lane）被回归测试明确禁止**：
+   `crates/worktree-state/src/store/tests/external_and_history.rs`
+   的 `external_index_change_must_not_refresh_only_the_staged_lane` 记录了它曾经的行为——
+   index 变更只发 `[LoadStagedStatus]`，结果一个被移动的文件在 unstaged 区残留为陈旧条目。
+   `set_staged_status` 只写 `staged_status`，`worktree_status_entries()` 命中 `Ready` 就直接返回旧值。
+
+   想从「上一份 settled 快照的 staged ∪ unstaged 路径」反推候选集也不成立：一个此前完全干净、
+   被 `git update-index --add` 直接写进索引的文件不在任何一个旧集合里，定向刷新会漏掉它。
+   引入一次额外的索引读取来补这个洞，已经不是 S 号工作量。
+
+   结论：外部 index 事件保持全量 `LoadStatus`。它本来就是**一条** `git status` 同时覆盖两条 lane，
+   计划里「全量双道」的说法高估了成本。
+
+**子项 2「watcher pathspec 对齐大小写不敏感文件系统」——已做。** 真实缺陷在
+`repo_monitor.rs` 的 `relativize_paths`：它用 `Path::strip_prefix` 做**字节**前缀比较，
+而 canonicalize 过的 `workdir` 与 watcher 报上来的路径在大小写不敏感的文件系统
+（macOS APFS/HFS+ 默认、Windows NTFS）上可以只差大小写，在 Windows 上还可以差
+`\\?\` verbatim 前缀。任一不匹配就让整条路径集被丢弃 → 定向刷新静默退化成全量 worktree 走查。
+新增 `strip_workdir_prefix`：先走字节快路径，失败后退化为逐组件比较，按平台折叠大小写
+（仅 macOS/Windows；Linux 上 `/REPO/a` 与 `/repo/a` 是两个文件，不能折叠）并忽略
+verbatim 前缀差异。仍然对真正落在 workdir 之外的路径返回 `None`——那必须退回粗扫。
+4 个单测锁定：字节匹配、越界拒绝（含 `repo` vs `repo2` 的前缀陷阱）、大小写折叠、verbatim 前缀。
+
+> 注：大小写折叠只在 macOS/Windows 编译，CI 的 Linux 腿跑不到这一支；本地 Windows 已验证。
 
 ## 验证
 

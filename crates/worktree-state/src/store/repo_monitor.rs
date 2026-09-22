@@ -6,7 +6,7 @@ use notify::{Config as NotifyConfig, RecommendedWatcher, RecursiveMode, Watcher}
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::any::Any;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc;
@@ -932,7 +932,7 @@ fn repo_monitor_thread(
         paths.and_then(|paths| {
             let relative: Option<Vec<PathBuf>> = paths
                 .iter()
-                .map(|p| p.strip_prefix(&workdir).ok().map(Path::to_path_buf))
+                .map(|p| strip_workdir_prefix(&workdir, p))
                 .collect();
             relative.map(|mut relative| {
                 relative.retain(|p| !p.as_os_str().is_empty());
@@ -1757,6 +1757,109 @@ fn is_git_index_lock_path(workdir: &Path, git_dir: Option<&Path>, path: &Path) -
     }
 
     false
+}
+
+/// Strip `workdir` off the front of a watcher-reported `path`.
+///
+/// Tolerates the two shapes a case-insensitive filesystem lets a watcher hand
+/// back: the path can differ in *case* from the canonicalized `workdir`
+/// (macOS APFS / HFS+ and Windows NTFS fold case on lookup), and on Windows the
+/// canonicalized form carries a `\\?\` verbatim prefix the watcher never uses.
+/// Both name the same file, but `Path::strip_prefix` compares bytes, so either
+/// difference fails — and `relativize_paths` drops the whole set on the first
+/// failure, silently demoting every targeted refresh on those platforms to a
+/// full worktree walk.
+///
+/// Still returns `None` for a path genuinely outside `workdir`: such a path
+/// cannot be named in a pathspec, so the caller has to fall back to the coarse
+/// scan rather than refresh a lane it cannot prove it covered.
+fn strip_workdir_prefix(workdir: &Path, path: &Path) -> Option<PathBuf> {
+    if let Ok(relative) = path.strip_prefix(workdir) {
+        return (!relative.as_os_str().is_empty()).then_some(relative.to_path_buf());
+    }
+    let mut expected_rest = workdir.components().peekable();
+    let mut actual_rest = path.components().peekable();
+    loop {
+        match (expected_rest.peek().copied(), actual_rest.peek().copied()) {
+            (None, _) => break,
+            // A root carries no name, and a `\\?\` verbatim path has none at
+            // all while the plain form does — so neither side's root has
+            // anything to match against the other's.
+            (Some(Component::RootDir), _) => {
+                expected_rest.next();
+            }
+            (Some(expected), Some(Component::RootDir)) if expected != Component::RootDir => {
+                actual_rest.next();
+            }
+            (Some(expected), Some(actual)) => {
+                if !components_match(expected, actual) {
+                    return None;
+                }
+                expected_rest.next();
+                actual_rest.next();
+            }
+            (Some(_), None) => return None,
+        }
+    }
+    let mut relative = PathBuf::new();
+    for component in actual_rest {
+        relative.push(component);
+    }
+    // A path that only *equals* the workdir leaves nothing to target.
+    (!relative.as_os_str().is_empty()).then_some(relative)
+}
+
+fn components_match(expected: Component<'_>, actual: Component<'_>) -> bool {
+    match (expected, actual) {
+        (Component::Prefix(expected), Component::Prefix(actual)) => {
+            prefix_matches(expected, actual)
+        }
+        (Component::Normal(expected), Component::Normal(actual)) => {
+            if expected == actual {
+                return true;
+            }
+            // Only a case-insensitive filesystem can hand back a differently
+            // cased spelling of the same name; on a case-sensitive one
+            // `/REPO/a` and `/repo/a` are two different files, and folding
+            // them would target a path the worktree does not contain.
+            cfg!(any(target_os = "macos", target_os = "windows"))
+                && expected
+                    .as_encoded_bytes()
+                    .eq_ignore_ascii_case(actual.as_encoded_bytes())
+        }
+        (expected, actual) => expected == actual,
+    }
+}
+
+#[cfg(windows)]
+fn prefix_matches(
+    expected: std::path::PrefixComponent<'_>,
+    actual: std::path::PrefixComponent<'_>,
+) -> bool {
+    use std::path::Prefix;
+    // `canonicalize` hands back a `\\?\` verbatim prefix while a watcher
+    // reports the plain form; both name the same volume.
+    match (unverbatim(expected.kind()), unverbatim(actual.kind())) {
+        (Prefix::Disk(expected), Prefix::Disk(actual)) => expected.eq_ignore_ascii_case(&actual),
+        (expected, actual) => expected == actual,
+    }
+}
+
+#[cfg(windows)]
+fn unverbatim(prefix: std::path::Prefix<'_>) -> std::path::Prefix<'_> {
+    use std::path::Prefix;
+    match prefix {
+        Prefix::VerbatimDisk(drive) => Prefix::Disk(drive),
+        other => other,
+    }
+}
+
+#[cfg(not(windows))]
+fn prefix_matches(
+    expected: std::path::PrefixComponent<'_>,
+    actual: std::path::PrefixComponent<'_>,
+) -> bool {
+    expected.as_os_str() == actual.as_os_str()
 }
 
 fn is_git_tags_path(workdir: &Path, git_dir: Option<&Path>, path: &Path) -> bool {
@@ -3220,6 +3323,83 @@ mod tests {
             attrs: Default::default(),
         };
         assert_eq!(path_dir_hint(&remove_any), None);
+    }
+
+    // A workdir built through `join` so the tests carry the platform's own
+    // separator instead of a hardcoded one.
+    fn test_workdir(name: &str) -> PathBuf {
+        #[cfg(windows)]
+        {
+            PathBuf::from(r"C:\").join(name)
+        }
+        #[cfg(not(windows))]
+        {
+            PathBuf::from("/").join(name)
+        }
+    }
+
+    #[test]
+    fn strip_workdir_prefix_keeps_an_exact_match_byte_for_byte() {
+        let workdir = test_workdir("repo");
+        assert_eq!(
+            strip_workdir_prefix(&workdir, &workdir.join("src").join("main.rs")),
+            Some(PathBuf::from("src").join("main.rs"))
+        );
+        assert_eq!(
+            strip_workdir_prefix(&workdir, &workdir),
+            None,
+            "the workdir itself names no path a refresh can target"
+        );
+    }
+
+    #[test]
+    fn strip_workdir_prefix_refuses_a_path_outside_the_workdir() {
+        let workdir = test_workdir("repo");
+        assert_eq!(
+            strip_workdir_prefix(&workdir, &test_workdir("other").join("src").join("main.rs")),
+            None,
+            "a sibling directory is outside the workdir"
+        );
+        assert_eq!(
+            strip_workdir_prefix(&workdir, &test_workdir("repo2").join("src").join("main.rs")),
+            None,
+            "a longer name sharing the workdir's prefix is a different directory"
+        );
+        assert_eq!(
+            strip_workdir_prefix(&workdir, &test_workdir("re")),
+            None,
+            "a shorter name must not match a prefix of it"
+        );
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[test]
+    fn strip_workdir_prefix_folds_case_like_a_case_insensitive_filesystem() {
+        // Spelled with a differently cased workdir so the byte-exact
+        // `strip_prefix` fast path is the one that fails: a case-insensitive
+        // filesystem lets the watcher report a spelling that names the same
+        // directory, and a byte comparison would demote every targeted refresh
+        // on those platforms to a full worktree walk.
+        let workdir = test_workdir("repo");
+        let reported = test_workdir("REPO").join("src").join("main.rs");
+        assert_eq!(
+            strip_workdir_prefix(&workdir, &reported),
+            Some(PathBuf::from("src").join("main.rs")),
+            "a differently cased workdir spelling names the same directory"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn strip_workdir_prefix_matches_a_verbatim_prefix_with_the_plain_form() {
+        // `canonicalize` hands the monitor thread a `\\?\` workdir while the
+        // watcher reports the plain form; both name the same volume.
+        let workdir = PathBuf::from(r"\\?\C:\repo");
+        let reported = PathBuf::from(r"C:\repo\src\main.rs");
+        assert_eq!(
+            strip_workdir_prefix(&workdir, &reported),
+            Some(PathBuf::from("src").join("main.rs"))
+        );
     }
 
     #[test]
