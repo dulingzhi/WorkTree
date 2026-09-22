@@ -33,13 +33,13 @@
 - 不做 UI 行为变更（本迭代不引入任何用户可见功能）
 - 不追求全仓库性能翻番——先拿能对外承诺的数字，再谈优化
 
-## 并行约束（与 P5 的边界）
+## 并行约束（与 P5 的边界）—— 2026-09-22 作废
 
-P5「split remaining」正在 `p5-split-remaining` 分支上跑（45 提交），dev 已合 2 件。两者同改 UI crate 的概率高：
+**P5「split remaining」已于 2026-09-22 取消，分支 `p5-split-remaining` 已删除。** 原「T4/T5/T6 会与 P5 抢文件」的前提不再成立，Wave 2 三大任务（冷启动 / history cache 纵深 / 大 diff 专项）**全面解锁**，可自由改动 `view/`、`git-gix/repo/`，无需再等收口或做文件级避让。
 
-- **T1/T2/T3**（CI 与文档）几乎不碰 `worktree-ui-gpui/src` → **与 P5 无冲突，可先行**
-- **T4/T5/T6**（冷启动、history cache、大 diff）会碰 `view/`、`git-gix/repo/` → **等 P5 收口或与其协商文件级避让**
-- 建议顺序：T0 → T1/T2/T3 → （P5 收口）→ T4/T5/T6/T7
+- T1/T2/T3（CI 与文档）已落地，无影响。
+- 建议顺序（修订）：T0/T1/T2/T3/T7 已完成 → **T6（先补档位基准，再做大 diff 虚拟化）→ T4 冷启动 → T5 history cache 纵深**。三者相互独立，T6 的档位基准是 T6 自身测量的前置。
+- 取舍记录：取消 P5 意味着保留当前模块结构（不再做剩余拆分降耦）。若日后耦合成为瓶颈，那是独立决策，不属于迭代 06。
 
 ## 任务波次
 
@@ -155,7 +155,7 @@ verbatim 前缀差异。仍然对真正落在 workdir 之外的路径返回 `Non
 
 | 风险 | 缓解 |
 |---|---|
-| P5 与 T4/T5/T6 同改 UI crate 引发冲突 | Wave 1 先行；Wave 2 等 P5 收口或文件级避让 |
+| ~~P5 与 T4/T5/T6 同改 UI crate 引发冲突~~ | **P5 已取消（分支删除），此风险消除**；Wave 2 可直接开工 |
 | 共享 runner 噪声导致门控误报 | PR 门控只跑轻量子集 + 容忍带；对外数字走固定靶子 |
 | 真实靶子仓库过大导致 CI 时间不可控 | 靶子仅用于周调度/对外发布，不进 PR 门控 |
 | 优化引入行为回归 | 每优化项独立 PR；退化即回滚并记入台账 |
@@ -311,3 +311,30 @@ Wave 2 全部未开工：T4 冷启动四连、T5 history cache 纵深、T6 大�
 - **残留风险**：hosted 共享 runner 数字有噪声，44 个合成预算的夜间严格门控偶发误报；`real_repo/*` 组（对外的「性能可证明」核心数字）仍只在专用 runner 上才有。要消除这两项，仍需接入自托管 perf runner 并配置 `PERF_REAL_REPO_ROOT`——但那已从「门控前提」降级为「数字精度增强」。
 - **2026-09-22 修正（follow-up commit）**：初版 hosted 回退用了 `--strict --skip-prefix real_repo/`（漏了 `--skip-missing`），会使 186 条未被 44 bench 覆盖的非 real_repo 预算全部 Alert → 门控假红。已改为 `--strict --skip-missing --skip-prefix real_repo/`。本地空 criterion 根验证：旧参数 `exit=2` / 977 行 ALERT；新参数 `exit=0` / 977 行 SKIP。CI 尚未重跑（hosted runner）。
 - 验证：`cargo test -p worktree-ui-gpui --bin perf_budget_report` 单测通过（`--skip-prefix` 解析 + 既有预算评估用例）；YAML 结构与既有条件式对齐。
+
+## 2026-09-22（2）P5 取消 · Wave 2 重规划
+
+P5 取消后，迭代 06 只剩 Wave 2（T4/T5/T6）未开工。原「剩余工作」（含 T7 未动）已过时：T7（增量 status 收尾）已于 `dcec618d` 落地（大小写不敏感文件系统路径对齐），故 T7 已从剩余清单移除。
+
+### 修订后任务清单（Wave 2）
+
+| 任务 | 量级 | 前置 | 范围 / 验收 |
+|---|---|---|---|
+| **T6 档位基准 + 大 diff 专项** | M | 无（立即开工） | ① 补合成档位：>10MB 单文件 diff、>5万行 diff（现有合成档位未覆盖，否则无法证明改善）；进 `benches/performance/` 夹具 + `budgets/` 预算规格，纯新增无冲突。② 对这两类做虚拟化 + 增量解码。验收：`perf_budget_report` 列出新预算且能产出 criterion 产物；大 diff 打开不再卡顿（与基线同表对比） |
+| **T4 冷启动四连优化** | M | P6-D3 决策 | 移植 C# 已验证四项：跳过冷启动探测、重活离 UI 线程、恢复 tab 不实例化全部仓库（第四项审计后定）。基线先测 `perf-app-launch` 的 `app_launch/cold_*`，不预设目标。验收：优化后数字与基线同表对比，退化即回滚 |
+| **T5 history cache 纵深** | M | P6-D4 决策 | 把已落地的 ref-fingerprint 磁盘缓存（log 域）扩展到 blame / reflog / 提交搜索；失效策略（ref 指纹 + LRU + 磁盘上限）；设置页手动清理入口（local-first：路径对用户可见可控）；缓存命中率指标进 `perf_budget_report`。验收：扩展域命中率可测、清理入口可用、越界受预算约束 |
+
+### 待拍板的决策（原决策点更新）
+
+- **P6-D1（自托管 runner）—— 2026-09-22 已定：用 GitHub Actions（仓库已 public，hosted runner 免费）**：不投入自托管 runner。real_repo/* 组严格门控顺延（hosted runner 不 checkout 巨型仓库，该组按缺失跳过）；T4/T5 基线靠本地 Windows 跑 `perf-app-launch` / 缓存命中率观测，或顺延到日后有专用 runner。对外「性能可证明」核心数字仍来自固定靶子 `rust-lang/rust` 的本地/周调度测量。
+- **P6-D3（T4 行为边界）**：「跳过冷启动探测」会改变启动时的信息完整度——接受？还是只做不损失信息的三项？开工 T4 前必须定。
+- **P6-D4（T5 默认开关 + 磁盘上限）**：缓存默认开还是关？磁盘上限多少（local-first 原则倾向默认开 + 可清理）？开工 T5 前必须定。
+
+### 执行顺序建议
+
+T6 档位基准（纯新增、零冲突、解锁测量）→ T4（用户体感最强，但基线依赖能跑 `perf-app-launch`，见 D1/D3）→ T5（深度最大）。三者可并行开发，但每项独立 PR、退化即回滚（沿用 P4 纪律）。
+
+### 不在迭代 06 范围
+
+- **T-F（directory-diff）**：计划显式顺延（deferred），属 directory-diff 轨道，非性能迭代。P5 冻结 GitRepositoryDiff trait 的约束随 P5 取消而失效；如想重启 T-F 另行规划。
+- P5 自身不再有任务。
