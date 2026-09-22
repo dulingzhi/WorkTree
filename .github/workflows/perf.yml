@@ -186,7 +186,23 @@ jobs:
         if [ -z "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]; then
           echo "::warning title=Missing compositor environment::No DISPLAY or WAYLAND_DISPLAY is set. app_launch/* may fail on this runner unless the compositor is provisioned out-of-band."
         fi
-    - name: Run full benchmark suite
+    # Hosted fallback (public repo, free Linux runners): run the synthetic
+    # subset only — `real_repo/*` budgets and the app_launch/idle harnesses need a
+    # dedicated runner with a checked-out target repo or a compositor, and would
+    # fail or error here. Benches are best-effort (`continue-on-error`) so a
+    # single flaky bench does not suppress the strict report that follows.
+    - name: Run synthetic benchmark subset (hosted fallback)
+      if: vars.PERF_RUNNER == ''
+      continue-on-error: true
+      env:
+        WORKTREE_PERF_REAL_REPO_ROOT: ${{ vars.PERF_REAL_REPO_ROOT }}
+      run: |
+        scripts/perf-bench-list.sh | while IFS= read -r bench; do
+          [ -z "$bench" ] && continue
+          cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- "$bench" || true
+        done
+    - name: Run full benchmark suite (dedicated runner)
+      if: vars.PERF_RUNNER != ''
       env:
         WORKTREE_PERF_REAL_REPO_ROOT: ${{ vars.PERF_REAL_REPO_ROOT }}
       run: cargo bench -p worktree-ui-gpui --features benchmarks --bench performance
@@ -208,12 +224,12 @@ jobs:
         cargo run -p worktree --bin perf-app-launch -- --bench 'app_launch/cold_twenty_repos'
         cargo run -p worktree --bin perf-app-launch -- --bench 'app_launch/warm_single_repo'
         cargo run -p worktree --bin perf-app-launch -- --bench 'app_launch/warm_twenty_repos'
-    - name: Emit budget report (strict on dedicated runner, alerting on shared)
+    - name: Emit budget report (strict; real_repo skipped on shared runner)
       run: |
         if [ -n "${{ vars.PERF_RUNNER }}" ]; then
-          echo "::notice::Running in strict mode on dedicated runner (${{ vars.PERF_RUNNER }}) with real-repo snapshots from ${{ vars.PERF_REAL_REPO_ROOT }}"
+          echo "::notice::Running strict mode on dedicated runner (${{ vars.PERF_RUNNER }}) with real-repo snapshots from ${{ vars.PERF_REAL_REPO_ROOT }}"
           cargo run -p worktree-ui-gpui --bin perf_budget_report -- --criterion-root target/criterion --strict
         else
-          echo "::notice::Running in alerting mode on shared runner (ubuntu-22.04) — numbers are noisy"
-          cargo run -p worktree-ui-gpui --bin perf_budget_report -- --criterion-root target/criterion --skip-missing
+          echo "::notice::Running strict mode on shared runner (ubuntu-22.04), skipping the real_repo nightly-only set (needs a dedicated runner + PERF_REAL_REPO_ROOT) — numbers are noisier than a dedicated runner would give"
+          cargo run -p worktree-ui-gpui --bin perf_budget_report -- --criterion-root target/criterion --strict --skip-prefix real_repo/
         fi

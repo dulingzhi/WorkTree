@@ -51,6 +51,26 @@ fn evaluate_budget_skips_when_estimate_file_is_missing_and_skip_missing() {
 }
 
 #[test]
+fn parse_cli_args_collects_repeatable_skip_prefixes() {
+    let (kind, cli) = parse_cli_args(
+        [
+            "--skip-prefix",
+            "real_repo/",
+            "--skip-prefix",
+            "app_launch/",
+        ]
+        .iter()
+        .map(|s| s.to_string()),
+    )
+    .expect("args should parse");
+    assert_eq!(kind, CliParseResult::Run);
+    assert_eq!(
+        cli.skip_prefixes,
+        vec!["real_repo/".to_string(), "app_launch/".to_string()]
+    );
+}
+
+#[test]
 fn evaluate_structural_budget_skips_when_sidecar_missing_and_skip_missing() {
     let temp_dir = TempDir::new().expect("tempdir");
     let roots = vec![temp_dir.path().to_path_buf()];

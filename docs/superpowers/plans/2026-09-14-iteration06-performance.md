@@ -281,3 +281,30 @@ README.md / README.zh-CN.md 均新增 `## Performance` / `## 性能` 节，4 场
 ### 剩余工作
 
 Wave 2 全部未开工：T4 冷启动四连、T5 history cache 纵深、T6 大文件/大 diff、T7 增量 status 收尾（T7 的 index-lane 在 `crates/` 里 grep 不到任何痕迹，确认未动）。
+
+## 2026-09-22 复核：strict 门控在免费 hosted runner 上落地（T0 收口）
+
+仓库已转 **public**（见 P0 复盘）→ GitHub-hosted runner 对公开仓库免费，原「额度耗尽」阻塞消失。借此把严格门控真正接上线，不再依赖用户手动去 Settings 点变量。
+
+### 改动（commit 待提交）
+
+1. **`perf_budget_report` 新增 `--skip-prefix`**（可重复）。`run_report` 在评估前按 `label`（timing）/ `bench`（structural）前缀过滤，被匹配的预算**整体跳过**（不计入 Skipped/Alert，也不计入告警门禁）。单测 `parse_cli_args_collects_repeatable_skip_prefixes` 覆盖解析。
+2. **`scripts/perf-bench-list.sh`**：抽出 PR subset 的合成 bench id 清单（与 perf.yml 中 PR subset 完全一致），供 hosted 回退路径复用。刻意排除 `real_repo/*`（需要 checked-out 巨型仓库）与 `app_launch/*` / `idle/*` harness（需要 compositor）。
+3. **`perf.yml` 的 `performance-budgets-full` job**：
+   - bench 步骤拆成两条：`vars.PERF_RUNNER == ''` 时跑合成子集（`perf-bench-list.sh`，`continue-on-error: true` 防单 bench 抖动压垮报告）；`!= ''` 时跑全量（含 real_repo）。
+   - 预算报告步骤：专用 runner 仍 `--strict`（全量，含 real_repo）；hosted 回退从 `--skip-missing` **改为 `--strict --skip-prefix real_repo/`** —— 即严格门控现在在每周 `schedule` + 手动 full 上**真实运行**，只跳过跑不起来的 nightly-only 真实靶子组。
+
+### 现在的门控语义
+
+| 路径 | runs-on | 跑的 bench | 报告模式 | 门禁 |
+|---|---|---|---|---|
+| `performance-budgets`（PR subset） | ubuntu-22.04 | 合成子集 | `--skip-missing`（轻量信号） | 容忍，不阻断 |
+| `performance-budgets-full` / 未配 PERF_RUNNER | ubuntu-22.04（免费） | 合成子集 | `--strict --skip-prefix real_repo/` | **真严格，含合成预算** |
+| `performance-budgets-full` / 配了 PERF_RUNNER+PERF_REAL_REPO_ROOT | 专用 runner | 全量含 real_repo | `--strict` | **真严格，全预算** |
+
+### 结论更新（推翻原「B 极端版 / 门控从未生效」）
+
+- 「strict 从未生效」**已不成立**：免费 hosted runner 上，合成预算的严格门控现在每周真实跑。
+- `PERF_RUNNER` / `PERF_REAL_REPO_ROOT` 两个仓库变量**仍可配可不配**：不配 → 合成预算真严格 + real_repo 组跳过；配了 → real_repo 组也纳入严格门控（需要专用 runner 能 checkout 巨型仓库）。
+- **残留风险**：hosted 共享 runner 数字有噪声，合成预算的夜间严格门控偶发误报；`real_repo/*` 组（对外的「性能可证明」核心数字）仍只在专用 runner 上才有。要消除这两项，仍需接入自托管 perf runner 并配置 `PERF_REAL_REPO_ROOT`——但那已从「门控前提」降级为「数字精度增强」。
+- 验证：`cargo test -p worktree-ui-gpui --bin perf_budget_report` 单测通过（`--skip-prefix` 解析 + 既有预算评估用例）；YAML 结构与既有条件式对齐，未实跑 CI。

@@ -101,6 +101,12 @@ pub(crate) struct CliArgs {
     /// Optional freshness gate. Artifacts older than this file's mtime are
     /// treated like missing data.
     pub(crate) fresh_reference: Option<PathBuf>,
+    /// Budgets whose label (timing) or bench (structural) starts with any of
+    /// these prefixes are omitted from evaluation entirely — used to keep the
+    /// shared-runner strict gate focused on budgets it can actually produce
+    /// (e.g. skip the `real_repo/` nightly-only set that needs a dedicated
+    /// runner with a checked-out target repository).
+    pub(crate) skip_prefixes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]

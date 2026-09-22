@@ -51,8 +51,17 @@ fn run_report(cli: CliArgs) -> Result<(), String> {
         .as_deref()
         .map(load_artifact_freshness_reference)
         .transpose()?;
+    let skip = |id: &str| {
+        cli.skip_prefixes
+            .iter()
+            .any(|prefix| id.starts_with(prefix.as_str()))
+    };
     let mut timing_results = Vec::with_capacity(PERF_BUDGETS.len());
-    for spec in PERF_BUDGETS.iter().copied() {
+    for spec in PERF_BUDGETS
+        .iter()
+        .copied()
+        .filter(|spec| !skip(spec.label))
+    {
         timing_results.push(evaluate_budget(
             spec,
             &cli.criterion_roots,
@@ -61,7 +70,11 @@ fn run_report(cli: CliArgs) -> Result<(), String> {
         ));
     }
     let mut structural_results = Vec::with_capacity(STRUCTURAL_BUDGETS.len());
-    for spec in STRUCTURAL_BUDGETS.iter().copied() {
+    for spec in STRUCTURAL_BUDGETS
+        .iter()
+        .copied()
+        .filter(|spec| !skip(spec.bench))
+    {
         structural_results.push(evaluate_structural_budget(
             spec,
             &cli.criterion_roots,

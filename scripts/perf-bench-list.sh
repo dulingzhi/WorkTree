@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Synthetic benchmark ids covered by the hosted-runner strict gate and the PR
+# subset. `real_repo/*` structural budgets and the `app_launch/*` / `idle/*`
+# harnesses are intentionally excluded: they need either a dedicated runner with
+# a checked-out target repository or a compositor, and are only evaluated on the
+# dedicated perf-runner path (PERF_RUNNER + PERF_REAL_REPO_ROOT configured).
+#
+# One id per line; consumer pipes this into `cargo bench --bench performance --`.
+set -euo pipefail
+
+cat <<'BENCH'
+conflict_three_way_scroll/style_window
+conflict_two_way_split_scroll/window_200
+conflict_search_query_update/window/200
+conflict_split_resize_step/window/200
+markdown_preview_parse_build/single_document/medium
+markdown_preview_parse_build/two_sided_diff/medium
+markdown_preview_render_single/window_rows/200
+markdown_preview_render_diff/window_rows/200
+open_repo/balanced
+history_cache_build/balanced
+branch_sidebar/cache_hit_balanced
+branch_sidebar/20k_branches_100_remotes
+branch_sidebar/cache_invalidation_worktrees_ready
+commit_details/many_files
+commit_details/large_message_body
+repo_switch/refocus_same_repo
+repo_switch/two_hot_repos
+repo_switch/selected_commit_and_details
+repo_switch/twenty_tabs
+repo_switch/selected_diff_file
+repo_switch/selected_conflict_target
+repo_switch/merge_active_with_draft_restore
+status_list/unstaged_large
+diff_open_patch_first_window/200
+diff_open_file_split_first_window/200
+diff_open_file_inline_first_window/200
+diff_open_image_preview_first_paint
+diff_open_patch_deep_window_90pct/200
+diff_refresh_rev_only_same_content
+text_input_runs_streamed_highlight_dense/streamed_cursor
+merge_open_bootstrap/large_streamed
+resolved_output_recompute_incremental/incremental_recompute
+git_ops/log_walk_100k_commits_shallow
+search/commit_filter_by_author_50k_commits
+search/in_diff_text_search_100k_lines
+keyboard/arrow_scroll_diff_sustained_repeat
+keyboard/stage_unstage_toggle_rapid
+staging/stage_all_10k_files
+undo_redo/conflict_resolution_deep_stack
+frame_timing/rapid_commit_selection_changes
+fs_event/single_file_save_to_status_update
+network/ui_responsiveness_during_fetch
+clipboard/copy_10k_lines_from_diff
+display/render_cost_1x_vs_2x_vs_3x_scale
+BENCH

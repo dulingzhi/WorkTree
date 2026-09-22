@@ -26,6 +26,7 @@ where
     let mut strict = strict_from_env();
     let mut skip_missing = false;
     let mut fresh_reference = None;
+    let mut skip_prefixes = Vec::new();
 
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
@@ -42,6 +43,12 @@ where
             }
             "--strict" => strict = true,
             "--skip-missing" => skip_missing = true,
+            "--skip-prefix" => {
+                let value = args
+                    .next()
+                    .ok_or_else(|| "--skip-prefix requires a prefix argument".to_string())?;
+                skip_prefixes.push(value);
+            }
             "--fresh-reference" => {
                 let value = args
                     .next()
@@ -56,6 +63,7 @@ where
                         strict,
                         skip_missing,
                         fresh_reference,
+                        skip_prefixes: skip_prefixes.clone(),
                     },
                 ));
             }
@@ -70,6 +78,7 @@ where
             strict,
             skip_missing,
             fresh_reference,
+            skip_prefixes,
         },
     ))
 }
@@ -87,5 +96,5 @@ pub(crate) fn is_truthy(value: &str) -> bool {
 }
 
 pub(crate) fn usage() -> &'static str {
-    "Usage: cargo run -p worktree-ui-gpui --bin perf_budget_report -- [--criterion-root PATH]... [--strict] [--skip-missing] [--fresh-reference PATH]"
+    "Usage: cargo run -p worktree-ui-gpui --bin perf_budget_report -- [--criterion-root PATH]... [--strict] [--skip-missing] [--skip-prefix PREFIX]... [--fresh-reference PATH]"
 }
