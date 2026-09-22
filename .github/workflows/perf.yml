@@ -197,7 +197,7 @@ jobs:
       env:
         WORKTREE_PERF_REAL_REPO_ROOT: ${{ vars.PERF_REAL_REPO_ROOT }}
       run: |
-        scripts/perf-bench-list.sh | while IFS= read -r bench; do
+        bash scripts/perf-bench-list.sh | while IFS= read -r bench; do
           [ -z "$bench" ] && continue
           cargo bench -p worktree-ui-gpui --features benchmarks --bench performance -- "$bench" || true
         done
