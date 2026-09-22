@@ -111,6 +111,18 @@ pub(crate) const PERF_BUDGETS: &[PerfBudgetSpec] = &[
         estimate_path: "diff_open_patch_100k_lines_first_window/200/new/estimates.json",
         threshold_ns: 30.0 * NANOS_PER_MILLISECOND,
     },
+    // --- diff_scroll/normal_lines_window --- large single-file diff scroll (10k lines, 96 B/line ≈ 1 MB)
+    PerfBudgetSpec {
+        label: "diff_scroll/normal_lines_window/200",
+        estimate_path: "diff_scroll/normal_lines_window/200/new/estimates.json",
+        threshold_ns: 30.0 * NANOS_PER_MILLISECOND,
+    },
+    // --- diff_scroll/long_lines_window --- large single-file diff scroll (10k lines, 4 KiB/line ≈ 40 MB)
+    PerfBudgetSpec {
+        label: "diff_scroll/long_lines_window/200",
+        estimate_path: "diff_scroll/long_lines_window/200/new/estimates.json",
+        threshold_ns: 60.0 * NANOS_PER_MILLISECOND,
+    },
     // --- diff_open_conflict_compare_first_window --- conflict compare first paint
     PerfBudgetSpec {
         label: "diff_open_conflict_compare_first_window/200",

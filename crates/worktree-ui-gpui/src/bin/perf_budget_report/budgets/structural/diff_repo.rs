@@ -227,6 +227,31 @@ pub(crate) const STRUCTURAL_BUDGETS: &[StructuralBudgetSpec] = &[
         comparator: StructuralBudgetComparator::Exactly,
         threshold: 0.0,
     },
+    // Large single-file diff scroll (diff_scroll) — fixture must stay intact and the window must materialize visible text.
+    StructuralBudgetSpec {
+        bench: "diff_scroll/normal_lines_window/200",
+        metric: "total_lines",
+        comparator: StructuralBudgetComparator::Exactly,
+        threshold: 10_000.0,
+    },
+    StructuralBudgetSpec {
+        bench: "diff_scroll/normal_lines_window/200",
+        metric: "visible_text_bytes",
+        comparator: StructuralBudgetComparator::AtLeast,
+        threshold: 19_000.0,
+    },
+    StructuralBudgetSpec {
+        bench: "diff_scroll/long_lines_window/200",
+        metric: "total_lines",
+        comparator: StructuralBudgetComparator::Exactly,
+        threshold: 10_000.0,
+    },
+    StructuralBudgetSpec {
+        bench: "diff_scroll/long_lines_window/200",
+        metric: "visible_text_bytes",
+        comparator: StructuralBudgetComparator::AtLeast,
+        threshold: 810_000.0,
+    },
     // Conflict compare first window structural budgets.
     StructuralBudgetSpec {
         bench: "diff_open_conflict_compare_first_window/200",
