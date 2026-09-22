@@ -230,6 +230,12 @@ jobs:
           echo "::notice::Running strict mode on dedicated runner (${{ vars.PERF_RUNNER }}) with real-repo snapshots from ${{ vars.PERF_REAL_REPO_ROOT }}"
           cargo run -p worktree-ui-gpui --bin perf_budget_report -- --criterion-root target/criterion --strict
         else
-          echo "::notice::Running strict mode on shared runner (ubuntu-22.04), skipping the real_repo nightly-only set (needs a dedicated runner + PERF_REAL_REPO_ROOT) — numbers are noisier than a dedicated runner would give"
-          cargo run -p worktree-ui-gpui --bin perf_budget_report -- --criterion-root target/criterion --strict --skip-prefix real_repo/
+          echo "::notice::Running strict mode on shared runner (ubuntu-22.04); budgets whose benchmark data is not produced here (real_repo/* needs a dedicated runner + PERF_REAL_REPO_ROOT, and the synthetic benches outside perf-bench-list.sh are out of scope for the shared runner) are skipped rather than alerted, so the strict gate enforces exactly the 44 synthetic benches this runner actually runs — numbers are noisier than a dedicated runner would give"
+          # `--strict` enforces thresholds on the benches that DID produce data;
+          # `--skip-missing` keeps the ~186 budgets this shared runner cannot
+          # produce (real_repo/*, app_launch/*, idle/*, and synthetic benches
+          # outside perf-bench-list.sh) from flipping to ALERT and failing the
+          # gate. Without `--skip-missing` the strict gate would be red on every
+          # run simply because those budgets have no criterion artifact here.
+          cargo run -p worktree-ui-gpui --bin perf_budget_report -- --criterion-root target/criterion --strict --skip-missing --skip-prefix real_repo/
         fi

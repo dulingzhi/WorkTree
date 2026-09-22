@@ -286,25 +286,28 @@ Wave 2 全部未开工：T4 冷启动四连、T5 history cache 纵深、T6 大�
 
 仓库已转 **public**（见 P0 复盘）→ GitHub-hosted runner 对公开仓库免费，原「额度耗尽」阻塞消失。借此把严格门控真正接上线，不再依赖用户手动去 Settings 点变量。
 
-### 改动（commit 待提交）
+### 改动（commit `b61b24f3`，hosted 报告参数在 follow-up 修正 commit 中改为 `--strict --skip-missing --skip-prefix real_repo/`）
 
 1. **`perf_budget_report` 新增 `--skip-prefix`**（可重复）。`run_report` 在评估前按 `label`（timing）/ `bench`（structural）前缀过滤，被匹配的预算**整体跳过**（不计入 Skipped/Alert，也不计入告警门禁）。单测 `parse_cli_args_collects_repeatable_skip_prefixes` 覆盖解析。
 2. **`scripts/perf-bench-list.sh`**：抽出 PR subset 的合成 bench id 清单（与 perf.yml 中 PR subset 完全一致），供 hosted 回退路径复用。刻意排除 `real_repo/*`（需要 checked-out 巨型仓库）与 `app_launch/*` / `idle/*` harness（需要 compositor）。
 3. **`perf.yml` 的 `performance-budgets-full` job**：
    - bench 步骤拆成两条：`vars.PERF_RUNNER == ''` 时跑合成子集（`perf-bench-list.sh`，`continue-on-error: true` 防单 bench 抖动压垮报告）；`!= ''` 时跑全量（含 real_repo）。
-   - 预算报告步骤：专用 runner 仍 `--strict`（全量，含 real_repo）；hosted 回退从 `--skip-missing` **改为 `--strict --skip-prefix real_repo/`** —— 即严格门控现在在每周 `schedule` + 手动 full 上**真实运行**，只跳过跑不起来的 nightly-only 真实靶子组。
+   - 预算报告步骤：专用 runner 仍 `--strict`（全量，含 real_repo）；hosted 回退从 `--skip-missing` **改为 `--strict --skip-missing --skip-prefix real_repo/`**。
+     - 关键点：预算表共 230 条（217 timing + 162 structural，去重后），而 hosted 回退只跑 `perf-bench-list.sh` 的 **44 个**合成 bench。若只用 `--strict --skip-prefix real_repo/`（不设 `--skip-missing`），那 186 条没被这 44 个 bench 覆盖的非 `real_repo/` 预算会因「数据缺失 → Alert」导致严格门控**每次都红（exit 2）**——这是初版落地的逻辑漏洞（已修）。
+     - `--skip-missing` 与 `--strict` 正交：`--skip-missing` 把「数据缺失」从 Alert 降级为 Skipped（不计入告警门禁），`--strict` 仍把「有数据但超阈值」判 Alert 并 `exit 2`。二者叠加 = **只严格约束本 runner 实际跑到的那 44 个合成 bench；其余（real_repo/*、app_launch/*、idle/* 以及未纳入 bench-list 的合成预算）按缺失跳过**，门控不再假红。
 
 ### 现在的门控语义
 
 | 路径 | runs-on | 跑的 bench | 报告模式 | 门禁 |
 |---|---|---|---|---|
 | `performance-budgets`（PR subset） | ubuntu-22.04 | 合成子集 | `--skip-missing`（轻量信号） | 容忍，不阻断 |
-| `performance-budgets-full` / 未配 PERF_RUNNER | ubuntu-22.04（免费） | 合成子集 | `--strict --skip-prefix real_repo/` | **真严格，含合成预算** |
+| `performance-budgets-full` / 未配 PERF_RUNNER | ubuntu-22.04（免费） | 合成子集（`perf-bench-list.sh` 的 44 个） | `--strict --skip-missing --skip-prefix real_repo/` | **真严格，但只针对本 runner 实际跑到的 44 个合成 bench；其余（real_repo/app_launch/idle 及未纳入 bench-list 的合成预算）按缺失跳过** |
 | `performance-budgets-full` / 配了 PERF_RUNNER+PERF_REAL_REPO_ROOT | 专用 runner | 全量含 real_repo | `--strict` | **真严格，全预算** |
 
 ### 结论更新（推翻原「B 极端版 / 门控从未生效」）
 
-- 「strict 从未生效」**已不成立**：免费 hosted runner 上，合成预算的严格门控现在每周真实跑。
-- `PERF_RUNNER` / `PERF_REAL_REPO_ROOT` 两个仓库变量**仍可配可不配**：不配 → 合成预算真严格 + real_repo 组跳过；配了 → real_repo 组也纳入严格门控（需要专用 runner 能 checkout 巨型仓库）。
-- **残留风险**：hosted 共享 runner 数字有噪声，合成预算的夜间严格门控偶发误报；`real_repo/*` 组（对外的「性能可证明」核心数字）仍只在专用 runner 上才有。要消除这两项，仍需接入自托管 perf runner 并配置 `PERF_REAL_REPO_ROOT`——但那已从「门控前提」降级为「数字精度增强」。
-- 验证：`cargo test -p worktree-ui-gpui --bin perf_budget_report` 单测通过（`--skip-prefix` 解析 + 既有预算评估用例）；YAML 结构与既有条件式对齐，未实跑 CI。
+- 「strict 从未生效」**已不成立**：免费 hosted runner 上，本 runner 实际跑到的 44 个合成预算的严格门控现在每周真实跑（超阈值会真 `exit 2`）。
+- `PERF_RUNNER` / `PERF_REAL_REPO_ROOT` 两个仓库变量**仍可配可不配**：不配 → 仅 44 个合成 bench 真严格 + 其余按缺失跳过；配了 → real_repo 组也纳入严格门控（需要专用 runner 能 checkout 巨型仓库）。
+- **残留风险**：hosted 共享 runner 数字有噪声，44 个合成预算的夜间严格门控偶发误报；`real_repo/*` 组（对外的「性能可证明」核心数字）仍只在专用 runner 上才有。要消除这两项，仍需接入自托管 perf runner 并配置 `PERF_REAL_REPO_ROOT`——但那已从「门控前提」降级为「数字精度增强」。
+- **2026-09-22 修正（follow-up commit）**：初版 hosted 回退用了 `--strict --skip-prefix real_repo/`（漏了 `--skip-missing`），会使 186 条未被 44 bench 覆盖的非 real_repo 预算全部 Alert → 门控假红。已改为 `--strict --skip-missing --skip-prefix real_repo/`。本地空 criterion 根验证：旧参数 `exit=2` / 977 行 ALERT；新参数 `exit=0` / 977 行 SKIP。CI 尚未重跑（hosted runner）。
+- 验证：`cargo test -p worktree-ui-gpui --bin perf_budget_report` 单测通过（`--skip-prefix` 解析 + 既有预算评估用例）；YAML 结构与既有条件式对齐。
