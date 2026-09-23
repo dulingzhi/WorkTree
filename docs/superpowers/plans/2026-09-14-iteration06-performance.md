@@ -148,8 +148,8 @@ verbatim 前缀差异。仍然对真正落在 workdir 之外的路径返回 `Non
 |---|---|---|
 | **P6-D1** | T0 结论为 C（无自持 runner）时：接受噪声门控 / 只发布不门控 / 投入自持 runner | T0 完成后立即 |
 | **P6-D2** | 真实靶子仓库选谁（体积 vs 可获得性 vs 代表性） | T1 开工前 |
-| **P6-D3** | T4 允许的行为变更边界——"跳过冷启动探测"会改变启动时的信息完整度 | T4 开工前 |
-| **P6-D4** | T5 缓存默认开关与磁盘上限（local-first 原则：默认开还是默认关） | T5 开工前 |
+| **P6-D3** | T4 允许的行为变更边界——"跳过冷启动探测"会改变启动时的信息完整度 | **2026-09-23 已闭合**：不跳过，改「离线程 + 乐观回填」（见下） |
+| **P6-D4** | T5 缓存默认开关与磁盘上限（local-first 原则：默认开还是默认关） | **2026-09-23 已闭合**：默认开 + 256 MiB + 7 天 TTL + 设置页可清（见下） |
 
 ## 风险与缓解
 
@@ -327,8 +327,49 @@ P5 取消后，迭代 06 只剩 Wave 2（T4/T5/T6）未开工。原「剩余工�
 ### 待拍板的决策（原决策点更新）
 
 - **P6-D1（自托管 runner）—— 2026-09-22 已定：用 GitHub Actions（仓库已 public，hosted runner 免费）**：不投入自托管 runner。real_repo/* 组严格门控顺延（hosted runner 不 checkout 巨型仓库，该组按缺失跳过）；T4/T5 基线靠本地 Windows 跑 `perf-app-launch` / 缓存命中率观测，或顺延到日后有专用 runner。对外「性能可证明」核心数字仍来自固定靶子 `rust-lang/rust` 的本地/周调度测量。
-- **P6-D3（T4 行为边界）**：「跳过冷启动探测」会改变启动时的信息完整度——接受？还是只做不损失信息的三项？开工 T4 前必须定。
-- **P6-D4（T5 默认开关 + 磁盘上限）**：缓存默认开还是关？磁盘上限多少（local-first 原则倾向默认开 + 可清理）？开工 T5 前必须定。
+- **P6-D3（T4 行为边界）—— 2026-09-23 已闭合：不跳过探测，改为「离线程 + 乐观回填」。**
+
+  审计推翻了原措辞。启动期真正算「探测」的只有 `git --version`（`worktree-core/src/process.rs:334-402`），
+  且它是 **reducer 硬闸门**（`store/reducer.rs:891-893`）：git 不可用时 `Msg::RestoreSession` 被
+  **静默丢弃**，用户看到的是空工作区而非「Git 未安装」错误条——这才是真实且最严重的信息损失。
+
+  同时，它的开销不在「探测」本身而在**跑在 UI 线程**：`AppState::default()` 经 `store/mod.rs:314`
+  （`app.rs:611` 的 `open_window` 闭包内）触发一次，`view/mod.rs:2219` 每次窗口激活再同步触发一次。
+  因此 ①跳过探测 与 ②重活离 UI 线程 **合并为同一个改动**：
+
+  1. `git --version` 改后台执行 + 结果缓存；
+  2. `AppState::default()` 乐观当可用，后台探测完成后用 `Msg::SetGitRuntimeState`（`reducer.rs:956-959`）回填；
+  3. git 真缺失时走**已有的** `DeferredRepoBootstrap`（`view/view_mode.rs:108-115`）
+     → `resume_after_git_runtime_recovery`（`view/state_apply.rs:176-177`），有转圈态兜底。
+
+  代价仅「设置页 Git 版本串短暂为空」，主视图零信息损失。
+
+- **P6-D4（T5 默认开关 + 磁盘上限）—— 2026-09-23 已闭合：默认开 + 256 MiB 全局上限 + 7 天 TTL + 设置页可清。**
+
+  审计发现「默认开」**就是现状**：`log.rs:1707` / `log.rs:1882` 无条件调用缓存，全仓不存在任何
+  enable 判定（无 feature flag、无 env、无 setting 字段）。改成「默认关」反而是新增工作量 + 行为回退，
+  且会让 T5 交付物「缓存命中率进 `perf_budget_report`」恒为 0、指标失去意义。
+
+  真正缺的是**护栏**：无字节上限、无 TTL、LRU 是假的（`prune_old_generations` 按 mtime 排序但
+  `load_log_page` 只读不刷 mtime，实为 FIFO）、无生产可达的清理入口（`clear_repo_cache` 仅 `#[cfg(test)]`）。
+
+  采纳值（对齐仓库既有先例 `view/panes/main/diff_cache/image_cache.rs:8-11`）：
+
+  | 项 | 值 | 依据 |
+  |---|---|---|
+  | 全局字节上限 | 256 MiB | 与 `IMAGE_DIFF_CACHE_MAX_TOTAL_BYTES` 一致；实测 254 B/commit，≈2000 个满快照 |
+  | TTL | 7 天 | 与 `IMAGE_DIFF_CACHE_MAX_AGE` 一致；实测 7 天前文件仍在盘（当前永不过期） |
+  | 每仓库子上限 | 32 MiB | 新增，防 blame（单条目可达 ~2 MB）一家吃满 |
+  | 真 LRU | 命中时刷 mtime | 修 FIFO 误删热快照的问题 |
+
+  另需：新增设置页 **Storage** 分类（显示缓存路径 / 体积 / 条目数 + 开关 + Clear 按钮）；
+  缓存根目录建议从 `std::env::temp_dir()` 迁到 `app_data_dir()`（`session.rs:1972`），
+  因 Linux `temp_dir` 可能是 tmpfs 且被系统清理，与 local-first「用户可见可控」相悖。
+  跨 crate 调用走 `worktree_core` 中转（`worktree-git-gix` 是 optional 依赖，先例 `process.rs:273`）。
+
+- **执行顺序（2026-09-23 定）**：T4 先修 `perf-app-launch` harness 语义并取基线（当前 5/20-repo 三个 case
+  必然失败、且从未取过基线），再做 D3 的离线程改动；T5 先做护栏 + 命中率接线，**再**按
+  reflog(S) → commit-search(M) → blame(M–L，最后且单独 PR) 的顺序扩展。
 
 ### 执行顺序建议
 
