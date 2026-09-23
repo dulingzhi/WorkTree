@@ -768,6 +768,12 @@ pub(crate) const STRUCTURAL_BUDGETS: &[StructuralBudgetSpec] = &[
         threshold: 0.0,
     },
     StructuralBudgetSpec {
+        bench: "app_launch/cold_empty_workspace",
+        metric: "tabs_restored",
+        comparator: StructuralBudgetComparator::Exactly,
+        threshold: 0.0,
+    },
+    StructuralBudgetSpec {
         bench: "app_launch/cold_single_repo",
         metric: "first_paint_ms",
         comparator: StructuralBudgetComparator::AtMost,
@@ -806,6 +812,12 @@ pub(crate) const STRUCTURAL_BUDGETS: &[StructuralBudgetSpec] = &[
     StructuralBudgetSpec {
         bench: "app_launch/cold_single_repo",
         metric: "repos_loaded",
+        comparator: StructuralBudgetComparator::Exactly,
+        threshold: 1.0,
+    },
+    StructuralBudgetSpec {
+        bench: "app_launch/cold_single_repo",
+        metric: "tabs_restored",
         comparator: StructuralBudgetComparator::Exactly,
         threshold: 1.0,
     },
@@ -849,6 +861,13 @@ pub(crate) const STRUCTURAL_BUDGETS: &[StructuralBudgetSpec] = &[
         bench: "app_launch/cold_five_repos",
         metric: "repos_loaded",
         comparator: StructuralBudgetComparator::Exactly,
+        // Session restore opens only the active repo; the other four stay tabs.
+        threshold: 1.0,
+    },
+    StructuralBudgetSpec {
+        bench: "app_launch/cold_five_repos",
+        metric: "tabs_restored",
+        comparator: StructuralBudgetComparator::Exactly,
         threshold: 5.0,
     },
     StructuralBudgetSpec {
@@ -890,6 +909,13 @@ pub(crate) const STRUCTURAL_BUDGETS: &[StructuralBudgetSpec] = &[
     StructuralBudgetSpec {
         bench: "app_launch/cold_twenty_repos",
         metric: "repos_loaded",
+        comparator: StructuralBudgetComparator::Exactly,
+        // Session restore opens only the active repo; the other 19 stay tabs.
+        threshold: 1.0,
+    },
+    StructuralBudgetSpec {
+        bench: "app_launch/cold_twenty_repos",
+        metric: "tabs_restored",
         comparator: StructuralBudgetComparator::Exactly,
         threshold: 20.0,
     },
@@ -936,6 +962,12 @@ pub(crate) const STRUCTURAL_BUDGETS: &[StructuralBudgetSpec] = &[
         threshold: 1.0,
     },
     StructuralBudgetSpec {
+        bench: "app_launch/warm_single_repo",
+        metric: "tabs_restored",
+        comparator: StructuralBudgetComparator::Exactly,
+        threshold: 1.0,
+    },
+    StructuralBudgetSpec {
         bench: "app_launch/warm_twenty_repos",
         metric: "first_paint_ms",
         comparator: StructuralBudgetComparator::AtMost,
@@ -974,6 +1006,13 @@ pub(crate) const STRUCTURAL_BUDGETS: &[StructuralBudgetSpec] = &[
     StructuralBudgetSpec {
         bench: "app_launch/warm_twenty_repos",
         metric: "repos_loaded",
+        comparator: StructuralBudgetComparator::Exactly,
+        // Session restore opens only the active repo; the other 19 stay tabs.
+        threshold: 1.0,
+    },
+    StructuralBudgetSpec {
+        bench: "app_launch/warm_twenty_repos",
+        metric: "tabs_restored",
         comparator: StructuralBudgetComparator::Exactly,
         threshold: 20.0,
     },

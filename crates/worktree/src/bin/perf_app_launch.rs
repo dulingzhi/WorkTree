@@ -83,6 +83,7 @@ struct HarnessRunResult {
     first_interactive: Option<ObservedMilestone>,
     repos_loaded: u64,
     repos_total: u64,
+    first_repo_ready_ms: Option<u64>,
     stderr_tail: Vec<String>,
 }
 
@@ -113,13 +114,32 @@ impl LaunchScenario {
         matches!(self, Self::ColdEmptyWorkspace)
     }
 
-    fn expected_ready_repos(self) -> usize {
+    /// Number of repositories written into the restored session file.
+    fn repo_count(self) -> usize {
         match self {
             Self::ColdEmptyWorkspace => 0,
             Self::ColdSingleRepo | Self::WarmSingleRepo => 1,
             Self::ColdFiveRepos => 5,
             Self::ColdTwentyRepos | Self::WarmTwentyRepos => 20,
         }
+    }
+
+    /// Repositories expected to reach `Loadable::Ready` before the child exits.
+    ///
+    /// Session restore deliberately opens only the active repository and leaves
+    /// every other tab as a `NotLoaded` placeholder (see
+    /// `worktree-state/src/store/reducer/repo_management.rs`), so a session with
+    /// N saved repos yields exactly 1 ready repo. The harness used to expect N,
+    /// which made the 5/20-repo cases unsatisfiable (the child could never meet
+    /// its exit condition and always hit the timeout).
+    fn expected_ready_repos(self) -> usize {
+        usize::from(self.repo_count() > 0)
+    }
+
+    /// Tabs expected to be restored as (unopened) placeholders. This is what
+    /// actually scales with the scenario; `expected_ready_repos` does not.
+    fn expected_restored_tabs(self) -> usize {
+        self.repo_count()
     }
 
     fn needs_warm_up_pass(self) -> bool {
@@ -131,6 +151,7 @@ struct LaunchFixture {
     _root: TempDir,
     session_file: PathBuf,
     expected_ready_repos: usize,
+    expected_restored_tabs: usize,
     disable_auto_restore: bool,
 }
 
@@ -159,9 +180,9 @@ impl LaunchFixture {
     fn build(scenario: LaunchScenario) -> Result<Self, String> {
         let root = tempfile::tempdir()
             .map_err(|err| format!("failed to create app launch fixture tempdir: {err}"))?;
-        let expected_ready_repos = scenario.expected_ready_repos();
-        let mut open_repos = Vec::with_capacity(expected_ready_repos);
-        for seed in 0..expected_ready_repos {
+        let repo_count = scenario.repo_count();
+        let mut open_repos = Vec::with_capacity(repo_count);
+        for seed in 0..repo_count {
             let repo_path = root.path().join(format!("repo-{seed:02}"));
             build_launch_repo(&repo_path, seed)?;
             open_repos.push(repo_path);
@@ -173,7 +194,8 @@ impl LaunchFixture {
         Ok(Self {
             _root: root,
             session_file,
-            expected_ready_repos,
+            expected_ready_repos: scenario.expected_ready_repos(),
+            expected_restored_tabs: scenario.expected_restored_tabs(),
             disable_auto_restore: scenario.disable_auto_restore(),
         })
     }
@@ -282,6 +304,7 @@ fn run_harness(args: &CliArgs) -> Result<(), String> {
     let mut first_interactive = None;
     let mut repos_loaded = 0u64;
     let mut repos_total = 0u64;
+    let mut first_repo_ready_ms = None;
     let mut stderr_tail = VecDeque::with_capacity(12);
 
     while started_at.elapsed() <= timeout {
@@ -293,6 +316,7 @@ fn run_harness(args: &CliArgs) -> Result<(), String> {
                 &mut first_interactive,
                 &mut repos_loaded,
                 &mut repos_total,
+                &mut first_repo_ready_ms,
                 &mut stderr_tail,
             ),
             Ok(Err(err)) => {
@@ -320,17 +344,20 @@ fn run_harness(args: &CliArgs) -> Result<(), String> {
                 &mut first_interactive,
                 &mut repos_loaded,
                 &mut repos_total,
+                &mut first_repo_ready_ms,
                 &mut stderr_tail,
             )?;
             return finish_harness(
                 args,
                 fixture.expected_ready_repos,
+                fixture.expected_restored_tabs,
                 HarnessRunResult {
                     status,
                     first_paint,
                     first_interactive,
                     repos_loaded,
                     repos_total,
+                    first_repo_ready_ms,
                     stderr_tail: stderr_tail_to_vec(stderr_tail),
                 },
             );
@@ -346,17 +373,20 @@ fn run_harness(args: &CliArgs) -> Result<(), String> {
         &mut first_interactive,
         &mut repos_loaded,
         &mut repos_total,
+        &mut first_repo_ready_ms,
         &mut stderr_tail,
     )?;
     finish_harness(
         args,
         fixture.expected_ready_repos,
+        fixture.expected_restored_tabs,
         HarnessRunResult {
             status,
             first_paint,
             first_interactive,
             repos_loaded,
             repos_total,
+            first_repo_ready_ms,
             stderr_tail: stderr_tail_to_vec(stderr_tail),
         },
     )
@@ -442,6 +472,7 @@ fn run_first_interactive_probe(
     let mut first_interactive = None;
     let mut repos_loaded = 0u64;
     let mut repos_total = 0u64;
+    let mut first_repo_ready_ms = None;
     let mut stderr_tail = VecDeque::with_capacity(12);
     let mut child_status = None;
 
@@ -454,6 +485,7 @@ fn run_first_interactive_probe(
                 &mut first_interactive,
                 &mut repos_loaded,
                 &mut repos_total,
+                &mut first_repo_ready_ms,
                 &mut stderr_tail,
             ),
             Ok(Err(err)) => {
@@ -493,6 +525,7 @@ fn run_first_interactive_probe(
         &mut first_interactive,
         &mut repos_loaded,
         &mut repos_total,
+        &mut first_repo_ready_ms,
         &mut stderr_tail,
     )?;
     let stderr_tail = stderr_tail_to_vec(stderr_tail);
@@ -560,6 +593,7 @@ fn require_launch_alloc_metrics(
 fn finish_harness(
     args: &CliArgs,
     expected_ready_repos: usize,
+    expected_restored_tabs: usize,
     result: HarnessRunResult,
 ) -> Result<(), String> {
     let HarnessRunResult {
@@ -568,6 +602,7 @@ fn finish_harness(
         first_interactive,
         repos_loaded,
         repos_total,
+        first_repo_ready_ms,
         stderr_tail,
     } = result;
 
@@ -606,17 +641,37 @@ fn finish_harness(
         ));
     }
 
-    let metrics = build_launch_sidecar_metrics(first_paint, first_interactive, repos_loaded);
+    // Only the active repo is opened eagerly; the rest must still be restored
+    // as tabs (placeholder repo slots) or the scenario did not really run.
+    if repos_total < expected_restored_tabs as u64 {
+        return Err(format!(
+            "launch probe child restored only {repos_total} of {expected_restored_tabs} expected tab slots for {} (ready repos: {repos_loaded}){}",
+            args.bench,
+            format_stderr_tail(&stderr_tail)
+        ));
+    }
+
+    let metrics = build_launch_sidecar_metrics(
+        first_paint,
+        first_interactive,
+        repos_loaded,
+        repos_total,
+        first_repo_ready_ms,
+    );
     let report = PerfSidecarReport::new(&args.bench, metrics);
     let sidecar_path = write_criterion_sidecar(&report)
         .map_err(|err| format!("failed to write sidecar report for {}: {err}", args.bench))?;
 
     println!(
-        "{} first_paint_ms={} first_interactive_ms={} repos_loaded={} sidecar={}",
+        "{} first_paint_ms={} first_interactive_ms={} first_repo_ready_ms={} repos_loaded={} tabs_restored={} sidecar={}",
         args.bench,
         first_paint.elapsed_ms,
         first_interactive.elapsed_ms,
+        first_repo_ready_ms
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "n/a".to_string()),
         repos_loaded,
+        repos_total,
         sidecar_path.display()
     );
     Ok(())
@@ -626,6 +681,8 @@ fn build_launch_sidecar_metrics(
     first_paint: ObservedMilestone,
     first_interactive: ObservedMilestone,
     repos_loaded: u64,
+    repos_total: u64,
+    first_repo_ready_ms: Option<u64>,
 ) -> Map<String, serde_json::Value> {
     let mut metrics = Map::new();
     metrics.insert("first_paint_ms".to_string(), json!(first_paint.elapsed_ms));
@@ -646,6 +703,12 @@ fn build_launch_sidecar_metrics(
         alloc_metrics.append_to_payload_with_prefix(&mut metrics, "first_interactive_");
     }
     metrics.insert("repos_loaded".to_string(), json!(repos_loaded));
+    // Tabs restored from the session file. Only the active one is opened
+    // eagerly, so this is normally much larger than `repos_loaded`.
+    metrics.insert("tabs_restored".to_string(), json!(repos_total));
+    if let Some(elapsed_ms) = first_repo_ready_ms {
+        metrics.insert("first_repo_ready_ms".to_string(), json!(elapsed_ms));
+    }
     metrics
 }
 
@@ -714,6 +777,7 @@ fn process_probe_line(
     first_interactive: &mut Option<ObservedMilestone>,
     repos_loaded: &mut u64,
     repos_total: &mut u64,
+    first_repo_ready_ms: &mut Option<u64>,
     stderr_tail: &mut VecDeque<String>,
 ) {
     if let Some(event) = parse_probe_event_line(&line) {
@@ -728,8 +792,14 @@ fn process_probe_line(
                 *first_interactive = Some(milestone)
             }
             "repos_loaded" => {
-                *repos_loaded = (*repos_loaded).max(event.repos_loaded.unwrap_or(0));
+                let loaded = event.repos_loaded.unwrap_or(0);
+                *repos_loaded = (*repos_loaded).max(loaded);
                 *repos_total = (*repos_total).max(event.repos_total.unwrap_or(0));
+                // Only the active repo is opened eagerly, so this fires once as
+                // soon as the first (and normally only) repo becomes usable.
+                if loaded > 0 && first_repo_ready_ms.is_none() {
+                    *first_repo_ready_ms = Some(milestone.elapsed_ms);
+                }
             }
             _ => {}
         }
@@ -757,6 +827,7 @@ fn drain_probe_channel(
     first_interactive: &mut Option<ObservedMilestone>,
     repos_loaded: &mut u64,
     repos_total: &mut u64,
+    first_repo_ready_ms: &mut Option<u64>,
     stderr_tail: &mut VecDeque<String>,
 ) -> Result<(), String> {
     loop {
@@ -768,6 +839,7 @@ fn drain_probe_channel(
                 first_interactive,
                 repos_loaded,
                 repos_total,
+                first_repo_ready_ms,
                 stderr_tail,
             ),
             Ok(Err(err)) => return Err(format!("failed while reading child stderr: {err}")),
@@ -1360,12 +1432,29 @@ mod tests {
 
     #[test]
     fn launch_scenario_expected_ready_repos_matches_variant() {
+        // Session restore opens only the active repo, so every non-empty
+        // scenario yields exactly one ready repo regardless of tab count.
         assert_eq!(LaunchScenario::ColdEmptyWorkspace.expected_ready_repos(), 0);
         assert_eq!(LaunchScenario::ColdSingleRepo.expected_ready_repos(), 1);
-        assert_eq!(LaunchScenario::ColdFiveRepos.expected_ready_repos(), 5);
-        assert_eq!(LaunchScenario::ColdTwentyRepos.expected_ready_repos(), 20);
+        assert_eq!(LaunchScenario::ColdFiveRepos.expected_ready_repos(), 1);
+        assert_eq!(LaunchScenario::ColdTwentyRepos.expected_ready_repos(), 1);
         assert_eq!(LaunchScenario::WarmSingleRepo.expected_ready_repos(), 1);
-        assert_eq!(LaunchScenario::WarmTwentyRepos.expected_ready_repos(), 20);
+        assert_eq!(LaunchScenario::WarmTwentyRepos.expected_ready_repos(), 1);
+    }
+
+    #[test]
+    fn launch_scenario_repo_count_and_restored_tabs_match_variant() {
+        assert_eq!(LaunchScenario::ColdEmptyWorkspace.repo_count(), 0);
+        assert_eq!(LaunchScenario::ColdSingleRepo.repo_count(), 1);
+        assert_eq!(LaunchScenario::ColdFiveRepos.repo_count(), 5);
+        assert_eq!(LaunchScenario::ColdTwentyRepos.repo_count(), 20);
+        assert_eq!(LaunchScenario::WarmSingleRepo.repo_count(), 1);
+        assert_eq!(LaunchScenario::WarmTwentyRepos.repo_count(), 20);
+
+        assert_eq!(LaunchScenario::ColdEmptyWorkspace.expected_restored_tabs(), 0);
+        assert_eq!(LaunchScenario::ColdFiveRepos.expected_restored_tabs(), 5);
+        assert_eq!(LaunchScenario::ColdTwentyRepos.expected_restored_tabs(), 20);
+        assert_eq!(LaunchScenario::WarmTwentyRepos.expected_restored_tabs(), 20);
     }
 
     #[test]
@@ -1465,7 +1554,7 @@ mod tests {
             }),
         };
 
-        let metrics = build_launch_sidecar_metrics(first_paint, first_interactive, 5);
+        let metrics = build_launch_sidecar_metrics(first_paint, first_interactive, 1, 20, Some(333));
 
         assert_eq!(metrics.get("first_paint_ms"), Some(&Value::from(111)));
         assert_eq!(metrics.get("first_interactive_ms"), Some(&Value::from(222)));
@@ -1490,7 +1579,10 @@ mod tests {
             metrics.get("first_interactive_net_alloc_bytes"),
             Some(&Value::from(6_144))
         );
-        assert_eq!(metrics.get("repos_loaded"), Some(&Value::from(5)));
+        assert_eq!(metrics.get("repos_loaded"), Some(&Value::from(1)));
+        // Only the active repo is opened eagerly; the rest stay tabs.
+        assert_eq!(metrics.get("tabs_restored"), Some(&Value::from(20)));
+        assert_eq!(metrics.get("first_repo_ready_ms"), Some(&Value::from(333)));
     }
 
     #[test]
