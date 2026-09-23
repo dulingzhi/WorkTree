@@ -1064,9 +1064,10 @@ fn record_keyboard_stage_unstage_select_effects(
 ) {
     for effect in effects {
         let logical_effects = match effect {
-            Effect::LoadDiff { .. }
-            | Effect::LoadDiffFile { .. }
-            | Effect::LoadDiffFileImage { .. } => 1,
+            // `select_diff` now emits a single `LoadSelectedDiff` per toggle
+            // (the old `LoadDiff`/`LoadDiffFile`/`LoadDiffFileImage` family was
+            // merged during the diff-selection reducer refactor).
+            Effect::LoadSelectedDiff { .. } => 1,
             _ => 0,
         };
         *total_effects = total_effects.saturating_add(logical_effects);

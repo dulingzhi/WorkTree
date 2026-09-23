@@ -180,7 +180,10 @@ pub(crate) const STRUCTURAL_BUDGETS: &[StructuralBudgetSpec] = &[
         bench: "keyboard/stage_unstage_toggle_rapid",
         metric: "effect_count",
         comparator: StructuralBudgetComparator::Exactly,
-        threshold: 720.0,
+        // 240 toggles: 120 stage + 120 unstage + 240 select_diff
+        // (1 LoadSelectedDiff each after the diff-selection reducer
+        // refactor; the old 720 assumed 2 select_diff effects per toggle).
+        threshold: 480.0,
     },
     StructuralBudgetSpec {
         bench: "keyboard/stage_unstage_toggle_rapid",
@@ -198,7 +201,9 @@ pub(crate) const STRUCTURAL_BUDGETS: &[StructuralBudgetSpec] = &[
         bench: "keyboard/stage_unstage_toggle_rapid",
         metric: "select_diff_effect_count",
         comparator: StructuralBudgetComparator::Exactly,
-        threshold: 480.0,
+        // 240 toggles × 1 LoadSelectedDiff each (the old 480 assumed 2
+        // select_diff effects per toggle before the reducer refactor).
+        threshold: 240.0,
     },
     StructuralBudgetSpec {
         bench: "keyboard/stage_unstage_toggle_rapid",

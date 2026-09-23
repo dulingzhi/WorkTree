@@ -437,7 +437,9 @@ pub(crate) const STRUCTURAL_BUDGETS: &[StructuralBudgetSpec] = &[
         bench: "fs_event/single_file_save_to_status_update",
         metric: "status_calls",
         comparator: StructuralBudgetComparator::Exactly,
-        threshold: 1.0,
+        // measure_split_repo_status splits one logical status into
+        // worktree + staged sub-queries, counted as 2.
+        threshold: 2.0,
     },
     StructuralBudgetSpec {
         bench: "fs_event/git_checkout_200_files_to_status_update",
@@ -461,7 +463,9 @@ pub(crate) const STRUCTURAL_BUDGETS: &[StructuralBudgetSpec] = &[
         bench: "fs_event/git_checkout_200_files_to_status_update",
         metric: "status_calls",
         comparator: StructuralBudgetComparator::Exactly,
-        threshold: 1.0,
+        // measure_split_repo_status splits one logical status into
+        // worktree + staged sub-queries, counted as 2.
+        threshold: 2.0,
     },
     StructuralBudgetSpec {
         bench: "fs_event/rapid_saves_debounce_coalesce",
@@ -479,7 +483,9 @@ pub(crate) const STRUCTURAL_BUDGETS: &[StructuralBudgetSpec] = &[
         bench: "fs_event/rapid_saves_debounce_coalesce",
         metric: "status_calls",
         comparator: StructuralBudgetComparator::Exactly,
-        threshold: 1.0,
+        // measure_split_repo_status splits one logical status into
+        // worktree + staged sub-queries, counted as 2.
+        threshold: 2.0,
     },
     StructuralBudgetSpec {
         bench: "fs_event/false_positive_rate_under_churn",
@@ -503,7 +509,9 @@ pub(crate) const STRUCTURAL_BUDGETS: &[StructuralBudgetSpec] = &[
         bench: "fs_event/false_positive_rate_under_churn",
         metric: "status_calls",
         comparator: StructuralBudgetComparator::Exactly,
-        threshold: 1.0,
+        // measure_split_repo_status splits one logical status into
+        // worktree + staged sub-queries, counted as 2.
+        threshold: 2.0,
     },
     // --- network --- mocked transport progress/cancel structural budgets
     StructuralBudgetSpec {

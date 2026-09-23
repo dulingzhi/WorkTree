@@ -203,7 +203,8 @@ pub(crate) const STRUCTURAL_BUDGETS: &[StructuralBudgetSpec] = &[
         bench: "branch_sidebar/20k_branches_100_remotes",
         metric: "branch_rows",
         comparator: StructuralBudgetComparator::Exactly,
-        threshold: 20_002.0,
+        // 1 local "main" + 20_000 remote branches = 20_001 leaf Branch rows.
+        threshold: 20_001.0,
     },
     StructuralBudgetSpec {
         bench: "branch_sidebar/20k_branches_100_remotes",
@@ -227,15 +228,19 @@ pub(crate) const STRUCTURAL_BUDGETS: &[StructuralBudgetSpec] = &[
         bench: "branch_sidebar/20k_branches_100_remotes",
         metric: "sidebar_rows",
         comparator: StructuralBudgetComparator::Exactly,
-        threshold: 20_414.0,
+        // Inter-section SectionSpacer separators were removed in the
+        // branch_sidebar density refactor; total dropped by 4 vs 20_414.
+        threshold: 20_410.0,
     },
     StructuralBudgetSpec {
         bench: "repo_switch/refocus_same_repo",
         metric: "effect_count",
         comparator: StructuralBudgetComparator::Exactly,
         // Same-repo refocus stays on the primary refresh path without
-        // persisting session state or reloading a selected diff.
-        threshold: 5.0,
+        // persisting session state or reloading a selected diff. +2 from the
+        // two unconditional effects added by PR #129 (LoadAuthorEmails +
+        // sidebar-data LoadWorktrees) vs the original 5.
+        threshold: 7.0,
     },
     StructuralBudgetSpec {
         bench: "repo_switch/refocus_same_repo",
@@ -247,14 +252,17 @@ pub(crate) const STRUCTURAL_BUDGETS: &[StructuralBudgetSpec] = &[
         bench: "repo_switch/two_hot_repos",
         metric: "effect_count",
         comparator: StructuralBudgetComparator::Exactly,
-        // Primary refresh (5) + combined selected-diff intent (1) + persist (1).
-        threshold: 7.0,
+        // Re-baselined to 13 after PR #129/#216 expanded the set_active_repo
+        // effect fan-out (worktree refresh, sidebar data, selected-history
+        // reload, background metadata, extra branch refresh, etc.).
+        threshold: 13.0,
     },
     StructuralBudgetSpec {
         bench: "repo_switch/two_hot_repos",
         metric: "refresh_effect_count",
         comparator: StructuralBudgetComparator::Exactly,
-        threshold: 5.0,
+        // +1 from the extra branch refresh on switch added by PR #129.
+        threshold: 6.0,
     },
     StructuralBudgetSpec {
         bench: "repo_switch/two_hot_repos",
@@ -272,7 +280,8 @@ pub(crate) const STRUCTURAL_BUDGETS: &[StructuralBudgetSpec] = &[
         bench: "repo_switch/selected_commit_and_details",
         metric: "effect_count",
         comparator: StructuralBudgetComparator::Exactly,
-        threshold: 6.0,
+        // Re-baselined to 12 after PR #129/#216 expanded the effect fan-out.
+        threshold: 12.0,
     },
     StructuralBudgetSpec {
         bench: "repo_switch/selected_commit_and_details",
@@ -302,7 +311,8 @@ pub(crate) const STRUCTURAL_BUDGETS: &[StructuralBudgetSpec] = &[
         bench: "repo_switch/twenty_tabs",
         metric: "effect_count",
         comparator: StructuralBudgetComparator::Exactly,
-        threshold: 7.0,
+        // Re-baselined to 13 after PR #129/#216 expanded the effect fan-out.
+        threshold: 13.0,
     },
     StructuralBudgetSpec {
         bench: "repo_switch/twenty_tabs",
@@ -376,7 +386,8 @@ pub(crate) const STRUCTURAL_BUDGETS: &[StructuralBudgetSpec] = &[
         bench: "repo_switch/selected_diff_file",
         metric: "effect_count",
         comparator: StructuralBudgetComparator::Exactly,
-        threshold: 7.0,
+        // Re-baselined to 13 after PR #129/#216 expanded the effect fan-out.
+        threshold: 13.0,
     },
     StructuralBudgetSpec {
         bench: "repo_switch/selected_diff_file",
@@ -402,7 +413,8 @@ pub(crate) const STRUCTURAL_BUDGETS: &[StructuralBudgetSpec] = &[
         bench: "repo_switch/selected_conflict_target",
         metric: "effect_count",
         comparator: StructuralBudgetComparator::Exactly,
-        threshold: 7.0,
+        // Re-baselined to 13 after PR #129/#216 expanded the effect fan-out.
+        threshold: 13.0,
     },
     StructuralBudgetSpec {
         bench: "repo_switch/selected_conflict_target",
@@ -428,7 +440,8 @@ pub(crate) const STRUCTURAL_BUDGETS: &[StructuralBudgetSpec] = &[
         bench: "repo_switch/merge_active_with_draft_restore",
         metric: "effect_count",
         comparator: StructuralBudgetComparator::Exactly,
-        threshold: 7.0,
+        // Re-baselined to 13 after PR #129/#216 expanded the effect fan-out.
+        threshold: 13.0,
     },
     StructuralBudgetSpec {
         bench: "repo_switch/merge_active_with_draft_restore",
