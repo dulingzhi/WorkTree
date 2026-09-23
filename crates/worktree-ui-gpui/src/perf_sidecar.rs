@@ -64,23 +64,34 @@ pub fn current_runner_metadata() -> PerfSidecarRunner {
 }
 
 pub fn criterion_output_root() -> PathBuf {
-    if let Some(root) = env_string("WORKTREE_PERF_CRITERION_ROOT") {
-        return PathBuf::from(root);
+    // Resolve the workspace root the same way Criterion resolves its own output
+    // directory, so our sidecar lands next to Criterion's estimates.json
+    // regardless of the process CWD. `cargo bench -p <pkg>` runs the bench binary
+    // from the package directory, so a raw relative `WORKTREE_PERF_CRITERION_ROOT`
+    // would resolve against the package dir while Criterion (using CARGO_TARGET_DIR
+    // or <manifest>/../../target) writes estimates against the *workspace* root --
+    // the report then reads from the workspace root and never finds the sidecar.
+    let workspace_root = if let Some(dir) = env::var_os("CARGO_TARGET_DIR") {
+        // CARGO_TARGET_DIR is <workspace>/target; step up to the workspace root.
+        PathBuf::from(dir).join("..")
+    } else {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+    };
+
+    if let Some(override_root) = env_string("WORKTREE_PERF_CRITERION_ROOT") {
+        let override_path = PathBuf::from(&override_root);
+        if override_path.is_absolute() {
+            return override_path;
+        }
+        // A relative override (e.g. "target/criterion") is resolved against the
+        // workspace root, mirroring where Criterion writes estimates -- not the
+        // raw process CWD, which varies under `cargo bench -p`.
+        return workspace_root.join(&override_root);
     }
 
-    env::var_os("CARGO_TARGET_DIR")
-        .map(PathBuf::from)
-        .or_else(|| {
-            env::current_exe()
-                .ok()
-                .and_then(|path| path.parent()?.parent()?.parent().map(Path::to_path_buf))
-        })
-        .unwrap_or_else(|| {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../..")
-                .join("target")
-        })
-        .join("criterion")
+    workspace_root.join("target").join("criterion")
 }
 
 pub fn criterion_sidecar_path(criterion_root: &Path, bench: &str) -> PathBuf {
