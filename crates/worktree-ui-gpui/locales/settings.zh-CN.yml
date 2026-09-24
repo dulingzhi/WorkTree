@@ -16,6 +16,7 @@ settings:
     merge_tool: 合并工具
     environment: 环境
     links: 链接
+    storage: 存储
     no_match: 没有匹配的设置
   search:
     placeholder: 搜索
@@ -250,3 +251,9 @@ settings:
     content_full_detail: 使用常规文件差异视图显示完整文件。
     view_inline_detail: 内联显示更改。
     view_split_detail: 以拆分视图显示更改。
+  storage:
+    path: 缓存位置
+    size: 占用空间
+    entries: 缓存快照数
+    clear: 清除缓存
+    unavailable: 当前构建没有可用的缓存。

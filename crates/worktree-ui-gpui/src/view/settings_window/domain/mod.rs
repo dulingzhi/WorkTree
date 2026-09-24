@@ -184,5 +184,6 @@ pub(super) mod git_log;
 pub(super) mod gpg_signing;
 pub(super) mod links;
 pub(super) mod merge_tool;
+pub(super) mod storage;
 pub(super) mod tags;
 pub(super) mod terminal;

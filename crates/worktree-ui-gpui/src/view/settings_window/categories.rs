@@ -73,6 +73,7 @@ pub(super) enum SettingsCategory {
     MergeTool,
     Environment,
     Links,
+    Storage,
 }
 
 impl SettingsCategory {
@@ -89,6 +90,7 @@ impl SettingsCategory {
         SettingsCategory::MergeTool,
         SettingsCategory::Environment,
         SettingsCategory::Links,
+        SettingsCategory::Storage,
     ];
 
     pub(super) fn label(self) -> &'static str {
@@ -105,6 +107,7 @@ impl SettingsCategory {
             Self::MergeTool => tr_str("settings.nav.merge_tool"),
             Self::Environment => tr_str("settings.nav.environment"),
             Self::Links => tr_str("settings.nav.links"),
+            Self::Storage => tr_str("settings.nav.storage"),
         }
     }
 
@@ -122,6 +125,7 @@ impl SettingsCategory {
             Self::MergeTool => "icons/git_merge.svg",
             Self::Environment => "icons/computer.svg",
             Self::Links => "icons/link.svg",
+            Self::Storage => "icons/disk.svg",
         }
     }
 
@@ -139,6 +143,7 @@ impl SettingsCategory {
             Self::MergeTool => "settings_window_nav_merge_tool",
             Self::Environment => "settings_window_nav_environment",
             Self::Links => "settings_window_nav_links",
+            Self::Storage => "settings_window_nav_storage",
         }
     }
 
@@ -180,6 +185,7 @@ impl SettingsCategory {
                 "links theme guide github license open source licenses professional edition \
                  waitlist"
             }
+            Self::Storage => "storage cache history cache disk space clear cache size entries path",
         }
     }
 

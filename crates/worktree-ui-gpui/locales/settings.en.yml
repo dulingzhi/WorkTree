@@ -18,6 +18,7 @@ settings:
     merge_tool: Merge tool
     environment: Environment
     links: Links
+    storage: Storage
     no_match: No matching settings
   search:
     placeholder: Search
@@ -252,3 +253,9 @@ settings:
     content_full_detail: Show the full file using the regular file diff view.
     view_inline_detail: Show changes inline.
     view_split_detail: Show changes in split view.
+  storage:
+    path: Cache location
+    size: Disk usage
+    entries: Cached snapshots
+    clear: Clear cache
+    unavailable: No cache is available in this build.

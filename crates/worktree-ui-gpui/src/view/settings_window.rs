@@ -1254,6 +1254,7 @@ impl Render for SettingsWindowView {
                     let merge_tool_card = self.merge_tool_card(theme, cx);
                     let environment_card = self.environment_card(theme, no_separator, cx);
                     let links_card = self.links_card(theme, no_separator, cx);
+                    let storage_card = self.storage_card(theme, no_separator, cx);
                     // The visible page follows the selected nav category.
                     // Expanding a row can only happen from within its owning
                     // category, so deriving from an expanded section keeps the
@@ -1276,6 +1277,7 @@ impl Render for SettingsWindowView {
                         SettingsCategory::MergeTool => merge_tool_card,
                         SettingsCategory::Environment => environment_card,
                         SettingsCategory::Links => links_card,
+                        SettingsCategory::Storage => storage_card,
                     };
 
                     let scroll_surface = restrict_scroll_to_vertical_axis(
