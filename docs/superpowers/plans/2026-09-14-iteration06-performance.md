@@ -387,7 +387,15 @@ P5 取消后，迭代 06 只剩 Wave 2（T4/T5/T6）未开工。原「剩余工�
   因 Linux `temp_dir` 可能是 tmpfs 且被系统清理，与 local-first「用户可见可控」相悖。
   跨 crate 调用走 `worktree_core` 中转（`worktree-git-gix` 是 optional 依赖，先例 `process.rs:273`）。
 
-  **2026-09-24 护栏已落地（commit `48f2ade7`）**：`MAX_TOTAL_BYTES=256MiB`、`MAX_BYTES_PER_REPO=32MiB`、
+  **2026-09-24 后续也已完成**：根目录 `temp_dir` → `app_data_dir()` + 公开清理 API（commit `9076e56f`）；
+  命中率进 perf sidecar（commit `1c487965`，**暂不设预算**，等 CI 观测分布）；设置页 **Storage** 分类
+  ——路径 / 体积 / 快照数 + Clear（commit `18501e18`）。
+
+  **开关（enable/disable）决定不做**，与「默认开就是现状」同一条理由：log 路径无条件调用缓存，全仓没有任何
+  enable 判定，加开关等于新增状态 + 持久化问题，且会让命中率指标因为「用户关了」而读 0%，指标失去意义。
+  开关本该回答的抱怨（「占多少空间、能不能清掉」）已由体积显示 + Clear 回答。**如后续要做，先定持久化位置。**
+
+  **命中率预算待补**：合成 bench 大多不开真 gix 仓库，命中率只在开真仓库的 bench 上动；先在 CI 看几轮分布再设阈值。：`MAX_TOTAL_BYTES=256MiB`、`MAX_BYTES_PER_REPO=32MiB`、
   `MAX_AGE=7d`、每 16 次 store 扫一次；命中时 `touch_cache_file()` 刷 mtime（修 FIFO→真 LRU）；
   纯函数 `eviction_plan()`（先每仓上限、再全局上限、oldest-first）+ 3 个单测。**未做**：缓存根目录迁移
   `app_data_dir()`、命中率接 `perf_budget_report`、设置页 Storage 分类（→ T5b/c/d）。
