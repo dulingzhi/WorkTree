@@ -52,7 +52,7 @@ mod discard;
 mod file_browser;
 mod git_ops;
 mod history;
-mod history_cache;
+pub(crate) mod history_cache;
 mod lfs;
 mod log;
 mod mergetool;

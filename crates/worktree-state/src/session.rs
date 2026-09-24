@@ -1969,7 +1969,9 @@ fn non_empty_path(value: Option<&OsStr>) -> Option<PathBuf> {
     Some(PathBuf::from(value))
 }
 
-fn app_data_dir() -> Option<PathBuf> {
+/// Where the app keeps its own data: themes today, and (per the local-first
+/// contract) anything else the user should be able to see and clear.
+pub fn app_data_dir() -> Option<PathBuf> {
     // Follow XDG on linux; otherwise fall back to platform conventions.
     #[cfg(target_os = "linux")]
     {

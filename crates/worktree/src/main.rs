@@ -165,6 +165,7 @@ fn main() {
 
     install_configured_git_executable_preference(&mode);
     install_configured_external_merge_tool(&mode);
+    install_history_cache_location();
 
     #[cfg(all(target_os = "linux", feature = "ui-gpui-runtime"))]
     if let Some(code) = maybe_relaunch_with_linux_x11_fallback(&mode) {
@@ -372,6 +373,22 @@ fn install_configured_git_executable_preference(mode: &AppMode) {
 /// Install the app-level external merge tool preference from the session file.
 /// The conflicted-file context menu snapshots this when dispatching, so the
 /// browser mode — the only mode with that menu — is the one that needs it.
+/// Point the on-disk history cache at the app data directory instead of the
+/// system temp directory.
+///
+/// Local-first: the cache is the user's disk space, so it has to live somewhere
+/// they can find and clear — and on Linux `temp_dir()` may be a tmpfs the OS
+/// wipes without asking, which would silently defeat the whole cache.
+fn install_history_cache_location() {
+    #[cfg(feature = "gix")]
+    {
+        worktree_git_gix::install_history_cache_hooks();
+        if let Some(dir) = worktree_state::session::app_data_dir() {
+            worktree_git_gix::install_history_cache_root(dir.join("history-cache"));
+        }
+    }
+}
+
 fn install_configured_external_merge_tool(mode: &AppMode) {
     if !mode_uses_configured_git_executable_preference(mode) {
         return;

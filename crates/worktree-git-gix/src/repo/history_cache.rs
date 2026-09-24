@@ -27,6 +27,7 @@ use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -211,8 +212,68 @@ fn repo_hash(repo_path: &Path) -> u64 {
     hasher.finish()
 }
 
-fn cache_dir() -> PathBuf {
-    std::env::temp_dir().join("gitcomet-history")
+/// Overrides the cache root for the whole process.
+///
+/// The default is the system temp directory, which on Linux may be a tmpfs that
+/// the OS clears behind our back — the opposite of the local-first "the user can
+/// see and clear this" contract. The app installs an `app_data_dir()`-rooted
+/// path at startup; tests install a scratch directory.
+static CACHE_ROOT: OnceLock<PathBuf> = OnceLock::new();
+
+pub(crate) fn install_cache_root(root: PathBuf) {
+    let _ = CACHE_ROOT.set(root);
+}
+
+pub(crate) fn cache_dir() -> PathBuf {
+    CACHE_ROOT
+        .get_or_init(|| std::env::temp_dir().join("gitcomet-history"))
+        .clone()
+}
+
+/// Every cache file under the current root, as `(bytes, entries)`.
+///
+/// Counts the current schema only — older schemas are somebody else's leftovers
+/// and are claimed by `sweep_cache` on the next store.
+fn cache_entries_now() -> Vec<(PathBuf, u64)> {
+    let schema_prefix = format!("v{}-", SCHEMA_VERSION);
+    let Ok(entries) = std::fs::read_dir(cache_dir()) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.path();
+            let name = path.file_name()?.to_str()?.to_owned();
+            if !name.starts_with(&schema_prefix) || !name.ends_with(".json") {
+                return None;
+            }
+            let size = std::fs::metadata(&path).ok()?.len();
+            Some((path, size))
+        })
+        .collect()
+}
+
+/// Total size and entry count of the cache — what the storage surface reports.
+pub(crate) fn cache_usage() -> (u64, usize) {
+    let entries = cache_entries_now();
+    let bytes = entries.iter().map(|(_, size)| *size).sum();
+    (bytes, entries.len())
+}
+
+/// Delete every cache entry, regardless of repository. Returns how many went.
+///
+/// This is the production counterpart of the test-only `clear_repo_cache`: the
+/// settings page needs a "clear" affordance that works for the whole app, and
+/// a cache the user cannot delete is not a cache the user controls.
+pub(crate) fn clear_all() -> usize {
+    let entries = cache_entries_now();
+    let mut removed = 0usize;
+    for (path, _) in entries {
+        if std::fs::remove_file(path).is_ok() {
+            removed += 1;
+        }
+    }
+    removed
 }
 
 fn cache_path(repo_path: &Path, fingerprint: u64, request_hash: u64) -> PathBuf {
@@ -989,6 +1050,47 @@ mod tests {
             page.next_cursor.is_none(),
             "nothing follows the last commit"
         );
+    }
+
+    /// A scratch cache root, installed once per test process (`install_cache_root`
+    /// is a `OnceLock`), so the filesystem-touching cases never see — or delete —
+    /// the real cache.
+    fn scratch_cache_root() -> PathBuf {
+        static ROOT: std::sync::LazyLock<PathBuf> = std::sync::LazyLock::new(|| {
+            let dir = std::env::temp_dir().join(format!(
+                "gitcomet-history-test-{}-{}",
+                SCHEMA_VERSION,
+                std::process::id()
+            ));
+            let _ = std::fs::create_dir_all(&dir);
+            install_cache_root(dir.clone());
+            dir
+        });
+        ROOT.clone()
+    }
+
+    /// The settings surface reports the cache it can actually reach: the
+    /// installed root, its size, and its entry count.
+    #[test]
+    fn cache_usage_and_clear_see_only_current_schema_entries() {
+        let root = scratch_cache_root();
+        assert_eq!(cache_dir(), root, "the installed root wins");
+        clear_all();
+
+        let payload = b"{\"schema_version\":2}";
+        std::fs::write(root.join("v2-r00000000000000aa-f1-2.json"), payload)
+            .expect("write cache entry");
+        // Old schema and unrelated files are somebody else's, not ours to count
+        // or delete.
+        std::fs::write(root.join("v1-r00000000000000aa-f1-2.json"), b"{}").expect("write old entry");
+        std::fs::write(root.join("notes.txt"), b"x").expect("write stray file");
+
+        let (bytes, entries) = cache_usage();
+        assert_eq!(entries, 1, "only the current schema counts");
+        assert_eq!(bytes, payload.len() as u64);
+
+        assert_eq!(clear_all(), 1, "clear removes exactly what we counted");
+        assert_eq!(cache_usage(), (0, 0));
     }
 
     fn entry(repo: &str, name: &str, seconds_ago: u64, size: u64) -> CacheFileEntry {

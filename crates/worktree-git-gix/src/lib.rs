@@ -27,6 +27,23 @@ pub fn install_test_git_command_environment(
     });
 }
 
+/// Publish the history-cache control hooks into `worktree_core` so the settings
+/// surface can report and clear the cache without depending on this crate.
+pub fn install_history_cache_hooks() {
+    worktree_core::history_cache::install_history_cache_hooks(
+        worktree_core::history_cache::HistoryCacheHooks {
+            dir: repo::history_cache::cache_dir,
+            usage: repo::history_cache::cache_usage,
+            clear: repo::history_cache::clear_all,
+        },
+    );
+}
+
+/// Move the history cache out of the system temp directory.
+pub fn install_history_cache_root(root: std::path::PathBuf) {
+    repo::history_cache::install_cache_root(root);
+}
+
 #[doc(hidden)]
 pub fn allow_test_repo_local_mergetool_command(repo: &std::path::Path, tool_name: &str) {
     repo::allow_test_repo_local_mergetool_command(repo, tool_name);
