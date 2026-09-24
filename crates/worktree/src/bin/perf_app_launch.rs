@@ -3,12 +3,13 @@ use serde_json::{Map, json};
 use std::collections::VecDeque;
 use std::env;
 use std::fs;
-use std::io::{BufRead as _, BufReader, Write as _};
+use std::io::{BufRead as _, BufReader};
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::sync::mpsc::TryRecvError;
 use std::thread;
@@ -1223,40 +1224,46 @@ fn run_git(repo: &Path, args: &[&str]) -> Result<(), String> {
 }
 
 fn run_git_with_input(repo: &Path, args: &[&str], input: &str) -> Result<(), String> {
-    let mut child = git_command(repo)
+    // Feed the payload through a temporary file instead of `Stdio::piped()`.
+    // Rust's anonymous stdin pipe is backed by a *named* pipe on Windows and can
+    // fail with ERROR_PIPE_BUSY (os error 231) once the pipe namespace is
+    // saturated — observed on this machine where even `git --version` with a
+    // piped stdin fails while piped stdout/stderr still works.  A plain file
+    // redirect has no such limit and additionally removes the stdin/stdout
+    // deadlock window for large `fast-import` streams.
+    let payload_path = stage_stdin_payload(input)?;
+    let result = run_git_with_stdin_file(repo, args, &payload_path);
+    let _ = fs::remove_file(&payload_path);
+    result
+}
+
+fn stage_stdin_payload(input: &str) -> Result<PathBuf, String> {
+    static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+    let sequence = SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let path = env::temp_dir().join(format!(
+        "gitcomet-perf-fixture-{}-{sequence}.in",
+        std::process::id()
+    ));
+    fs::write(&path, input)
+        .map_err(|err| format!("failed to stage stdin payload at {}: {err}", path.display()))?;
+    Ok(path)
+}
+
+fn run_git_with_stdin_file(repo: &Path, args: &[&str], payload: &Path) -> Result<(), String> {
+    let stdin = fs::File::open(payload).map_err(|err| {
+        format!(
+            "failed to open stdin payload {} for git {:?}: {err}",
+            payload.display(),
+            args
+        )
+    })?;
+    let output = git_command(repo)
         .args(args)
-        .stdin(Stdio::piped())
+        .stdin(Stdio::from(stdin))
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|err| {
-            format!(
-                "failed to spawn git {:?} in {}: {err}",
-                args,
-                repo.display()
-            )
-        })?;
-
-    let mut stdin = child
-        .stdin
-        .take()
-        .ok_or_else(|| format!("git {:?} stdin unavailable in {}", args, repo.display()))?;
-    stdin.write_all(input.as_bytes()).map_err(|err| {
-        format!(
-            "failed to write stdin for git {:?} in {}: {err}",
-            args,
-            repo.display()
-        )
-    })?;
-    drop(stdin);
-
-    let output = child.wait_with_output().map_err(|err| {
-        format!(
-            "failed to wait for git {:?} in {}: {err}",
-            args,
-            repo.display()
-        )
-    })?;
+        .output()
+        .map_err(|err| format!("failed to run git {:?} in {}: {err}", args, repo.display()))?;
     if output.status.success() {
         return Ok(());
     }
@@ -1451,7 +1458,10 @@ mod tests {
         assert_eq!(LaunchScenario::WarmSingleRepo.repo_count(), 1);
         assert_eq!(LaunchScenario::WarmTwentyRepos.repo_count(), 20);
 
-        assert_eq!(LaunchScenario::ColdEmptyWorkspace.expected_restored_tabs(), 0);
+        assert_eq!(
+            LaunchScenario::ColdEmptyWorkspace.expected_restored_tabs(),
+            0
+        );
         assert_eq!(LaunchScenario::ColdFiveRepos.expected_restored_tabs(), 5);
         assert_eq!(LaunchScenario::ColdTwentyRepos.expected_restored_tabs(), 20);
         assert_eq!(LaunchScenario::WarmTwentyRepos.expected_restored_tabs(), 20);
@@ -1554,7 +1564,8 @@ mod tests {
             }),
         };
 
-        let metrics = build_launch_sidecar_metrics(first_paint, first_interactive, 1, 20, Some(333));
+        let metrics =
+            build_launch_sidecar_metrics(first_paint, first_interactive, 1, 20, Some(333));
 
         assert_eq!(metrics.get("first_paint_ms"), Some(&Value::from(111)));
         assert_eq!(metrics.get("first_interactive_ms"), Some(&Value::from(222)));
