@@ -344,6 +344,26 @@ P5 取消后，迭代 06 只剩 Wave 2（T4/T5/T6）未开工。原「剩余工�
 
   代价仅「设置页 Git 版本串短暂为空」，主视图零信息损失。
 
+  **2026-09-24 已落地（commit `24fb8168`）+ 实测**：`git_runtime_slot()` 不再同步探测，
+  改为乐观 `Available` + 后台线程探测；新增 `await_git_runtime_probe()`（Condvar gate），
+  `app.rs` 建 store 后 `spawn_git_runtime_backfill()` 回填，`view/mod.rs` 窗口激活处改用
+  `current_git_runtime()`（不再每次激活同步 spawn git）。
+
+  `perf-app-launch` 稳态实测（release，本机，两遍）：
+
+  | 指标 | 改前 | 改后 | Δ |
+  |---|---|---|---|
+  | `first_paint_ms` | 824–883 | 577–676 | **−200~250** |
+  | `first_interactive_ms` | 965–993 | 582–683 | **−300~380** |
+  | paint → interactive 间隔 | ~140 ms | ~7 ms | **−133 ms** |
+
+  第三条是本次改动的核心证据：那 ~140 ms 正是「首次窗口激活时同步 `git --version`」卡在首帧之后。
+
+  **两个附带结论**：① 冷启动耗时与仓库数**无关**（1/5/20 仓库互在噪声内），故「恢复 tab 不实例化全部仓库」
+  无需再做——`restore_session` 早已只开 active repo；② 首轮基线里 `cold_twenty_repos` 的 1374 ms
+  是**假数**（新链接的 127 MB 二进制首次启动 + %TEMP% 里 1365 个残留夹具目录），回退代码重测得 846 ms。
+  **教训**：新二进制的头一次 launch 要丢弃，基线取稳态。
+
 - **P6-D4（T5 默认开关 + 磁盘上限）—— 2026-09-23 已闭合：默认开 + 256 MiB 全局上限 + 7 天 TTL + 设置页可清。**
 
   审计发现「默认开」**就是现状**：`log.rs:1707` / `log.rs:1882` 无条件调用缓存，全仓不存在任何
@@ -366,6 +386,11 @@ P5 取消后，迭代 06 只剩 Wave 2（T4/T5/T6）未开工。原「剩余工�
   缓存根目录建议从 `std::env::temp_dir()` 迁到 `app_data_dir()`（`session.rs:1972`），
   因 Linux `temp_dir` 可能是 tmpfs 且被系统清理，与 local-first「用户可见可控」相悖。
   跨 crate 调用走 `worktree_core` 中转（`worktree-git-gix` 是 optional 依赖，先例 `process.rs:273`）。
+
+  **2026-09-24 护栏已落地（commit `48f2ade7`）**：`MAX_TOTAL_BYTES=256MiB`、`MAX_BYTES_PER_REPO=32MiB`、
+  `MAX_AGE=7d`、每 16 次 store 扫一次；命中时 `touch_cache_file()` 刷 mtime（修 FIFO→真 LRU）；
+  纯函数 `eviction_plan()`（先每仓上限、再全局上限、oldest-first）+ 3 个单测。**未做**：缓存根目录迁移
+  `app_data_dir()`、命中率接 `perf_budget_report`、设置页 Storage 分类（→ T5b/c/d）。
 
 - **执行顺序（2026-09-23 定）**：T4 先修 `perf-app-launch` harness 语义并取基线（当前 5/20-repo 三个 case
   必然失败、且从未取过基线），再做 D3 的离线程改动；T5 先做护栏 + 命中率接线，**再**按
