@@ -59,6 +59,30 @@ pub(super) const SNAPSHOT_COMMITS_ALL_BRANCHES: usize = 200;
 const MAX_GENERATIONS_PER_REPO: usize = 16;
 
 // ---------------------------------------------------------------------------
+// Disk guardrails
+//
+// The generation cap alone is not a budget: one entry is a few KB for the log
+// domain but will be orders of magnitude larger once blame lands, and nothing
+// previously removed a file whose refs never moved again. These three limits
+// mirror the image-diff cache (`view/panes/main/diff_cache/image_cache.rs`) so
+// every cache in the app answers to the same ceiling question.
+// ---------------------------------------------------------------------------
+
+/// Ceiling for the whole cache directory, every repository included.
+const MAX_TOTAL_BYTES: u64 = 256 * 1024 * 1024;
+/// Ceiling for one repository. A single blame-sized entry must not be able to
+/// evict every log snapshot in the app.
+const MAX_BYTES_PER_REPO: u64 = 32 * 1024 * 1024;
+/// Entries untouched for this long are dead weight: refs have moved on, or the
+/// repository is gone from the session entirely.
+const MAX_AGE: std::time::Duration = std::time::Duration::from_secs(60 * 60 * 24 * 7);
+/// The byte/TTL sweep reads the whole cache directory, so it runs every N-th
+/// store rather than on every one. Bounded overshoot: N × largest entry.
+const SWEEP_EVERY_STORES: u64 = 16;
+/// Counts stores since the last sweep.
+static STORES_SINCE_SWEEP: AtomicU64 = AtomicU64::new(0);
+
+// ---------------------------------------------------------------------------
 // Serialized projection
 // ---------------------------------------------------------------------------
 
@@ -404,12 +428,26 @@ pub(super) fn load_log_page(
     };
 
     CACHE_STATS.hits.fetch_add(1, Ordering::Relaxed);
+    // Real LRU: without this the mtime only ever records the *write*, so
+    // "oldest" degenerates into "written first" and a snapshot that is read on
+    // every single startup is the first one evicted.
+    touch_cache_file(&path);
     log_event(format_args!(
         "hit mode={mode_idx} limit={limit} served={} rate={:.0}%",
         page.commits.len(),
         CACHE_STATS.hit_rate() * 100.0
     ));
     Some(page)
+}
+
+/// Stamp a cache file as just-used so eviction order is genuinely LRU.
+///
+/// A read that fails to stamp is harmless — the entry simply ages out by write
+/// time, which is the behaviour we had before.
+fn touch_cache_file(path: &Path) {
+    if let Ok(file) = std::fs::OpenOptions::new().write(true).open(path) {
+        let _ = file.set_modified(SystemTime::now());
+    }
 }
 
 /// Retry a filesystem mutation on transient sharing-violation errors. On
@@ -501,6 +539,7 @@ pub(super) fn store_log_page(
             cached.commits.len(),
             bytes.len()
         ));
+        maybe_sweep_cache();
     }
     prune_old_generations(repo_path, fingerprint);
 }
@@ -605,6 +644,127 @@ fn reconstruct_commit(c: &CachedCommit) -> Commit {
 // ---------------------------------------------------------------------------
 // Pruning
 // ---------------------------------------------------------------------------
+
+/// One cache directory entry, as the sweep sees it.
+#[derive(Clone, Debug)]
+struct CacheFileEntry {
+    modified: SystemTime,
+    size: u64,
+    /// `v{n}-r{hash}-` — the per-repository namespace inside the cache dir.
+    repo_prefix: String,
+    path: PathBuf,
+}
+
+/// Pick the files to delete so both byte ceilings hold, oldest first.
+///
+/// Kept separate from the filesystem so the budget arithmetic is testable:
+/// "oldest" is least-recently-*used* because [`touch_cache_file`] stamps mtime
+/// on every hit.
+fn eviction_plan(entries: &[CacheFileEntry], per_repo_cap: u64, total_cap: u64) -> Vec<PathBuf> {
+    let mut per_repo: std::collections::HashMap<&str, u64> = std::collections::HashMap::new();
+    for entry in entries {
+        *per_repo.entry(entry.repo_prefix.as_str()).or_default() += entry.size;
+    }
+    let mut by_age: Vec<&CacheFileEntry> = entries.iter().collect();
+    by_age.sort_by(|a, b| a.modified.cmp(&b.modified).then_with(|| a.path.cmp(&b.path)));
+
+    let mut doomed: Vec<PathBuf> = Vec::new();
+    // Per-repository first: one busy repository must not be able to spend the
+    // whole global budget.
+    for (repo, bytes) in &per_repo {
+        let mut remaining = *bytes;
+        if remaining <= per_repo_cap {
+            continue;
+        }
+        for entry in by_age.iter().filter(|e| e.repo_prefix == *repo) {
+            if remaining <= per_repo_cap {
+                break;
+            }
+            doomed.push(entry.path.clone());
+            remaining = remaining.saturating_sub(entry.size);
+        }
+    }
+
+    let doomed_paths: std::collections::HashSet<PathBuf> = doomed.iter().cloned().collect();
+    let mut total: u64 = entries
+        .iter()
+        .filter(|e| !doomed_paths.contains(e.path.as_path()))
+        .map(|e| e.size)
+        .sum();
+    if total > total_cap {
+        for entry in &by_age {
+            if total <= total_cap {
+                break;
+            }
+            if doomed_paths.contains(entry.path.as_path()) {
+                continue;
+            }
+            doomed.push(entry.path.clone());
+            total = total.saturating_sub(entry.size);
+        }
+    }
+    doomed
+}
+
+/// Delete expired entries and then enforce both byte ceilings.
+fn sweep_cache(now: SystemTime) {
+    let dir = cache_dir();
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return;
+    };
+    let schema_prefix = format!("v{}-", SCHEMA_VERSION);
+    let mut live: Vec<CacheFileEntry> = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some(name) = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(str::to_owned)
+        else {
+            continue;
+        };
+        if !name.starts_with(&schema_prefix) || !name.ends_with(".json") {
+            continue;
+        }
+        let Ok(metadata) = std::fs::metadata(&path) else {
+            continue;
+        };
+        if !metadata.is_file() {
+            continue;
+        }
+        let modified = metadata.modified().unwrap_or(UNIX_EPOCH);
+        if now.duration_since(modified).unwrap_or_default() > MAX_AGE {
+            let _ = std::fs::remove_file(&path);
+            continue;
+        }
+        // `v{n}-r{hash}-f{fp}-{req}.json`: the repo namespace ends at the `-f`
+        // separator. Hex ref hashes contain no dash, so the first hit is it.
+        let repo_prefix = match name.find("-f") {
+            Some(index) => name[..index + 1].to_string(),
+            None => name.clone(),
+        };
+        live.push(CacheFileEntry {
+            modified,
+            size: metadata.len(),
+            repo_prefix,
+            path,
+        });
+    }
+
+    for path in eviction_plan(&live, MAX_BYTES_PER_REPO, MAX_TOTAL_BYTES) {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+/// Run [`sweep_cache`] every [`SWEEP_EVERY_STORES`] stores — it reads the whole
+/// cache directory, so it must stay off the hot path.
+fn maybe_sweep_cache() {
+    if STORES_SINCE_SWEEP.fetch_add(1, Ordering::Relaxed) + 1 < SWEEP_EVERY_STORES {
+        return;
+    }
+    STORES_SINCE_SWEEP.store(0, Ordering::Relaxed);
+    sweep_cache(SystemTime::now());
+}
 
 /// Remove all but the newest [`MAX_GENERATIONS_PER_REPO`] cache files for this
 /// repository, keyed by repo hash. Old generations are simply wasted disk once
@@ -828,6 +988,63 @@ mod tests {
         assert!(
             page.next_cursor.is_none(),
             "nothing follows the last commit"
+        );
+    }
+
+    fn entry(repo: &str, name: &str, seconds_ago: u64, size: u64) -> CacheFileEntry {
+        CacheFileEntry {
+            modified: UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000 - seconds_ago),
+            size,
+            repo_prefix: repo.to_string(),
+            path: PathBuf::from(name),
+        }
+    }
+
+    /// A single repository may not spend the whole budget: blame-sized entries
+    /// would otherwise evict every log snapshot in the app.
+    #[test]
+    fn eviction_plan_caps_each_repo_before_the_global_budget() {
+        let entries = vec![
+            entry("v2-ra-", "a-old.json", 30, 20),
+            entry("v2-ra-", "a-new.json", 10, 20),
+            entry("v2-rb-", "b-old.json", 20, 5),
+        ];
+        let doomed = eviction_plan(&entries, 32, 200);
+        assert_eq!(
+            doomed,
+            vec![PathBuf::from("a-old.json")],
+            "only the over-budget repo loses anything, oldest first"
+        );
+    }
+
+    /// Once the per-repo caps hold, the global ceiling evicts oldest-first
+    /// across repositories.
+    #[test]
+    fn eviction_plan_enforces_global_cap_oldest_first() {
+        let entries = vec![
+            entry("v2-ra-", "a-old.json", 30, 10),
+            entry("v2-ra-", "a-new.json", 10, 10),
+            entry("v2-rb-", "b-mid.json", 20, 10),
+        ];
+        let doomed = eviction_plan(&entries, 32, 15);
+        assert_eq!(
+            doomed,
+            vec![PathBuf::from("a-old.json"), PathBuf::from("b-mid.json")],
+            "oldest across repos goes first, and only until the cap holds"
+        );
+    }
+
+    /// Eviction is LRU, not FIFO: a hit stamps mtime, so a snapshot that is
+    /// still being read survives a newer-but-colder one.
+    #[test]
+    fn eviction_plan_spares_the_most_recently_used_entry() {
+        let entries = vec![
+            entry("v2-ra-", "a-cold.json", 30, 10),
+            entry("v2-ra-", "a-hot.json", 1, 10),
+        ];
+        assert_eq!(
+            eviction_plan(&entries, 32, 10),
+            vec![PathBuf::from("a-cold.json")]
         );
     }
 }
