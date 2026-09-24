@@ -230,6 +230,19 @@ pub(crate) fn cache_dir() -> PathBuf {
         .clone()
 }
 
+/// Cumulative counters, in the shape `worktree_core` reports to the perf
+/// sidecar.
+pub(crate) fn cache_stats() -> worktree_core::history_cache::HistoryCacheStats {
+    let (hits, cold, stale, corrupt, stores) = CACHE_STATS.snapshot();
+    worktree_core::history_cache::HistoryCacheStats {
+        hits,
+        misses_cold: cold,
+        misses_stale: stale,
+        misses_corrupt: corrupt,
+        stores,
+    }
+}
+
 /// Every cache file under the current root, as `(bytes, entries)`.
 ///
 /// Counts the current schema only — older schemas are somebody else's leftovers

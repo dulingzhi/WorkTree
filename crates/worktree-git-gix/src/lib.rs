@@ -35,6 +35,7 @@ pub fn install_history_cache_hooks() {
             dir: repo::history_cache::cache_dir,
             usage: repo::history_cache::cache_usage,
             clear: repo::history_cache::clear_all,
+            stats: repo::history_cache::cache_stats,
         },
     );
 }

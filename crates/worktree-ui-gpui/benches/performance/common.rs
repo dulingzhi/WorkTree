@@ -73,6 +73,40 @@ thread_local! {
     };
 }
 
+/// Counters already attributed to an earlier sidecar.
+///
+/// Criterion runs every benchmark in one process, so the history-cache counters
+/// are cumulative across benches; the sidecar reports the *delta* so a number
+/// belongs to the bench that caused it.
+static REPORTED_CACHE_STATS: std::sync::Mutex<Option<worktree_core::history_cache::HistoryCacheStats>> =
+    std::sync::Mutex::new(None);
+
+/// Append this bench's share of the history-cache counters, when there is one.
+///
+/// `None` hit rate (no reads) is left out entirely rather than written as 0%:
+/// a bench that never touched history has nothing to report, and a budget that
+/// sees a missing key is skipped instead of alerting on a meaningless zero.
+fn append_history_cache_metrics(metrics: &mut Map<String, Value>) {
+    let Some(now) = worktree_core::history_cache::history_cache_stats() else {
+        return;
+    };
+    let delta = {
+        let Ok(mut guard) = REPORTED_CACHE_STATS.lock() else {
+            return;
+        };
+        let delta = now.saturating_sub(guard.unwrap_or_default());
+        *guard = Some(now);
+        delta
+    };
+    let Some(hit_rate_pct) = delta.hit_rate_pct() else {
+        return;
+    };
+    metrics.insert("history_cache_reads".to_string(), json!(delta.reads()));
+    metrics.insert("history_cache_hits".to_string(), json!(delta.hits));
+    metrics.insert("history_cache_stores".to_string(), json!(delta.stores));
+    metrics.insert("history_cache_hit_rate_pct".to_string(), json!(hit_rate_pct));
+}
+
 pub(crate) const SUPPRESS_MISSING_REAL_REPO_NOTICE_ENV: &str =
     "WORKTREE_PERF_SUPPRESS_MISSING_REAL_REPO_NOTICE";
 
@@ -292,6 +326,7 @@ pub(crate) fn emit_sidecar_metrics(bench: &str, mut metrics: Map<String, Value>)
             .tree_sitter
             .append_to_payload_with_prefix(&mut metrics, "tree_sitter_");
     }
+    append_history_cache_metrics(&mut metrics);
     let report = PerfSidecarReport::new(bench, metrics);
     write_criterion_sidecar(&report).unwrap_or_else(|err| panic!("{err}"));
 }

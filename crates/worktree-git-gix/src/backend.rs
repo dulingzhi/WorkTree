@@ -19,6 +19,11 @@ impl GixBackend {
         workdir: &Path,
         cancellation: Option<&CancellationToken>,
     ) -> Result<Arc<dyn GitRepository>> {
+        // Publish the history-cache hooks the first time a repository is opened.
+        // This (optional) crate is the only thing that knows about the cache, but
+        // its consumers — the app binary, the bench harness, the tests — reach it
+        // through `worktree_core`, so the registration has to happen from here.
+        crate::install_history_cache_hooks();
         if let Some(cancellation) = cancellation {
             cancellation.check_cancelled()?;
         }
