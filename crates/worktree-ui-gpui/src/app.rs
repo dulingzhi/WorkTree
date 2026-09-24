@@ -609,6 +609,7 @@ fn open_worktree_window(
                 });
             }
             let (store, events) = AppStore::new(Arc::clone(&backend));
+            spawn_git_runtime_backfill(&store);
             cx.new(|cx| {
                 WorkTreeView::new_with_config(store, events, view_config.clone(), window, cx)
             })
@@ -622,6 +623,18 @@ fn open_worktree_window(
              For per-adapter details, relaunch with RUST_LOG=info."
         )
     })
+}
+
+/// `git --version` no longer runs while the window is being built — the runtime
+/// starts out optimistically available and a background probe resolves it.
+/// Drain that result into the store so the reducer gate and the settings page
+/// see the real state without the UI thread ever waiting for the subprocess.
+fn spawn_git_runtime_backfill(store: &AppStore) {
+    let store = store.clone();
+    std::thread::spawn(move || {
+        let runtime = worktree_core::process::await_git_runtime_probe();
+        store.dispatch(worktree_state::msg::Msg::SetGitRuntimeState(runtime));
+    });
 }
 
 fn current_or_default_ui_scale_percent(cx: &mut App) -> u32 {

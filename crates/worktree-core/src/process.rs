@@ -1,9 +1,10 @@
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-#[cfg(test)]
-use std::sync::Mutex;
-use std::sync::{OnceLock, RwLock};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Condvar, Mutex, OnceLock, RwLock};
+#[cfg(not(test))]
+use std::thread;
 
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub enum GitExecutablePreference {
@@ -228,9 +229,101 @@ fn git_config_set_with(
     )))
 }
 
+/// Placeholder version text shown while the background probe is still running.
+/// The main view treats the runtime as available from the very first frame so a
+/// missing Git surfaces as a real repo-load error instead of a silently empty
+/// workspace; the only visible cost is this string on the settings page.
+const GIT_RUNTIME_PROBING_VERSION: &str = "git version (detecting…)";
+
+/// Bumped by every explicit install so a slow background probe can never
+/// overwrite a newer preference the user just picked in settings.
+static GIT_RUNTIME_GENERATION: AtomicU64 = AtomicU64::new(0);
+
+/// Resolved-probe rendezvous: `None` until the first `git --version` result is
+/// known.  Lets the UI backfill the real state without ever blocking on it.
+struct GitRuntimeProbeGate {
+    resolved: Mutex<Option<GitRuntimeState>>,
+    wake: Condvar,
+}
+
+fn git_runtime_probe_gate() -> &'static GitRuntimeProbeGate {
+    static GATE: OnceLock<GitRuntimeProbeGate> = OnceLock::new();
+    GATE.get_or_init(|| GitRuntimeProbeGate {
+        resolved: Mutex::new(None),
+        wake: Condvar::new(),
+    })
+}
+
+fn optimistic_git_runtime(preference: GitExecutablePreference) -> GitRuntimeState {
+    GitRuntimeState {
+        preference,
+        availability: GitExecutableAvailability::Available {
+            version_output: GIT_RUNTIME_PROBING_VERSION.to_string(),
+        },
+    }
+}
+
 fn git_runtime_slot() -> &'static RwLock<GitRuntimeState> {
     static SLOT: OnceLock<RwLock<GitRuntimeState>> = OnceLock::new();
-    SLOT.get_or_init(|| RwLock::new(probe_git_runtime(GitExecutablePreference::SystemPath)))
+    SLOT.get_or_init(|| {
+        let preference = GitExecutablePreference::SystemPath;
+        // Probing here would put a `git --version` spawn on whatever thread
+        // touches the runtime first — the UI thread during startup.  Start out
+        // optimistic and let the background thread publish the real answer.
+        #[cfg(not(test))]
+        {
+            let generation = GIT_RUNTIME_GENERATION.load(Ordering::Acquire);
+            let probe_preference = preference.clone();
+            let _probe = thread::spawn(move || {
+                let resolved = probe_git_runtime(probe_preference.clone());
+                if GIT_RUNTIME_GENERATION.load(Ordering::Acquire) != generation {
+                    return;
+                }
+                // A settings install raced us to the finish line; its result
+                // is the fresher one.
+                if current_git_runtime().preference != probe_preference {
+                    return;
+                }
+                publish_git_runtime(resolved);
+            });
+        }
+        RwLock::new(optimistic_git_runtime(preference))
+    })
+}
+
+/// Store the resolved runtime and wake anybody waiting on it.
+fn publish_git_runtime(resolved: GitRuntimeState) {
+    *git_runtime_slot()
+        .write()
+        .unwrap_or_else(|err| err.into_inner()) = resolved.clone();
+    let gate = git_runtime_probe_gate();
+    let mut guard = gate.resolved.lock().unwrap_or_else(|err| err.into_inner());
+    *guard = Some(resolved);
+    drop(guard);
+    gate.wake.notify_all();
+}
+
+/// Block until the first `git --version` probe has resolved and return it.
+///
+/// Safe to call from a worker thread; the probe itself never runs on the caller
+/// of [`current_git_runtime`], which is what keeps startup off the UI thread.
+pub fn await_git_runtime_probe() -> GitRuntimeState {
+    // Touching the slot first guarantees the background probe is underway.
+    let _ = current_git_runtime();
+    // This crate's own tests never spawn it, so resolve inline instead of
+    // waiting on a gate nobody will ever open.
+    if cfg!(test) {
+        return refresh_git_runtime();
+    }
+
+    let gate = git_runtime_probe_gate();
+    let mut guard = gate.resolved.lock().unwrap_or_else(|err| err.into_inner());
+    loop {
+        if let Some(resolved) = guard.as_ref() {
+            return resolved.clone();
+        }
+        guard = gate.wake.wait(guard).unwrap_or_else(|err| err.into_inner());
+    }
 }
 
 #[cfg(test)]
@@ -264,9 +357,11 @@ pub fn current_git_executable_preference() -> GitExecutablePreference {
 
 pub fn install_git_executable_preference(preference: GitExecutablePreference) -> GitRuntimeState {
     let next = probe_git_runtime(preference);
-    *git_runtime_slot()
-        .write()
-        .unwrap_or_else(|err| err.into_inner()) = next.clone();
+    publish_git_runtime(next.clone());
+    // Retire any in-flight background probe *after* publishing: a probe that
+    // starts inside `publish_git_runtime` still reads the pre-bump generation
+    // and therefore sees this install and bails out instead of clobbering it.
+    GIT_RUNTIME_GENERATION.fetch_add(1, Ordering::AcqRel);
     next
 }
 

@@ -32,7 +32,7 @@ use worktree_core::domain::{
     UpstreamDivergence,
 };
 use worktree_core::file_diff::FileDiffRow;
-use worktree_core::process::refresh_git_runtime;
+use worktree_core::process::current_git_runtime;
 use worktree_core::services::{PullMode, RemoteUrlKind, ResetMode};
 use worktree_state::model::{
     AppNotificationKind, AppState, AuthPromptKind, CloneOpState, CloneOpStatus, DefaultTagType,
@@ -2216,7 +2216,10 @@ impl WorkTreeView {
             }
             let self_initiated_grab =
                 consume_window_grab_activation(&mut this.window_grab_activation_suppressed_at, now);
-            let runtime = refresh_git_runtime();
+            // Cached, never a blocking `git --version`: the probe runs once in
+            // the background (see `spawn_git_runtime_backfill`) and lands here
+            // through `Msg::SetGitRuntimeState`.
+            let runtime = current_git_runtime();
             if runtime != this.state.git_runtime {
                 this.store
                     .dispatch(Msg::SetGitRuntimeState(runtime.clone()));
