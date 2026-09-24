@@ -141,7 +141,11 @@ mod tests {
 
         let after_second = stats(6, 4, 0, 0, 2);
         let second_only = after_second.saturating_sub(after_first);
-        assert_eq!(second_only.reads(), 5, "five reads happened after bench one");
+        assert_eq!(
+            second_only.reads(),
+            5,
+            "five reads happened after bench one"
+        );
         assert_eq!(second_only.hits, 5);
         assert_eq!(second_only.stores, 1);
         assert_eq!(second_only.hit_rate_pct(), Some(100));

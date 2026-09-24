@@ -78,8 +78,9 @@ thread_local! {
 /// Criterion runs every benchmark in one process, so the history-cache counters
 /// are cumulative across benches; the sidecar reports the *delta* so a number
 /// belongs to the bench that caused it.
-static REPORTED_CACHE_STATS: std::sync::Mutex<Option<worktree_core::history_cache::HistoryCacheStats>> =
-    std::sync::Mutex::new(None);
+static REPORTED_CACHE_STATS: std::sync::Mutex<
+    Option<worktree_core::history_cache::HistoryCacheStats>,
+> = std::sync::Mutex::new(None);
 
 /// Append this bench's share of the history-cache counters, when there is one.
 ///
@@ -104,7 +105,10 @@ fn append_history_cache_metrics(metrics: &mut Map<String, Value>) {
     metrics.insert("history_cache_reads".to_string(), json!(delta.reads()));
     metrics.insert("history_cache_hits".to_string(), json!(delta.hits));
     metrics.insert("history_cache_stores".to_string(), json!(delta.stores));
-    metrics.insert("history_cache_hit_rate_pct".to_string(), json!(hit_rate_pct));
+    metrics.insert(
+        "history_cache_hit_rate_pct".to_string(),
+        json!(hit_rate_pct),
+    );
 }
 
 pub(crate) const SUPPRESS_MISSING_REAL_REPO_NOTICE_ENV: &str =

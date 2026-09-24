@@ -740,7 +740,11 @@ fn eviction_plan(entries: &[CacheFileEntry], per_repo_cap: u64, total_cap: u64) 
         *per_repo.entry(entry.repo_prefix.as_str()).or_default() += entry.size;
     }
     let mut by_age: Vec<&CacheFileEntry> = entries.iter().collect();
-    by_age.sort_by(|a, b| a.modified.cmp(&b.modified).then_with(|| a.path.cmp(&b.path)));
+    by_age.sort_by(|a, b| {
+        a.modified
+            .cmp(&b.modified)
+            .then_with(|| a.path.cmp(&b.path))
+    });
 
     let mut doomed: Vec<PathBuf> = Vec::new();
     // Per-repository first: one busy repository must not be able to spend the
@@ -790,11 +794,7 @@ fn sweep_cache(now: SystemTime) {
     let mut live: Vec<CacheFileEntry> = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
-        let Some(name) = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .map(str::to_owned)
-        else {
+        let Some(name) = path.file_name().and_then(|n| n.to_str()).map(str::to_owned) else {
             continue;
         };
         if !name.starts_with(&schema_prefix) || !name.ends_with(".json") {
@@ -1095,7 +1095,8 @@ mod tests {
             .expect("write cache entry");
         // Old schema and unrelated files are somebody else's, not ours to count
         // or delete.
-        std::fs::write(root.join("v1-r00000000000000aa-f1-2.json"), b"{}").expect("write old entry");
+        std::fs::write(root.join("v1-r00000000000000aa-f1-2.json"), b"{}")
+            .expect("write old entry");
         std::fs::write(root.join("notes.txt"), b"x").expect("write stray file");
 
         let (bytes, entries) = cache_usage();
