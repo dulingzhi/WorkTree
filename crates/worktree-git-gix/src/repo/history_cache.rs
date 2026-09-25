@@ -52,6 +52,7 @@ const SCHEMA_VERSION: u32 = 3;
 /// in the file name does.
 const DOMAIN_LOG: u8 = 0;
 const DOMAIN_REFLOG: u8 = 1;
+const DOMAIN_SEARCH: u8 = 2;
 /// How many commits one snapshot holds — the fetch window for a cold first page.
 ///
 /// Walking this many instead of just `limit` costs marginally more once, and in
@@ -155,6 +156,26 @@ struct CachedReflogEntry {
     author: String,
 }
 
+/// A completed `git log --all --grep/--author` run: the merged, deduplicated
+/// matches for one query, newest-first.
+///
+/// Reuses [`CachedCommit`] — search returns the same `Commit` projection as the
+/// history list, so the two domains share one serialization and one
+/// reconstruction path.
+#[derive(Serialize, Deserialize)]
+struct CachedSearch {
+    schema_version: u32,
+    domain: u8,
+    ref_fingerprint: u64,
+    /// Not part of the lookup — the query is already in the file name's request
+    /// hash. Kept so a stray file can be identified from its contents alone.
+    query: String,
+    /// Whether the run returned as many commits as it was allowed to, i.e. the
+    /// reflog-equivalent of "there may be more".
+    has_more: bool,
+    commits: Vec<CachedCommit>,
+}
+
 // ---------------------------------------------------------------------------
 // Fingerprinting
 // ---------------------------------------------------------------------------
@@ -209,6 +230,17 @@ pub(super) fn all_refs_fingerprint_from_entries(
 /// Standalone all-refs fingerprint, for the probe harness's timing breakdown.
 #[allow(dead_code)]
 pub(super) fn all_refs_fingerprint(repo: &Repository) -> u64 {
+    all_refs_fingerprint_inner(repo, true)
+}
+
+/// Fingerprint over every ref, optionally leaving tags out.
+///
+/// `AllBranches` history walks seed from branches and remotes, so a tag moving
+/// cannot change their result. Commit search runs `git log --all`, which *does*
+/// read tags — a commit reachable only through a tag is a real search hit — so
+/// its fingerprint has to include them, or a tagged-only commit would be missing
+/// from every later search for the same query.
+fn all_refs_fingerprint_inner(repo: &Repository, skip_tags: bool) -> u64 {
     let mut entries: Vec<(Vec<u8>, Option<String>)> = Vec::new();
     // Two `let else` rather than a chained `and_then`: the iterator borrows the
     // ref store, so the two steps cannot be collapsed into one expression.
@@ -219,10 +251,12 @@ pub(super) fn all_refs_fingerprint(repo: &Repository) -> u64 {
         return all_refs_fingerprint_from_entries(repo, &mut entries);
     };
     for reference in iter.flatten() {
-        if matches!(
-            reference.name().category(),
-            Some(gix::reference::Category::Tag)
-        ) {
+        if skip_tags
+            && matches!(
+                reference.name().category(),
+                Some(gix::reference::Category::Tag)
+            )
+        {
             continue;
         }
         let name = reference.name().as_bstr().as_bytes().to_vec();
@@ -243,6 +277,12 @@ fn ref_fingerprint(repo: &Repository, mode_idx: u8) -> u64 {
     } else {
         head_fingerprint(repo)
     }
+}
+
+/// Fingerprint for a commit-search result: every ref, tags included, because
+/// `git log --all` reads tags too.
+pub(super) fn search_fingerprint(repo: &Repository) -> u64 {
+    all_refs_fingerprint_inner(repo, false)
 }
 
 /// Stable hash of the workdir path, used as the per-repo namespace on disk.
@@ -407,6 +447,15 @@ pub(crate) struct CacheStats {
 /// Same counters for the reflog domain. Kept apart so a hit rate can be read
 /// per domain: "the log cache works" must not be masked by "reflog never hits".
 pub(crate) static REFLOG_CACHE_STATS: CacheStats = CacheStats {
+    hits: AtomicU64::new(0),
+    misses_cold: AtomicU64::new(0),
+    misses_stale: AtomicU64::new(0),
+    misses_corrupt: AtomicU64::new(0),
+    stores: AtomicU64::new(0),
+};
+
+/// Same counters for the commit-search domain — see [`REFLOG_CACHE_STATS`].
+pub(crate) static SEARCH_CACHE_STATS: CacheStats = CacheStats {
     hits: AtomicU64::new(0),
     misses_cold: AtomicU64::new(0),
     misses_stale: AtomicU64::new(0),
@@ -989,6 +1038,177 @@ fn project_reflog_line(line: &gix::refs::log::Line) -> CachedReflogEntry {
         time: line.signature.time.seconds,
         author: String::from_utf8_lossy(line.signature.name.as_ref()).into_owned(),
     }
+}
+
+// ---------------------------------------------------------------------------
+// Search domain
+//
+// A commit search is `git log --all` twice — message then author, up to
+// `limit` matches each — so on a 37k-commit repository it costs ~940ms. The
+// query is what the user typed, and the result is a pure function of (query,
+// refs), so the same reasoning as the other two domains applies: cache the run,
+// key it by the refs, slice it per request.
+//
+// Unlike the log domain this is not on the cold-open path — a search is a
+// deliberate action, and its results are not restored across restarts. It is
+// worth caching anyway because the win is large (37x on a hit: ~940ms -> ~25ms)
+// and the overhead is small: the all-refs fingerprint is ~23ms once the OS file
+// cache is warm, so break-even is a ~3% hit rate.
+// ---------------------------------------------------------------------------
+
+/// The largest search result that will be written to disk.
+const MAX_SEARCH_WINDOW: usize = 2000;
+
+fn search_request_hash(query: &str) -> u64 {
+    // Trimmed here rather than by the caller so a lookup and a store can never
+    // disagree about which query they are talking about.
+    request_hash(DOMAIN_SEARCH, 0, Some(query.trim()))
+}
+
+/// Serve a completed search for `query` out of the cache, if it can.
+///
+/// `None` means "run the search": no result cached, a stale one, or a request
+/// that wants more than a result we know was truncated.
+pub(super) fn load_search(
+    repo: &Repository,
+    repo_path: &Path,
+    query: &str,
+    limit: usize,
+    // See [`load_log_page`]: pass the fingerprint when the caller has already
+    // enumerated refs — here it means one enumeration for both the lookup and
+    // the store that follows a miss.
+    fingerprint: Option<u64>,
+) -> Option<Vec<Commit>> {
+    let fingerprint = fingerprint.unwrap_or_else(|| all_refs_fingerprint_inner(repo, false));
+    let path = cache_path(repo_path, fingerprint, search_request_hash(query));
+
+    let bytes = match std::fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            SEARCH_CACHE_STATS
+                .misses_cold
+                .fetch_add(1, Ordering::Relaxed);
+            log_event(format_args!(
+                "search miss kind=cold limit={limit} rate={:.0}%",
+                SEARCH_CACHE_STATS.hit_rate() * 100.0
+            ));
+            return None;
+        }
+    };
+    let parsed: CachedSearch = match serde_json::from_slice(&bytes) {
+        Ok(parsed) => parsed,
+        Err(_) => {
+            SEARCH_CACHE_STATS
+                .misses_corrupt
+                .fetch_add(1, Ordering::Relaxed);
+            log_event(format_args!(
+                "search miss kind=corrupt limit={limit} rate={:.0}%",
+                SEARCH_CACHE_STATS.hit_rate() * 100.0
+            ));
+            return None;
+        }
+    };
+
+    if parsed.schema_version != SCHEMA_VERSION
+        || parsed.domain != DOMAIN_SEARCH
+        || parsed.ref_fingerprint != fingerprint
+    {
+        SEARCH_CACHE_STATS
+            .misses_stale
+            .fetch_add(1, Ordering::Relaxed);
+        log_event(format_args!(
+            "search miss kind=stale limit={limit} rate={:.0}%",
+            SEARCH_CACHE_STATS.hit_rate() * 100.0
+        ));
+        return None;
+    }
+
+    if limit > parsed.commits.len() && parsed.has_more {
+        SEARCH_CACHE_STATS
+            .misses_cold
+            .fetch_add(1, Ordering::Relaxed);
+        log_event(format_args!(
+            "search miss kind=short limit={limit} available={} rate={:.0}%",
+            parsed.commits.len(),
+            SEARCH_CACHE_STATS.hit_rate() * 100.0
+        ));
+        return None;
+    }
+
+    let commits = parsed
+        .commits
+        .iter()
+        .take(limit)
+        .map(reconstruct_commit)
+        .collect();
+
+    SEARCH_CACHE_STATS.hits.fetch_add(1, Ordering::Relaxed);
+    touch_cache_file(&path);
+    log_event(format_args!(
+        "search hit limit={limit} rate={:.0}%",
+        SEARCH_CACHE_STATS.hit_rate() * 100.0
+    ));
+    Some(commits)
+}
+
+/// Persist a finished search for `query`, keyed by the current refs.
+///
+/// `requested` is the `limit` the search was allowed to return — the only way to
+/// know whether the result reached the end of the matches.
+pub(super) fn store_search(
+    repo: &Repository,
+    repo_path: &Path,
+    query: &str,
+    results: &[Commit],
+    requested: usize,
+    fingerprint: Option<u64>,
+) {
+    // An empty result is cached too: "nothing matches" is a real answer, and
+    // re-running a negative search costs exactly as much as a positive one.
+    let fingerprint = fingerprint.unwrap_or_else(|| all_refs_fingerprint_inner(repo, false));
+    let key = search_request_hash(query);
+    let path = cache_path(repo_path, fingerprint, key);
+
+    let keep = results.len().min(MAX_SEARCH_WINDOW);
+    let has_more = results.len() > keep || results.len() >= requested;
+    let cached = CachedSearch {
+        schema_version: SCHEMA_VERSION,
+        domain: DOMAIN_SEARCH,
+        ref_fingerprint: fingerprint,
+        query: query.trim().to_owned(),
+        has_more,
+        commits: results[..keep].iter().map(project_commit).collect(),
+    };
+
+    let bytes = match serde_json::to_vec(&cached) {
+        Ok(b) => b,
+        Err(_) => return,
+    };
+
+    let dir = cache_dir();
+    if !retry_on_transient_fs(|| std::fs::create_dir_all(&dir)) {
+        return;
+    }
+
+    let tmp = dir.join(format!(
+        "tmp-{}-{:016x}-{:016x}.json",
+        std::process::id(),
+        fingerprint,
+        key,
+    ));
+    if !retry_on_transient_fs(|| std::fs::write(&tmp, &bytes)) {
+        return;
+    }
+    if retry_on_transient_fs(|| std::fs::rename(&tmp, &path)) {
+        SEARCH_CACHE_STATS.stores.fetch_add(1, Ordering::Relaxed);
+        log_event(format_args!(
+            "search store commits={} bytes={} has_more={has_more}",
+            cached.commits.len(),
+            bytes.len()
+        ));
+        maybe_sweep_cache();
+    }
+    prune_old_generations(repo_path, fingerprint);
 }
 
 // ---------------------------------------------------------------------------

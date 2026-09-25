@@ -2239,6 +2239,24 @@ impl GixRepo {
         let mut seen = FxHashSet::default();
         let mut commits = Vec::new();
 
+        // The result of a search is a pure function of (query, refs), so an
+        // unchanged repository answers the same query from disk instead of
+        // spending two `git log --all` passes on it. The fingerprint is
+        // computed once here and handed to both the lookup and the store —
+        // enumerating refs is the one cost a cache adds to a miss, so it must
+        // not be paid twice.
+        let repo = self._repo.to_thread_local();
+        let refs_fingerprint = Some(super::history_cache::search_fingerprint(&repo));
+        if let Some(hits) = super::history_cache::load_search(
+            &repo,
+            &self.spec.workdir,
+            query,
+            limit,
+            refs_fingerprint,
+        ) {
+            return Ok(hits);
+        }
+
         // Hash pass: a hex-shaped query names an object, and `git log`
         // resolves it directly — full hashes and unambiguous prefixes alike,
         // even when no ref reaches the commit. Failures stay quiet
@@ -2286,6 +2304,18 @@ impl GixRepo {
                 commits.push(commit);
             }
         }
+
+        // Persist for the next identical query. The merged, deduplicated run is
+        // what gets stored — not per-pass slices — so a hit returns exactly what
+        // a fresh search would have.
+        super::history_cache::store_search(
+            &repo,
+            &self.spec.workdir,
+            query,
+            &commits,
+            limit,
+            refs_fingerprint,
+        );
 
         Ok(commits)
     }
@@ -3343,6 +3373,91 @@ mod tests {
             after[0].new_id, before[0].new_id,
             "HEAD is back on the same commit, so only the reflog changed"
         );
+    }
+
+    /// A repeated search with unchanged refs is served from disk: a fresh
+    /// `GixRepo` has no in-process state, so identical results can only have
+    /// come from the cache.
+    #[test]
+    fn search_commits_is_served_from_disk_on_a_repeat() {
+        scratch_history_cache_root();
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let workdir = tmp.path();
+        init_test_repo(workdir);
+        commit_file(workdir, "a.txt", "one\n", "fix: the widget");
+        commit_file(workdir, "b.txt", "two\n", "add feature");
+
+        let cold = open_repo(workdir)
+            .search_commits("widget", 10)
+            .expect("cold search");
+        assert_eq!(cold.len(), 1);
+
+        let warm = open_repo(workdir)
+            .search_commits("widget", 10)
+            .expect("warm search");
+        assert_eq!(warm, cold, "the repeat rehydrates the same result");
+
+        // A different query is a different file, not a collision.
+        let other = open_repo(workdir)
+            .search_commits("feature", 10)
+            .expect("other query");
+        assert_eq!(other.len(), 1);
+        assert_eq!(other[0].summary.as_ref(), "add feature");
+    }
+
+    /// A search that matched nothing must not stay empty once a matching commit
+    /// exists: the cache is keyed by refs, and a new commit moved them.
+    #[test]
+    fn search_commits_invalidates_when_a_new_commit_matches() {
+        scratch_history_cache_root();
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let workdir = tmp.path();
+        init_test_repo(workdir);
+        commit_file(workdir, "a.txt", "one\n", "initial");
+
+        let before = open_repo(workdir)
+            .search_commits("widget", 10)
+            .expect("cold search");
+        assert!(before.is_empty(), "nothing matches yet");
+
+        commit_file(workdir, "b.txt", "two\n", "fix: the widget");
+
+        let after = open_repo(workdir)
+            .search_commits("widget", 10)
+            .expect("search after the commit");
+        assert_eq!(after.len(), 1, "the new commit must not be hidden");
+        assert_eq!(after[0].summary.as_ref(), "fix: the widget");
+    }
+
+    /// A commit reachable only through a tag is still a `git log --all` hit, so
+    /// the search fingerprint must include tags — otherwise one tag would make
+    /// every later search for that query quietly stale.
+    #[test]
+    fn search_commits_invalidates_when_only_a_tag_moves() {
+        scratch_history_cache_root();
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let workdir = tmp.path();
+        init_test_repo(workdir);
+        commit_file(workdir, "a.txt", "one\n", "initial");
+
+        let before = open_repo(workdir)
+            .search_commits("widget", 10)
+            .expect("cold search");
+        assert!(before.is_empty());
+
+        // Branch off, tag the branch, delete the branch: the commit is now
+        // reachable through the tag alone — exactly what the history fingerprint
+        // skips and `git log --all` does not.
+        git_success(workdir, &["checkout", "-b", "side"]);
+        commit_file(workdir, "b.txt", "two\n", "fix: the widget");
+        git_success(workdir, &["tag", "wip"]);
+        git_success(workdir, &["checkout", "-"]);
+        git_success(workdir, &["branch", "-D", "side"]);
+
+        let after = open_repo(workdir)
+            .search_commits("widget", 10)
+            .expect("search after tagging");
+        assert_eq!(after.len(), 1, "a tag-only commit must still be found");
     }
 
     #[test]

@@ -414,7 +414,23 @@ P5 取消后，迭代 06 只剩 Wave 2（T4/T5/T6）未开工。原「剩余工�
   读取被截会静默丢条目。reflog 计数器独立一份 `REFLOG_CACHE_STATS`，避免「log 命中率正常」掩盖「reflog 从不命中」；
   暂不进 perf sidecar（要扩 `HistoryCacheStats` 结构，等真有需求再动）。
 
-  **下一步**：commit-search(M) → blame(M–L，最后且单独 PR)。：`MAX_TOTAL_BYTES=256MiB`、`MAX_BYTES_PER_REPO=32MiB`、
+  **2026-09-25：扩展域 commit-search(M) 已落地**（`DOMAIN_SEARCH=2`）。实测（up5client，36,920 commits /
+  281 refs）：一次搜索 = grep 趟 ~400ms + author 趟 ~540ms ≈ **940ms**；全 ref 指纹 **冷 ~133ms / 热 ~23ms**
+  （`WORKTREE_GIX_CACHE_PROBE_REPO` 探针；133ms 是首次触碰 `.git/refs/*` 的 OS 冷缓存，稳态按 23ms 算）。
+  故命中省 ~800ms、未命中多付 ~23ms，**盈亏平衡命中率约 3%** —— 搜索是显式触发（回车/点击，非逐键增量），
+  且结果不跨重启恢复，命中率全靠「同一 query 再搜一次」，量级低但过线。
+
+  **不用 HEAD-only 指纹**：搜索跑的是 `git log --all`，**会读 tag**。只用分支/远端做指纹（log 域的做法）时，
+  一个只经 tag 可达的提交会让之后同 query 的搜索静默漏结果。故 `search_fingerprint()` 走
+  `all_refs_fingerprint_inner(skip_tags=false)`，与 `AllBranches` 的 `skip_tags=true` 分开。
+  已加反向验证：把一个 tag-only 提交挂上去（建分支→提交→打 tag→切回→删分支，HEAD 的 id 与名字都与之前
+  完全相同），测试必须红——把 `skip_tags` 翻成 `true` 实测确实红（`0 != 1`），确认这条测试不是空转。
+
+  指纹由 `search_commits` **算一次**后同时传给 load 与 store——枚举 ref 是缓存给未命中路径新增的唯一成本，
+  不能付两遍。空结果也缓存（「没有匹配」是同样昂贵的答复）。写入上限 `MAX_SEARCH_WINDOW=2000`，
+  与 `COMMIT_SEARCH_LIMIT` 一致：低于它会导致唯一的调用方永远命中不了。计数器 `SEARCH_CACHE_STATS` 独立。
+
+  **下一步**：blame（M–L，最后且单独 PR）。：`MAX_TOTAL_BYTES=256MiB`、`MAX_BYTES_PER_REPO=32MiB`、
   `MAX_AGE=7d`、每 16 次 store 扫一次；命中时 `touch_cache_file()` 刷 mtime（修 FIFO→真 LRU）；
   纯函数 `eviction_plan()`（先每仓上限、再全局上限、oldest-first）+ 3 个单测。**未做**：缓存根目录迁移
   `app_data_dir()`、命中率接 `perf_budget_report`、设置页 Storage 分类（→ T5b/c/d）。
