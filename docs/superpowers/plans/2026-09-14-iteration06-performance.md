@@ -430,7 +430,33 @@ P5 取消后，迭代 06 只剩 Wave 2（T4/T5/T6）未开工。原「剩余工�
   不能付两遍。空结果也缓存（「没有匹配」是同样昂贵的答复）。写入上限 `MAX_SEARCH_WINDOW=2000`，
   与 `COMMIT_SEARCH_LIMIT` 一致：低于它会导致唯一的调用方永远命中不了。计数器 `SEARCH_CACHE_STATS` 独立。
 
-  **下一步**：blame（M–L，最后且单独 PR）。：`MAX_TOTAL_BYTES=256MiB`、`MAX_BYTES_PER_REPO=32MiB`、
+  **2026-09-25：扩展域 blame(M) 已落地**（`DOMAIN_BLAME=3`）——T5 三个扩展域全部完成。
+
+  **blame 是唯一不需要 ref 指纹的域**：它按**已解析的 commit id** 做键，commit id 是内容寻址的——它指向的
+  tree、以及走到它的每一条祖先路径都是不可变的。所以 blame 缓存**不可能过期**：没有「refs 动了」这回事要检测，
+  查缓存连一次 ref 枚举都不用付。这也是三个域里唯一「零失效风险」的。代价是 `blame_options_hash()`：
+  `diff.renames` / `diff.renameLimit` 决定重命名跟踪，而重命名跟踪决定某一行归哪个历史提交，所以这两个配置进了键。
+  （配置读取留在 `blame.rs`，`history_cache` 不碰配置。）
+
+  **存的是「提交表 + 逐行引用」**，不是逐行平铺：领域类型 `BlameLine` 把被 blame 提交的 author / time /
+  summary / **body 重复挂在每一行上**，5000 行的文件会把每条提交信息重复 5000 次。表按
+  **(commit, 历史路径)** 去重——与 `blame_commit_metadata` 自己的缓存键一致，因为 `prior_exists` 是按历史路径
+  而非仅按 commit 回答的。单条目写入上限 `MAX_BLAME_ENTRY_BYTES=8MiB`（32MiB 的每仓上限下还能放下几个）。
+  `MAX_GENERATIONS_PER_REPO` 16 → **64**：16 是「一个条目只有几 KB」时定的，blame 条目是整文件的量级，16 连
+  一屏 blame 过的文件都装不下；真正的天花板是 `MAX_BYTES_PER_REPO`，由 `sweep_cache` 执行。
+
+  **未做**：`blame_worktree_file`（工作区/暂存区 blame）不缓存。它的键要同时含 HEAD 与工作区文件内容，
+  而用户一编辑内容就变——命中率近乎为零，算键还要每次把文件整读一遍。
+
+  **测试基建修正（重要，踩过）**：`install_cache_root` 是进程级 `OnceLock`，而测试是并行线程跑的。
+  「统计并清空整个目录」那个测试会和真正读写的测试抢目录——它把别人的文件数进去、并在别人读的半路上删掉
+  （本次实到：加了 blame 测试后该用例转红）。先试了全局互斥锁，**不够**：不打锁的 log 测试照样往全局 root 写。
+  最终改法：测试构建下 `cache_dir()` 先看**线程私有 root**（`cache_test_root()`），默认 root 也换成每进程的
+  scratch 目录——测试从此既不碰真实缓存、也互不干扰。
+
+  **三个域的本地失败基线（与本次改动无关）**：`util::tests::run_git_with_stdin_capture_*` 3 个 +
+  `blame_integration` 的 `blame_worktree_staged_succeeds_for_conflicted_file` 1 个，均因本机
+  `Stdio::piped()` 的 stdin 报 os error 231（`Io(Uncategorized)`），CI（Linux）不受影响。：`MAX_TOTAL_BYTES=256MiB`、`MAX_BYTES_PER_REPO=32MiB`、
   `MAX_AGE=7d`、每 16 次 store 扫一次；命中时 `touch_cache_file()` 刷 mtime（修 FIFO→真 LRU）；
   纯函数 `eviction_plan()`（先每仓上限、再全局上限、oldest-first）+ 3 个单测。**未做**：缓存根目录迁移
   `app_data_dir()`、命中率接 `perf_budget_report`、设置页 Storage 分类（→ T5b/c/d）。

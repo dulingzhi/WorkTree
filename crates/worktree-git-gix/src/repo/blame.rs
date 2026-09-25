@@ -150,6 +150,26 @@ fn configured_rewrites(repo: &gix::Repository) -> Option<gix::diff::Rewrites> {
     })
 }
 
+/// Hash the config that changes a blame's attribution, for the blame cache key.
+///
+/// [`configured_rewrites`] turns `diff.renames` / `diff.renameLimit` into rename
+/// tracking, and rename tracking decides which historical commit owns a line.
+/// The blame cache is otherwise keyed by an immutable commit id, so without this
+/// a config change would serve a cached blame computed under the old one.
+/// Owning the config reading here keeps `history_cache` free of it.
+fn blame_options_hash(repo: &gix::Repository) -> u64 {
+    use std::hash::{Hash, Hasher};
+
+    let snapshot = repo.config_snapshot();
+    let mut hasher = rustc_hash::FxHasher::default();
+    if let Some(value) = snapshot.string("diff.renames") {
+        let bytes: &[u8] = value.as_ref();
+        bytes.hash(&mut hasher);
+    }
+    snapshot.integer("diff.renameLimit").hash(&mut hasher);
+    hasher.finish()
+}
+
 fn blame_commit_metadata<'a>(
     repo: &gix::Repository,
     cache: &'a mut FxHashMap<(gix::ObjectId, Option<PathBuf>), BlameCommitMetadata>,
@@ -386,6 +406,22 @@ impl GixRepo {
             .rev_parse_single(spec)
             .map_err(|e| Error::new(ErrorKind::Backend(format!("gix rev-parse {spec}: {e}"))))?
             .detach();
+
+        // A blame is a pure function of (commit, path, options), and the commit
+        // id is content-addressed — its tree and every ancestor are immutable —
+        // so a cached blame cannot go stale and no ref enumeration is needed to
+        // check one. `options` covers the two configs that change attribution.
+        let suspect_text = oid_to_arc_str(&suspect);
+        let options_key = blame_options_hash(&repo);
+        if let Some(lines) = super::history_cache::load_blame(
+            &self.spec.workdir,
+            path,
+            suspect_text.as_ref(),
+            options_key,
+        ) {
+            return Ok(lines);
+        }
+
         let git_path = gix::path::os_str_into_bstr(path.as_os_str())
             .map(gix::path::to_unix_separators_on_windows)
             .map_err(|_| Error::new(ErrorKind::Unsupported("path is not valid UTF-8")))?;
@@ -456,6 +492,13 @@ impl GixRepo {
                 });
             }
         }
+        super::history_cache::store_blame(
+            &self.spec.workdir,
+            path,
+            suspect_text.as_ref(),
+            options_key,
+            &lines,
+        );
         Ok(lines)
     }
 
@@ -601,6 +644,81 @@ impl GixRepo {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // --- Real-repository blame cache cases -----------------------------------
+    //
+    // These need a repository, so they live here rather than in `history_cache`'s
+    // pure-function tests. They are the only tests in this binary that blame,
+    // which is what lets them assert on the process-wide counters directly.
+
+    fn git(workdir: &Path, args: &[&str]) {
+        let output = crate::util::git_workdir_cmd_for(workdir)
+            .args(args)
+            .output()
+            .expect("spawn git");
+        assert!(
+            output.status.success(),
+            "git {args:?} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    fn init_blame_repo(workdir: &Path) {
+        git(workdir, &["init", "-b", "main"]);
+        for args in [
+            ["config", "user.email", "you@example.com"].as_slice(),
+            ["config", "user.name", "You"].as_slice(),
+            ["config", "commit.gpgsign", "false"].as_slice(),
+        ] {
+            git(workdir, args);
+        }
+    }
+
+    fn commit_contents(workdir: &Path, name: &str, contents: &str, message: &str) {
+        fs::write(workdir.join(name), contents).unwrap();
+        git(workdir, &["add", name]);
+        git(workdir, &["commit", "-m", message]);
+    }
+
+    /// A repeated blame is served from disk — proven on the counter, not just by
+    /// the results matching, because a cache that never hits would produce
+    /// identical results too and the test would still be green.
+    #[test]
+    fn blame_file_is_served_from_disk_on_a_repeat() {
+        use super::super::history_cache as hc;
+
+        let _root = hc::cache_test_root();
+        hc::BLAME_CACHE_STATS.reset();
+
+        let tmp = tempfile::tempdir().unwrap();
+        init_blame_repo(tmp.path());
+        commit_contents(tmp.path(), "story.txt", "one\ntwo\n", "base");
+        commit_contents(tmp.path(), "story.txt", "one\ntwo updated\n", "update");
+
+        let cold = {
+            let repo = gix::open(tmp.path()).unwrap().into_sync();
+            GixRepo::new(tmp.path().to_path_buf(), repo)
+                .blame_file(Path::new("story.txt"), None)
+                .expect("cold blame")
+        };
+        assert_eq!(cold.len(), 2);
+        let (hits, cold_misses, _, _, stores) = hc::BLAME_CACHE_STATS.snapshot();
+        assert_eq!((hits, stores), (0, 1), "the cold blame stored a new entry");
+
+        // A fresh handle: no in-process state survives it, so a hit can only
+        // have come from disk.
+        let warm = {
+            let repo = gix::open(tmp.path()).unwrap().into_sync();
+            GixRepo::new(tmp.path().to_path_buf(), repo)
+                .blame_file(Path::new("story.txt"), None)
+                .expect("warm blame")
+        };
+        assert_eq!(warm, cold);
+        let (hits, misses_now, _, _, stores) = hc::BLAME_CACHE_STATS.snapshot();
+        assert_eq!(hits, 1, "the repeat was served from disk");
+        assert_eq!(misses_now, cold_misses, "and caused no further miss");
+        assert_eq!(stores, 1, "a hit does not write again");
+    }
 
     #[test]
     fn blame_line_text_trims_crlf_and_lf() {

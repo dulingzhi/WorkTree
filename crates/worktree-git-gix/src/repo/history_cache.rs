@@ -37,6 +37,7 @@ use worktree_core::applog::{self, Level};
 use worktree_core::domain::{
     Commit, CommitId, CommitParentIds, HistoryMode, LogCursor, LogPage, ReflogEntry,
 };
+use worktree_core::services::BlameLine;
 
 use super::history::gix_head_id_or_none;
 use super::oid_to_arc_str;
@@ -53,6 +54,7 @@ const SCHEMA_VERSION: u32 = 3;
 const DOMAIN_LOG: u8 = 0;
 const DOMAIN_REFLOG: u8 = 1;
 const DOMAIN_SEARCH: u8 = 2;
+const DOMAIN_BLAME: u8 = 3;
 /// How many commits one snapshot holds — the fetch window for a cold first page.
 ///
 /// Walking this many instead of just `limit` costs marginally more once, and in
@@ -63,14 +65,18 @@ pub(super) const SNAPSHOT_COMMITS: usize = 500;
 /// commit costs visibly more than it does from HEAD alone — small enough to
 /// keep the cold open honest, large enough to cover a couple of pages.
 pub(super) const SNAPSHOT_COMMITS_ALL_BRANCHES: usize = 200;
-/// Keep at most this many cached generations per repository on disk.
+/// Keep at most this many cached files per repository on disk.
 ///
 /// Deliberately well above rgitui's single generation: the fingerprint includes
 /// HEAD, so **switching branches yields a new fingerprint**, and keeping several
 /// generations is what lets "switch back to a branch" hit the cache instead of
-/// re-walking. One entry is a single page (a few KB), so the disk cost is
-/// negligible next to the win.
-const MAX_GENERATIONS_PER_REPO: usize = 16;
+/// re-walking.
+///
+/// Raised from 16 to 64 when blame landed. 16 was set when every entry was a few
+/// KB; a blame entry is a whole file's worth of lines, so 16 could not even hold
+/// one screenful of blamed files. The real ceiling is [`MAX_BYTES_PER_REPO`],
+/// which `sweep_cache` enforces — this cap only stops *stale* files piling up.
+const MAX_GENERATIONS_PER_REPO: usize = 64;
 
 // ---------------------------------------------------------------------------
 // Disk guardrails
@@ -174,6 +180,50 @@ struct CachedSearch {
     /// reflog-equivalent of "there may be more".
     has_more: bool,
     commits: Vec<CachedCommit>,
+}
+
+/// A blamed file, stored as a **commit table plus per-line references**.
+///
+/// The domain `BlameLine` carries the blamed commit's author, time, subject and
+/// body on *every line*. Serialized as-is, a 5,000-line file would repeat each
+/// commit message 5,000 times. The table holds each distinct (commit, historical
+/// path) once — which is also what `blame_commit_metadata` keys its own cache on,
+/// since `prior_exists` depends on the historical path, not just the commit.
+#[derive(Serialize, Deserialize)]
+struct CachedBlame {
+    schema_version: u32,
+    domain: u8,
+    /// Not part of the lookup; kept so a stray file can be identified from its
+    /// contents alone.
+    commit_id: String,
+    /// Likewise: the blamed path, for the same reason.
+    path: String,
+    commits: Vec<CachedBlameCommit>,
+    lines: Vec<CachedBlameLine>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct CachedBlameCommit {
+    id: String,
+    author: String,
+    author_time_unix: Option<i64>,
+    summary: String,
+    body: Option<String>,
+    prior_exists: bool,
+    /// The file's path at this commit, when rename tracking attributed lines to
+    /// it under a different name. Part of this entry's identity — the same
+    /// commit can appear twice with different historical paths.
+    source_path: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct CachedBlameLine {
+    /// Index into [`CachedBlame::commits`].
+    commit: u32,
+    line: String,
+    /// Only uncommitted ("Not Committed Yet") lines carry this: the revision the
+    /// working-tree change is based on.
+    prior_commit: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -307,11 +357,64 @@ pub(crate) fn install_cache_root(root: PathBuf) {
     let _ = CACHE_ROOT.set(root);
 }
 
-pub(crate) fn cache_dir() -> PathBuf {
-    CACHE_ROOT
-        .get_or_init(|| std::env::temp_dir().join("gitcomet-history"))
-        .clone()
+/// Where the cache lives when nobody has installed anything: the system temp
+/// directory, except in test builds, where it is a per-process scratch
+/// directory so a test run never reads or deletes the real cache.
+fn default_cache_root() -> PathBuf {
+    #[cfg(test)]
+    let dir = std::env::temp_dir().join(format!(
+        "gitcomet-history-test-{}-{}",
+        SCHEMA_VERSION,
+        std::process::id()
+    ));
+    #[cfg(not(test))]
+    let dir = std::env::temp_dir().join("gitcomet-history");
+    let _ = std::fs::create_dir_all(&dir);
+    dir
 }
+
+pub(crate) fn cache_dir() -> PathBuf {
+    // A test that sets a thread root must not see any other test's files: tests
+    // run in parallel threads, and `CACHE_ROOT` is a process-wide `OnceLock`, so
+    // a test that counts or clears the whole directory would otherwise race the
+    // ones doing real reads and writes.
+    #[cfg(test)]
+    if let Some(dir) = TEST_ROOT.with(|slot| slot.borrow().clone()) {
+        return dir;
+    }
+    CACHE_ROOT.get_or_init(default_cache_root).clone()
+}
+
+/// A cache root private to this thread, created on first call.
+///
+/// Returns the directory so a test can also write fixture files into it.
+#[cfg(test)]
+pub(crate) fn cache_test_root() -> PathBuf {
+    TEST_ROOT.with(|slot| {
+        if let Some(dir) = slot.borrow().as_ref() {
+            return dir.clone();
+        }
+        let dir = std::env::temp_dir().join(format!(
+            "gitcomet-history-test-{}-{}-{}",
+            SCHEMA_VERSION,
+            std::process::id(),
+            TEST_ROOT_SEQ.fetch_add(1, Ordering::Relaxed)
+        ));
+        let _ = std::fs::create_dir_all(&dir);
+        *slot.borrow_mut() = Some(dir.clone());
+        dir
+    })
+}
+
+#[cfg(test)]
+thread_local! {
+    static TEST_ROOT: std::cell::RefCell<Option<PathBuf>> = const {
+        std::cell::RefCell::new(None)
+    };
+}
+
+#[cfg(test)]
+static TEST_ROOT_SEQ: AtomicU64 = AtomicU64::new(0);
 
 /// Cumulative counters, in the shape `worktree_core` reports to the perf
 /// sidecar.
@@ -456,6 +559,15 @@ pub(crate) static REFLOG_CACHE_STATS: CacheStats = CacheStats {
 
 /// Same counters for the commit-search domain — see [`REFLOG_CACHE_STATS`].
 pub(crate) static SEARCH_CACHE_STATS: CacheStats = CacheStats {
+    hits: AtomicU64::new(0),
+    misses_cold: AtomicU64::new(0),
+    misses_stale: AtomicU64::new(0),
+    misses_corrupt: AtomicU64::new(0),
+    stores: AtomicU64::new(0),
+};
+
+/// Same counters for the blame domain — see [`REFLOG_CACHE_STATS`].
+pub(crate) static BLAME_CACHE_STATS: CacheStats = CacheStats {
     hits: AtomicU64::new(0),
     misses_cold: AtomicU64::new(0),
     misses_stale: AtomicU64::new(0),
@@ -1037,6 +1149,250 @@ fn project_reflog_line(line: &gix::refs::log::Line) -> CachedReflogEntry {
         message: String::from_utf8_lossy(line.message.as_ref()).into_owned(),
         time: line.signature.time.seconds,
         author: String::from_utf8_lossy(line.signature.name.as_ref()).into_owned(),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Blame domain
+//
+// The one domain that needs no ref fingerprint at all. A blame is keyed by the
+// *resolved commit id*, and commit ids are content-addressed: the tree they
+// point at, and every ancestor it was reached through, are immutable. So a blame
+// cache cannot go stale — there is no "refs moved" case to detect, and no
+// enumeration to pay for on lookup.
+// ---------------------------------------------------------------------------
+
+/// Skip writing a single blame larger than this. One entry is a whole file's
+/// worth of lines, so an enormous generated file must not be able to evict
+/// everything else the repository has cached — [`MAX_BYTES_PER_REPO`] is 32 MiB,
+/// so this leaves room for several alongside the other domains.
+const MAX_BLAME_ENTRY_BYTES: u64 = 8 * 1024 * 1024;
+
+/// The commit id plus whatever configurable options change a blame — see
+/// `blame_options_hash` in `blame.rs`, which owns the config reading.
+fn blame_fingerprint(commit_id: &str, options: u64) -> u64 {
+    let mut hasher = FxHasher::default();
+    commit_id.hash(&mut hasher);
+    options.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn blame_request_hash(path: &Path) -> u64 {
+    request_hash(DOMAIN_BLAME, 0, Some(&path.to_string_lossy()))
+}
+
+/// Serve a cached blame for `path` at `commit_id`, if there is one.
+///
+/// No `Repository`, no fingerprinting: the caller already resolved the commit.
+pub(super) fn load_blame(
+    repo_path: &Path,
+    path: &Path,
+    commit_id: &str,
+    options: u64,
+) -> Option<Vec<BlameLine>> {
+    let fingerprint = blame_fingerprint(commit_id, options);
+    let cache_path = cache_path(repo_path, fingerprint, blame_request_hash(path));
+
+    let bytes = match std::fs::read(&cache_path) {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            BLAME_CACHE_STATS
+                .misses_cold
+                .fetch_add(1, Ordering::Relaxed);
+            log_event(format_args!(
+                "blame miss kind=cold rate={:.0}%",
+                BLAME_CACHE_STATS.hit_rate() * 100.0
+            ));
+            return None;
+        }
+    };
+    let parsed: CachedBlame = match serde_json::from_slice(&bytes) {
+        Ok(parsed) => parsed,
+        Err(_) => {
+            BLAME_CACHE_STATS
+                .misses_corrupt
+                .fetch_add(1, Ordering::Relaxed);
+            log_event(format_args!(
+                "blame miss kind=corrupt rate={:.0}%",
+                BLAME_CACHE_STATS.hit_rate() * 100.0
+            ));
+            return None;
+        }
+    };
+    if parsed.schema_version != SCHEMA_VERSION || parsed.domain != DOMAIN_BLAME {
+        BLAME_CACHE_STATS
+            .misses_stale
+            .fetch_add(1, Ordering::Relaxed);
+        log_event(format_args!(
+            "blame miss kind=stale rate={:.0}%",
+            BLAME_CACHE_STATS.hit_rate() * 100.0
+        ));
+        return None;
+    }
+
+    let lines = reconstruct_blame(&parsed);
+    BLAME_CACHE_STATS.hits.fetch_add(1, Ordering::Relaxed);
+    touch_cache_file(&cache_path);
+    log_event(format_args!(
+        "blame hit lines={} rate={:.0}%",
+        lines.len(),
+        BLAME_CACHE_STATS.hit_rate() * 100.0
+    ));
+    Some(lines)
+}
+
+/// Persist a blame for `path` at `commit_id`.
+pub(super) fn store_blame(
+    repo_path: &Path,
+    path: &Path,
+    commit_id: &str,
+    options: u64,
+    lines: &[BlameLine],
+) {
+    if lines.is_empty() {
+        return;
+    }
+
+    let fingerprint = blame_fingerprint(commit_id, options);
+    let key = blame_request_hash(path);
+    let cache_path = cache_path(repo_path, fingerprint, key);
+
+    let cached = project_blame(commit_id, path, lines);
+    let bytes = match serde_json::to_vec(&cached) {
+        Ok(b) => b,
+        Err(_) => return,
+    };
+    if bytes.len() as u64 > MAX_BLAME_ENTRY_BYTES {
+        log_event(format_args!(
+            "blame skip bytes={} over the {}-byte entry cap",
+            bytes.len(),
+            MAX_BLAME_ENTRY_BYTES
+        ));
+        return;
+    }
+
+    let dir = cache_dir();
+    if !retry_on_transient_fs(|| std::fs::create_dir_all(&dir)) {
+        return;
+    }
+
+    let tmp = dir.join(format!(
+        "tmp-{}-{:016x}-{:016x}.json",
+        std::process::id(),
+        fingerprint,
+        key,
+    ));
+    if !retry_on_transient_fs(|| std::fs::write(&tmp, &bytes)) {
+        return;
+    }
+    if retry_on_transient_fs(|| std::fs::rename(&tmp, &cache_path)) {
+        BLAME_CACHE_STATS.stores.fetch_add(1, Ordering::Relaxed);
+        log_event(format_args!(
+            "blame store lines={} commits={} bytes={}",
+            cached.lines.len(),
+            cached.commits.len(),
+            bytes.len()
+        ));
+        maybe_sweep_cache();
+    }
+    prune_old_generations(repo_path, fingerprint);
+}
+
+fn project_blame(commit_id: &str, path: &Path, lines: &[BlameLine]) -> CachedBlame {
+    let mut commits: Vec<CachedBlameCommit> = Vec::new();
+    let mut index: std::collections::HashMap<(String, Option<String>), u32> =
+        std::collections::HashMap::new();
+    let mut cached_lines = Vec::with_capacity(lines.len());
+
+    for line in lines {
+        let source = line
+            .source_path
+            .as_ref()
+            .map(|p| p.to_string_lossy().into_owned());
+        let identity = (line.commit_id.to_string(), source.clone());
+        let slot = match index.get(&identity) {
+            Some(slot) => *slot,
+            None => {
+                let slot = commits.len() as u32;
+                commits.push(CachedBlameCommit {
+                    id: line.commit_id.to_string(),
+                    author: line.author.to_string(),
+                    author_time_unix: line.author_time_unix,
+                    summary: line.summary.to_string(),
+                    body: line.body.as_ref().map(|b| b.to_string()),
+                    prior_exists: line.prior_exists,
+                    source_path: source,
+                });
+                index.insert(identity, slot);
+                slot
+            }
+        };
+        cached_lines.push(CachedBlameLine {
+            commit: slot,
+            line: line.line.clone(),
+            prior_commit: line.prior_commit.as_ref().map(|c| c.to_string()),
+        });
+    }
+
+    CachedBlame {
+        schema_version: SCHEMA_VERSION,
+        domain: DOMAIN_BLAME,
+        commit_id: commit_id.to_owned(),
+        path: path.to_string_lossy().into_owned(),
+        commits,
+        lines: cached_lines,
+    }
+}
+
+/// Rebuild [`BlameLine`]s from the commit table.
+///
+/// Pure — no filesystem, no repository — so the table deduplication can be
+/// tested without one.
+fn reconstruct_blame(cached: &CachedBlame) -> Vec<BlameLine> {
+    // Shared per commit, so a 5,000-line file clones 5,000 refcounts instead of
+    // 5,000 copies of each commit message.
+    let table: Vec<SharedBlameCommit> = cached.commits.iter().map(SharedBlameCommit::of).collect();
+    cached
+        .lines
+        .iter()
+        .filter_map(|line| {
+            let entry = table.get(line.commit as usize)?;
+            Some(BlameLine {
+                commit_id: entry.id.clone(),
+                author: entry.author.clone(),
+                author_time_unix: entry.author_time_unix,
+                summary: entry.summary.clone(),
+                body: entry.body.clone(),
+                line: line.line.clone(),
+                prior_exists: entry.prior_exists,
+                source_path: entry.source_path.clone(),
+                prior_commit: line.prior_commit.as_deref().map(Arc::<str>::from),
+            })
+        })
+        .collect()
+}
+
+struct SharedBlameCommit {
+    id: Arc<str>,
+    author: Arc<str>,
+    author_time_unix: Option<i64>,
+    summary: Arc<str>,
+    body: Option<Arc<str>>,
+    prior_exists: bool,
+    source_path: Option<PathBuf>,
+}
+
+impl SharedBlameCommit {
+    fn of(c: &CachedBlameCommit) -> Self {
+        Self {
+            id: Arc::from(c.id.as_str()),
+            author: Arc::from(c.author.as_str()),
+            author_time_unix: c.author_time_unix,
+            summary: Arc::from(c.summary.as_str()),
+            body: c.body.as_ref().map(|b| Arc::from(b.as_str())),
+            prior_exists: c.prior_exists,
+            source_path: c.source_path.as_deref().map(PathBuf::from),
+        }
     }
 }
 
@@ -1638,29 +1994,68 @@ mod tests {
         }
     }
 
-    /// A scratch cache root, installed once per test process (`install_cache_root`
-    /// is a `OnceLock`), so the filesystem-touching cases never see — or delete —
-    /// the real cache.
-    fn scratch_cache_root() -> PathBuf {
-        static ROOT: std::sync::LazyLock<PathBuf> = std::sync::LazyLock::new(|| {
-            let dir = std::env::temp_dir().join(format!(
-                "gitcomet-history-test-{}-{}",
-                SCHEMA_VERSION,
-                std::process::id()
-            ));
-            let _ = std::fs::create_dir_all(&dir);
-            install_cache_root(dir.clone());
-            dir
-        });
-        ROOT.clone()
+    /// A blame round-trips, and the commit table is what keeps it affordable:
+    /// the domain type repeats each commit's author/summary/body on every line,
+    /// which a 5,000-line file would otherwise duplicate 5,000 times.
+    #[test]
+    fn blame_round_trips_with_one_table_entry_per_distinct_commit() {
+        let lines = vec![
+            BlameLine {
+                commit_id: Arc::from("1111111111111111111111111111111111111111"),
+                author: Arc::from("Ada"),
+                author_time_unix: Some(1_700_000_000),
+                summary: Arc::from("initial commit"),
+                body: Some(Arc::from("a body that would otherwise repeat")),
+                line: "one".to_string(),
+                prior_exists: false,
+                source_path: None,
+                prior_commit: None,
+            },
+            BlameLine {
+                commit_id: Arc::from("1111111111111111111111111111111111111111"),
+                author: Arc::from("Ada"),
+                author_time_unix: Some(1_700_000_000),
+                summary: Arc::from("initial commit"),
+                body: Some(Arc::from("a body that would otherwise repeat")),
+                line: "two".to_string(),
+                prior_exists: false,
+                source_path: None,
+                prior_commit: None,
+            },
+            BlameLine {
+                // Same commit, different historical path: a distinct entry,
+                // because `prior_exists` is answered per (commit, path).
+                commit_id: Arc::from("1111111111111111111111111111111111111111"),
+                author: Arc::from("Ada"),
+                author_time_unix: Some(1_700_000_000),
+                summary: Arc::from("initial commit"),
+                body: Some(Arc::from("a body that would otherwise repeat")),
+                line: "three".to_string(),
+                prior_exists: true,
+                source_path: Some(PathBuf::from("src/old.rs")),
+                prior_commit: None,
+            },
+        ];
+
+        let cached = project_blame(
+            "1111111111111111111111111111111111111111",
+            Path::new("src/new.rs"),
+            &lines,
+        );
+        assert_eq!(cached.commits.len(), 2, "one entry per (commit, path)");
+        assert_eq!(cached.lines.len(), 3);
+
+        let json = serde_json::to_string(&cached).expect("serialize");
+        let parsed: CachedBlame = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(reconstruct_blame(&parsed), lines);
     }
 
     /// The settings surface reports the cache it can actually reach: the
     /// installed root, its size, and its entry count.
     #[test]
     fn cache_usage_and_clear_see_only_current_schema_entries() {
-        let root = scratch_cache_root();
-        assert_eq!(cache_dir(), root, "the installed root wins");
+        let root = cache_test_root();
+        assert_eq!(cache_dir(), root, "the thread root wins");
         clear_all();
 
         // Named after the current schema, so bumping it does not silently turn

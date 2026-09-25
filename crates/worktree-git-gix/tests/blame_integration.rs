@@ -118,6 +118,93 @@ fn blame_file_reports_head_and_explicit_revision() {
     );
 }
 
+/// A repeated blame is served from disk: a freshly opened backend has no
+/// in-process state, so identical lines can only have come from the cache.
+#[test]
+fn blame_file_is_served_from_disk_on_a_repeat() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path();
+
+    run_git(repo, &["init", "-b", "main"]);
+    run_git(repo, &["config", "user.email", "you@example.com"]);
+    run_git(repo, &["config", "user.name", "You"]);
+    run_git(repo, &["config", "commit.gpgsign", "false"]);
+
+    std::fs::write(repo.join("story.txt"), "one\ntwo\n").unwrap();
+    run_git(repo, &["add", "story.txt"]);
+    run_git(
+        repo,
+        &["-c", "commit.gpgsign=false", "commit", "-m", "base"],
+    );
+    std::fs::write(repo.join("story.txt"), "one\ntwo updated\n").unwrap();
+    run_git(repo, &["add", "story.txt"]);
+    run_git(
+        repo,
+        &["-c", "commit.gpgsign=false", "commit", "-m", "update"],
+    );
+
+    let cold = GixBackend
+        .open(repo)
+        .unwrap()
+        .blame_file(Path::new("story.txt"), None)
+        .unwrap();
+    assert_eq!(cold.len(), 2);
+
+    let warm = GixBackend
+        .open(repo)
+        .unwrap()
+        .blame_file(Path::new("story.txt"), None)
+        .unwrap();
+    assert_eq!(warm, cold, "the repeat rehydrates the same blame");
+}
+
+/// The cache is keyed by the resolved commit, so a new commit on the file is a
+/// different key — not a stale hit. This is the whole reason blame needs no ref
+/// fingerprint: commit ids are content-addressed and cannot change under us.
+#[test]
+fn blame_file_invalidates_when_the_commit_changes() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path();
+
+    run_git(repo, &["init", "-b", "main"]);
+    run_git(repo, &["config", "user.email", "you@example.com"]);
+    run_git(repo, &["config", "user.name", "You"]);
+    run_git(repo, &["config", "commit.gpgsign", "false"]);
+
+    std::fs::write(repo.join("story.txt"), "one\ntwo\n").unwrap();
+    run_git(repo, &["add", "story.txt"]);
+    run_git(
+        repo,
+        &["-c", "commit.gpgsign=false", "commit", "-m", "base"],
+    );
+
+    let before = GixBackend
+        .open(repo)
+        .unwrap()
+        .blame_file(Path::new("story.txt"), None)
+        .unwrap();
+    assert!(before.iter().all(|l| l.summary.as_ref() == "base"));
+
+    std::fs::write(repo.join("story.txt"), "one\ntwo updated\n").unwrap();
+    run_git(repo, &["add", "story.txt"]);
+    run_git(
+        repo,
+        &["-c", "commit.gpgsign=false", "commit", "-m", "update"],
+    );
+
+    let after = GixBackend
+        .open(repo)
+        .unwrap()
+        .blame_file(Path::new("story.txt"), None)
+        .unwrap();
+    assert_eq!(
+        after[1].summary.as_ref(),
+        "update",
+        "the new commit must own its line"
+    );
+    assert_eq!(after[0].summary.as_ref(), "base");
+}
+
 /// Build a repo where `src/old.txt` is committed, then renamed to `lib/new.txt`
 /// in its own commit, then a single line is tweaked in a later commit. The pure
 /// rename keeps the file identical, so it is detected and followed (the combined

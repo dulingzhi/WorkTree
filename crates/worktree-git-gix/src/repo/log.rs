@@ -3304,19 +3304,11 @@ mod tests {
         assert_eq!(entries.len(), 1);
     }
 
-    /// Point the history cache at a scratch directory for this process and
-    /// return the root that is actually in effect.
-    ///
-    /// `install_cache_root` is a `OnceLock`, so this is best-effort: another
-    /// test module may have installed a scratch root first, which is fine — the
-    /// point is only that tests never write into the real cache directory.
+    /// Give this test a cache directory of its own, so the filesystem-touching
+    /// cases never see — or delete — the real cache, and never see each other's
+    /// files either (tests run in parallel threads).
     fn scratch_history_cache_root() -> std::path::PathBuf {
-        use super::super::history_cache as hc;
-        let dir =
-            std::env::temp_dir().join(format!("gitcomet-history-logtest-{}", std::process::id()));
-        let _ = fs::create_dir_all(&dir);
-        hc::install_cache_root(dir);
-        hc::cache_dir()
+        super::super::history_cache::cache_test_root()
     }
 
     /// The reflog window is served from disk on a second open: a fresh `GixRepo`
@@ -3324,7 +3316,7 @@ mod tests {
     /// come from the cache.
     #[test]
     fn reflog_head_is_served_from_disk_on_a_second_open() {
-        scratch_history_cache_root();
+        let _root = scratch_history_cache_root();
         let tmp = tempfile::tempdir().expect("tempdir");
         let workdir = tmp.path();
         init_test_repo(workdir);
@@ -3352,7 +3344,7 @@ mod tests {
     /// reads, so a missing newest entry is a wrong undo.
     #[test]
     fn reflog_window_invalidates_when_the_reflog_grows_without_head_moving() {
-        scratch_history_cache_root();
+        let _root = scratch_history_cache_root();
         let tmp = tempfile::tempdir().expect("tempdir");
         let workdir = tmp.path();
         init_test_repo(workdir);
@@ -3380,7 +3372,7 @@ mod tests {
     /// come from the cache.
     #[test]
     fn search_commits_is_served_from_disk_on_a_repeat() {
-        scratch_history_cache_root();
+        let _root = scratch_history_cache_root();
         let tmp = tempfile::tempdir().expect("tempdir");
         let workdir = tmp.path();
         init_test_repo(workdir);
@@ -3409,7 +3401,7 @@ mod tests {
     /// exists: the cache is keyed by refs, and a new commit moved them.
     #[test]
     fn search_commits_invalidates_when_a_new_commit_matches() {
-        scratch_history_cache_root();
+        let _root = scratch_history_cache_root();
         let tmp = tempfile::tempdir().expect("tempdir");
         let workdir = tmp.path();
         init_test_repo(workdir);
@@ -3434,7 +3426,7 @@ mod tests {
     /// every later search for that query quietly stale.
     #[test]
     fn search_commits_invalidates_when_only_a_tag_moves() {
-        scratch_history_cache_root();
+        let _root = scratch_history_cache_root();
         let tmp = tempfile::tempdir().expect("tempdir");
         let workdir = tmp.path();
         init_test_repo(workdir);
