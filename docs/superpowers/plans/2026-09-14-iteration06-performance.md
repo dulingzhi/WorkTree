@@ -395,7 +395,26 @@ P5 取消后，迭代 06 只剩 Wave 2（T4/T5/T6）未开工。原「剩余工�
   enable 判定，加开关等于新增状态 + 持久化问题，且会让命中率指标因为「用户关了」而读 0%，指标失去意义。
   开关本该回答的抱怨（「占多少空间、能不能清掉」）已由体积显示 + Clear 回答。**如后续要做，先定持久化位置。**
 
-  **命中率预算待补**：合成 bench 大多不开真 gix 仓库，命中率只在开真仓库的 bench 上动；先在 CI 看几轮分布再设阈值。：`MAX_TOTAL_BYTES=256MiB`、`MAX_BYTES_PER_REPO=32MiB`、
+  **命中率预算待补**：合成 bench 大多不开真 gix 仓库，命中率只在开真仓库的 bench 上动；先在 CI 看几轮分布再设阈值。
+
+  **2026-09-25：扩展域 reflog(S) 已落地。** 缓存文件改为「域」寻址：`SCHEMA_VERSION 2→3`，请求哈希混入
+  `DOMAIN_LOG=0` / `DOMAIN_REFLOG=1`（`request_hash(domain, mode, author)`），`CachedSnapshot` 增加 `domain`
+  字段并在读取时校验——一个 reflog 文件永远不可能被反序列化成历史快照。旧 schema 文件由 `sweep_cache` 删除，
+  不再永久占盘。新增 `CachedReflog` / `CachedReflogEntry`（**不存 `index` 与 `HEAD@{n}`**：它们就是窗口内的偏移，
+  存下来只会给它们第二个可以出错的地方），读取时由 `reconstruct_reflog()` 还原。
+
+  **reflog 指纹不能只用 HEAD。** `git stash`、以及任何 reset 回 HEAD 当前所指提交的 `git reset`，都会**在 HEAD
+  不动的情况下**往 reflog 追加一行；只用 head id + 分支名做指纹（如 log 域）会命中一个缺最新行的窗口，而 reflog
+  正是 `classify_undo` 的输入——缺一行就是错的 undo。所以 `reflog_fingerprint()` = HEAD 哈希 + `.git/logs/HEAD`
+  的 `len` + `mtime`（一次 `stat` 的代价，覆盖所有追加）。已加反向测试：新建分支再切回，HEAD 的 id 与名字都与
+  之前完全相同，窗口必须失效（否则测试红）。
+
+  窗口大小：读取窗口 `REFLOG_WINDOW=200`（与 log 域的 snapshot 同理，一个文件服务窗口内任意页大小），
+  **写入**上限 `MAX_REFLOG_WINDOW=2000`——调用方可以要 `usize::MAX` 条，必须全部拿到，所以只有写入被截，
+  读取被截会静默丢条目。reflog 计数器独立一份 `REFLOG_CACHE_STATS`，避免「log 命中率正常」掩盖「reflog 从不命中」；
+  暂不进 perf sidecar（要扩 `HistoryCacheStats` 结构，等真有需求再动）。
+
+  **下一步**：commit-search(M) → blame(M–L，最后且单独 PR)。：`MAX_TOTAL_BYTES=256MiB`、`MAX_BYTES_PER_REPO=32MiB`、
   `MAX_AGE=7d`、每 16 次 store 扫一次；命中时 `touch_cache_file()` 刷 mtime（修 FIFO→真 LRU）；
   纯函数 `eviction_plan()`（先每仓上限、再全局上限、oldest-first）+ 3 个单测。**未做**：缓存根目录迁移
   `app_data_dir()`、命中率接 `perf_budget_report`、设置页 Storage 分类（→ T5b/c/d）。

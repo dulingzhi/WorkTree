@@ -34,12 +34,24 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use gix::Repository;
 use gix::bstr::ByteSlice as _;
 use worktree_core::applog::{self, Level};
-use worktree_core::domain::{Commit, CommitId, CommitParentIds, HistoryMode, LogCursor, LogPage};
+use worktree_core::domain::{
+    Commit, CommitId, CommitParentIds, HistoryMode, LogCursor, LogPage, ReflogEntry,
+};
 
 use super::history::gix_head_id_or_none;
-use crate::util::unix_seconds_to_system_time_or_epoch;
+use super::oid_to_arc_str;
+use crate::util::{unix_seconds_to_system_time, unix_seconds_to_system_time_or_epoch};
 
-const SCHEMA_VERSION: u32 = 2;
+/// Bumped to 3 when the reflog domain landed: cache files are now addressed by
+/// a request hash that also mixes in the cache domain, so a v2 file can no
+/// longer collide with a v3 one. Foreign-schema files are swept, not read.
+const SCHEMA_VERSION: u32 = 3;
+
+/// Which projection a cache file holds. Every domain shares one directory and
+/// one byte budget, so the request hash has to tell them apart — nothing else
+/// in the file name does.
+const DOMAIN_LOG: u8 = 0;
+const DOMAIN_REFLOG: u8 = 1;
 /// How many commits one snapshot holds — the fetch window for a cold first page.
 ///
 /// Walking this many instead of just `limit` costs marginally more once, and in
@@ -101,6 +113,9 @@ struct CachedCommit {
 #[derive(Serialize, Deserialize)]
 struct CachedSnapshot {
     schema_version: u32,
+    /// [`DOMAIN_LOG`] — validated on load so a reflog file can never be
+    /// rehydrated as a history snapshot.
+    domain: u8,
     ref_fingerprint: u64,
     mode: u8,
     author: Option<String>,
@@ -110,6 +125,34 @@ struct CachedSnapshot {
     /// The contiguous run, oldest-request-first (i.e. starting at the walk's
     /// start point). Requests address it by offset, not by page identity.
     commits: Vec<CachedCommit>,
+}
+
+/// How many reflog entries one cached window holds, newest-first.
+///
+/// Reflogs are append-only and read from the top, so — like the log snapshot —
+/// one file serves every page size inside the window.
+pub(super) const REFLOG_WINDOW: usize = 200;
+
+#[derive(Serialize, Deserialize)]
+struct CachedReflog {
+    schema_version: u32,
+    domain: u8,
+    ref_fingerprint: u64,
+    /// Whether the read found more entries than the window holds. A window that
+    /// ends inside a longer reflog cannot answer a deeper request.
+    has_more: bool,
+    entries: Vec<CachedReflogEntry>,
+}
+
+/// [`ReflogEntry`] minus everything positional: `index` and the `HEAD@{n}`
+/// selector are just the offset in the window, so storing them would only give
+/// them a second place to go wrong.
+#[derive(Serialize, Deserialize)]
+struct CachedReflogEntry {
+    new_id: String,
+    message: String,
+    time: i64,
+    author: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -304,11 +347,22 @@ fn cache_path(repo_path: &Path, fingerprint: u64, request_hash: u64) -> PathBuf 
 /// Deliberately *not* `limit` or the cursor — those say where to slice inside a
 /// snapshot, not which snapshot to open. Dropping them is what lets one file
 /// serve every page size and every "load more" offset.
-fn snapshot_hash(mode_idx: u8, author: Option<&str>) -> u64 {
+fn request_hash(domain: u8, mode_idx: u8, author: Option<&str>) -> u64 {
     let mut hasher = FxHasher::default();
+    domain.hash(&mut hasher);
     mode_idx.hash(&mut hasher);
     author.hash(&mut hasher);
     hasher.finish()
+}
+
+fn log_request_hash(mode_idx: u8, author: Option<&str>) -> u64 {
+    request_hash(DOMAIN_LOG, mode_idx, author)
+}
+
+/// Reflog windows are scoped by nothing but the ref they belong to, so the
+/// hash is the domain alone.
+fn reflog_request_hash() -> u64 {
+    request_hash(DOMAIN_REFLOG, 0, None)
 }
 
 /// `mode_index` of `HistoryMode::AllBranches` — the only mode whose walk seeds
@@ -349,6 +403,16 @@ pub(crate) struct CacheStats {
     /// Pages successfully published to disk.
     pub stores: AtomicU64,
 }
+
+/// Same counters for the reflog domain. Kept apart so a hit rate can be read
+/// per domain: "the log cache works" must not be masked by "reflog never hits".
+pub(crate) static REFLOG_CACHE_STATS: CacheStats = CacheStats {
+    hits: AtomicU64::new(0),
+    misses_cold: AtomicU64::new(0),
+    misses_stale: AtomicU64::new(0),
+    misses_corrupt: AtomicU64::new(0),
+    stores: AtomicU64::new(0),
+};
 
 pub(crate) static CACHE_STATS: CacheStats = CacheStats {
     hits: AtomicU64::new(0),
@@ -442,7 +506,7 @@ pub(super) fn load_log_page(
     fingerprint: Option<u64>,
 ) -> Option<LogPage> {
     let fingerprint = fingerprint.unwrap_or_else(|| ref_fingerprint(repo, mode_idx));
-    let path = cache_path(repo_path, fingerprint, snapshot_hash(mode_idx, author));
+    let path = cache_path(repo_path, fingerprint, log_request_hash(mode_idx, author));
 
     let bytes = match std::fs::read(&path) {
         Ok(bytes) => bytes,
@@ -469,6 +533,7 @@ pub(super) fn load_log_page(
 
     // Stale / mismatched cache: ignore and let the caller re-walk.
     if parsed.schema_version != SCHEMA_VERSION
+        || parsed.domain != DOMAIN_LOG
         || parsed.ref_fingerprint != fingerprint
         || parsed.mode != mode_idx
         || parsed.author.as_deref() != author
@@ -573,11 +638,12 @@ pub(super) fn store_log_page(
     }
 
     let fingerprint = fingerprint.unwrap_or_else(|| ref_fingerprint(repo, mode_idx));
-    let key = snapshot_hash(mode_idx, author);
+    let key = log_request_hash(mode_idx, author);
     let path = cache_path(repo_path, fingerprint, key);
 
     let cached = CachedSnapshot {
         schema_version: SCHEMA_VERSION,
+        domain: DOMAIN_LOG,
         ref_fingerprint: fingerprint,
         mode: mode_idx,
         author: author.map(str::to_owned),
@@ -716,6 +782,216 @@ fn reconstruct_commit(c: &CachedCommit) -> Commit {
 }
 
 // ---------------------------------------------------------------------------
+// Reflog domain
+//
+// Same mechanism as the log domain, one domain byte over: a window of the HEAD
+// reflog written once and sliced per request. Reflogs are append-only and read
+// from the top, so a window anchored at the newest entry serves every page size
+// inside it.
+// ---------------------------------------------------------------------------
+
+/// The largest reflog window that will ever be written to disk.
+///
+/// A caller may ask for more than [`REFLOG_WINDOW`] (`usize::MAX` reads as "all
+/// entries"), and it must get all of them — so the *read* is never capped. Only
+/// the write is: one unbounded request must not be able to park a 100k-entry
+/// reflog in the cache directory.
+const MAX_REFLOG_WINDOW: usize = 2000;
+
+/// Fingerprint for the HEAD reflog window.
+///
+/// HEAD's own id is not enough. `git stash` — and any `git reset` back to the
+/// commit HEAD already points at — appends a reflog entry *without* moving
+/// HEAD, so an id-only fingerprint would serve a reflog missing its newest
+/// entry, and the reflog is what `classify_undo` reads. The reflog file's length
+/// and mtime catch every append for the price of one `stat`.
+///
+/// A missing file (reflogs disabled, or a repo with no HEAD movement yet) leaves
+/// the hash on HEAD alone, which is the best available answer.
+fn reflog_fingerprint(repo: &Repository) -> u64 {
+    let mut hasher = FxHasher::default();
+    hash_head(repo, &mut hasher);
+    if let Ok(metadata) = std::fs::metadata(repo.git_dir().join("logs").join("HEAD")) {
+        metadata.len().hash(&mut hasher);
+        if let Ok(modified) = metadata.modified() {
+            modified
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+                .hash(&mut hasher);
+        }
+    }
+    hasher.finish()
+}
+
+/// Serve the newest `limit` HEAD reflog entries out of the cached window.
+///
+/// `None` means "walk instead": no window, a stale one, or a request that runs
+/// past a window we know is not the whole reflog.
+pub(super) fn load_reflog_window(
+    repo: &Repository,
+    repo_path: &Path,
+    limit: usize,
+) -> Option<Vec<ReflogEntry>> {
+    let fingerprint = reflog_fingerprint(repo);
+    let path = cache_path(repo_path, fingerprint, reflog_request_hash());
+
+    let bytes = match std::fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            REFLOG_CACHE_STATS
+                .misses_cold
+                .fetch_add(1, Ordering::Relaxed);
+            log_event(format_args!(
+                "reflog miss kind=cold limit={limit} rate={:.0}%",
+                REFLOG_CACHE_STATS.hit_rate() * 100.0
+            ));
+            return None;
+        }
+    };
+    let parsed: CachedReflog = match serde_json::from_slice(&bytes) {
+        Ok(parsed) => parsed,
+        Err(_) => {
+            REFLOG_CACHE_STATS
+                .misses_corrupt
+                .fetch_add(1, Ordering::Relaxed);
+            log_event(format_args!(
+                "reflog miss kind=corrupt limit={limit} rate={:.0}%",
+                REFLOG_CACHE_STATS.hit_rate() * 100.0
+            ));
+            return None;
+        }
+    };
+
+    if parsed.schema_version != SCHEMA_VERSION
+        || parsed.domain != DOMAIN_REFLOG
+        || parsed.ref_fingerprint != fingerprint
+    {
+        REFLOG_CACHE_STATS
+            .misses_stale
+            .fetch_add(1, Ordering::Relaxed);
+        log_event(format_args!(
+            "reflog miss kind=stale limit={limit} rate={:.0}%",
+            REFLOG_CACHE_STATS.hit_rate() * 100.0
+        ));
+        return None;
+    }
+
+    // The window is the newest N entries; a deeper request needs the real thing.
+    if limit > parsed.entries.len() && parsed.has_more {
+        REFLOG_CACHE_STATS
+            .misses_cold
+            .fetch_add(1, Ordering::Relaxed);
+        log_event(format_args!(
+            "reflog miss kind=short limit={limit} available={} rate={:.0}%",
+            parsed.entries.len(),
+            REFLOG_CACHE_STATS.hit_rate() * 100.0
+        ));
+        return None;
+    }
+
+    REFLOG_CACHE_STATS.hits.fetch_add(1, Ordering::Relaxed);
+    touch_cache_file(&path);
+    log_event(format_args!(
+        "reflog hit limit={limit} rate={:.0}%",
+        REFLOG_CACHE_STATS.hit_rate() * 100.0
+    ));
+    Some(reconstruct_reflog(parsed.entries, limit))
+}
+
+/// Persist a freshly read reflog window, keyed by the current HEAD reflog.
+///
+/// `requested` is how many entries the read asked for — the same number the
+/// caller truncated to, and the only way to know whether the window reached the
+/// end of the reflog.
+pub(super) fn store_reflog_window(
+    repo: &Repository,
+    repo_path: &Path,
+    lines: &[gix::refs::log::Line],
+    requested: usize,
+) {
+    if lines.is_empty() {
+        return;
+    }
+
+    let fingerprint = reflog_fingerprint(repo);
+    let key = reflog_request_hash();
+    let path = cache_path(repo_path, fingerprint, key);
+
+    let keep = lines.len().min(MAX_REFLOG_WINDOW);
+    // Reached the read's cap, or the store cap — either way the reflog may
+    // continue past what we are writing.
+    let has_more = lines.len() > keep || lines.len() >= requested;
+    let cached = CachedReflog {
+        schema_version: SCHEMA_VERSION,
+        domain: DOMAIN_REFLOG,
+        ref_fingerprint: fingerprint,
+        has_more,
+        entries: lines[..keep].iter().map(project_reflog_line).collect(),
+    };
+
+    let bytes = match serde_json::to_vec(&cached) {
+        Ok(b) => b,
+        Err(_) => return,
+    };
+
+    let dir = cache_dir();
+    if !retry_on_transient_fs(|| std::fs::create_dir_all(&dir)) {
+        return;
+    }
+
+    let tmp = dir.join(format!(
+        "tmp-{}-{:016x}-{:016x}.json",
+        std::process::id(),
+        fingerprint,
+        key,
+    ));
+    if !retry_on_transient_fs(|| std::fs::write(&tmp, &bytes)) {
+        return;
+    }
+    if retry_on_transient_fs(|| std::fs::rename(&tmp, &path)) {
+        REFLOG_CACHE_STATS.stores.fetch_add(1, Ordering::Relaxed);
+        log_event(format_args!(
+            "reflog store entries={} bytes={} has_more={has_more}",
+            cached.entries.len(),
+            bytes.len()
+        ));
+        maybe_sweep_cache();
+    }
+    prune_old_generations(repo_path, fingerprint);
+}
+
+/// Rebuild domain entries from a stored window, newest first.
+///
+/// Pure — no filesystem, no repository — so the positional fields can be tested
+/// without a repository: `index` and the `HEAD@{n}` selector are the offset in
+/// the window, so they are derived here rather than stored.
+fn reconstruct_reflog(entries: Vec<CachedReflogEntry>, limit: usize) -> Vec<ReflogEntry> {
+    entries
+        .into_iter()
+        .take(limit)
+        .enumerate()
+        .map(|(index, entry)| ReflogEntry {
+            index,
+            new_id: CommitId(Arc::from(entry.new_id.as_str())),
+            message: Arc::from(entry.message.as_str()),
+            time: unix_seconds_to_system_time(entry.time),
+            selector: Arc::from(format!("HEAD@{{{index}}}").as_str()),
+            author: Arc::from(entry.author.as_str()),
+        })
+        .collect()
+}
+
+fn project_reflog_line(line: &gix::refs::log::Line) -> CachedReflogEntry {
+    CachedReflogEntry {
+        new_id: oid_to_arc_str(&line.new_oid).to_string(),
+        message: String::from_utf8_lossy(line.message.as_ref()).into_owned(),
+        time: line.signature.time.seconds,
+        author: String::from_utf8_lossy(line.signature.name.as_ref()).into_owned(),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Pruning
 // ---------------------------------------------------------------------------
 
@@ -797,7 +1073,15 @@ fn sweep_cache(now: SystemTime) {
         let Some(name) = path.file_name().and_then(|n| n.to_str()).map(str::to_owned) else {
             continue;
         };
-        if !name.starts_with(&schema_prefix) || !name.ends_with(".json") {
+        if !name.ends_with(".json") {
+            continue;
+        }
+        // A file written by another schema version can never be read again, so
+        // drop it here: otherwise every schema bump leaks disk forever.
+        if !name.starts_with(&schema_prefix) {
+            if name.starts_with("v") {
+                let _ = std::fs::remove_file(&path);
+            }
             continue;
         }
         let Ok(metadata) = std::fs::metadata(&path) else {
@@ -942,6 +1226,7 @@ mod tests {
     fn snapshot_of(count: usize, has_more: bool) -> CachedSnapshot {
         CachedSnapshot {
             schema_version: SCHEMA_VERSION,
+            domain: DOMAIN_LOG,
             ref_fingerprint: 1,
             mode: 1,
             author: None,
@@ -970,6 +1255,7 @@ mod tests {
         let page = sample_page();
         let cached = CachedSnapshot {
             schema_version: SCHEMA_VERSION,
+            domain: DOMAIN_LOG,
             ref_fingerprint: 0xabcdef,
             mode: 1,
             author: Some("alice".to_string()),
@@ -991,6 +1277,7 @@ mod tests {
         let page = sample_page();
         let cached = CachedSnapshot {
             schema_version: SCHEMA_VERSION,
+            domain: DOMAIN_LOG,
             ref_fingerprint: 1,
             mode: 0,
             author: None,
@@ -1065,6 +1352,72 @@ mod tests {
         );
     }
 
+    /// A reflog window round-trips through the cached projection, and the
+    /// positional fields (`index`, `HEAD@{n}`) are rebuilt from the offset
+    /// rather than stored — storing them would give them a second place to
+    /// disagree with the window they came from.
+    #[test]
+    fn reflog_window_round_trips_through_the_cached_projection() {
+        let window = CachedReflog {
+            schema_version: SCHEMA_VERSION,
+            domain: DOMAIN_REFLOG,
+            ref_fingerprint: 7,
+            has_more: true,
+            entries: vec![
+                CachedReflogEntry {
+                    new_id: "aaa".to_string(),
+                    message: "commit: first".to_string(),
+                    time: 1_700_000_000,
+                    author: "Test User".to_string(),
+                },
+                CachedReflogEntry {
+                    new_id: "bbb".to_string(),
+                    message: "commit: second".to_string(),
+                    time: 1_700_000_060,
+                    author: "Test User".to_string(),
+                },
+            ],
+        };
+
+        let json = serde_json::to_string(&window).expect("serialize");
+        let parsed: CachedReflog = serde_json::from_str(&json).expect("deserialize");
+        let entries = reconstruct_reflog(parsed.entries, 10);
+
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].index, 0);
+        assert_eq!(entries[0].selector.as_ref(), "HEAD@{0}");
+        assert_eq!(entries[0].new_id.0.as_ref(), "aaa");
+        assert_eq!(entries[0].message.as_ref(), "commit: first");
+        assert_eq!(entries[0].author.as_ref(), "Test User");
+        assert_eq!(
+            entries[0].time,
+            Some(UNIX_EPOCH + Duration::from_secs(1_700_000_000))
+        );
+        assert_eq!(entries[1].selector.as_ref(), "HEAD@{1}");
+    }
+
+    /// One window serves every page size, the same way one log snapshot does.
+    #[test]
+    fn reflog_window_serves_any_page_size() {
+        for limit in [1usize, 3, 5] {
+            // Rebuilt per iteration: the domain type owns its window, and the
+            // projection is what the store hands over.
+            let entries = reconstruct_reflog(
+                (0..5)
+                    .map(|i| CachedReflogEntry {
+                        new_id: format!("id{i}"),
+                        message: format!("entry {i}"),
+                        time: 1_700_000_000 + i as i64,
+                        author: "Test User".to_string(),
+                    })
+                    .collect(),
+                limit,
+            );
+            assert_eq!(entries.len(), limit, "limit={limit}");
+            assert_eq!(entries[0].new_id.0.as_ref(), "id0", "newest first");
+        }
+    }
+
     /// A scratch cache root, installed once per test process (`install_cache_root`
     /// is a `OnceLock`), so the filesystem-touching cases never see — or delete —
     /// the real cache.
@@ -1090,13 +1443,15 @@ mod tests {
         assert_eq!(cache_dir(), root, "the installed root wins");
         clear_all();
 
+        // Named after the current schema, so bumping it does not silently turn
+        // this into a test about nothing.
+        let current = format!("v{SCHEMA_VERSION}-r00000000000000aa-f1-2.json");
+        let previous = format!("v{}-r00000000000000aa-f1-2.json", SCHEMA_VERSION - 1);
         let payload = b"{\"schema_version\":2}";
-        std::fs::write(root.join("v2-r00000000000000aa-f1-2.json"), payload)
-            .expect("write cache entry");
+        std::fs::write(root.join(&current), payload).expect("write cache entry");
         // Old schema and unrelated files are somebody else's, not ours to count
         // or delete.
-        std::fs::write(root.join("v1-r00000000000000aa-f1-2.json"), b"{}")
-            .expect("write old entry");
+        std::fs::write(root.join(&previous), b"{}").expect("write old entry");
         std::fs::write(root.join("notes.txt"), b"x").expect("write stray file");
 
         let (bytes, entries) = cache_usage();

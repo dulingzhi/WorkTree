@@ -2300,12 +2300,29 @@ impl GixRepo {
             return Err(reflog_unborn_head_error(&repo));
         }
 
+        // Cold-open shortcut: if the HEAD reflog has not grown since the last
+        // read, rehydrate the window from disk instead of re-reading it.
+        if let Some(entries) =
+            super::history_cache::load_reflog_window(&repo, &self.spec.workdir, limit)
+        {
+            return Ok(entries);
+        }
+
         let head = repo
             .head()
             .map_err(|e| Error::new(ErrorKind::Backend(format!("gix head: {e}"))))?;
+        // A cold read takes a wider window than was asked for and the whole run
+        // is cached, so every later page size inside that window is served by
+        // slicing one file instead of re-reading the reflog.
+        let fetch_limit = limit.max(super::history_cache::REFLOG_WINDOW);
         let mut platform = head.log_iter();
-        reflog_lines_rev(&mut platform, "HEAD", Some(limit))?
+        let lines = reflog_lines_rev(&mut platform, "HEAD", Some(fetch_limit))?;
+        // Persist for the next cold open. This runs before truncation so the
+        // window keeps the whole read, not just the page handed back.
+        super::history_cache::store_reflog_window(&repo, &self.spec.workdir, &lines, fetch_limit);
+        lines
             .into_iter()
+            .take(limit)
             .enumerate()
             .map(|(index, line)| {
                 Ok(ReflogEntry {
@@ -3255,6 +3272,77 @@ mod tests {
         // `usize::MAX` reads as "every entry": it must not be reserved up front.
         let entries = repo.reflog_head(usize::MAX).expect("reflog_head");
         assert_eq!(entries.len(), 1);
+    }
+
+    /// Point the history cache at a scratch directory for this process and
+    /// return the root that is actually in effect.
+    ///
+    /// `install_cache_root` is a `OnceLock`, so this is best-effort: another
+    /// test module may have installed a scratch root first, which is fine — the
+    /// point is only that tests never write into the real cache directory.
+    fn scratch_history_cache_root() -> std::path::PathBuf {
+        use super::super::history_cache as hc;
+        let dir =
+            std::env::temp_dir().join(format!("gitcomet-history-logtest-{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+        hc::install_cache_root(dir);
+        hc::cache_dir()
+    }
+
+    /// The reflog window is served from disk on a second open: a fresh `GixRepo`
+    /// has no in-process state of its own, so identical entries can only have
+    /// come from the cache.
+    #[test]
+    fn reflog_head_is_served_from_disk_on_a_second_open() {
+        scratch_history_cache_root();
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let workdir = tmp.path();
+        init_test_repo(workdir);
+        commit_file(workdir, "a.txt", "one\n", "first");
+        commit_file(workdir, "a.txt", "two\n", "second");
+
+        let cold = open_repo(workdir).reflog_head(10).expect("cold reflog");
+        assert_eq!(cold.len(), 2);
+
+        let warm = open_repo(workdir).reflog_head(10).expect("warm reflog");
+        assert_eq!(warm, cold, "the second open rehydrates the same window");
+
+        // A smaller page out of the very same window — one file, any page size.
+        let smaller = open_repo(workdir).reflog_head(1).expect("warm reflog");
+        assert_eq!(smaller.len(), 1);
+        assert_eq!(smaller[0].selector.as_ref(), "HEAD@{0}");
+        assert_eq!(smaller[0].new_id, cold[0].new_id);
+    }
+
+    /// A reflog that grew *without* HEAD moving must invalidate the window.
+    ///
+    /// Checking a branch out and back leaves HEAD's id and name exactly as they
+    /// were, so a fingerprint built from HEAD alone would serve a window that is
+    /// missing the two checkout entries — and the reflog is what `classify_undo`
+    /// reads, so a missing newest entry is a wrong undo.
+    #[test]
+    fn reflog_window_invalidates_when_the_reflog_grows_without_head_moving() {
+        scratch_history_cache_root();
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let workdir = tmp.path();
+        init_test_repo(workdir);
+        commit_file(workdir, "a.txt", "one\n", "first");
+
+        let before = open_repo(workdir).reflog_head(10).expect("cold reflog");
+        assert_eq!(before.len(), 1, "just the initial commit");
+
+        let branch = git_stdout(workdir, &["rev-parse", "--abbrev-ref", "HEAD"]);
+        git_success(workdir, &["checkout", "-b", "other"]);
+        git_success(workdir, &["checkout", &branch]);
+
+        let after = open_repo(workdir)
+            .reflog_head(10)
+            .expect("reflog after checkout");
+        assert!(after.len() > before.len(), "both checkouts were logged");
+        assert_eq!(
+            after[0].new_id, before[0].new_id,
+            "HEAD is back on the same commit, so only the reflog changed"
+        );
     }
 
     #[test]
