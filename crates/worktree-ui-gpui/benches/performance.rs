@@ -145,6 +145,13 @@ exact_filtered_target!(
 exact_filtered_target!(
     bench_diff_open_svg_dual_path_first_window_selected => bench_diff_open_svg_dual_path_first_window
 );
+exact_filtered_target!(
+    bench_diff_open_patch_large_tiers_selected => bench_diff_open_patch_large_tiers,
+    [
+        "diff_open_patch_large_tiers/10mb_single_file",
+        "diff_open_patch_large_tiers/50k_additions",
+    ]
+);
 exact_filtered_target!(bench_conflict_three_way_scroll_selected => bench_conflict_three_way_scroll);
 exact_filtered_target!(
     bench_conflict_three_way_prepared_syntax_scroll_selected => bench_conflict_three_way_prepared_syntax_scroll
@@ -283,6 +290,7 @@ criterion_group! {
         bench_diff_open_markdown_preview_first_window_selected,
         bench_diff_open_image_preview_first_paint_selected,
         bench_diff_open_svg_dual_path_first_window_selected,
+        bench_diff_open_patch_large_tiers_selected,
         bench_conflict_three_way_scroll_selected,
         bench_conflict_three_way_prepared_syntax_scroll_selected,
         bench_conflict_three_way_visible_map_build_selected,

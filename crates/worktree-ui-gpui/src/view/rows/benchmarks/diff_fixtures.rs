@@ -48,6 +48,74 @@ pub struct PatchDiffPagedRowsFixture {
     split_row_count: usize,
 }
 
+/// Like [`build_synthetic_unified_patch`] but pads each payload line to roughly
+/// `line_bytes` so a modest line count yields a multi-megabyte single-file diff
+/// (used for the >10MB large-diff tier, T6).
+fn build_synthetic_unified_patch_with_line_bytes(line_count: usize, line_bytes: usize) -> String {
+    let line_count = line_count.max(1);
+    let line_bytes = line_bytes.max(16);
+    let mut out = String::new();
+    out.push_str("diff --git a/src/lib.rs b/src/lib.rs\n");
+    out.push_str("index 1111111..2222222 100644\n");
+    out.push_str("--- a/src/lib.rs\n");
+    out.push_str("+++ b/src/lib.rs\n");
+    out.push_str(&format!(
+        "@@ -1,{} +1,{} @@ fn synthetic() {{\n",
+        line_count.saturating_mul(2),
+        line_count.saturating_mul(2)
+    ));
+    for ix in 0..line_count {
+        if ix % 7 == 0 {
+            let line = format!("-let old_{ix} = old_call({ix});");
+            out.push_str(&pad_line(&line, line_bytes));
+            out.push('\n');
+            let line = format!("+let new_{ix} = new_call({ix});");
+            out.push_str(&pad_line(&line, line_bytes));
+            out.push('\n');
+        } else {
+            let line = format!(" let shared_{ix} = keep({ix});");
+            out.push_str(&pad_line(&line, line_bytes));
+            out.push('\n');
+        }
+    }
+    out
+}
+
+/// A unified diff of purely added lines (`+`), modelling a whole-file addition
+/// (e.g. a vendored file dropped in wholesale). Used for the >50k-line
+/// pure-addition large-diff tier (T6).
+fn build_synthetic_unified_patch_additions_only(line_count: usize) -> String {
+    let line_count = line_count.max(1);
+    let mut out = String::new();
+    out.push_str("diff --git a/src/generated.rs b/src/generated.rs\n");
+    out.push_str("new file mode 100644\n");
+    out.push_str("index 0000000..2222222\n");
+    out.push_str("--- /dev/null\n");
+    out.push_str("+++ b/src/generated.rs\n");
+    out.push_str(&format!("@@ -0,0 +1,{} @@\n", line_count));
+    for ix in 0..line_count {
+        out.push_str(&format!("+pub const VALUE_{ix}: u64 = {ix};\n"));
+    }
+    out
+}
+
+/// Pad `line` with a trailing comment so it is at least `line_bytes` long.
+fn pad_line(line: &str, line_bytes: usize) -> String {
+    if line.len() >= line_bytes {
+        return line.to_string();
+    }
+    let pad = line_bytes - line.len();
+    let mut s = String::with_capacity(line_bytes);
+    s.push_str(line);
+    // Pad with a comment so the line stays valid-ish source text.
+    s.push_str(" //");
+    let pad_spaces = pad.saturating_sub(3);
+    if pad_spaces > 0 {
+        s.push_str(&" ".repeat(pad_spaces));
+    }
+    s
+}
+
 impl PatchDiffPagedRowsFixture {
     pub fn new(lines: usize) -> Self {
         let target = DiffTarget::WorkingTree {
@@ -56,6 +124,42 @@ impl PatchDiffPagedRowsFixture {
         };
         let text = build_synthetic_unified_patch(lines);
         let diff = Arc::new(Diff::from_unified(target, text.as_str()));
+        Self::from_diff(diff)
+    }
+
+    /// Constructor for the >10MB single-file large-diff tier (T6).
+    ///
+    /// Pads every payload line to roughly `line_bytes` so a modest line count
+    /// still yields a multi-megabyte unified-diff text. With the default
+    /// synthetic mix (every 7th line is a remove+add pair) and ~256-byte lines,
+    /// 50k lines is ~13MB of diff text — comfortably past the 10MB tier.
+    pub fn new_with_line_bytes(lines: usize, line_bytes: usize) -> Self {
+        let target = DiffTarget::WorkingTree {
+            path: std::path::PathBuf::from("src/lib.rs"),
+            area: DiffArea::Unstaged,
+        };
+        let text = build_synthetic_unified_patch_with_line_bytes(lines, line_bytes);
+        let diff = Arc::new(Diff::from_unified(target, text.as_str()));
+        Self::from_diff(diff)
+    }
+
+    /// Constructor for the >50k-line pure-addition large-diff tier (T6).
+    ///
+    /// Every line is a `+` addition (`--- /dev/null` + `@@ -0,0 +1,N @@`),
+    /// modelling a whole-file drop-in such as a vendored artifact.
+    pub fn new_additions_only(lines: usize) -> Self {
+        let target = DiffTarget::WorkingTree {
+            path: std::path::PathBuf::from("src/generated.rs"),
+            area: DiffArea::Unstaged,
+        };
+        let text = build_synthetic_unified_patch_additions_only(lines);
+        let diff = Arc::new(Diff::from_unified(target, text.as_str()));
+        Self::from_diff(diff)
+    }
+
+    /// Build a fixture from an already-parsed `Diff`, computing the
+    /// hidden-flag map and split-row count once. Shared by every constructor.
+    fn from_diff(diff: Arc<Diff>) -> Self {
         let mut pending_removes = 0usize;
         let mut pending_adds = 0usize;
         let mut split_row_count = 0usize;
@@ -81,6 +185,17 @@ impl PatchDiffPagedRowsFixture {
             hidden_flags,
             split_row_count,
         }
+    }
+
+    /// Total unified-diff text length in bytes. Used by tests to assert that a
+    /// fixture actually crosses a size tier (e.g. the >10MB single-file diff).
+    #[cfg(any(test, feature = "benchmarks"))]
+    pub fn diff_text_len(&self) -> usize {
+        self.diff
+            .lines
+            .iter()
+            .map(|line| line.text.as_ref().len())
+            .sum()
     }
 
     pub fn run_eager_full_materialize_step(&self) -> u64 {
@@ -2261,5 +2376,58 @@ impl PatchDiffSearchQueryUpdateFixture {
                     .is_some_and(|entry| entry.generation == self.query_cache_generation)
             })
             .count()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// T6 large-diff tier fixtures — construction + first-window invariants
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod large_diff_tier_tests {
+    use super::*;
+
+    /// The >10MB single-file tier must actually produce a multi-megabyte diff
+    /// text, and its first-window paging must paint the requested window
+    /// without materializing any full text.
+    #[test]
+    fn large_tier_10mb_single_file_is_large_and_paged() {
+        let fixture = PatchDiffPagedRowsFixture::new_with_line_bytes(50_000, 256);
+        let metrics = fixture.measure_paged_first_window_step(200);
+        assert!(
+            fixture.diff_text_len() > 10 * 1024 * 1024,
+            "synthetic single-file diff should exceed 10MB, got {} bytes",
+            fixture.diff_text_len()
+        );
+        assert!(
+            metrics.split_rows_painted >= 200,
+            "first window should paint at least 200 rows"
+        );
+        assert_eq!(
+            metrics.full_text_materializations, 0,
+            "paged first window must not materialize full text"
+        );
+    }
+
+    /// The >50k-line pure-addition tier must carry at least 50k diff rows, and
+    /// its first-window paging must paint the requested window without
+    /// materializing any full text.
+    #[test]
+    fn large_tier_50k_additions_has_many_rows_and_paged() {
+        let fixture = PatchDiffPagedRowsFixture::new_additions_only(50_000);
+        let metrics = fixture.measure_paged_first_window_step(200);
+        assert!(
+            fixture.total_rows() >= 50_000,
+            "pure-addition diff should carry at least 50k rows, got {}",
+            fixture.total_rows()
+        );
+        assert!(
+            metrics.split_rows_painted >= 200,
+            "first window should paint at least 200 rows"
+        );
+        assert_eq!(
+            metrics.full_text_materializations, 0,
+            "paged first window must not materialize full text"
+        );
     }
 }

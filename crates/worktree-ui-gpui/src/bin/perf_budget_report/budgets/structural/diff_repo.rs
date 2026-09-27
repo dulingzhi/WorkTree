@@ -227,6 +227,36 @@ pub(crate) const STRUCTURAL_BUDGETS: &[StructuralBudgetSpec] = &[
         comparator: StructuralBudgetComparator::Exactly,
         threshold: 0.0,
     },
+    // T6 large-diff tier: >10MB single-file diff (very wide payloads).
+    // The first window must paint the requested rows and never materialize
+    // full text — paging keeps the directory-diff view responsive regardless
+    // of how large a single file's diff text is.
+    StructuralBudgetSpec {
+        bench: "diff_open_patch_large_tiers/10mb_single_file/200",
+        metric: "rows_painted",
+        comparator: StructuralBudgetComparator::AtLeast,
+        threshold: 200.0,
+    },
+    StructuralBudgetSpec {
+        bench: "diff_open_patch_large_tiers/10mb_single_file/200",
+        metric: "full_text_materializations",
+        comparator: StructuralBudgetComparator::Exactly,
+        threshold: 0.0,
+    },
+    // T6 large-diff tier: >50k-line pure-addition diff (very tall diffs).
+    // Same first-window paging invariant as the single-file tier.
+    StructuralBudgetSpec {
+        bench: "diff_open_patch_large_tiers/50k_additions/200",
+        metric: "rows_painted",
+        comparator: StructuralBudgetComparator::AtLeast,
+        threshold: 200.0,
+    },
+    StructuralBudgetSpec {
+        bench: "diff_open_patch_large_tiers/50k_additions/200",
+        metric: "full_text_materializations",
+        comparator: StructuralBudgetComparator::Exactly,
+        threshold: 0.0,
+    },
     // Large single-file diff scroll (diff_scroll) — fixture must stay intact and the window must materialize visible text.
     StructuralBudgetSpec {
         bench: "diff_scroll/normal_lines_window/200",

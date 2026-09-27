@@ -27,6 +27,7 @@ mod diff_open_patch_100k_lines_first_window;
 mod diff_open_patch_deep_window;
 mod diff_open_patch_first_window;
 mod diff_open_svg_dual_path_first_window;
+mod diff_open_patch_large_tiers;
 mod diff_refresh_rev_only_same_content;
 mod diff_split_resize_drag_step;
 mod display;
@@ -112,6 +113,7 @@ pub(crate) use diff_open_patch_100k_lines_first_window::bench_diff_open_patch_10
 pub(crate) use diff_open_patch_deep_window::bench_diff_open_patch_deep_window;
 pub(crate) use diff_open_patch_first_window::bench_diff_open_patch_first_window;
 pub(crate) use diff_open_svg_dual_path_first_window::bench_diff_open_svg_dual_path_first_window;
+pub(crate) use diff_open_patch_large_tiers::bench_diff_open_patch_large_tiers;
 pub(crate) use diff_refresh_rev_only_same_content::bench_diff_refresh_rev_only_same_content;
 pub(crate) use diff_split_resize_drag_step::bench_diff_split_resize_drag_step;
 pub(crate) use display::bench_display;
