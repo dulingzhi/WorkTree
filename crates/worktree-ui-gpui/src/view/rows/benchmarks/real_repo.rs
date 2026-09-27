@@ -252,6 +252,26 @@ impl RealRepoFixture {
         (hash, metrics)
     }
 
+    /// Exercise the LOG and SEARCH history-cache domains with a cold-then-hot
+    /// pair of runs so the perf sidecar reports a real hit rate instead of a
+    /// single cold pass.
+    ///
+    /// The first pass populates the on-disk cache (cold misses become stores);
+    /// the second re-reads it (hits). Reflog and blame are intentionally absent:
+    /// their cache entry points (`load_reflog_window`/`load_blame`) are
+    /// `pub(super)` and are not exposed on `GitRepositoryLog`, so a bench cannot
+    /// trigger them yet — their hit-rate budgets stay deferred (see
+    /// `perf_budget_report/budgets/structural/history_cache.rs`).
+    pub fn run_cache_repeat(&self) -> (u64, RealRepoMetrics) {
+        // Cold pass: populates the on-disk LOG snapshot and SEARCH result.
+        let _ = self.run_monorepo_open_and_history();
+        let _ = self.repo.search_commits("commit", 100);
+        // Hot pass: re-reads the cache, producing LOG and SEARCH hits.
+        let hot = self.run_monorepo_open_and_history();
+        let _ = self.repo.search_commits("commit", 100);
+        hot
+    }
+
     fn run_monorepo_open_and_history(&self) -> (u64, RealRepoMetrics) {
         let status =
             load_split_repo_status(self.repo.as_ref(), "real_repo monorepo status benchmark");
@@ -872,6 +892,23 @@ mod tests {
         assert!(metrics.graph_rows >= 8);
         assert!(metrics.status_calls >= 1);
         assert!(metrics.log_walk_calls >= 1);
+    }
+
+    #[test]
+    fn real_repo_monorepo_fixture_repeat_exercises_search_cache() {
+        let snapshot_root = build_monorepo_snapshot_root();
+        let fixture = RealRepoFixture::from_snapshot_root(
+            snapshot_root.path(),
+            RealRepoScenario::MonorepoOpenAndHistoryLoad,
+        )
+        .expect("real_repo monorepo fixture");
+
+        // `run_cache_repeat` runs the open twice (cold then hot) and issues a
+        // commit-search twice; it must still produce a valid open result.
+        let (hash, metrics) = fixture.run_cache_repeat();
+        assert_ne!(hash, 0);
+        assert!(metrics.commits_loaded >= 8);
+        assert!(metrics.graph_rows >= 8);
     }
 
     #[test]
