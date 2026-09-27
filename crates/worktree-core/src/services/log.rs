@@ -203,6 +203,30 @@ pub trait GitRepositoryLog {
         )))
     }
 
+    /// Like [`GitRepositoryLog::diff_range_files`], but restricted to `root`.
+    ///
+    /// Directory comparison needs per-file line counts for one subtree, and the
+    /// gix backend deliberately skips stats once a comparison exceeds
+    /// `COMMIT_STATS_MAX_FILES` changes: filtering the whole-range result after
+    /// the fact would therefore report `+0/-0` for a small directory sitting
+    /// inside a huge range. Backends that can push the scope into the diff (a
+    /// subtree walk) keep accurate stats; this default is correct but inherits
+    /// that degradation, which is the pre-existing behaviour.
+    ///
+    /// An empty `root` means the repository root and matches every path.
+    fn diff_range_files_scoped(
+        &self,
+        from: &CommitId,
+        to: Option<&CommitId>,
+        root: &Path,
+    ) -> Result<Vec<CommitFileChange>> {
+        let changes = self.diff_range_files(from, to)?;
+        Ok(changes
+            .into_iter()
+            .filter(|change| change.path.starts_with(root))
+            .collect())
+    }
+
     /// Full `%B` messages of the given commits, in input order. Message-only
     /// on purpose: callers like the cherry-pick editor need nothing else, and
     /// implementations should skip the per-commit tree diff `commit_details`

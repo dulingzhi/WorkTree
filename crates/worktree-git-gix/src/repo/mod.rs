@@ -396,6 +396,13 @@ impl GitRepositoryLog for GixRepo {
             to: Option<&CommitId>,
         ) -> Result<Vec<CommitFileChange>>;
 
+        fn diff_range_files_scoped(
+            &self,
+            from: &CommitId,
+            to: Option<&CommitId>,
+            root: &Path,
+        ) -> Result<Vec<CommitFileChange>>;
+
         fn commit_messages(&self, ids: &[CommitId]) -> Result<Vec<String>>;
 
         fn topologically_order_commits(&self, ids: &[CommitId]) -> Result<Vec<CommitId>>;

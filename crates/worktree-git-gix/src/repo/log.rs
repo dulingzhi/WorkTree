@@ -577,6 +577,87 @@ pub(crate) fn diff_range_files(
     tree_diff_file_changes(repo, from_tree.as_ref(), &to_tree)
 }
 
+/// List the files that differ between two commits, restricted to `root`.
+///
+/// Diffing the two *subtrees* at `root` — rather than filtering the
+/// whole-range result afterwards — keeps the change set at the size of the
+/// directory, so `tree_diff_file_changes` still computes per-file line counts.
+/// The whole-range form silently degrades to `None` stats once a comparison
+/// exceeds `COMMIT_STATS_MAX_FILES` changes, which is exactly what made a small
+/// directory inside a big range report `+0/-0`.
+///
+/// An empty `root` means the repository root and behaves like
+/// [`diff_range_files`].
+pub(crate) fn diff_range_files_scoped(
+    repo: &gix::Repository,
+    from: &CommitId,
+    to: &CommitId,
+    root: &Path,
+) -> Result<Vec<CommitFileChange>> {
+    if root.as_os_str().is_empty() {
+        return diff_range_files(repo, from, to);
+    }
+
+    let from_tree = (from.as_ref() != EMPTY_TREE_ID)
+        .then(|| commit_tree_for_id(repo, from, "gix range from"))
+        .transpose()?;
+    let to_tree = commit_tree_for_id(repo, to, "gix range to")?;
+
+    let from_subtree = match from_tree.as_ref() {
+        Some(tree) => subtree_at(repo, tree, root)?,
+        None => None,
+    };
+    let to_subtree = subtree_at(repo, &to_tree, root)?;
+
+    let changes = match (from_subtree.as_ref(), to_subtree.as_ref()) {
+        (None, None) => Vec::new(),
+        // The directory is new, so everything under it is an addition.
+        (None, Some(to_subtree)) => tree_diff_file_changes(repo, None, to_subtree)?,
+        (Some(from_subtree), Some(to_subtree)) => {
+            tree_diff_file_changes(repo, Some(from_subtree), to_subtree)?
+        }
+        // The directory exists only on the older side, i.e. it was removed.
+        // There is no tree on the newer side to diff against, so fall back to
+        // the whole-range list: the file set stays correct and only the stats
+        // can be `None`, which is the pre-existing behaviour.
+        (Some(_), None) => {
+            return Ok(diff_range_files(repo, from, to)?
+                .into_iter()
+                .filter(|change| change.path.starts_with(root))
+                .collect());
+        }
+    };
+
+    // Subtree results are relative to that subtree, so re-prefix them with the
+    // directory the caller asked about.
+    Ok(changes
+        .into_iter()
+        .map(|mut change| {
+            change.path = root.join(&change.path);
+            change
+        })
+        .collect())
+}
+
+/// Resolve the subtree at `root` inside `tree`, or `None` when that side has no
+/// such directory (or holds a non-tree object at that path).
+fn subtree_at<'repo>(
+    repo: &'repo gix::Repository,
+    tree: &gix::Tree<'repo>,
+    root: &Path,
+) -> Result<Option<gix::Tree<'repo>>> {
+    let Some(entry) = tree
+        .lookup_entry_by_path(root)
+        .map_err(|e| Error::new(ErrorKind::Backend(format!("gix lookup_entry_by_path: {e}"))))?
+    else {
+        return Ok(None);
+    };
+    let object = repo
+        .find_object(entry.object_id())
+        .map_err(|e| Error::new(ErrorKind::Backend(format!("gix find object: {e}"))))?;
+    Ok(object.peel_to_tree().ok())
+}
+
 /// Resolve a comparison endpoint to the tree it names. Peels to a tree rather
 /// than to a commit so a bare tree spec resolves too — the empty tree is how the
 /// changes a root commit introduces are expressed, and it is not a commit.
@@ -2061,6 +2142,29 @@ impl GixRepo {
         }
     }
 
+    pub(super) fn diff_range_files_scoped(
+        &self,
+        from: &CommitId,
+        to: Option<&CommitId>,
+        root: &Path,
+    ) -> Result<Vec<CommitFileChange>> {
+        match to {
+            Some(to) => {
+                let repo = self._repo.to_thread_local();
+                diff_range_files_scoped(&repo, from, to, root)
+            }
+            // Working-tree tip: the newer side is the live worktree, which has
+            // no tree object, so the subtree walk cannot run. Filter the
+            // shelled-out file list instead.
+            None => Ok(
+                super::submodules::diff_commit_to_worktree_files(&self.spec.workdir, from)?
+                    .into_iter()
+                    .filter(|change| change.path.starts_with(root))
+                    .collect(),
+            ),
+        }
+    }
+
     pub(super) fn commit_messages(&self, ids: &[CommitId]) -> Result<Vec<String>> {
         let repo = self._repo.to_thread_local();
         ids.iter()
@@ -2703,6 +2807,74 @@ mod tests {
                 ("new.txt".to_string(), FileStatusKind::Added),
             ]
         );
+    }
+
+    #[test]
+    fn diff_range_files_scoped_keeps_line_counts_for_a_small_directory_in_a_huge_range() {
+        use worktree_core::services::GitRepository;
+
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let repo = tmp.path();
+        init_test_repo(repo);
+
+        // Base commit: the directory under test already exists, so it can be
+        // diffed as a subtree on both sides of the range.
+        write_file(repo, "small/a.txt", "one\ntwo\n");
+        git_success(repo, &["add", "."]);
+        git_success(repo, &["commit", "-m", "base"]);
+        let from = CommitId(git_stdout(repo, &["rev-parse", "HEAD"]).into());
+
+        // Target commit: touch the one file in `small` and add far more than
+        // COMMIT_STATS_MAX_FILES (400) files elsewhere, so the *whole-range*
+        // comparison trips the stats guard.
+        write_file(repo, "small/a.txt", "one\ntwo\nthree\n");
+        for i in 0..420 {
+            write_file(repo, &format!("bulk/f{i}.txt"), "bulk\n");
+        }
+        git_success(repo, &["add", "-A"]);
+        git_success(repo, &["commit", "-m", "target"]);
+        let to = CommitId(git_stdout(repo, &["rev-parse", "HEAD"]).into());
+
+        let opened = open_repo(repo);
+
+        // The whole-range form is what the directory view used to build its tree
+        // from: past the guard every stat is `None`, which is what made the
+        // panel report `+0 / -0`.
+        let unscoped = opened
+            .diff_range_files(&from, Some(&to))
+            .expect("diff_range_files should succeed");
+        assert!(
+            unscoped.len() > 400,
+            "expected a range past the stats guard"
+        );
+        let unscoped_small = unscoped
+            .iter()
+            .find(|f| f.path.ends_with("a.txt"))
+            .expect("small/a.txt is part of the range");
+        assert_eq!(
+            unscoped_small.additions, None,
+            "the guard should have dropped stats for the whole range"
+        );
+
+        // Scoped to the directory, the subtree diff is small enough that the
+        // line counts survive — the bug this guards against.
+        let scoped = opened
+            .diff_range_files_scoped(&from, Some(&to), std::path::Path::new("small"))
+            .expect("diff_range_files_scoped should succeed");
+        assert_eq!(scoped.len(), 1, "only small/a.txt changed under small/");
+        let change = &scoped[0];
+        assert_eq!(change.path.parent(), Some(std::path::Path::new("small")));
+        assert_eq!(
+            change.path.file_name(),
+            Some(std::ffi::OsStr::new("a.txt")),
+            "subtree-relative paths must be re-prefixed with the scope"
+        );
+        assert_eq!(
+            change.additions,
+            Some(1),
+            "the added line must be counted for the scoped directory"
+        );
+        assert_eq!(change.deletions, Some(0));
     }
 
     #[test]

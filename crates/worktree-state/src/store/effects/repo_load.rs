@@ -2083,11 +2083,13 @@ pub(super) fn schedule_load_diff(
     });
 }
 
-/// Schedule a directory-scoped change-tree load for a commit range. Reuses the
-/// existing `diff_range_files` primitive (no new backend trait method) and
-/// aggregates the flat file-change list into a nested tree via core's
-/// `DirectoryDiffResult::new`. `target` must be a `CommitRange`; its `path`
-/// field is treated as the directory root (empty = repo root).
+/// Schedule a directory-scoped change-tree load for a commit range. The backend
+/// diffs only the subtree at the comparison root (`diff_range_files_scoped`), so
+/// the change set stays at the size of the directory and per-file line counts
+/// survive the `COMMIT_STATS_MAX_FILES` guard that would otherwise zero them out
+/// for a small directory inside a huge range. The flat list is aggregated into a
+/// nested tree via core's `DirectoryDiffResult::new`. `target` must be a
+/// `CommitRange`; its `path` field is the directory root (empty = repo root).
 pub(super) fn schedule_load_directory_diff(
     executor: &TaskExecutor,
     repos: &RepoMap,
@@ -2103,7 +2105,7 @@ pub(super) fn schedule_load_directory_diff(
                 path,
             } => {
                 let root = path.clone().unwrap_or_else(|| std::path::PathBuf::from(""));
-                repo.diff_range_files(from_commit_id, to_commit_id.as_ref())
+                repo.diff_range_files_scoped(from_commit_id, to_commit_id.as_ref(), &root)
                     .map_err(|e| e.to_string())
                     .map(|changes| Arc::new(DirectoryDiffResult::new(&changes, &root)))
             }
