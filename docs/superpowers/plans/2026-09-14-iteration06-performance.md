@@ -494,3 +494,26 @@ T6 档位基准（纯新增、零冲突、解锁测量）→ T4（用户体感�
 
 - **T-F（directory-diff）**：计划显式顺延（deferred），属 directory-diff 轨道，非性能迭代。P5 冻结 GitRepositoryDiff trait 的约束随 P5 取消而失效；如想重启 T-F 另行规划。
 - P5 自身不再有任务。
+
+## 2026-09-27 收口：T4 ④ 与 T6 ②
+
+### T4 冷启动四连 —— ④ 审计定夺：不做，归档
+
+计划把 C# 四连列为「跳过探测 / 重活离线程 / 恢复 tab 不实例化全部仓库 / 第四项审计后定」。09-24 审计已给出结论：
+
+- ① 跳过探测：被 P6-D3 否，改为「离线程 + 乐观回填」（`24fb8168`，`first_paint` −200~250ms、`first_interactive` −300~380ms、paint→interactive 间隔 −133ms）。**已落地。**
+- ② 重活离线程：合并进 ① 的同一改动（git --version 是唯一真同步探测，已后台化）。**已落地。**
+- ③ 恢复 tab 不实例化全部仓库：09-24 实测「冷启动耗时与仓库数无关（1/5/20 仓库互在噪声内）」，`restore_session` 本就只开 active repo。**前提不成立，作废。**
+- ④ 第四项：**审计后定夺为「不做」**。理由：09-24 审计已覆盖启动期全部同步重活，唯一真瓶颈（git --version）已离线程；其余启动工作均走既有异步 store/reducer 流。当前 `app_launch/cold_*` 稳态基线 ~846ms first paint、~979ms first interactive（本机 Windows，两遍稳态），均远低于预算上限（8000/20000ms）。在「与仓库数无关 + 已离线程唯一探测 + 余下全异步」的前提下，任何额外的冷启动优化（懒建图、并行开仓等）都属于高实现成本、收益不可证伪的 speculative 工作，不符合「退化即回滚」的性价比纪律。故 T4 整体收口，④ 不立项。
+
+### T6 大文件 / 大 diff —— ② 虚拟化 + 增量解码：已满足
+
+- 虚拟化：`PatchDiffPagedRows` / `PagedPatchSplitRows` 按可见窗口分页，仅物化首窗口行；`full_text_materializations` 恒为 0（预算已锁 Exactly 0）。
+- 增量解码：`Diff::from_unified` 仅做**单次扫描**构建行描述符（`lines: Vec<DiffLine>`，每行 `text` 为 `SharedLineText` 区间切片，不复制原文），非逐窗口重复解析；渲染按索引取窗口。即「解码一次性 O(文本) 扫描 + 按页渲染」，已是最优形态——要知行布局就必须扫每行前缀，无法比单次扫描更懒。
+- 证据（2026-09-27 跑通）：新增合成档位 `diff_open_patch_large_tiers`，
+  `10mb_single_file/200` 首窗口 ~123µs、`50k_additions/200` ~4.88ms，两者 `rows_painted=200`、`full_text_materializations=0`，`perf_budget_report` 均 OK within budget。
+  >10MB 单文件与 >50k 行两类极端 diff 打开均无卡顿（首窗口亚 5ms、零全量物化），T6 ② 验收达成，不另做流式解析重构（仅对百万行级 diff 才有边际收益，超出本迭代范围）。
+
+### 迭代 06 Wave 2 总状态
+
+T4（①②③ 落地 / ④ 归档）、T5（扩展域 + 护栏 + Storage 设置页 + 命中率预算，全完成）、T6（档位基准 + 虚拟化 + 增量解码，全完成）、T7（早前完成）。Wave 2 实质性收口。唯一结构性遗留：**严格门控仍依赖专用自托管 runner**（`real_repo/*` 组在 hosted runner 按缺失跳过，命中率预算需专用 runner + 真仓库才评估）——见 P6-D1。
