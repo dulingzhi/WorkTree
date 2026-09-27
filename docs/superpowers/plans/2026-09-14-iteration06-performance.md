@@ -395,7 +395,24 @@ P5 取消后，迭代 06 只剩 Wave 2（T4/T5/T6）未开工。原「剩余工�
   enable 判定，加开关等于新增状态 + 持久化问题，且会让命中率指标因为「用户关了」而读 0%，指标失去意义。
   开关本该回答的抱怨（「占多少空间、能不能清掉」）已由体积显示 + Clear 回答。**如后续要做，先定持久化位置。**
 
-  **命中率预算待补**：合成 bench 大多不开真 gix 仓库，命中率只在开真仓库的 bench 上动；先在 CI 看几轮分布再设阈值。
+  **命中率预算（2026-09-25 补，原「待补」）**：合成 bench 大多不开真 gix 仓库，命中率只在开真仓库的 bench 上动；
+  扩展域已全部落地，阈值按**盈亏平衡分析**给出（不再等 CI 分布——严格门控至今未实跑真仓库）：
+  - 三域未命中附加成本统一为「全 ref 指纹」**热 ~23ms**（冷 133ms 仅首次触碰 `.git/refs/*`，稳态不算）；
+  - commit-search 命中省 ~800ms（一次搜索 940ms − 2×23ms ×2 趟 ref 枚举）→ 盈亏平衡命中率 **≈ 3%**；
+  - blame 内容寻址、零失效，命中省一次整文件 blame（数百 ms~秒级）；reflog 命中省一次窗口重建。
+  - 预算项（进 `perf_budget_report`，单位 %，下限型 budget——低于阈值即 Alert）：
+
+    | 域 | label | 硬下限（防「缓存全失效」回归） | 建议目标（CI 观测后收紧/上调） |
+    |---|---|---|---|
+    | commit-search | `history_cache.hit_rate.search` | ≥ 3% | ≥ 50% |
+    | blame | `history_cache.hit_rate.blame` | ≥ 30% | ≥ 80% |
+    | reflog | `history_cache.hit_rate.reflog` | ≥ 10% | ≥ 40% |
+
+  - 硬下限取「低于它缓存净收益为负 / 命中归零」的边界：search=3% 直接来自盈亏平衡；blame/reflog 因零/低失效风险，
+    下限设为能识别「键设计回退导致命中归零」的保守值。建议目标为初始观测锚点，待 CI 真仓库跑几轮后下调为硬下限或上调为实际达成值。
+  - 接线仍待做：预算项需写进 `worktree-ui-gpui/src/bin/perf_budget_report/budgets/` 的对应 spec 文件，
+    且 `HistoryCacheStats` 目前只有 log/reflog/search/blame 各自的本地计数器、尚未聚合成 sidecar 指标下发——
+    这两步是「命中率进 perf_budget_report」的收尾（原 commit `1c487965` 只埋了 sidecar 钩子、暂不设预算）。
 
   **2026-09-25：扩展域 reflog(S) 已落地。** 缓存文件改为「域」寻址：`SCHEMA_VERSION 2→3`，请求哈希混入
   `DOMAIN_LOG=0` / `DOMAIN_REFLOG=1`（`request_hash(domain, mode, author)`），`CachedSnapshot` 增加 `domain`
