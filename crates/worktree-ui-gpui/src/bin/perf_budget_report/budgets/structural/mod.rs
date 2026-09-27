@@ -2,6 +2,7 @@ use super::*;
 
 mod diff_repo;
 mod editing_ops;
+mod history_cache;
 mod history_status;
 mod layout_navigation;
 mod render_preview;
@@ -16,4 +17,5 @@ pub(crate) const STRUCTURAL_BUDGET_GROUPS: &[&[StructuralBudgetSpec]] = &[
     system_runtime::STRUCTURAL_BUDGETS,
     render_preview::STRUCTURAL_BUDGETS,
     text_model::STRUCTURAL_BUDGETS,
+    history_cache::STRUCTURAL_BUDGETS,
 ];

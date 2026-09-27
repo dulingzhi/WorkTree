@@ -62,6 +62,19 @@ impl HistoryCacheStats {
     }
 }
 
+/// Number of history-cache domains tracked by [`HistoryCacheStatsByDomain`].
+///
+/// Fixed order: `[log, reflog, search, blame]` — matches the `DOMAIN_*` values
+/// in `worktree-git-gix`'s history cache.
+pub const HISTORY_CACHE_DOMAIN_COUNT: usize = 4;
+
+/// Per-domain cumulative cache counters, one entry per [`HISTORY_CACHE_DOMAIN_COUNT`] domain.
+///
+/// The history-cache backend fills this so the perf sidecar can report a hit rate for each
+/// domain independently. A single aggregate would hide "search never hits" behind "log always
+/// hits", which is exactly the regression the hit-rate budget exists to catch.
+pub type HistoryCacheStatsByDomain = [HistoryCacheStats; HISTORY_CACHE_DOMAIN_COUNT];
+
 #[derive(Clone, Copy)]
 pub struct HistoryCacheHooks {
     /// Where the cache lives.
@@ -70,8 +83,10 @@ pub struct HistoryCacheHooks {
     pub usage: fn() -> HistoryCacheUsage,
     /// Delete everything; returns the number of entries removed.
     pub clear: fn() -> usize,
-    /// Cumulative counters.
+    /// Cumulative counters (aggregate across all domains).
     pub stats: fn() -> HistoryCacheStats,
+    /// Cumulative counters, one entry per domain in order `[log, reflog, search, blame]`.
+    pub stats_by_domain: fn() -> HistoryCacheStatsByDomain,
 }
 
 static HOOKS: OnceLock<HistoryCacheHooks> = OnceLock::new();
@@ -99,6 +114,11 @@ pub fn history_cache_usage() -> Option<HistoryCacheUsage> {
 /// `None` when no backend registered a cache.
 pub fn history_cache_stats() -> Option<HistoryCacheStats> {
     HOOKS.get().map(|hooks| (hooks.stats)())
+}
+
+/// `None` when no backend registered a cache.
+pub fn history_cache_stats_by_domain() -> Option<HistoryCacheStatsByDomain> {
+    HOOKS.get().map(|hooks| (hooks.stats_by_domain)())
 }
 
 /// `None` when no backend registered a cache — the caller cannot distinguish

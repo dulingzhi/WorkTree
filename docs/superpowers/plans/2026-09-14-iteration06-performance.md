@@ -410,9 +410,13 @@ P5 取消后，迭代 06 只剩 Wave 2（T4/T5/T6）未开工。原「剩余工�
 
   - 硬下限取「低于它缓存净收益为负 / 命中归零」的边界：search=3% 直接来自盈亏平衡；blame/reflog 因零/低失效风险，
     下限设为能识别「键设计回退导致命中归零」的保守值。建议目标为初始观测锚点，待 CI 真仓库跑几轮后下调为硬下限或上调为实际达成值。
-  - 接线仍待做：预算项需写进 `worktree-ui-gpui/src/bin/perf_budget_report/budgets/` 的对应 spec 文件，
-    且 `HistoryCacheStats` 目前只有 log/reflog/search/blame 各自的本地计数器、尚未聚合成 sidecar 指标下发——
-    这两步是「命中率进 perf_budget_report」的收尾（原 commit `1c487965` 只埋了 sidecar 钩子、暂不设预算）。
+  - 接线已完成（2026-09-27）：预算项写进
+    `worktree-ui-gpui/src/bin/perf_budget_report/budgets/structural/history_cache.rs`（4 条 `StructuralBudgetSpec`，
+    bench = `real_repo/monorepo_open_and_history_load`，metric = `history_cache.hit_rate.{log,reflog,search,blame}`，
+    `AtLeast` 阈值 20 / 10 / 3 / 30）。`worktree_core::history_cache` 新增 `stats_by_domain` hook +
+    `history_cache_stats_by_domain()`；`git-gix` 实现 `cache_stats_by_domain()` 聚合四域，bench sidecar 改发
+    per-domain `history_cache.hit_rate.<dom>`（某域无读取则跳过，不写 0%）。hosted CI 因 `real_repo/*` 被排除而
+    跳过这些预算；命中率需专用 runner + 真仓库（重复同一查询才会产生 hit）才真正评估——与「等 CI 观测分布」一致。
 
   **2026-09-25：扩展域 reflog(S) 已落地。** 缓存文件改为「域」寻址：`SCHEMA_VERSION 2→3`，请求哈希混入
   `DOMAIN_LOG=0` / `DOMAIN_REFLOG=1`（`request_hash(domain, mode, author)`），`CachedSnapshot` 增加 `domain`

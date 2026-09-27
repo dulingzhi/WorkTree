@@ -416,10 +416,37 @@ thread_local! {
 #[cfg(test)]
 static TEST_ROOT_SEQ: AtomicU64 = AtomicU64::new(0);
 
-/// Cumulative counters, in the shape `worktree_core` reports to the perf
-/// sidecar.
+/// Per-domain cumulative counters, in `worktree_core` order `[log, reflog, search, blame]`.
+///
+/// This is what the perf sidecar consumes: each domain gets its own hit-rate
+/// metric so "search never hits" cannot hide behind "log always hits". The
+/// `log` domain is `CACHE_STATS`; the other three are the dedicated statics.
+pub(crate) fn cache_stats_by_domain() -> [worktree_core::history_cache::HistoryCacheStats; 4] {
+    [
+        stats_from(CACHE_STATS.snapshot()),
+        stats_from(REFLOG_CACHE_STATS.snapshot()),
+        stats_from(SEARCH_CACHE_STATS.snapshot()),
+        stats_from(BLAME_CACHE_STATS.snapshot()),
+    ]
+}
+
+/// Aggregate cumulative counters across every domain — kept for any caller that
+/// still wants the single overall hit rate.
 pub(crate) fn cache_stats() -> worktree_core::history_cache::HistoryCacheStats {
-    let (hits, cold, stale, corrupt, stores) = CACHE_STATS.snapshot();
+    cache_stats_by_domain()
+        .iter()
+        .fold(Default::default(), |acc, s| worktree_core::history_cache::HistoryCacheStats {
+            hits: acc.hits + s.hits,
+            misses_cold: acc.misses_cold + s.misses_cold,
+            misses_stale: acc.misses_stale + s.misses_stale,
+            misses_corrupt: acc.misses_corrupt + s.misses_corrupt,
+            stores: acc.stores + s.stores,
+        })
+}
+
+fn stats_from(
+    (hits, cold, stale, corrupt, stores): (u64, u64, u64, u64, u64),
+) -> worktree_core::history_cache::HistoryCacheStats {
     worktree_core::history_cache::HistoryCacheStats {
         hits,
         misses_cold: cold,
