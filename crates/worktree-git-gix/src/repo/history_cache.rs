@@ -435,12 +435,14 @@ pub(crate) fn cache_stats_by_domain() -> [worktree_core::history_cache::HistoryC
 pub(crate) fn cache_stats() -> worktree_core::history_cache::HistoryCacheStats {
     cache_stats_by_domain()
         .iter()
-        .fold(Default::default(), |acc, s| worktree_core::history_cache::HistoryCacheStats {
-            hits: acc.hits + s.hits,
-            misses_cold: acc.misses_cold + s.misses_cold,
-            misses_stale: acc.misses_stale + s.misses_stale,
-            misses_corrupt: acc.misses_corrupt + s.misses_corrupt,
-            stores: acc.stores + s.stores,
+        .fold(Default::default(), |acc, s| {
+            worktree_core::history_cache::HistoryCacheStats {
+                hits: acc.hits + s.hits,
+                misses_cold: acc.misses_cold + s.misses_cold,
+                misses_stale: acc.misses_stale + s.misses_stale,
+                misses_corrupt: acc.misses_corrupt + s.misses_corrupt,
+                stores: acc.stores + s.stores,
+            }
         })
 }
 

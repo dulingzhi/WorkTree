@@ -33,11 +33,9 @@ pub(crate) fn bench_diff_open_patch_large_tiers(c: &mut Criterion) {
     group.sample_size(10);
     group.warm_up_time(Duration::from_secs(1));
     for (tier, fixture) in tiers.iter() {
-        group.bench_with_input(
-            BenchmarkId::new(*tier, window),
-            &window,
-            |b, &window| b.iter(|| fixture.run_paged_first_window_step(window)),
-        );
+        group.bench_with_input(BenchmarkId::new(*tier, window), &window, |b, &window| {
+            b.iter(|| fixture.run_paged_first_window_step(window))
+        });
     }
     group.finish();
 
@@ -45,7 +43,8 @@ pub(crate) fn bench_diff_open_patch_large_tiers(c: &mut Criterion) {
     // diff format (rows_painted == split_rows_painted, no full-text materialize).
     for (tier, fixture) in tiers.iter() {
         let sidecar_started_at = Instant::now();
-        let metrics = measure_sidecar_allocations(|| fixture.measure_paged_first_window_step(window));
+        let metrics =
+            measure_sidecar_allocations(|| fixture.measure_paged_first_window_step(window));
         let first_window_ns = sidecar_started_at
             .elapsed()
             .as_nanos()

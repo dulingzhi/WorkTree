@@ -30,8 +30,7 @@ pub(crate) fn bench_real_repo(c: &mut Criterion) {
     group.bench_function("monorepo_open_and_history_load_repeat", |b| {
         b.iter(|| monorepo.run_cache_repeat())
     });
-    let (_, monorepo_repeat_metrics) =
-        measure_sidecar_allocations(|| monorepo.run_cache_repeat());
+    let (_, monorepo_repeat_metrics) = measure_sidecar_allocations(|| monorepo.run_cache_repeat());
     emit_real_repo_sidecar(
         "monorepo_open_and_history_load_repeat",
         &monorepo_repeat_metrics,

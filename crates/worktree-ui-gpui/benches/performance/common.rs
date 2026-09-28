@@ -84,7 +84,8 @@ static REPORTED_CACHE_STATS: std::sync::Mutex<
 
 /// Domain suffixes, fixed order matching `HistoryCacheStatsByDomain`:
 /// `[log, reflog, search, blame]`.
-const HISTORY_CACHE_DOMAIN_SUFFIXES: [&str; worktree_core::history_cache::HISTORY_CACHE_DOMAIN_COUNT] =
+const HISTORY_CACHE_DOMAIN_SUFFIXES: [&str;
+    worktree_core::history_cache::HISTORY_CACHE_DOMAIN_COUNT] =
     ["log", "reflog", "search", "blame"];
 
 /// Append this bench's share of the per-domain history-cache counters, when
@@ -110,7 +111,10 @@ fn append_history_cache_metrics(metrics: &mut Map<String, Value>) {
     };
     for (suffix, dom) in HISTORY_CACHE_DOMAIN_SUFFIXES.iter().zip(delta.iter()) {
         if let Some(hit_rate_pct) = dom.hit_rate_pct() {
-            metrics.insert(format!("history_cache.hit_rate.{suffix}"), json!(hit_rate_pct));
+            metrics.insert(
+                format!("history_cache.hit_rate.{suffix}"),
+                json!(hit_rate_pct),
+            );
         }
     }
 }
