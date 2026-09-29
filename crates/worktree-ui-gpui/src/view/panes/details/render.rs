@@ -713,7 +713,7 @@ impl DetailsPaneView {
     /// container, a gutter reserves room for the scrollbar so rows never sit
     /// underneath it, and the scrollbar overlays the right edge. Every scrolling
     /// list in this pane is built from this, so they all scroll alike.
-    fn vertical_scroll_frame(
+    pub(in crate::view) fn vertical_scroll_frame(
         theme: AppTheme,
         container_id: impl Into<ElementId>,
         scrollbar_id: impl Into<ElementId>,

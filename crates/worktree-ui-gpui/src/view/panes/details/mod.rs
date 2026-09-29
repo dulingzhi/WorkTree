@@ -97,6 +97,7 @@ pub(in super::super) struct DetailsPaneView {
     pub(in super::super) commit_multi_scroll: UniformListScrollHandle,
     pub(in super::super) range_files_scroll: UniformListScrollHandle,
     pub(in super::super) worktree_files_scroll: UniformListScrollHandle,
+    pub(in super::super) directory_diff_scroll: UniformListScrollHandle,
     pub(in super::super) commit_message_scroll: ScrollHandle,
     pub(in super::super) commit_scroll: ScrollHandle,
 
@@ -491,6 +492,7 @@ impl DetailsPaneView {
             commit_multi_scroll: UniformListScrollHandle::default(),
             range_files_scroll: UniformListScrollHandle::default(),
             worktree_files_scroll: UniformListScrollHandle::default(),
+            directory_diff_scroll: UniformListScrollHandle::default(),
             commit_message_scroll,
             commit_scroll: ScrollHandle::new(),
             commit_message_input,
@@ -1639,6 +1641,20 @@ impl Render for DetailsPaneView {
     }
 }
 
+/// One row of the flattened (collapsed/drilled-resolved) directory-diff tree.
+/// Built by `flatten_directory_tree` and fed to the `uniform_list` processor so
+/// only the visible viewport window is materialised.
+#[derive(Clone)]
+struct FlatDirectoryRow {
+    path: std::path::PathBuf,
+    name: String,
+    depth: usize,
+    kind: worktree_core::diff_tree::DirectoryNodeKind,
+    additions: u64,
+    deletions: u64,
+    file_count: u64,
+}
+
 impl DetailsPaneView {
     /// Render the active directory diff (SmartGit-style folder comparison) in
     /// the details pane: a stats bar — with a breadcrumb once drilled into a
@@ -1647,7 +1663,7 @@ impl DetailsPaneView {
     fn render_directory_diff(&mut self, cx: &mut gpui::Context<Self>) -> impl IntoElement {
         // Clone the repo-derived bits up front so the tree can mutate view-local
         // drill/collapse state below without holding a borrow of `self`.
-        let Some((repo_id, range, directory_diff)) = self.active_repo().map(|repo| {
+        let Some((_, _, directory_diff)) = self.active_repo().map(|repo| {
             // A file row opens that file's diff; the target mirrors the active
             // comparison so `fill_select_diff_inline` keeps the tree on screen.
             let range = match repo.diff_state.directory_diff_target.as_ref() {
@@ -1669,23 +1685,18 @@ impl DetailsPaneView {
                 // (`filter_by_prefix` prunes every sibling subtree), so the stats
                 // bar and the rows always describe exactly what is on screen. A
                 // drilled root that no longer resolves (a fresh comparison was
-                // loaded) falls back to the comparison root.
-                let mut drilled_stale = false;
-                let display_root = match self.directory_diff_root.as_ref() {
-                    Some(root) if root != &result.root.path => {
+                // loaded) falls back to the comparison root and the drill is
+                // cleared.
+                let display_root = self.resolve_directory_diff_root(&result);
+                if let Some(drill) = self.directory_diff_root.clone() {
+                    if drill != result.root.path {
                         let filtered =
-                            worktree_core::diff_tree::filter_by_prefix(&result.root, root);
+                            worktree_core::diff_tree::filter_by_prefix(&result.root, &drill);
                         if filtered.file_count == 0 && filtered.children.is_empty() {
-                            drilled_stale = true;
-                            result.root.clone()
-                        } else {
-                            filtered
+                            self.directory_diff_root = None;
+                            cx.notify();
                         }
                     }
-                    _ => result.root.clone(),
-                };
-                if drilled_stale {
-                    self.directory_diff_root = None;
                 }
 
                 let header = div().flex().items_center().gap(px(8.0)).child(
@@ -1715,13 +1726,31 @@ impl DetailsPaneView {
                     None => header,
                 };
 
-                div().child(header).child(self.render_directory_tree(
-                    &display_root,
-                    0,
-                    repo_id,
-                    range,
-                    cx,
-                ))
+                // The tree can be huge (thousands of rows for a large diff), so it
+                // is rendered through a `uniform_list` that only materialises the
+                // rows inside the scroll viewport. `flatten_directory_tree` turns
+                // the collapsed/drilled tree into a flat index space; the processor
+                // rebuilds that same flat list for just the visible window.
+                let flat_len = self.flatten_directory_tree(&display_root).len();
+                let list = uniform_list(
+                    "directory-diff-list",
+                    flat_len,
+                    cx.processor(Self::render_directory_diff_rows),
+                );
+                let framed = Self::vertical_scroll_frame(
+                    self.theme,
+                    "directory-diff-container",
+                    "directory-diff-scrollbar",
+                    &self.directory_diff_scroll,
+                    list,
+                );
+                div()
+                    .flex()
+                    .flex_col()
+                    .flex_1()
+                    .min_h(px(0.0))
+                    .child(header)
+                    .child(framed)
             }
             worktree_state::model::Loadable::Loading => div().child("Loading directory diff…"),
             worktree_state::model::Loadable::Error(err) => {
@@ -1729,7 +1758,7 @@ impl DetailsPaneView {
             }
             worktree_state::model::Loadable::NotLoaded => div().child("No directory diff loaded"),
         };
-        div().size_full().p(px(12.0)).child(body)
+        div().size_full().p(px(12.0)).flex().flex_col().child(body)
     }
 
     /// The header line for the directory currently on screen: the rolled-up file
@@ -1747,43 +1776,131 @@ impl DetailsPaneView {
         )
     }
 
-    /// One row of the directory tree plus, unless collapsed, its children.
-    /// Clicking a directory toggles its `[-]`/`[+]` collapse; the trailing `›`
-    /// drills into it. Clicking a file opens that file's diff in the main pane.
-    fn render_directory_tree(
+    /// Resolve the directory currently on screen: the comparison root, or — when
+    /// drilled into a subdirectory — that subtree (pruned via `filter_by_prefix`).
+    /// Pure: callers that detect a stale drill reset `directory_diff_root` themselves.
+    fn resolve_directory_diff_root(
+        &self,
+        result: &worktree_core::diff_tree::DirectoryDiffResult,
+    ) -> worktree_core::diff_tree::DirectoryNode {
+        let mut root = result.root.clone();
+        if let Some(drill) = self.directory_diff_root.as_ref() {
+            if drill != &result.root.path {
+                let filtered = worktree_core::diff_tree::filter_by_prefix(&result.root, drill);
+                if filtered.file_count != 0 || !filtered.children.is_empty() {
+                    root = filtered;
+                }
+            }
+        }
+        root
+    }
+
+    /// Depth-first flatten of the (already drilled) tree, skipping the children
+    /// of any collapsed directory. The resulting order is the row order the
+    /// virtualised list scrolls through.
+    fn flatten_directory_tree(
         &self,
         node: &worktree_core::diff_tree::DirectoryNode,
+    ) -> Vec<FlatDirectoryRow> {
+        let mut out = Vec::new();
+        Self::flatten_directory_node(node, 0, &self.directory_diff_collapsed, &mut out);
+        out
+    }
+
+    /// Depth-first flatten of `node`, skipping the children of any directory whose
+    /// path is in `collapsed`. Static so it can be unit-tested without a view.
+    fn flatten_directory_node(
+        node: &worktree_core::diff_tree::DirectoryNode,
         depth: usize,
-        repo_id: RepoId,
-        range: Option<(CommitId, Option<CommitId>)>,
+        collapsed: &std::collections::HashSet<std::path::PathBuf>,
+        out: &mut Vec<FlatDirectoryRow>,
+    ) {
+        out.push(FlatDirectoryRow {
+            path: node.path.clone(),
+            name: node.name.clone(),
+            depth,
+            kind: node.kind,
+            additions: node.additions,
+            deletions: node.deletions,
+            file_count: node.file_count,
+        });
+        if node.kind == worktree_core::diff_tree::DirectoryNodeKind::Directory
+            && !collapsed.contains(node.path.as_path())
+        {
+            for child in &node.children {
+                Self::flatten_directory_node(child, depth + 1, collapsed, out);
+            }
+        }
+    }
+
+    /// `uniform_list` processor for the directory-diff tree: renders only the
+    /// rows in `range` (the visible viewport window), rebuilding the same flat
+    /// index space that `render_directory_diff` used for the total row count.
+    pub(in crate::view) fn render_directory_diff_rows(
+        this: &mut Self,
+        range: std::ops::Range<usize>,
+        _window: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
-    ) -> gpui::Div {
-        let is_dir = node.kind == worktree_core::diff_tree::DirectoryNodeKind::Directory;
-        let collapsed = is_dir && self.directory_diff_collapsed.contains(node.path.as_path());
-        let indent = px(12.0 * depth as f32);
+    ) -> Vec<gpui::AnyElement> {
+        let Some(repo) = this.active_repo() else {
+            return Vec::new();
+        };
+        let range_opt = match repo.diff_state.directory_diff_target.as_ref() {
+            Some(DiffTarget::CommitRange {
+                from_commit_id,
+                to_commit_id,
+                ..
+            }) => Some((from_commit_id.clone(), to_commit_id.clone())),
+            _ => None,
+        };
+        let worktree_state::model::Loadable::Ready(result) = &repo.diff_state.directory_diff else {
+            return Vec::new();
+        };
+        let display_root = this.resolve_directory_diff_root(result);
+        let flat = this.flatten_directory_tree(&display_root);
+        range
+            .filter_map(|ix| flat.get(ix).cloned())
+            .map(|row| this.directory_diff_row_element(&row, repo.id, range_opt.clone(), cx))
+            .collect()
+    }
+
+    /// Build a single directory-diff row (file or directory) for the virtualised
+    /// list. Mirrors the old recursive `render_directory_tree` row, but receives
+    /// a pre-flattened `FlatDirectoryRow` and an explicit `depth` (indent) instead
+    /// of walking the tree itself.
+    fn directory_diff_row_element(
+        &self,
+        row: &FlatDirectoryRow,
+        repo_id: RepoId,
+        range_opt: Option<(CommitId, Option<CommitId>)>,
+        cx: &mut gpui::Context<Self>,
+    ) -> gpui::AnyElement {
+        let is_dir = row.kind == worktree_core::diff_tree::DirectoryNodeKind::Directory;
+        let collapsed = is_dir && self.directory_diff_collapsed.contains(row.path.as_path());
+        let indent = px(12.0 * row.depth as f32);
         let label = if is_dir {
             let marker = if collapsed { "[+] " } else { "[-] " };
             format!(
                 "{}{}  ({} files, +{} -{})",
-                marker, node.name, node.file_count, node.additions, node.deletions
+                marker, row.name, row.file_count, row.additions, row.deletions
             )
         } else {
-            format!("{}  +{} -{}", node.name, node.additions, node.deletions)
+            format!("{}  +{} -{}", row.name, row.additions, row.deletions)
         };
 
         let row_id = gpui::ElementId::Name(gpui::SharedString::from(format!(
             "directory-diff-row-{}",
-            node.path.display()
+            row.path.display()
         )));
-        let mut row = div()
+        let mut row_el = div()
             .flex()
             .items_center()
             .pl(indent)
             .child(label)
             .id(row_id);
         if is_dir {
-            let toggle_path = node.path.clone();
-            row = row
+            let toggle_path = row.path.clone();
+            row_el = row_el
                 .cursor(gpui::CursorStyle::PointingHand)
                 .on_click(cx.listener(move |this, _event, _window, cx| {
                     if !this.directory_diff_collapsed.remove(&toggle_path) {
@@ -1791,13 +1908,13 @@ impl DetailsPaneView {
                     }
                     cx.notify();
                 }));
-            let drill_key = node.path.display().to_string();
+            let drill_key = row.path.display().to_string();
             let drill_id = gpui::ElementId::Name(gpui::SharedString::from(format!(
                 "directory-diff-drill-{drill_key}"
             )));
             let drill_debug = drill_key.clone();
-            let drill_path = node.path.clone();
-            row = row.child(
+            let drill_path = row.path.clone();
+            row_el = row_el.child(
                 div()
                     .id(drill_id)
                     .debug_selector(move || format!("directory-diff-drill-{drill_debug}"))
@@ -1809,14 +1926,14 @@ impl DetailsPaneView {
                         cx.notify();
                     })),
             );
-        } else if let Some((from_commit_id, to_commit_id)) = range.clone() {
+        } else if let Some((from_commit_id, to_commit_id)) = range_opt.clone() {
             let target = DiffTarget::CommitRange {
                 from_commit_id,
                 to_commit_id,
-                path: Some(node.path.clone()),
+                path: Some(row.path.clone()),
             };
             let file_repo_id = repo_id;
-            row = row
+            row_el = row_el
                 .cursor(gpui::CursorStyle::PointingHand)
                 .on_click(cx.listener(move |this, _event, _window, cx| {
                     this.store.dispatch(Msg::SelectDiff {
@@ -1826,22 +1943,7 @@ impl DetailsPaneView {
                     cx.notify();
                 }));
         }
-
-        let mut container = div().child(row);
-        if !collapsed {
-            let mut children = Vec::with_capacity(node.children.len());
-            for child in &node.children {
-                children.push(self.render_directory_tree(
-                    child,
-                    depth + 1,
-                    repo_id,
-                    range.clone(),
-                    &mut *cx,
-                ));
-            }
-            container = container.children(children);
-        }
-        container
+        row_el.into_any_element()
     }
 }
 
@@ -1896,6 +1998,55 @@ mod tests {
             DetailsPaneView::directory_diff_stats_line(&src),
             "2 files changed, +12 -4, 0 subdirectories"
         );
+    }
+
+    /// The virtualised tree flattens every node depth-first, and a collapsed
+    /// directory drops its own descendants from the flat row list (while staying
+    /// itself visible, so it can still be expanded). Regression guard for the
+    /// directory-diff virtualization (T-F large-tree windowing).
+    #[test]
+    fn flatten_directory_tree_skips_collapsed_subtrees() {
+        use std::collections::HashSet;
+        use std::path::Path;
+        use worktree_core::diff_tree::aggregate_to_tree;
+        use worktree_core::domain::{CommitFileChange, FileStatusKind};
+
+        let change = |path: &str, additions: u32, deletions: u32| CommitFileChange {
+            path: PathBuf::from(path),
+            kind: FileStatusKind::Modified,
+            is_submodule: false,
+            additions: Some(additions),
+            deletions: Some(deletions),
+        };
+        let root = aggregate_to_tree(
+            &[
+                change("src/a.rs", 10, 1),
+                change("src/b.rs", 2, 3),
+                change("docs/readme.md", 5, 0),
+            ],
+            Path::new(""),
+        );
+
+        // No collapses: root + src + src/a.rs + src/b.rs + docs + docs/readme.md = 6.
+        let mut all = Vec::new();
+        DetailsPaneView::flatten_directory_node(&root, 0, &HashSet::new(), &mut all);
+        assert_eq!(all.len(), 6);
+        assert!(all.iter().any(|r| r.path == PathBuf::from("src/a.rs")));
+
+        // Collapse `src`: its two files disappear, `src` itself stays, depth preserved.
+        let mut collapsed = HashSet::new();
+        collapsed.insert(PathBuf::from("src"));
+        let mut partial = Vec::new();
+        DetailsPaneView::flatten_directory_node(&root, 0, &collapsed, &mut partial);
+        assert_eq!(partial.len(), 4);
+        assert!(partial.iter().any(|r| r.path == PathBuf::from("src")));
+        assert!(!partial.iter().any(|r| r.path == PathBuf::from("src/a.rs")));
+        assert!(!partial.iter().any(|r| r.path == PathBuf::from("src/b.rs")));
+        let docs = partial
+            .iter()
+            .find(|r| r.path == PathBuf::from("docs"))
+            .expect("docs row present");
+        assert_eq!(docs.depth, 1);
     }
 
     fn command_log_entry(command: &str, ok: bool, seconds: u64) -> CommandLogEntry {
