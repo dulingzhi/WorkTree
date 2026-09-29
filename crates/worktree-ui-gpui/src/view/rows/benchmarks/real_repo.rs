@@ -252,23 +252,28 @@ impl RealRepoFixture {
         (hash, metrics)
     }
 
-    /// Exercise the LOG and SEARCH history-cache domains with a cold-then-hot
-    /// pair of runs so the perf sidecar reports a real hit rate instead of a
-    /// single cold pass.
+    /// Exercise the LOG, SEARCH and REFLOG history-cache domains with a
+    /// cold-then-hot pair of runs so the perf sidecar reports a real hit rate
+    /// instead of a single cold pass.
     ///
-    /// The first pass populates the on-disk cache (cold misses become stores);
-    /// the second re-reads it (hits). Reflog and blame are intentionally absent:
-    /// their cache entry points (`load_reflog_window`/`load_blame`) are
-    /// `pub(super)` and are not exposed on `GitRepositoryLog`, so a bench cannot
-    /// trigger them yet — their hit-rate budgets stay deferred (see
-    /// `perf_budget_report/budgets/structural/history_cache.rs`).
+    /// The first pass populates the on-disk caches (cold misses become stores);
+    /// the second re-reads them (hits). Reflog is reachable now: `reflog_head`
+    /// is exposed on `GitRepositoryLog` and is served from the disk cache on a
+    /// second open, so its hit-rate budget is active (see
+    /// `perf_budget_report/budgets/structural/history_cache.rs`). Blame is
+    /// intentionally absent: its cache entry point (`load_blame`) is `pub(super)`
+    /// and not on `GitRepositoryLog`, so a bench cannot trigger it yet — its
+    /// hit-rate budget stays deferred.
     pub fn run_cache_repeat(&self) -> (u64, RealRepoMetrics) {
-        // Cold pass: populates the on-disk LOG snapshot and SEARCH result.
+        // Cold pass: populates the on-disk LOG snapshot, SEARCH result and
+        // REFLOG window.
         let _ = self.run_monorepo_open_and_history();
         let _ = self.repo.search_commits("commit", 100);
-        // Hot pass: re-reads the cache, producing LOG and SEARCH hits.
+        let _ = self.repo.reflog_head(100);
+        // Hot pass: re-reads the caches, producing LOG, SEARCH and REFLOG hits.
         let hot = self.run_monorepo_open_and_history();
         let _ = self.repo.search_commits("commit", 100);
+        let _ = self.repo.reflog_head(100);
         hot
     }
 

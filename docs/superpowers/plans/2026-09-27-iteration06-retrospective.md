@@ -49,7 +49,7 @@
 
 ## 6. 成果流转建议
 
-- **研发跟进**：命中率预算阈值当前为盈亏平衡硬下限（search 3% / log 20%），待专用 runner 长期观测分布后收紧到目标值；reflog/blame 命中率预算仍 `DEFERRED`（其缓存入口未暴露到 `GitRepositoryLog`），待 trait 暴露后提升。
+- **研发跟进**：命中率预算阈值当前为盈亏平衡硬下限（search 3% / log 20%），待专用 runner 长期观测分布后收紧到目标值；reflog 命中率预算已于成果流转阶段提升为生效预算（`reflog_head` 已暴露到 `GitRepositoryLog`，且 `run_cache_repeat` 已驱动 cold+hot 读取）；blame 命中率预算仍 `DEFERRED`（`load_blame` 未暴露到 `GitRepositoryLog`），待 trait 暴露后提升。
 - **测试验收**：冷启动（`app_launch/cold_*`）、大 diff（`diff_open_patch_large_tiers/*`）、命中率（`real_repo/monorepo_open_and_history_load_repeat`）基线条已进 `perf_budget_report`，可作为回归门；hosted CI 跑 PR 子集 + alerting，专用 runner 跑 strict。
 - **上线复盘**：「性能可证明」核心数字来自固定靶子 `rust-lang/rust` 的本地 / 周调度测量；对外口径应明确 hosted runner 仅做 alerting、严格门控待专用 runner。
 - **不在范围**：T-F（directory-diff）显式顺延，属 directory-diff 轨道，非性能迭代。

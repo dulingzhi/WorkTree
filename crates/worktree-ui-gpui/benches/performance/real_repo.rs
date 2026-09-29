@@ -23,10 +23,10 @@ pub(crate) fn bench_real_repo(c: &mut Criterion) {
     emit_real_repo_sidecar("monorepo_open_and_history_load", &monorepo_metrics);
 
     // Repeat bench: runs the monorepo open twice (cold then hot) and issues a
-    // commit-search twice, so the LOG and SEARCH history-cache domains report a
-    // real hit rate instead of a single cold pass. Reflog/blame are not
-    // reachable from the fixture (their cache entry points are `pub(super)` and
-    // not on `GitRepositoryLog`) — see `RealRepoFixture::run_cache_repeat`.
+    // commit-search twice and a reflog read twice, so the LOG, SEARCH and REFLOG
+    // history-cache domains report a real hit rate instead of a single cold
+    // pass. Blame is not reachable from the fixture (`load_blame` is not on
+    // `GitRepositoryLog`) — see `RealRepoFixture::run_cache_repeat`.
     group.bench_function("monorepo_open_and_history_load_repeat", |b| {
         b.iter(|| monorepo.run_cache_repeat())
     });
