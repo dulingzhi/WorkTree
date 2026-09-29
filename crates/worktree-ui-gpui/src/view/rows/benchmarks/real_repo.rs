@@ -10,6 +10,10 @@ const DEFAULT_DEEP_HISTORY_LIMIT: usize = 50_000;
 const DEFAULT_HISTORY_PAGE_SIZE: usize = 1_000;
 const DEFAULT_HISTORY_WINDOW: usize = 200;
 
+/// A file that `build_repo_with_linear_history` always creates at HEAD, used by
+/// `run_cache_repeat` to exercise the BLAME history-cache domain.
+const BLAME_BENCH_PATH: &Path = Path::new("src/module_0/file_0.txt");
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RealRepoScenario {
     MonorepoOpenAndHistoryLoad,
@@ -252,28 +256,30 @@ impl RealRepoFixture {
         (hash, metrics)
     }
 
-    /// Exercise the LOG, SEARCH and REFLOG history-cache domains with a
+    /// Exercise every history-cache domain (LOG, SEARCH, REFLOG, BLAME) with a
     /// cold-then-hot pair of runs so the perf sidecar reports a real hit rate
     /// instead of a single cold pass.
     ///
     /// The first pass populates the on-disk caches (cold misses become stores);
-    /// the second re-reads them (hits). Reflog is reachable now: `reflog_head`
-    /// is exposed on `GitRepositoryLog` and is served from the disk cache on a
-    /// second open, so its hit-rate budget is active (see
-    /// `perf_budget_report/budgets/structural/history_cache.rs`). Blame is
-    /// intentionally absent: its cache entry point (`load_blame`) is `pub(super)`
-    /// and not on `GitRepositoryLog`, so a bench cannot trigger it yet — its
-    /// hit-rate budget stays deferred.
+    /// the second re-reads them (hits). LOG/SEARCH come from
+    /// `run_monorepo_open_and_history` and `search_commits`; REFLOG from
+    /// `reflog_head` (on `GitRepositoryLog`); BLAME from `blame_file` (on
+    /// `GitRepositoryDiff`, already wired to the on-disk blame cache). All four
+    /// hit-rate budgets are therefore active (see
+    /// `perf_budget_report/budgets/structural/history_cache.rs`).
     pub fn run_cache_repeat(&self) -> (u64, RealRepoMetrics) {
-        // Cold pass: populates the on-disk LOG snapshot, SEARCH result and
-        // REFLOG window.
+        // Cold pass: populates the on-disk LOG snapshot, SEARCH result, REFLOG
+        // window and a BLAME entry for a fixture-known file.
         let _ = self.run_monorepo_open_and_history();
         let _ = self.repo.search_commits("commit", 100);
         let _ = self.repo.reflog_head(100);
-        // Hot pass: re-reads the caches, producing LOG, SEARCH and REFLOG hits.
+        let _ = self.repo.blame_file(BLAME_BENCH_PATH, None);
+        // Hot pass: re-reads the caches, producing LOG, SEARCH, REFLOG and BLAME
+        // hits.
         let hot = self.run_monorepo_open_and_history();
         let _ = self.repo.search_commits("commit", 100);
         let _ = self.repo.reflog_head(100);
+        let _ = self.repo.blame_file(BLAME_BENCH_PATH, None);
         hot
     }
 
