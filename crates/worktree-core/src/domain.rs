@@ -1438,6 +1438,185 @@ impl RepoHookList {
     }
 }
 
+/// A single branch that participates in a stacked-PR (stacked-branch) chain.
+///
+/// `parent` names the branch this one is built on top of within the stack; the
+/// root branch(es) of a stack have `parent == None`. `order` is the position in
+/// the stack counted from the base upward, used both to render the chain and to
+/// drive `git rebase --onto` restacks in dependency order.
+///
+/// `name` is a plain branch refname — matching [`Branch::name`] and
+/// [`Upstream::branch`] rather than a dedicated newtype — because stacked
+/// branches are ordinary local branches, merely related by a parent link.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StackBranch {
+    pub name: String,
+    pub parent: Option<String>,
+    pub order: usize,
+}
+
+impl StackBranch {
+    pub fn new(name: impl Into<String>, parent: Option<String>, order: usize) -> Self {
+        Self {
+            name: name.into(),
+            parent,
+            order,
+        }
+    }
+}
+
+/// The stacked-PR metadata for a repository: the set of branches that form one
+/// or more stacks, in no particular order.
+///
+/// This is the pure data model for iteration 07 (Stacked-PR). It deliberately
+/// depends only on [`crate::domain`] primitives — no `GitRepository*` trait and
+/// no `model.rs` field — so it can land before the P5 model split and be wired
+/// into state/UI once that settles. Persistence and the gix restack
+/// orchestration are intentionally out of scope here.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct StackMetadata {
+    pub branches: Vec<StackBranch>,
+}
+
+impl StackMetadata {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Branches sorted by their stack `order`, ascending. Stable for equal
+    /// `order` (retains the `branches` insertion order within a tier).
+    pub fn ordered(&self) -> Vec<&StackBranch> {
+        let mut refs: Vec<&StackBranch> = self.branches.iter().collect();
+        refs.sort_by_key(|b| b.order);
+        refs
+    }
+
+    /// The branches with `parent == None` — the roots of their stacks.
+    pub fn roots(&self) -> Vec<&StackBranch> {
+        self.branches
+            .iter()
+            .filter(|b| b.parent.is_none())
+            .collect()
+    }
+
+    pub fn by_name(&self, name: &str) -> Option<&StackBranch> {
+        self.branches.iter().find(|b| b.name == name)
+    }
+
+    /// Walk the parent chain from `name` upward to its root, inclusive of
+    /// `name`. Returns `None` if `name` is unknown. A cycle guard stops at the
+    /// first repeated branch so a malformed (circular) stack cannot loop forever.
+    pub fn parent_chain(&self, name: &str) -> Option<Vec<&StackBranch>> {
+        let start = self.by_name(name)?;
+        let mut chain = vec![start];
+        let mut cursor = start.parent.as_deref();
+        while let Some(target) = cursor {
+            if chain.iter().any(|b| b.name == target) {
+                break; // cycle guard
+            }
+            match self.by_name(target) {
+                Some(next) => {
+                    chain.push(next);
+                    cursor = next.parent.as_deref();
+                }
+                None => break,
+            }
+        }
+        Some(chain)
+    }
+}
+
+#[cfg(test)]
+mod stack_metadata_tests {
+    use super::*;
+
+    fn branch(name: &str, parent: Option<&str>, order: usize) -> StackBranch {
+        StackBranch::new(name, parent.map(|p| p.to_string()), order)
+    }
+
+    #[test]
+    fn new_sets_fields_and_uses_string_name() {
+        let b = StackBranch::new("feature/a", Some("main".to_string()), 1);
+        assert_eq!(b.name, "feature/a");
+        assert_eq!(b.parent.as_deref(), Some("main"));
+        assert_eq!(b.order, 1);
+    }
+
+    #[test]
+    fn ordered_sorts_by_order_and_is_stable() {
+        let meta = StackMetadata {
+            branches: vec![
+                branch("c", Some("b"), 2),
+                branch("a", None, 0),
+                branch("b", Some("a"), 1),
+            ],
+        };
+        let names: Vec<&str> = meta.ordered().iter().map(|b| b.name.as_str()).collect();
+        assert_eq!(names, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn roots_returns_only_parentless_branches() {
+        let meta = StackMetadata {
+            branches: vec![
+                branch("a", None, 0),
+                branch("b", Some("a"), 1),
+                branch("c", Some("b"), 2),
+                branch("x", None, 0),
+            ],
+        };
+        let roots: Vec<&str> = meta.roots().iter().map(|b| b.name.as_str()).collect();
+        assert_eq!(roots, vec!["a", "x"]);
+    }
+
+    #[test]
+    fn by_name_finds_and_misses() {
+        let meta = StackMetadata {
+            branches: vec![branch("a", None, 0), branch("b", Some("a"), 1)],
+        };
+        assert_eq!(meta.by_name("b").unwrap().parent.as_deref(), Some("a"));
+        assert!(meta.by_name("missing").is_none());
+    }
+
+    #[test]
+    fn parent_chain_walks_up_to_root_inclusive() {
+        let meta = StackMetadata {
+            branches: vec![
+                branch("a", None, 0),
+                branch("b", Some("a"), 1),
+                branch("c", Some("b"), 2),
+            ],
+        };
+        let chain: Vec<&str> = meta
+            .parent_chain("c")
+            .unwrap()
+            .iter()
+            .map(|b| b.name.as_str())
+            .collect();
+        assert_eq!(chain, vec!["c", "b", "a"]);
+    }
+
+    #[test]
+    fn parent_chain_unknown_branch_is_none() {
+        let meta = StackMetadata {
+            branches: vec![branch("a", None, 0)],
+        };
+        assert!(meta.parent_chain("ghost").is_none());
+    }
+
+    #[test]
+    fn parent_chain_cycle_guard_terminates() {
+        // a -> b -> a is malformed; the guard must stop at the repeat.
+        let meta = StackMetadata {
+            branches: vec![branch("a", Some("b"), 0), branch("b", Some("a"), 1)],
+        };
+        let chain = meta.parent_chain("a").unwrap();
+        assert_eq!(chain.len(), 2);
+        assert_eq!(chain[0].name, "a");
+        assert_eq!(chain[1].name, "b");
+    }
+}
+
 #[cfg(test)]
 mod file_status_count_tests {
     use super::*;
