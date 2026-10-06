@@ -1200,6 +1200,32 @@ pub enum Msg {
         repo_id: RepoId,
         name: RepoHookName,
     },
+    /// Stacked-PR (iteration 07): register a branch as part of a stack, linked
+    /// to an optional parent branch. Does not itself create the git branch —
+    /// that reuses `CreateBranch`; this only records the stack relationship and
+    /// persists it.
+    CreateStackedBranch {
+        repo_id: RepoId,
+        name: String,
+        parent: Option<String>,
+    },
+    /// Stacked-PR: reassign the `order` of every branch in the stack from an
+    /// explicit, ordered list of branch names (root-first).
+    ReorderStack {
+        repo_id: RepoId,
+        ordered_names: Vec<String>,
+    },
+    /// Stacked-PR: remove a branch from the stack. Children that pointed at the
+    /// removed branch are reparented to its parent (or to root when it was a
+    /// root), preserving the rest of the chain.
+    DeleteStackBranch {
+        repo_id: RepoId,
+        name: String,
+    },
+    /// Stacked-PR: (re)load this repository's stack metadata from disk.
+    LoadStackMetadata {
+        repo_id: RepoId,
+    },
     Internal(InternalMsg),
 }
 
@@ -1573,6 +1599,14 @@ pub enum InternalMsg {
     RepoHooksLoaded {
         repo_id: RepoId,
         result: Result<Arc<RepoHookList>, String>,
+    },
+    /// Stacked-PR (iteration 07): the repository's stack metadata finished
+    /// loading from the session file. `Ok` carries the metadata (an empty
+    /// `StackMetadata` when nothing was recorded); `Err` carries a parse/read
+    /// failure.
+    StackMetadataLoaded {
+        repo_id: RepoId,
+        result: Result<StackMetadata, Error>,
     },
 }
 

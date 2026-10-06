@@ -206,6 +206,8 @@ fn effect_requires_available_git(effect: &Effect) -> bool {
             | Effect::PersistRecentRepo { .. }
             | Effect::PersistRepoHistoryMode { .. }
             | Effect::PersistRepoHistoryModesBatch { .. }
+            | Effect::PersistStackMetadata { .. }
+            | Effect::LoadStackMetadata { .. }
             | Effect::CancelRepoLoads { .. }
             | Effect::AbortCloneRepo { .. }
     )
@@ -263,6 +265,15 @@ fn send_unavailable_git_effect_result(
                 result: Err(git_unavailable_error(runtime)),
             }))
         }
+        Effect::LoadStackMetadata { repo_id } => send(Msg::Internal(
+            crate::msg::InternalMsg::StackMetadataLoaded {
+                repo_id,
+                result: Err(git_unavailable_error(runtime)),
+            },
+        )),
+        // Persisting stack metadata needs no git; nothing to report when git is
+        // unavailable, so this is a no-op fallback.
+        Effect::PersistStackMetadata { .. } => {}
         Effect::LoadRemotes { repo_id } => {
             send(Msg::Internal(crate::msg::InternalMsg::RemotesLoaded {
                 repo_id,
@@ -1722,6 +1733,35 @@ pub(super) fn schedule_effect(
                     cancellation,
                 );
             }
+        }
+        Effect::LoadStackMetadata { repo_id } => {
+            if let Some((msg_tx, cancellation)) =
+                repo_load_context(thread_state, repo_task_tokens, msg_tx, repo_id)
+            {
+                repo_load::schedule_load_stack_metadata(
+                    repo_load_executor,
+                    repos,
+                    msg_tx,
+                    repo_id,
+                    cancellation,
+                );
+            }
+        }
+        Effect::PersistStackMetadata { repo_id, metadata } => {
+            let Some(workdir) = repos.get(&repo_id).map(|repo| repo.spec().workdir.clone()) else {
+                return;
+            };
+            session_persist_executor.spawn(move || {
+                if let Err(error) = session::persist_stack_metadata(&workdir, &metadata) {
+                    util::send_or_log(
+                        &msg_tx,
+                        Msg::ShowBannerError {
+                            repo_id: Some(repo_id),
+                            message: format!("Failed to persist stacked-PR metadata: {error}"),
+                        },
+                    );
+                }
+            });
         }
         Effect::LoadRemotes { repo_id } => {
             if let Some((msg_tx, cancellation)) =

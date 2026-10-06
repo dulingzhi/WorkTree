@@ -10,7 +10,7 @@ use worktree_core::conflict_session::{ConflictPayload, ConflictSession, Conflict
 use worktree_core::diff_tree::DirectoryDiffResult;
 use worktree_core::domain::{
     DiffArea, DiffPreviewTextSide, DiffTarget, FileDiffImage, LogCursor, LogScope, RepoHookName,
-    RepoStatus, Worktree, WorktreeDirtySummary, count_file_statuses,
+    RepoStatus, StackMetadata, Worktree, WorktreeDirtySummary, count_file_statuses,
 };
 use worktree_core::error::{Error, ErrorKind};
 use worktree_core::mergetool_trace::{
@@ -24,6 +24,7 @@ use super::util::{
     RepoMap, send_or_log, spawn_detached_with_repo_or_else, spawn_with_repo,
     spawn_with_repo_or_else,
 };
+use crate::session;
 
 pub(super) struct SelectedDiffLoadOptions {
     pub(super) load_patch_diff: bool,
@@ -228,6 +229,47 @@ pub(super) fn schedule_load_branches(
             send_or_log(
                 &msg_tx,
                 Msg::Internal(crate::msg::InternalMsg::BranchesLoaded {
+                    repo_id,
+                    result: Err(missing_repo_error(repo_id)),
+                }),
+            );
+        },
+    );
+}
+
+/// Load a repository's stacked-PR metadata from the session file. Pure file IO —
+/// no git backend is touched — but it rides the repository load guard so a
+/// cancelled repo's reply is dropped rather than applied. A missing entry is an
+/// empty `StackMetadata` (no stack recorded yet).
+pub(super) fn schedule_load_stack_metadata(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    _cancellation: CancellationToken,
+) {
+    spawn_detached_with_repo_or_else(
+        executor,
+        "load-stack-metadata",
+        repos,
+        repo_id,
+        msg_tx,
+        move |repo, msg_tx| {
+            let workdir = repo.spec().workdir.clone();
+            let metadata =
+                session::load_stack_metadata(&workdir).unwrap_or_else(StackMetadata::new);
+            send_or_log(
+                &msg_tx,
+                Msg::Internal(crate::msg::InternalMsg::StackMetadataLoaded {
+                    repo_id,
+                    result: Ok(metadata),
+                }),
+            );
+        },
+        move |msg_tx| {
+            send_or_log(
+                &msg_tx,
+                Msg::Internal(crate::msg::InternalMsg::StackMetadataLoaded {
                     repo_id,
                     result: Err(missing_repo_error(repo_id)),
                 }),

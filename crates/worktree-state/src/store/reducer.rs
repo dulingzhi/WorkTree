@@ -6,6 +6,7 @@ mod loaded_results;
 mod repo_change;
 mod repo_hooks;
 mod repo_management;
+mod stacked_pr;
 mod util;
 
 use crate::model::{
@@ -923,6 +924,11 @@ fn reduce_inner(
     };
 
     let msg = match repo_hooks::reduce_repo_hooks(msg, state) {
+        ReduceOutcome::Handled(effects) => return effects,
+        ReduceOutcome::NotHandled(msg) => msg,
+    };
+
+    let msg = match stacked_pr::reduce_stacked_pr(msg, state) {
         ReduceOutcome::Handled(effects) => return effects,
         ReduceOutcome::NotHandled(msg) => msg,
     };

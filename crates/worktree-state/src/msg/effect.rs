@@ -56,6 +56,17 @@ pub enum Effect {
     LoadBranches {
         repo_id: RepoId,
     },
+    /// Load this repository's stacked-PR metadata from the session file. Pure
+    /// file IO (no git backend), so it is exempt from the "git required" gate.
+    LoadStackMetadata {
+        repo_id: RepoId,
+    },
+    /// Persist this repository's stacked-PR metadata to the session file. Pure
+    /// file IO (no git backend), so it is exempt from the "git required" gate.
+    PersistStackMetadata {
+        repo_id: RepoId,
+        metadata: StackMetadata,
+    },
     LoadRemotes {
         repo_id: RepoId,
     },

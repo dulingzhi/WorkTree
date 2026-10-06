@@ -593,6 +593,11 @@ impl std::fmt::Debug for InternalMsg {
                 .field("command", command)
                 .field("result", result)
                 .finish(),
+            InternalMsg::StackMetadataLoaded { repo_id, result } => f
+                .debug_struct("StackMetadataLoaded")
+                .field("repo_id", repo_id)
+                .field("ok", &result.is_ok())
+                .finish(),
         }
     }
 }

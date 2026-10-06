@@ -1400,6 +1400,14 @@ pub struct RepoState {
     /// Bumped whenever `repo_hooks` changes (loading → ready/error, or a
     /// create/enable/delete round-trip), so the panel can react to refreshes.
     pub repo_hooks_rev: u64,
+    /// Stacked-PR metadata for this repository (iteration 07): the set of
+    /// branches that form one or more stacks, persisted to the session file and
+    /// keyed by `RepoId` here. `None`-parent branches are stack roots.
+    pub stacks: Loadable<Shared<StackMetadata>>,
+    /// Bumped whenever `stacks` changes (loading → ready/error, or a
+    /// create/reorder/delete round-trip that persists), so the sidebar can
+    /// re-render the stack visualization.
+    pub stacks_rev: u64,
 }
 
 /// A point marked for comparison via the "Mark for comparison" context-menu
@@ -1515,6 +1523,8 @@ impl RepoState {
             comparison_mark: None,
             repo_hooks: Loadable::NotLoaded,
             repo_hooks_rev: 0,
+            stacks: Loadable::NotLoaded,
+            stacks_rev: 0,
         }
     }
 
@@ -1599,6 +1609,15 @@ impl RepoState {
         self.branches_rev = self.branches_rev.wrapping_add(1);
         self.invalidate_ref_metadata();
         self.bump_branch_sidebar_rev();
+    }
+
+    pub(crate) fn set_stacks(&mut self, stacks: Loadable<StackMetadata>) {
+        let stacks = loadable_into_arc(stacks);
+        if self.stacks == stacks {
+            return;
+        }
+        self.stacks = stacks;
+        self.stacks_rev = self.stacks_rev.wrapping_add(1);
     }
 
     pub(crate) fn set_tags(&mut self, tags: Loadable<Vec<Tag>>) {

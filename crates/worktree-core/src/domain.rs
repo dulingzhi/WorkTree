@@ -1,5 +1,6 @@
 use memchr::memchr;
 use rustc_hash::FxHasher;
+use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -1448,7 +1449,7 @@ impl RepoHookList {
 /// `name` is a plain branch refname — matching [`Branch::name`] and
 /// [`Upstream::branch`] rather than a dedicated newtype — because stacked
 /// branches are ordinary local branches, merely related by a parent link.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct StackBranch {
     pub name: String,
     pub parent: Option<String>,
@@ -1473,7 +1474,7 @@ impl StackBranch {
 /// no `model.rs` field — so it can land before the P5 model split and be wired
 /// into state/UI once that settles. Persistence and the gix restack
 /// orchestration are intentionally out of scope here.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct StackMetadata {
     pub branches: Vec<StackBranch>,
 }

@@ -170,6 +170,8 @@ pub(super) fn effect_name(effect: &Effect) -> &'static str {
         Effect::LoadMergeCommitMessage { .. } => "LoadMergeCommitMessage",
         Effect::PersistSession { .. } => "PersistSession",
         Effect::PersistRecentRepo { .. } => "PersistRecentRepo",
+        Effect::LoadStackMetadata { .. } => "LoadStackMetadata",
+        Effect::PersistStackMetadata { .. } => "PersistStackMetadata",
         _ => "Effect",
     }
 }
@@ -205,6 +207,8 @@ pub(super) fn effect_repo_id(effect: &Effect) -> Option<RepoId> {
         Effect::PersistRepoHistoryModesBatch { repo_id, .. } => *repo_id,
         Effect::PersistRepoHistoryAuthorFilter { repo_id, .. } => *repo_id,
         Effect::PersistRepoHistoryRefFilters { repo_id, .. } => *repo_id,
+        Effect::LoadStackMetadata { repo_id } => Some(*repo_id),
+        Effect::PersistStackMetadata { repo_id, .. } => Some(*repo_id),
         _ => None,
     }
 }

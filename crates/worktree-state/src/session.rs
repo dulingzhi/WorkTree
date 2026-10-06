@@ -9,7 +9,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::{env, fs, io};
-use worktree_core::domain::{HistoryMode, LogScope};
+use worktree_core::domain::{HistoryMode, LogScope, StackMetadata};
 use worktree_core::external_merge_tool::ExternalMergeToolSelection;
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -254,6 +254,11 @@ pub struct UiSessionFile {
     pub git_executable_path: Option<String>,
     pub external_code_editor: Option<ExternalCodeEditorSettingFile>,
     pub external_merge_tool: Option<ExternalMergeToolSelection>,
+    /// Stacked-PR metadata (iteration 07), keyed by the repository workdir
+    /// storage key. `None` for a repo with no recorded stack; an empty
+    /// `StackMetadata` is never written (the key is simply absent).
+    #[serde(default)]
+    pub repo_stack_metadata: Option<BTreeMap<String, StackMetadata>>,
     pub repo_history_modes: Option<BTreeMap<String, HistoryModeSetting>>,
     pub repo_history_scopes: Option<BTreeMap<String, HistoryScopeSetting>>,
     pub repo_history_author_filters: Option<BTreeMap<String, Option<String>>>,
@@ -1435,6 +1440,63 @@ fn persist_repo_fetch_prune_deleted_remote_tracking_branches_impl(
     })
 }
 
+/// Load a repository's stacked-PR metadata from the session file, keyed by the
+/// workdir storage key. Returns `None` when the repo has no recorded stack (the
+/// key is absent) — callers treat `None` as an empty `StackMetadata`.
+pub fn load_stack_metadata(workdir: &Path) -> Option<StackMetadata> {
+    let session_file_path = default_session_file_path()?;
+    load_stack_metadata_from_path(workdir, &session_file_path)
+}
+
+pub fn load_stack_metadata_from_path(
+    workdir: &Path,
+    session_file_path: &Path,
+) -> Option<StackMetadata> {
+    let workdir_key = path_storage_key(workdir);
+    let file = load_file(session_file_path)?;
+    file.repo_stack_metadata?.get(&workdir_key).cloned()
+}
+
+/// Persist a repository's stacked-PR metadata to the session file. An empty
+/// `StackMetadata` removes the key entirely rather than writing an empty object.
+pub fn persist_stack_metadata(workdir: &Path, metadata: &StackMetadata) -> io::Result<()> {
+    let Some(session_file_path) = default_session_file_path() else {
+        return Ok(());
+    };
+    persist_stack_metadata_to_path(workdir, metadata, &session_file_path)
+}
+
+pub fn persist_stack_metadata_to_path(
+    workdir: &Path,
+    metadata: &StackMetadata,
+    session_file_path: &Path,
+) -> io::Result<()> {
+    persist_stack_metadata_impl(workdir, metadata, session_file_path)
+}
+
+fn persist_stack_metadata_impl(
+    workdir: &Path,
+    metadata: &StackMetadata,
+    session_file_path: &Path,
+) -> io::Result<()> {
+    with_session_file_persist_lock(|| {
+        let mut file = load_file(session_file_path).unwrap_or_default();
+        file.version = CURRENT_SESSION_FILE_VERSION;
+        let workdir_key = path_storage_key(workdir);
+        let entry = file.repo_stack_metadata.get_or_insert_with(BTreeMap::new);
+        if metadata.branches.is_empty() {
+            entry.remove(&workdir_key);
+            if entry.is_empty() {
+                file.repo_stack_metadata = None;
+            }
+        } else {
+            entry.insert(workdir_key, metadata.clone());
+        }
+
+        persist_to_path(session_file_path, &file)
+    })
+}
+
 pub fn should_show_survey_prompt(survey_id: &str) -> bool {
     let Some(session_file_path) = default_session_file_path() else {
         return false;
@@ -2034,5 +2096,62 @@ fn app_state_dir() -> Option<PathBuf> {
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     {
         non_empty_path(env::var_os("HOME").as_deref()).map(|home| home.join(".worktree"))
+    }
+}
+
+#[cfg(test)]
+mod stacked_pr_session_tests {
+    use super::{load_file, load_stack_metadata_from_path, persist_stack_metadata_to_path};
+    use std::path::PathBuf;
+    use worktree_core::domain::{StackBranch, StackMetadata};
+
+    fn test_path() -> PathBuf {
+        std::env::temp_dir().join("gitcomet-stack-metadata-test.json")
+    }
+
+    #[test]
+    fn persist_then_load_stack_metadata_round_trips() {
+        let path = test_path();
+        let workdir = PathBuf::from("/tmp/stack-repo");
+        let mut meta = StackMetadata::new();
+        meta.branches.push(StackBranch::new("base", None, 0));
+        meta.branches
+            .push(StackBranch::new("feature/a", Some("base".to_string()), 1));
+
+        persist_stack_metadata_to_path(&workdir, &meta, &path).unwrap();
+        let loaded = load_stack_metadata_from_path(&workdir, &path).expect("metadata should load");
+        assert_eq!(loaded, meta);
+    }
+
+    #[test]
+    fn empty_stack_metadata_removes_the_key() {
+        let path = test_path();
+        let workdir = PathBuf::from("/tmp/stack-repo");
+        // Write a populated entry first.
+        let mut meta = StackMetadata::new();
+        meta.branches.push(StackBranch::new("base", None, 0));
+        persist_stack_metadata_to_path(&workdir, &meta, &path).unwrap();
+        assert!(load_stack_metadata_from_path(&workdir, &path).is_some());
+        // Now persist an empty stack — the key should be removed entirely.
+        persist_stack_metadata_to_path(&workdir, &StackMetadata::new(), &path).unwrap();
+        assert!(load_stack_metadata_from_path(&workdir, &path).is_none());
+    }
+
+    #[test]
+    fn load_file_survives_missing_stack_metadata_field() {
+        // A V3 session file written by an older build that predates the
+        // `repo_stack_metadata` field must still deserialize (gated by
+        // `#[serde(default)]`), so existing sessions are not discarded.
+        let path = test_path();
+        std::fs::write(
+            &path,
+            r#"{"version":3,"open_repos":["/tmp/stack-repo"],"active_repo":null}"#,
+        )
+        .unwrap();
+        assert!(
+            load_file(&path).is_some(),
+            "V3 file without repo_stack_metadata must still load"
+        );
+        assert!(load_stack_metadata_from_path(&PathBuf::from("/tmp/stack-repo"), &path).is_none());
     }
 }

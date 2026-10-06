@@ -190,6 +190,13 @@ pub(in crate::store::reducer) fn branches_loaded(
         {
             effects.push(Effect::LoadBranches { repo_id });
         }
+        // Eagerly load this repository's stacked-PR metadata once, when the
+        // branch list (a reliable "repo is open" signal) first lands. Guarded by
+        // `NotLoaded` so branch refreshes never re-trigger a redundant load.
+        if matches!(repo_state.stacks, Loadable::NotLoaded) {
+            repo_state.stacks = Loadable::Loading;
+            effects.push(Effect::LoadStackMetadata { repo_id });
+        }
     }
     effects
 }
