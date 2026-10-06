@@ -8,7 +8,7 @@
 |---|---|---|
 | 数据模型 `StackBranch` / `StackMetadata` | **已落地** | commit `91d92a71`，`worktree-core/src/domain.rs`，P5 安全 |
 | 本文档（设计 / 接线草图） | **本文件** | P5 收口前可定稿 |
-| `Msg` / `Effect` / reducer | 待 P5 | 撞 `model.rs` 热文件 |
+| `Msg` / `Effect` / reducer | 待开工 | **P5 已于 2026-09-22 取消**（分支 `p5-split-remaining` 删除），不再有 model 拆分闸门，可直接做 |
 | gix `restack_stack` 编排 | 待 P5 | 撞 `git-gix/repo/` |
 | 侧栏可视化 / 命令面板 | 待 P5 | 撞 `view/` |
 
@@ -36,13 +36,13 @@ pub struct StackMetadata {
 
 附 `ordered()` / `roots()` / `by_name()` / `parent_chain()`（含环检测）。P5 安全：仅 `domain` 原语，未碰 trait / `model.rs`。
 
-## 3. 持久化（待 P5 收口后）
+## 3. 持久化（可直接做，P5 已取消）
 
 - `StackMetadata` 落盘到 `UiSettings` / `session.json`，keyed by `RepoId`。
 - 复用 `fetch_prune_deleted_remote_tracking_branches` 的 session 持久化范式（`RepoState` 加载 / `repo_management.rs` reducer / `session.json` 写入）。
 - 单测：顺序持久化往返 + restack 后顺序守恒。
 
-## 4. Msg（P5 后）
+## 4. Msg（P5 已取消 2026-09-22，可直接开工）
 
 | id | 载荷 | 备注 |
 |---|---|---|
@@ -54,25 +54,25 @@ pub struct StackMetadata {
 
 > 不新增 `GitRepository*` required 方法；restack 走 `GitRepositoryHistory` 的 rebase default + gix override。
 
-## 5. Effect（P5 后）
+## 5. Effect（P5 已取消，可直接开工）
 
 - `Effect::LoadStackMetadata { repo_id }` → `InternalMsg::StackMetadataLoaded { repo_id, result: Result<…> }`
 - `Effect::PersistStackMetadata { repo_id, metadata }`
 - `Effect::RestackStack { repo_id, plan }`（后端编排，见 §7）
 
-## 6. model / reducer（P5 后，撞 `model.rs` 热文件）
+## 6. model / reducer（P5 已取消，model.rs 可直接改；沿用 default 方法 + state 层复用纪律，不新增 trait required 方法）
 
 - `RepoState` 增 `stacks: Loadable<Shared<StackMetadata>>`（keyed by `RepoId`；与 `DiffState` 同级容器）。
 - reducer：`create_stacked_branch` / `reorder_stack` / `restack_stack` / `stack_metadata_loaded` / `delete_stack_branch`。
 - 与 P5 模型拆分同波次，文件级避让 `model.rs`（参考目录 diff T-B 的 `diff_selection.rs` 隔离模式）。
 
-## 7. gix 后端（P5 后，撞 `git-gix/repo/`）
+## 7. gix 后端（P5 已取消，可直接做；restack 走 GitRepositoryHistory rebase default + gix override）
 
 - 新 `worktree-git-gix/src/repo/stack.rs`：`restack_stack(base_branch)` 用 `rebase --onto` 逐分支重放。
 - restack 顺序由 `StackMetadata::ordered()` 决定（base 在上，子分支在下）。
 - 冲突处理：restack 中途冲突 → 中断并回滚到 restack 前状态，UI 提示用户在冲突分支手动解决后重试。
 
-## 8. UI（P5 后）
+## 8. UI（P5 已取消，可直接做）
 
 - `view/panels/sidebar.rs` `BranchSidebarRow`：堆叠分支缩进 + 链线 + 顺序标识。
 - 命令面板 `stack-branch` / `restack` / `reorder`（`view/command_palette.rs`）。
@@ -82,14 +82,14 @@ pub struct StackMetadata {
 
 | # | 决策 | 触发 |
 |---|---|---|
-| **D-S1** | P5 模型拆分何时收口（本特性的硬前置） | **当前无 P5 计划文件、无 P5 分支** —— 需先立项 |
+| **D-S1** | P5 模型拆分（本特性的原前置） | **已于 2026-09-22 取消**（分支 `p5-split-remaining` 删除）—— 不再是需收口的闸门；Stacked-PR 现可直接开工 |
 | D-S2 | `StackMetadata` 落盘位置（UiSettings vs session） | 开工前 |
 | D-S3 | restack 冲突时 UI 行为（中断 / 交互解决） | 实现 restack 前 |
 
 ## 10. 与 P5 / P6 边界
 
-- 本特性所有 `Msg` / `Effect` / reducer / UI 均撞 P5 热文件（`model.rs` / `git-gix/repo`）。**P5 收口前只做本文档 + domain 类型（已完成），不碰 state / UI**。
-- 命中率阈值收紧（P6-D1）与本特性正交，独立推进（见 §11）。
+- P5 已于 2026-09-22 取消，原「撞 P5 热文件」前提失效；`Msg` / `Effect` / reducer / UI 现在即可开工。沿用迭代 06 已定纪律：**不加 `GitRepository*` trait 的 required 方法**，用 default 方法 + state 层复用（同目录 diff T-B）。
+- 命中率阈值收紧（P6-D1）与本特性正交，独立推进（见 §11）。P6-D1 已定：用 GitHub Actions hosted runner、不起自托管；`real_repo/*` 命中率预算在 hosted runner 按缺失跳过，收紧需日后有真仓库数据才验证。
 
 ## 11. 关联：命中率预算阈值收紧（P6-D1，独立项）
 
