@@ -9,14 +9,15 @@
 //! * `Msg::ReorderStack` — reassigns every branch's `order` from an explicit list.
 //! * `Msg::DeleteStackBranch` — removes a branch and reparents its children.
 //!
-//! These mutations only touch `StackMetadata`; they do NOT create or rewrite git
-//! branches. Branch creation still flows through `Msg::CreateBranch`, and the
-//! gix restack orchestration (see the design doc, §7) lands in a later cut.
+//! `Msg::CreateStackedBranch` records the relationship in `StackMetadata` and
+//! reuses the existing `Effect::CreateBranch` to actually create the git branch
+//! (started at the parent's tip, or HEAD for a root). The gix restack
+//! orchestration (see the design doc, §7) lands in a later cut.
 
 use super::ReduceOutcome;
 use crate::model::{AppState, DiagnosticKind, Loadable, RepoId, RepoState};
 use crate::msg::{Effect, InternalMsg, Msg};
-use worktree_core::domain::{StackBranch, StackMetadata};
+use worktree_core::domain::{CommitId, StackBranch, StackMetadata};
 
 pub(super) fn reduce_stacked_pr(msg: Msg, state: &mut AppState) -> ReduceOutcome {
     match msg {
@@ -73,6 +74,13 @@ pub(super) fn reduce_stacked_pr(msg: Msg, state: &mut AppState) -> ReduceOutcome
                     );
                     Vec::new()
                 } else {
+                    // Start point for the new git branch: the parent branch's
+                    // tip, or HEAD for a root branch.
+                    let target = parent
+                        .as_deref()
+                        .and_then(|p| branch_tip(repo_state, p))
+                        .or_else(|| repo_state.head_commit_id());
+
                     let mut metadata = current_metadata(repo_state);
                     let order = parent
                         .as_ref()
@@ -81,8 +89,31 @@ pub(super) fn reduce_stacked_pr(msg: Msg, state: &mut AppState) -> ReduceOutcome
                         .unwrap_or(0);
                     metadata
                         .branches
-                        .push(StackBranch::new(name, parent, order));
-                    apply_and_persist(repo_state, repo_id, metadata)
+                        .push(StackBranch::new(name.clone(), parent, order));
+                    repo_state.set_stacks(Loadable::Ready(metadata.clone()));
+
+                    let mut effects = vec![Effect::PersistStackMetadata { repo_id, metadata }];
+                    match target {
+                        Some(target) => {
+                            effects.insert(
+                                0,
+                                Effect::CreateBranch {
+                                    repo_id,
+                                    name,
+                                    target: target.to_string(),
+                                },
+                            );
+                        }
+                        None => {
+                            super::util::push_diagnostic(
+                                repo_state,
+                                DiagnosticKind::Error,
+                                "Could not resolve a start point (parent tip or HEAD) to create the branch"
+                                    .to_string(),
+                            );
+                        }
+                    }
+                    effects
                 }
             } else {
                 Vec::new()
@@ -169,6 +200,19 @@ fn current_metadata(repo_state: &RepoState) -> StackMetadata {
     }
 }
 
+/// Resolve a branch's tip commit from the loaded git branch list, used as the
+/// start point when creating a child stacked branch. Returns `None` when the
+/// branch list has not loaded yet (callers fall back to HEAD).
+fn branch_tip(repo_state: &RepoState, name: &str) -> Option<CommitId> {
+    match &repo_state.branches {
+        Loadable::Ready(branches) => branches
+            .iter()
+            .find(|b| b.name == name)
+            .map(|b| b.target.clone()),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::reduce_stacked_pr;
@@ -176,7 +220,7 @@ mod tests {
     use crate::msg::{Effect, InternalMsg, Msg};
     use std::path::PathBuf;
     use std::sync::Arc;
-    use worktree_core::domain::{RepoSpec, StackBranch, StackMetadata};
+    use worktree_core::domain::{Branch, CommitId, RepoSpec, StackBranch, StackMetadata};
 
     fn state_with_repo(repo_id: RepoId) -> AppState {
         let mut state = AppState::default();
@@ -218,11 +262,14 @@ mod tests {
         );
         match outcome {
             super::ReduceOutcome::Handled(effects) => {
+                // In this bare setup no start point resolves (no branches/HEAD
+                // loaded), so only the stack relationship is persisted. The
+                // CreateBranch effect is covered by the resolved-target tests.
                 assert_eq!(effects.len(), 1);
-                assert!(matches!(
-                    effects[0],
-                    Effect::PersistStackMetadata { repo_id: id, .. } if id == repo_id
-                ));
+                assert!(effects.iter().any(|e| matches!(
+                    e,
+                    Effect::PersistStackMetadata { repo_id: id, .. } if *id == repo_id
+                )));
             }
             super::ReduceOutcome::NotHandled(_) => panic!("CreateStackedBranch should be Handled"),
         }
@@ -253,6 +300,95 @@ mod tests {
         let child = meta.by_name("feature/a").unwrap();
         assert_eq!(child.order, 1);
         assert_eq!(child.parent.as_deref(), Some("base"));
+    }
+
+    #[test]
+    fn create_stacked_branch_emits_create_branch_effect() {
+        let repo_id = RepoId(1);
+        let mut state = state_with_repo(repo_id);
+        // HEAD resolves to the "main" branch tip, so a root stacked branch has
+        // a concrete start point.
+        {
+            let repo = state.repos.iter_mut().find(|r| r.id == repo_id).unwrap();
+            repo.head_branch = Loadable::Ready("main".to_string());
+            repo.branches = Loadable::Ready(Arc::new(vec![Branch {
+                name: "main".to_string(),
+                target: CommitId(Arc::from("deadbeef")),
+                upstream: None,
+                divergence: None,
+            }]));
+        }
+        with_loaded_stack(&mut state, repo_id, StackMetadata::new());
+
+        let outcome = reduce_stacked_pr(
+            Msg::CreateStackedBranch {
+                repo_id,
+                name: "feature/a".to_string(),
+                parent: None,
+            },
+            &mut state,
+        );
+        match outcome {
+            super::ReduceOutcome::Handled(effects) => {
+                assert_eq!(effects.len(), 2);
+                let create = effects
+                    .iter()
+                    .find(|e| matches!(e, Effect::CreateBranch { .. }))
+                    .expect("CreateBranch effect should be emitted");
+                if let Effect::CreateBranch { target, .. } = create {
+                    assert_eq!(target, "deadbeef");
+                }
+            }
+            super::ReduceOutcome::NotHandled(_) => panic!("CreateStackedBranch should be Handled"),
+        }
+    }
+
+    #[test]
+    fn create_child_stacked_branch_starts_at_parent_tip() {
+        let repo_id = RepoId(1);
+        let mut state = state_with_repo(repo_id);
+        {
+            let repo = state.repos.iter_mut().find(|r| r.id == repo_id).unwrap();
+            repo.branches = Loadable::Ready(Arc::new(vec![
+                Branch {
+                    name: "base".to_string(),
+                    target: CommitId(Arc::from("aaa111")),
+                    upstream: None,
+                    divergence: None,
+                },
+                Branch {
+                    name: "feature/a".to_string(),
+                    target: CommitId(Arc::from("bbb222")),
+                    upstream: None,
+                    divergence: None,
+                },
+            ]));
+        }
+        let mut meta = StackMetadata::new();
+        meta.branches.push(StackBranch::new("base", None, 0));
+        with_loaded_stack(&mut state, repo_id, meta);
+
+        let outcome = reduce_stacked_pr(
+            Msg::CreateStackedBranch {
+                repo_id,
+                name: "feature/b".to_string(),
+                parent: Some("feature/a".to_string()),
+            },
+            &mut state,
+        );
+        match outcome {
+            super::ReduceOutcome::Handled(effects) => {
+                let create = effects
+                    .iter()
+                    .find(|e| matches!(e, Effect::CreateBranch { .. }))
+                    .expect("CreateBranch effect should be emitted");
+                if let Effect::CreateBranch { name, target, .. } = create {
+                    assert_eq!(name, "feature/b");
+                    assert_eq!(target, "bbb222");
+                }
+            }
+            super::ReduceOutcome::NotHandled(_) => panic!("CreateStackedBranch should be Handled"),
+        }
     }
 
     #[test]
