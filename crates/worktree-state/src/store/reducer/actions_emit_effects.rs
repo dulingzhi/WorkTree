@@ -1855,6 +1855,26 @@ fn apply_resolution_to_all_regions(
     changed
 }
 
+/// Drops `name` from the repo's Stacked-PR metadata when the branch is part of
+/// a stack, appending the persist effect to `effects`.
+///
+/// Deleting a git branch must not leave the stack pointing at it: a stale entry
+/// makes a later `restack` resolve a parent ref that no longer exists. Clearing
+/// it here covers every delete path (palette, branch menu, bulk delete, and the
+/// worktree-removal follow-up) instead of each call site remembering to do it.
+fn drop_branch_from_stack(
+    state: &mut AppState,
+    repo_id: RepoId,
+    name: &str,
+    effects: &mut Vec<Effect>,
+) {
+    if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+        effects.extend(super::stacked_pr::remove_branch_from_stack(
+            repo_state, repo_id, name,
+        ));
+    }
+}
+
 pub(super) fn reduce_actions_emit_effects(
     msg: Msg,
     repos: &mut FxHashMap<RepoId, Arc<dyn GitRepository>>,
@@ -1941,11 +1961,15 @@ pub(super) fn reduce_actions_emit_effects(
         }
         Msg::DeleteBranch { repo_id, name } => {
             begin_local_action(state, repo_id);
-            actions_emit_effects::delete_branch(repo_id, name)
+            let mut effects = actions_emit_effects::delete_branch(repo_id, name.clone());
+            drop_branch_from_stack(state, repo_id, &name, &mut effects);
+            effects
         }
         Msg::ForceDeleteBranch { repo_id, name } => {
             begin_local_action(state, repo_id);
-            actions_emit_effects::force_delete_branch(repo_id, name)
+            let mut effects = actions_emit_effects::force_delete_branch(repo_id, name.clone());
+            drop_branch_from_stack(state, repo_id, &name, &mut effects);
+            effects
         }
         Msg::DeleteBranches {
             repo_id,
@@ -1956,7 +1980,11 @@ pub(super) fn reduce_actions_emit_effects(
                 return ReduceOutcome::Handled(Vec::new());
             }
             begin_local_action(state, repo_id);
-            actions_emit_effects::delete_branches(repo_id, names, force)
+            let mut effects = actions_emit_effects::delete_branches(repo_id, names.clone(), force);
+            for name in &names {
+                drop_branch_from_stack(state, repo_id, name, &mut effects);
+            }
+            effects
         }
         Msg::ExportPatch {
             repo_id,

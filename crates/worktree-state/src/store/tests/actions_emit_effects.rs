@@ -1455,6 +1455,108 @@ fn create_rename_and_delete_branch_emit_effects() {
     ));
 }
 
+/// A stack entry must not survive the branch it names: a stale entry makes a
+/// later `restack` resolve a parent ref that no longer exists.
+#[test]
+fn deleting_a_branch_drops_it_from_the_stack_and_reparents_children() {
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+    let repo_id = RepoId(1);
+    repos.insert(repo_id, Arc::new(DummyRepo::new("/tmp/repo")));
+    state.repos.push(RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    ));
+
+    let mut meta = worktree_core::domain::StackMetadata::new();
+    meta.branches
+        .push(worktree_core::domain::StackBranch::new("a", None, 0));
+    meta.branches.push(worktree_core::domain::StackBranch::new(
+        "b",
+        Some("a".to_string()),
+        1,
+    ));
+    meta.branches.push(worktree_core::domain::StackBranch::new(
+        "c",
+        Some("b".to_string()),
+        2,
+    ));
+    state.repos[0].set_stacks(Loadable::Ready(meta));
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::DeleteBranch {
+            repo_id,
+            name: "b".to_string(),
+        },
+    );
+
+    // The delete still goes out, followed by the stack rewrite.
+    assert!(
+        matches!(effects.first(), Some(Effect::DeleteBranch { name, .. }) if name == "b"),
+        "expected a DeleteBranch effect, got {effects:?}"
+    );
+    assert!(
+        matches!(effects.last(), Some(Effect::PersistStackMetadata { .. })),
+        "expected the cleaned stack to be persisted, got {effects:?}"
+    );
+
+    let Loadable::Ready(stack) = &state.repos[0].stacks else {
+        panic!("stack should still be loaded");
+    };
+    assert!(stack.by_name("b").is_none(), "b must leave the stack");
+    assert_eq!(
+        stack.by_name("c").unwrap().parent.as_deref(),
+        Some("a"),
+        "c must be reparented onto b's parent"
+    );
+}
+
+/// Deleting a branch that was never stacked must not rewrite the metadata.
+#[test]
+fn deleting_an_unstacked_branch_leaves_stack_metadata_untouched() {
+    let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();
+    let id_alloc = AtomicU64::new(1);
+    let mut state = AppState::default();
+    let repo_id = RepoId(1);
+    repos.insert(repo_id, Arc::new(DummyRepo::new("/tmp/repo")));
+    state.repos.push(RepoState::new_opening(
+        repo_id,
+        RepoSpec {
+            workdir: PathBuf::from("/tmp/repo"),
+        },
+    ));
+
+    let mut meta = worktree_core::domain::StackMetadata::new();
+    meta.branches
+        .push(worktree_core::domain::StackBranch::new("a", None, 0));
+    state.repos[0].set_stacks(Loadable::Ready(meta));
+
+    let effects = reduce(
+        &mut repos,
+        &id_alloc,
+        &mut state,
+        Msg::DeleteBranch {
+            repo_id,
+            name: "unrelated".to_string(),
+        },
+    );
+
+    assert!(
+        matches!(effects.as_slice(), [Effect::DeleteBranch { name, .. }] if name == "unrelated"),
+        "expected only the delete effect, got {effects:?}"
+    );
+    let Loadable::Ready(stack) = &state.repos[0].stacks else {
+        panic!("stack should still be loaded");
+    };
+    assert!(stack.by_name("a").is_some(), "stack must be untouched");
+}
+
 #[test]
 fn create_and_delete_tag_emit_effects() {
     let mut repos: FxHashMap<RepoId, Arc<dyn GitRepository>> = FxHashMap::default();

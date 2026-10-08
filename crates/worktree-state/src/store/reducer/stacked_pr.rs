@@ -160,15 +160,7 @@ pub(super) fn reduce_stacked_pr(msg: Msg, state: &mut AppState) -> ReduceOutcome
             let effects = if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id)
             {
                 if matches!(repo_state.stacks, Loadable::Ready(_)) {
-                    let mut metadata = current_metadata(repo_state);
-                    let deleted_parent = metadata.by_name(&name).and_then(|b| b.parent.clone());
-                    for branch in metadata.branches.iter_mut() {
-                        if branch.parent.as_deref() == Some(name.as_str()) {
-                            branch.parent = deleted_parent.clone();
-                        }
-                    }
-                    metadata.branches.retain(|b| b.name != name);
-                    apply_and_persist(repo_state, repo_id, metadata)
+                    remove_branch_from_stack(repo_state, repo_id, &name)
                 } else {
                     super::util::push_diagnostic(
                         repo_state,
@@ -252,6 +244,35 @@ fn apply_and_persist(
 ) -> Vec<Effect> {
     repo_state.set_stacks(Loadable::Ready(metadata.clone()));
     vec![Effect::PersistStackMetadata { repo_id, metadata }]
+}
+
+/// Removes `name` from the repo's loaded stack metadata, reparenting any
+/// children onto the removed branch's parent so the stack stays contiguous.
+///
+/// Returns the persist effect when the branch was actually part of the stack,
+/// and nothing when it was not (or when no stack is loaded) — a no-op delete
+/// must not rewrite the metadata file.
+///
+/// This is also what keeps the stack consistent when a git branch is deleted
+/// through the ordinary delete flow: a stale entry would otherwise leave
+/// `restack`/`reorder` pointing at a branch that no longer resolves.
+pub(super) fn remove_branch_from_stack(
+    repo_state: &mut RepoState,
+    repo_id: RepoId,
+    name: &str,
+) -> Vec<Effect> {
+    let mut metadata = current_metadata(repo_state);
+    if metadata.by_name(name).is_none() {
+        return Vec::new();
+    }
+    let deleted_parent = metadata.by_name(name).and_then(|b| b.parent.clone());
+    for branch in metadata.branches.iter_mut() {
+        if branch.parent.as_deref() == Some(name) {
+            branch.parent = deleted_parent.clone();
+        }
+    }
+    metadata.branches.retain(|b| b.name != name);
+    apply_and_persist(repo_state, repo_id, metadata)
 }
 
 /// Read the currently-loaded stack metadata, or an empty one when nothing has
