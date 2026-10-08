@@ -86,6 +86,14 @@ pub(crate) const COMMANDS: &[CommandEntry] = &[
         requires_repo: true,
     },
     CommandEntry {
+        id: "restack",
+        label: "palette.cmd.restack",
+        shortcut: Shortcut::None,
+        category: "palette.cat.branch",
+        keywords: "stacked pr restack rebase replay rebase onto",
+        requires_repo: true,
+    },
+    CommandEntry {
         id: "checkout-branch",
         label: "palette.cmd.checkout-branch",
         shortcut: Shortcut::None,
@@ -734,6 +742,7 @@ pub(crate) const REGISTERED_COMMAND_HANDLERS: &[&str] = &[
     "rename-branch",
     "repo-settings",
     "reset-ui-scale",
+    "restack",
     "search-commits",
     "show-reflog",
     "show-statistics",

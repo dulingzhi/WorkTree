@@ -8,9 +8,10 @@
 |---|---|---|
 | 数据模型 `StackBranch` / `StackMetadata` | **已落地** | commit `91d92a71`，`worktree-core/src/domain.rs`，P5 安全 |
 | 本文档（设计 / 接线草图） | **本文件** | P5 收口前可定稿 |
-| `Msg` / `Effect` / reducer | 待开工 | **P5 已于 2026-09-22 取消**（分支 `p5-split-remaining` 删除），不再有 model 拆分闸门，可直接做 |
-| gix `restack_stack` 编排 | 待 P5 | 撞 `git-gix/repo/` |
-| 侧栏可视化 / 命令面板 | 待 P5 | 撞 `view/` |
+| `Msg` / `Effect` / reducer | **已落地** | commit `becb43ac`（`RestackStack` 接线 + `GitRepositoryHistory::restack_stack` default + reducer 单测） |
+| gix `restack_stack` 编排 | **已落地** | commit `e3d39ce1`，`worktree-git-gix/src/repo/stack.rs`（`rebase --onto` 逐分支重放 + 冲突回滚单测） |
+| 侧栏可视化 / 命令面板 | **已落地** | commit `1daaf842`（侧栏缩进 + 链线 + 顺序标识；`stack-branch` / `reorder-stack` 命令） |
+| 命令面板 `restack` 入口 | **已落地** | `command_palette.rs` + `view/mod.rs` 派发 `Msg::RestackStack { base_branch: None }` |
 
 ## 1. 目标
 
@@ -84,7 +85,7 @@ pub struct StackMetadata {
 |---|---|---|
 | **D-S1** | P5 模型拆分（本特性的原前置） | **已于 2026-09-22 取消**（分支 `p5-split-remaining` 删除）—— 不再是需收口的闸门；Stacked-PR 现可直接开工 |
 | D-S2 | `StackMetadata` 落盘位置（UiSettings vs session） | 开工前 |
-| D-S3 | restack 冲突时 UI 行为（中断 / 交互解决） | 实现 restack 前 |
+| D-S3 | restack 冲突时 UI 行为（中断 / 交互解决） | **已定：中断并回滚** —— 冲突 → `git rebase --abort`，再把已重放分支强制回退到 restack 前 tip，UI 提示用户在冲突分支手动解决后重试。已随 §7（commit `e3d39ce1`）实现 |
 
 ## 10. 与 P5 / P6 边界
 

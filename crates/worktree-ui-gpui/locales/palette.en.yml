@@ -25,6 +25,7 @@ palette:
     create-branch: Create Branch
     stack-branch: Create Stacked Branch
     reorder-stack: Reorder Stack
+    restack: Restack Stack
     checkout-branch: Checkout Branch
     delete-branch: Delete Branch
     rename-branch: Rename Branch

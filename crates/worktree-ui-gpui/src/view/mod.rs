@@ -1276,6 +1276,21 @@ impl WorkTreeView {
                     }
                 }
             }
+            "restack" => {
+                if let Some(repo_id) = self.active_repo_id() {
+                    // Stacked-PR: replay every stacked branch onto its parent
+                    // with `git rebase --onto`. Each branch already records the
+                    // parent it was built on — including the root, whose parent
+                    // is the branch the stack was started from — so no explicit
+                    // base branch is needed. The reducer reports when the stack
+                    // has not loaded yet, and the backend rolls back to the
+                    // pre-restack state on a conflict.
+                    self.store.dispatch(Msg::RestackStack {
+                        repo_id,
+                        base_branch: None,
+                    });
+                }
+            }
             "checkout-branch" => {
                 if let Some(window) = window {
                     self.open_popover_centered(
