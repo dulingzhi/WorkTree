@@ -2105,13 +2105,17 @@ mod stacked_pr_session_tests {
     use std::path::PathBuf;
     use worktree_core::domain::{StackBranch, StackMetadata};
 
-    fn test_path() -> PathBuf {
-        std::env::temp_dir().join("gitcomet-stack-metadata-test.json")
+    /// A distinct file per test. Sharing one path makes the three tests race
+    /// under cargo's default parallel runner — one truncates the file while
+    /// another reads it — which surfaced as a failure that only reproduced in
+    /// the full-suite run and passed when the test ran alone.
+    fn test_path(tag: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("gitcomet-stack-metadata-test-{tag}.json"))
     }
 
     #[test]
     fn persist_then_load_stack_metadata_round_trips() {
-        let path = test_path();
+        let path = test_path("round-trip");
         let workdir = PathBuf::from("/tmp/stack-repo");
         let mut meta = StackMetadata::new();
         meta.branches.push(StackBranch::new("base", None, 0));
@@ -2125,7 +2129,7 @@ mod stacked_pr_session_tests {
 
     #[test]
     fn empty_stack_metadata_removes_the_key() {
-        let path = test_path();
+        let path = test_path("empty-key");
         let workdir = PathBuf::from("/tmp/stack-repo");
         // Write a populated entry first.
         let mut meta = StackMetadata::new();
@@ -2142,7 +2146,7 @@ mod stacked_pr_session_tests {
         // A V3 session file written by an older build that predates the
         // `repo_stack_metadata` field must still deserialize (gated by
         // `#[serde(default)]`), so existing sessions are not discarded.
-        let path = test_path();
+        let path = test_path("missing-field");
         std::fs::write(
             &path,
             r#"{"version":3,"open_repos":["/tmp/stack-repo"],"active_repo":null}"#,
