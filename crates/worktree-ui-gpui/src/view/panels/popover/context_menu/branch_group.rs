@@ -104,6 +104,7 @@ pub(super) fn model(
                     target: current_branch_target(this, repo_id),
                     source_selectable: true,
                     name_prefix: format!("{path}/"),
+                    stacked: false,
                 },
             }),
         });

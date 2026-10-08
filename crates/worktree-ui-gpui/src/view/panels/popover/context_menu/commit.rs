@@ -494,6 +494,7 @@ pub(super) fn model(this: &PopoverHost, repo_id: RepoId, commit_id: &CommitId) -
                 target: sha.clone(),
                 source_selectable: false,
                 name_prefix: String::new(),
+                stacked: false,
             },
         }),
     });

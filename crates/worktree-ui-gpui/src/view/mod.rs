@@ -1211,10 +1211,69 @@ impl WorkTreeView {
                             target,
                             source_selectable: true,
                             name_prefix: String::new(),
+                            stacked: false,
                         },
                         window,
                         cx,
                     );
+                }
+            }
+            "stack-branch" => {
+                if let Some(repo_id) = self.active_repo_id()
+                    && let Some(window) = window
+                {
+                    // Stacked-PR: seed the new branch on top of the current HEAD
+                    // branch, which becomes its stack parent. `parent` is `None`
+                    // only when the HEAD branch is not yet known.
+                    let target = self
+                        .state
+                        .repos
+                        .iter()
+                        .find(|r| r.id == repo_id)
+                        .and_then(|repo| {
+                            if let Loadable::Ready(head) = &repo.head_branch {
+                                Some(head.clone())
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or_else(|| "HEAD".to_string());
+                    self.open_popover_centered(
+                        PopoverKind::CreateBranchFromRefPrompt {
+                            repo_id,
+                            target,
+                            source_selectable: false,
+                            name_prefix: String::new(),
+                            stacked: true,
+                        },
+                        window,
+                        cx,
+                    );
+                }
+            }
+            "reorder-stack" => {
+                if let Some(repo_id) = self.active_repo_id() {
+                    let ordered_names =
+                        self.state
+                            .repos
+                            .iter()
+                            .find(|r| r.id == repo_id)
+                            .and_then(|repo| match &repo.stacks {
+                                Loadable::Ready(stack) => Some(
+                                    stack
+                                        .ordered()
+                                        .into_iter()
+                                        .map(|branch| branch.name.clone())
+                                        .collect::<Vec<_>>(),
+                                ),
+                                _ => None,
+                            });
+                    if let Some(ordered_names) = ordered_names {
+                        self.store.dispatch(Msg::ReorderStack {
+                            repo_id,
+                            ordered_names,
+                        });
+                    }
                 }
             }
             "checkout-branch" => {

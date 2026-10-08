@@ -23,6 +23,8 @@ palette:
     unstage-all: Unstage All Changes
     discard-all: Discard All Changes
     create-branch: Create Branch
+    stack-branch: Create Stacked Branch
+    reorder-stack: Reorder Stack
     checkout-branch: Checkout Branch
     delete-branch: Delete Branch
     rename-branch: Rename Branch

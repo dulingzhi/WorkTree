@@ -85,6 +85,7 @@ pub(super) fn model(
                 target: name.clone(),
                 source_selectable: false,
                 name_prefix: String::new(),
+                stacked: false,
             },
         }),
     });

@@ -12,6 +12,8 @@ palette:
     unstage-all: 取消暂存所有更改
     discard-all: 丢弃所有更改
     create-branch: 创建分支
+    stack-branch: 创建堆叠分支
+    reorder-stack: 重排堆叠
     checkout-branch: 检出分支
     delete-branch: 删除分支
     rename-branch: 重命名分支

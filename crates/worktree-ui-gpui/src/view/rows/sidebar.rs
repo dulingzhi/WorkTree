@@ -2323,6 +2323,22 @@ impl SidebarPaneView {
                         .selected(branch_selected, branch_selected_bg)
                         .open(context_menu_active);
 
+                    // Stacked-PR: look up this branch's position in its stack at
+                    // render time. Only local branches participate in stacks, so
+                    // skip the lookup for remotes. Extra left indentation
+                    // proportional to `order`, plus a "#n" badge + a chain-line
+                    // marker, surface the stack membership in the sidebar.
+                    let stack_order: Option<usize> = (section == BranchSection::Local)
+                        .then(|| {
+                            this.active_repo().and_then(|repo| match &repo.stacks {
+                                Loadable::Ready(stack) => {
+                                    stack.by_name(name.as_ref()).map(|sb| sb.order)
+                                }
+                                _ => None,
+                            })
+                        })
+                        .flatten();
+
                     let mut row = div()
                         .id(("branch_item", ix))
                         .debug_selector(move || row_debug_selector.clone())
@@ -2336,41 +2352,75 @@ impl SidebarPaneView {
                         .flex()
                         .items_center()
                         .gap(scaled_px(BRANCH_TREE_GAP_PX))
-                        .pl(indent_px(usize::from(depth)))
+                        .pl(indent_px(usize::from(depth))
+                            + stack_order.map_or(px(0.0), |o| {
+                                scaled_px(o as f32 * BRANCH_TREE_DEPTH_STEP_PX)
+                            }))
                         .pr(scaled_px(BRANCH_ROW_TRAILING_PAD_PX))
                         .interactive_row(row_style, row_state)
                         .text_color(branch_text_color)
-                        .child(tree_toggle_slot(None))
-                        .child(tree_icon_slot(
-                            "icons/git_branch.svg",
-                            branch_icon_color,
-                            12.0,
-                        ))
-                        .child(
-                            // Long branch names run into the trailing badges;
-                            // fade them into the row instead of slicing a glyph.
-                            components::FadingText::new(
-                                div()
-                                    .text_sm()
-                                    .text_color(branch_selected_label_color)
-                                    .child(filtered_label_element(
-                                        label,
-                                        &filter_query,
-                                        branch_selected_label_color,
-                                        theme.colors.accent.foreground,
-                                        gpui::rems(0.875).into(),
-                                        FontWeight::NORMAL,
-                                        cx,
-                                    )),
-                                row_style.resolved_background(row_state),
-                            )
-                            .hover_bg(
-                                row_group.clone(),
-                                row_style.resolved_hover_background(row_state),
-                            )
-                            .render(ui_scale_percent)
-                            .flex_1(),
+                        .child(tree_toggle_slot(None));
+
+                    if stack_order.is_some() {
+                        // Chain-line marker: a thin accent bar linking a stacked
+                        // branch to its parent in the visual stack hierarchy.
+                        row = row.child(
+                            div()
+                                .w(px(2.0))
+                                .h(scaled_px(12.0))
+                                .rounded_full()
+                                .bg(with_alpha(theme.colors.accent.foreground, 0.55)),
                         );
+                    }
+
+                    row = row.child(tree_icon_slot(
+                        "icons/git_branch.svg",
+                        branch_icon_color,
+                        12.0,
+                    ));
+
+                    if let Some(order) = stack_order {
+                        // Order badge, 1-based to match human-readable stack index.
+                        let stack_badge_label: SharedString = format!("#{}", order + 1).into();
+                        row = row.child(
+                            div()
+                                .px(scaled_px(5.0))
+                                .rounded(px(theme.radii.pill))
+                                .text_size(scaled_px(10.0))
+                                .font_weight(FontWeight::BOLD)
+                                .text_color(theme.colors.accent.foreground)
+                                .bg(with_alpha(theme.colors.accent.foreground, 0.14))
+                                .border_1()
+                                .border_color(with_alpha(theme.colors.accent.foreground, 0.35))
+                                .child(stack_badge_label),
+                        );
+                    }
+
+                    row = row.child(
+                        // Long branch names run into the trailing badges;
+                        // fade them into the row instead of slicing a glyph.
+                        components::FadingText::new(
+                            div()
+                                .text_sm()
+                                .text_color(branch_selected_label_color)
+                                .child(filtered_label_element(
+                                    label,
+                                    &filter_query,
+                                    branch_selected_label_color,
+                                    theme.colors.accent.foreground,
+                                    gpui::rems(0.875).into(),
+                                    FontWeight::NORMAL,
+                                    cx,
+                                )),
+                            row_style.resolved_background(row_state),
+                        )
+                        .hover_bg(
+                            row_group.clone(),
+                            row_style.resolved_hover_background(row_state),
+                        )
+                        .render(ui_scale_percent)
+                        .flex_1(),
+                    );
 
                     let show_branch_badges = divergence_behind.is_some()
                         || divergence_ahead.is_some()

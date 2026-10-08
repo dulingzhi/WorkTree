@@ -291,14 +291,26 @@ impl PopoverHost {
             return;
         }
 
-        let checkout = match self.popover {
-            Some(PopoverKind::CreateBranchFromRefPrompt { .. }) => {
-                self.create_branch.create_branch_checkout_enabled
+        let (checkout, stacked) = match self.popover {
+            Some(PopoverKind::CreateBranchFromRefPrompt { stacked, .. }) => {
+                (self.create_branch.create_branch_checkout_enabled, stacked)
             }
             _ => return,
         };
 
-        if checkout {
+        if stacked {
+            // Stacked-PR: record the branch as a child of `target` (the current
+            // HEAD branch) rather than creating a plain branch.
+            self.store.dispatch(Msg::CreateStackedBranch {
+                repo_id,
+                name,
+                parent: if target.is_empty() || target == "HEAD" {
+                    None
+                } else {
+                    Some(target.clone())
+                },
+            });
+        } else if checkout {
             self.store.dispatch(Msg::CreateBranchAndCheckout {
                 repo_id,
                 name,

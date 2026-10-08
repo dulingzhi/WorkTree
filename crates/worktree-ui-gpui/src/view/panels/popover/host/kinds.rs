@@ -59,6 +59,11 @@ pub(in crate::view) enum PopoverKind {
         /// two prompts differing only by prefix are different popovers; sharing
         /// a value would make them compare equal.
         name_prefix: String,
+        /// When true the prompt records a Stacked-PR relationship on creation,
+        /// dispatching `Msg::CreateStackedBranch` with `parent = target` instead
+        /// of a plain `Msg::CreateBranch`. Opened by the `stack-branch` palette
+        /// command.
+        stacked: bool,
     },
     RenameBranchPrompt {
         repo_id: RepoId,

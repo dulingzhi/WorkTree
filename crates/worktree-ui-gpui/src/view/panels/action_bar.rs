@@ -758,6 +758,7 @@ impl Render for ActionBarView {
                                 target,
                                 source_selectable: true,
                                 name_prefix: String::new(),
+                                stacked: false,
                             },
                             bounds,
                             window,
