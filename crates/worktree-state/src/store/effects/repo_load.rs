@@ -10,7 +10,7 @@ use worktree_core::conflict_session::{ConflictPayload, ConflictSession, Conflict
 use worktree_core::diff_tree::DirectoryDiffResult;
 use worktree_core::domain::{
     DiffArea, DiffPreviewTextSide, DiffTarget, FileDiffImage, LogCursor, LogScope, RepoHookName,
-    RepoStatus, StackMetadata, Worktree, WorktreeDirtySummary, count_file_statuses,
+    RepoStatus, Worktree, WorktreeDirtySummary, count_file_statuses,
 };
 use worktree_core::error::{Error, ErrorKind};
 use worktree_core::mergetool_trace::{
@@ -256,8 +256,7 @@ pub(super) fn schedule_load_stack_metadata(
         msg_tx,
         move |repo, msg_tx| {
             let workdir = repo.spec().workdir.clone();
-            let metadata =
-                session::load_stack_metadata(&workdir).unwrap_or_else(StackMetadata::new);
+            let metadata = session::load_stack_metadata(&workdir).unwrap_or_default();
             send_or_log(
                 &msg_tx,
                 Msg::Internal(crate::msg::InternalMsg::StackMetadataLoaded {

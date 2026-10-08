@@ -43,10 +43,10 @@ impl GixRepo {
             if !refs.contains(&step.branch) {
                 refs.push(step.branch.clone());
             }
-            if let Some(parent) = &step.parent {
-                if !refs.contains(parent) {
-                    refs.push(parent.clone());
-                }
+            if let Some(parent) = &step.parent
+                && !refs.contains(parent)
+            {
+                refs.push(parent.clone());
             }
         }
 
@@ -85,7 +85,7 @@ impl GixRepo {
             ]);
             let label = format!(
                 "git rebase --onto {} {} {}",
-                &new_parent_tip, &old_parent_tip, &step.branch
+                new_parent_tip, old_parent_tip, step.branch
             );
             let output = run_git_raw_output(cmd, &label)?;
             if !output.status.success() {
@@ -103,7 +103,7 @@ impl GixRepo {
                 self.restore_head(&head_target);
                 return Err(Error::new(ErrorKind::Backend(format!(
                     "restack conflict while rebasing '{}': {}",
-                    &step.branch, stderr
+                    step.branch, stderr
                 ))));
             }
 
