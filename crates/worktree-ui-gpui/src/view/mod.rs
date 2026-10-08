@@ -952,11 +952,22 @@ impl WorkTreeView {
                 .map(|(_, branch)| branch.to_string())
         })
         .filter(|branch| forge_request::branch_is_url_safe(branch));
+        // Stacked-PR: a stacked branch's PR targets its stack parent, so review
+        // stays incremental (b -> a, not b -> main). The remote's default
+        // branch remains the target for a branch that is not stacked.
+        let stack_base = match &repo.stacks {
+            Loadable::Ready(stack) => stack
+                .by_name(head.as_str())
+                .and_then(|branch| branch.parent.clone())
+                .filter(|parent| forge_request::branch_is_url_safe(parent)),
+            _ => None,
+        };
+        let base_branch = stack_base.or(default_branch);
         let url = forge_request::create_request_url(
             kind,
             &base.web_root,
             head.as_str(),
-            default_branch.as_deref(),
+            base_branch.as_deref(),
         );
         if let Err(err) = crate::view::platform_open::open_url(&url) {
             self.push_toast(
