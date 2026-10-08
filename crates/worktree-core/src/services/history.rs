@@ -5,7 +5,7 @@ use super::{
     BisectState, BisectVerdict, CancellationToken, CommandOutput, InteractiveRebaseEntry,
     MergeTreePreview, ResetMode, Result, SequencerState,
 };
-use crate::domain::CommitId;
+use crate::domain::{CommitId, StackRestackOutcome, StackRestackPlan};
 use crate::error::{Error, ErrorKind};
 
 pub trait GitRepositoryHistory {
@@ -25,6 +25,17 @@ pub trait GitRepositoryHistory {
     fn rebase_with_output(&self, _onto: &str) -> Result<CommandOutput> {
         Err(Error::new(ErrorKind::Unsupported(
             "git rebase is not implemented for this backend",
+        )))
+    }
+
+    /// Replays every branch in `plan` on top of its (possibly already-rebased)
+    /// parent via `git rebase --onto`, in dependency order. The default
+    /// implementation is unsupported; the gix backend overrides it (design doc
+    /// §7). `StackRestackPlan` is built by the state layer from `StackMetadata`,
+    /// so this method need not depend on stack metadata or on loaded repo state.
+    fn restack_stack(&self, _plan: &StackRestackPlan) -> Result<StackRestackOutcome> {
+        Err(Error::new(ErrorKind::Unsupported(
+            "stacked-PR restack is not implemented for this backend",
         )))
     }
 

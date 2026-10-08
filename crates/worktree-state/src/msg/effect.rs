@@ -61,6 +61,13 @@ pub enum Effect {
     LoadStackMetadata {
         repo_id: RepoId,
     },
+    /// Stacked-PR restack orchestration: replay each branch in the plan on top
+    /// of its (rebased) parent. Dispatched by the `restack_stack` reducer; the
+    /// git backend returns `StackRestackOutcome` (or a conflict error).
+    RestackStack {
+        repo_id: RepoId,
+        plan: StackRestackPlan,
+    },
     /// Persist this repository's stacked-PR metadata to the session file. Pure
     /// file IO (no git backend), so it is exempt from the "git required" gate.
     PersistStackMetadata {

@@ -598,6 +598,15 @@ impl std::fmt::Debug for InternalMsg {
                 .field("repo_id", repo_id)
                 .field("ok", &result.is_ok())
                 .finish(),
+            InternalMsg::RestackStackDone { repo_id, result } => f
+                .debug_struct("RestackStackDone")
+                .field("repo_id", repo_id)
+                .field("ok", &result.is_ok())
+                .field(
+                    "rebased",
+                    &result.as_ref().map(|o| o.rebased.len()).unwrap_or(0),
+                )
+                .finish(),
         }
     }
 }

@@ -8,16 +8,21 @@
 //! * `Msg::CreateStackedBranch` — records a branch as part of a stack.
 //! * `Msg::ReorderStack` — reassigns every branch's `order` from an explicit list.
 //! * `Msg::DeleteStackBranch` — removes a branch and reparents its children.
+//! * `Msg::RestackStack` — replays every branch on top of its (rebased) parent
+//!   via `git rebase --onto`, in dependency order (design doc §7).
 //!
 //! `Msg::CreateStackedBranch` records the relationship in `StackMetadata` and
 //! reuses the existing `Effect::CreateBranch` to actually create the git branch
-//! (started at the parent's tip, or HEAD for a root). The gix restack
-//! orchestration (see the design doc, §7) lands in a later cut.
+//! (started at the parent's tip, or HEAD for a root). `Msg::RestackStack`
+//! computes the ordered plan and dispatches `Effect::RestackStack`; the gix
+//! backend performs the actual `rebase --onto` replay (design doc §7).
 
 use super::ReduceOutcome;
 use crate::model::{AppState, DiagnosticKind, Loadable, RepoId, RepoState};
 use crate::msg::{Effect, InternalMsg, Msg};
-use worktree_core::domain::{CommitId, StackBranch, StackMetadata};
+use worktree_core::domain::{
+    CommitId, StackBranch, StackMetadata, StackRestackPlan, StackRestackStep,
+};
 
 pub(super) fn reduce_stacked_pr(msg: Msg, state: &mut AppState) -> ReduceOutcome {
     match msg {
@@ -171,6 +176,64 @@ pub(super) fn reduce_stacked_pr(msg: Msg, state: &mut AppState) -> ReduceOutcome
                         "Cannot delete from a stack that has not loaded yet".to_string(),
                     );
                     Vec::new()
+                }
+            } else {
+                Vec::new()
+            };
+            ReduceOutcome::Handled(effects)
+        }
+        Msg::RestackStack {
+            repo_id,
+            base_branch,
+        } => {
+            let effects = if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id)
+            {
+                if matches!(repo_state.stacks, Loadable::Ready(_)) {
+                    let metadata = current_metadata(repo_state);
+                    let steps = metadata
+                        .ordered()
+                        .into_iter()
+                        .map(|b| StackRestackStep {
+                            branch: b.name.clone(),
+                            parent: b.parent.clone(),
+                        })
+                        .collect::<Vec<_>>();
+                    let plan = StackRestackPlan { base_branch, steps };
+                    vec![Effect::RestackStack { repo_id, plan }]
+                } else {
+                    super::util::push_diagnostic(
+                        repo_state,
+                        DiagnosticKind::Error,
+                        "Cannot restack a stack that has not loaded yet".to_string(),
+                    );
+                    Vec::new()
+                }
+            } else {
+                Vec::new()
+            };
+            ReduceOutcome::Handled(effects)
+        }
+        Msg::Internal(InternalMsg::RestackStackDone { repo_id, result }) => {
+            let effects = if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id)
+            {
+                match result {
+                    Ok(outcome) => {
+                        let summary = if outcome.rebased.is_empty() {
+                            "Stack is already up to date".to_string()
+                        } else {
+                            format!("Restacked {} branch(es)", outcome.rebased.len())
+                        };
+                        super::util::push_diagnostic(repo_state, DiagnosticKind::Info, summary);
+                        vec![Effect::LoadBranches { repo_id }]
+                    }
+                    Err(error) => {
+                        super::util::push_diagnostic(
+                            repo_state,
+                            DiagnosticKind::Error,
+                            format!("Restack failed: {error}"),
+                        );
+                        Vec::new()
+                    }
                 }
             } else {
                 Vec::new()
@@ -533,5 +596,109 @@ mod tests {
             super::ReduceOutcome::NotHandled(_) => panic!("should be Handled"),
         }
         assert!(matches!(state.repos[0].stacks, Loadable::Loading));
+    }
+
+    #[test]
+    fn restack_stack_emits_ordered_plan() {
+        let repo_id = RepoId(1);
+        let mut state = state_with_repo(repo_id);
+        let mut meta = StackMetadata::new();
+        meta.branches.push(StackBranch::new("a", None, 0));
+        meta.branches
+            .push(StackBranch::new("b", Some("a".to_string()), 1));
+        meta.branches
+            .push(StackBranch::new("c", Some("b".to_string()), 2));
+        with_loaded_stack(&mut state, repo_id, meta);
+
+        let outcome = reduce_stacked_pr(
+            Msg::RestackStack {
+                repo_id,
+                base_branch: None,
+            },
+            &mut state,
+        );
+        match outcome {
+            super::ReduceOutcome::Handled(effects) => {
+                assert_eq!(effects.len(), 1);
+                if let Effect::RestackStack { repo_id: id, plan } = &effects[0] {
+                    assert_eq!(*id, repo_id);
+                    assert_eq!(plan.base_branch, None);
+                    // Ordered base-first: a (root), b (child of a), c (child of b).
+                    assert_eq!(plan.steps.len(), 3);
+                    assert_eq!(plan.steps[0].branch, "a");
+                    assert_eq!(plan.steps[0].parent, None);
+                    assert_eq!(plan.steps[1].branch, "b");
+                    assert_eq!(plan.steps[1].parent.as_deref(), Some("a"));
+                    assert_eq!(plan.steps[2].branch, "c");
+                    assert_eq!(plan.steps[2].parent.as_deref(), Some("b"));
+                } else {
+                    panic!("expected Effect::RestackStack");
+                }
+            }
+            super::ReduceOutcome::NotHandled(_) => panic!("should be Handled"),
+        }
+    }
+
+    #[test]
+    fn restack_stack_before_load_is_noop() {
+        let repo_id = RepoId(1);
+        let mut state = state_with_repo(repo_id);
+        let outcome = reduce_stacked_pr(
+            Msg::RestackStack {
+                repo_id,
+                base_branch: None,
+            },
+            &mut state,
+        );
+        match outcome {
+            super::ReduceOutcome::Handled(effects) => assert!(effects.is_empty()),
+            super::ReduceOutcome::NotHandled(_) => panic!("should be Handled"),
+        }
+    }
+
+    #[test]
+    fn restack_stack_done_success_reloads_branches() {
+        let repo_id = RepoId(1);
+        let mut state = state_with_repo(repo_id);
+        with_loaded_stack(&mut state, repo_id, StackMetadata::new());
+        let outcome = reduce_stacked_pr(
+            Msg::Internal(InternalMsg::RestackStackDone {
+                repo_id,
+                result: Ok(worktree_core::domain::StackRestackOutcome {
+                    rebased: vec!["b".to_string()],
+                }),
+            }),
+            &mut state,
+        );
+        match outcome {
+            super::ReduceOutcome::Handled(effects) => {
+                assert_eq!(effects.len(), 1);
+                assert!(matches!(
+                    effects[0],
+                    Effect::LoadBranches { repo_id: id } if id == repo_id
+                ));
+            }
+            super::ReduceOutcome::NotHandled(_) => panic!("should be Handled"),
+        }
+    }
+
+    #[test]
+    fn restack_stack_done_error_pushes_diagnostic() {
+        let repo_id = RepoId(1);
+        let mut state = state_with_repo(repo_id);
+        with_loaded_stack(&mut state, repo_id, StackMetadata::new());
+        let outcome = reduce_stacked_pr(
+            Msg::Internal(InternalMsg::RestackStackDone {
+                repo_id,
+                result: Err(worktree_core::error::Error::new(
+                    worktree_core::error::ErrorKind::Backend("conflict at b".to_string()),
+                )),
+            }),
+            &mut state,
+        );
+        match outcome {
+            super::ReduceOutcome::Handled(effects) => assert!(effects.is_empty()),
+            super::ReduceOutcome::NotHandled(_) => panic!("should be Handled"),
+        }
     }
 }

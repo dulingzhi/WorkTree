@@ -274,6 +274,14 @@ fn send_unavailable_git_effect_result(
         // Persisting stack metadata needs no git; nothing to report when git is
         // unavailable, so this is a no-op fallback.
         Effect::PersistStackMetadata { .. } => {}
+        // Restack needs git; report the unavailability through the same
+        // completion message the backend would have produced.
+        Effect::RestackStack { repo_id, .. } => {
+            send(Msg::Internal(crate::msg::InternalMsg::RestackStackDone {
+                repo_id,
+                result: Err(git_unavailable_error(runtime)),
+            }))
+        }
         Effect::LoadRemotes { repo_id } => {
             send(Msg::Internal(crate::msg::InternalMsg::RemotesLoaded {
                 repo_id,
@@ -2529,6 +2537,9 @@ pub(super) fn schedule_effect(
             repo_actions::schedule_create_branch_and_checkout(
                 executor, repos, msg_tx, repo_id, name, target,
             );
+        }
+        Effect::RestackStack { repo_id, plan } => {
+            repo_actions::schedule_restack_stack(executor, repos, msg_tx, repo_id, plan);
         }
         Effect::RenameBranch {
             repo_id,

@@ -1215,6 +1215,16 @@ pub enum Msg {
         repo_id: RepoId,
         ordered_names: Vec<String>,
     },
+    /// Stacked-PR: replay every branch in the stack on top of its (rebased)
+    /// parent via `git rebase --onto`, in dependency order. The state layer
+    /// computes the ordered plan from `StackMetadata` and dispatches
+    /// `Effect::RestackStack`.
+    RestackStack {
+        repo_id: RepoId,
+        /// Optional base branch the roots of the stack are measured against;
+        /// `None` lets the backend use the stack's recorded roots.
+        base_branch: Option<String>,
+    },
     /// Stacked-PR: remove a branch from the stack. Children that pointed at the
     /// removed branch are reparented to its parent (or to root when it was a
     /// root), preserving the rest of the chain.
@@ -1607,6 +1617,14 @@ pub enum InternalMsg {
     StackMetadataLoaded {
         repo_id: RepoId,
         result: Result<StackMetadata, Error>,
+    },
+    /// Stacked-PR (iteration 07): the gix restack orchestration finished.
+    /// `Ok` carries the list of rebased branches; `Err` carries the failure
+    /// (including the conflict branch name when a restack hit a merge conflict
+    /// and was rolled back to its pre-restack state).
+    RestackStackDone {
+        repo_id: RepoId,
+        result: Result<StackRestackOutcome, Error>,
     },
 }
 

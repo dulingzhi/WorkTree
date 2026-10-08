@@ -1527,6 +1527,33 @@ impl StackMetadata {
     }
 }
 
+/// A single step in a stacked-PR restack plan: replay `branch` on top of its
+/// (possibly already-rebased) `parent`. A root (`parent == None`) is anchored on
+/// the plan's `base_branch` by the backend; if neither is present the step is
+/// skipped (there is nothing to rebase onto).
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
+pub struct StackRestackStep {
+    pub branch: String,
+    pub parent: Option<String>,
+}
+
+/// The ordered set of branches to replay during a restack, base-first. Built by
+/// the state layer from `StackMetadata::ordered()` and handed to the git backend
+/// so the backend need not depend on `StackMetadata` (or on loaded repo state).
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
+pub struct StackRestackPlan {
+    pub base_branch: Option<String>,
+    pub steps: Vec<StackRestackStep>,
+}
+
+/// Outcome of a restack: the branches that were successfully replayed, in the
+/// order they were processed. On a conflict the backend rolls everything back
+/// and reports the conflict branch through the `Error` returned instead.
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
+pub struct StackRestackOutcome {
+    pub rebased: Vec<String>,
+}
+
 #[cfg(test)]
 mod stack_metadata_tests {
     use super::*;

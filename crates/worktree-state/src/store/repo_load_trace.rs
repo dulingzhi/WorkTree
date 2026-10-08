@@ -172,6 +172,7 @@ pub(super) fn effect_name(effect: &Effect) -> &'static str {
         Effect::PersistRecentRepo { .. } => "PersistRecentRepo",
         Effect::LoadStackMetadata { .. } => "LoadStackMetadata",
         Effect::PersistStackMetadata { .. } => "PersistStackMetadata",
+        Effect::RestackStack { .. } => "RestackStack",
         _ => "Effect",
     }
 }
@@ -209,6 +210,7 @@ pub(super) fn effect_repo_id(effect: &Effect) -> Option<RepoId> {
         Effect::PersistRepoHistoryRefFilters { repo_id, .. } => *repo_id,
         Effect::LoadStackMetadata { repo_id } => Some(*repo_id),
         Effect::PersistStackMetadata { repo_id, .. } => Some(*repo_id),
+        Effect::RestackStack { repo_id, .. } => Some(*repo_id),
         _ => None,
     }
 }

@@ -285,6 +285,22 @@ pub(super) fn schedule_create_branch_and_checkout(
     });
 }
 
+pub(super) fn schedule_restack_stack(
+    executor: &TaskExecutor,
+    repos: &RepoMap,
+    msg_tx: StoreWorkerSender,
+    repo_id: RepoId,
+    plan: worktree_core::domain::StackRestackPlan,
+) {
+    spawn_with_repo(executor, repos, repo_id, msg_tx, move |repo, msg_tx| {
+        let result = repo.restack_stack(&plan);
+        send_or_log(
+            &msg_tx,
+            Msg::Internal(crate::msg::InternalMsg::RestackStackDone { repo_id, result }),
+        );
+    });
+}
+
 pub(super) fn schedule_rename_branch(
     executor: &TaskExecutor,
     repos: &RepoMap,
