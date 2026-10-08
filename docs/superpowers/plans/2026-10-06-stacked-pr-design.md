@@ -50,10 +50,11 @@ pub struct StackMetadata {
 | `CreateStackedBranch` | `repo_id, name, parent: Option<String>` | 后端复用 `Msg::CreateBranch`，仅多记 `parent` |
 | `ReorderStack` | `repo_id, ordered_names: Vec<String>` | 重排 `order` |
 | `RestackStack` | `repo_id, base_branch: Option<String>` | 触发 gix restack 编排 |
-| `DeleteStackBranch` | `repo_id, name` | 删分支 + 清除指向它的 `parent` 引用 |
 | `LoadStackMetadata` | `repo_id` | 读盘 / 探测 |
 
 > 不新增 `GitRepository*` required 方法；restack 走 `GitRepositoryHistory` 的 rebase default + gix override。
+>
+> **已实现时调整**：原计划的 `DeleteStackBranch` Msg 不再存在。删分支后的栈清理（移除条目 + 把子节点挂到被删分支的父节点）改为在 state 层随 `Msg::DeleteBranch` / `ForceDeleteBranch` / `DeleteBranches` 自动完成，一处覆盖命令面板、右键菜单、批量删除与 worktree 移除后续，不会出现「Msg 无人派发」的死代码。
 
 ## 5. Effect（P5 已取消，可直接开工）
 

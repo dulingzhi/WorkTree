@@ -7,9 +7,12 @@
 //! * `Msg::LoadStackMetadata` — kicks off an on-demand load when nothing is loaded.
 //! * `Msg::CreateStackedBranch` — records a branch as part of a stack.
 //! * `Msg::ReorderStack` — reassigns every branch's `order` from an explicit list.
-//! * `Msg::DeleteStackBranch` — removes a branch and reparents its children.
 //! * `Msg::RestackStack` — replays every branch on top of its (rebased) parent
 //!   via `git rebase --onto`, in dependency order (design doc §7).
+//!
+//! Removing a branch from a stack is not a message: deleting the git branch
+//! cleans the metadata up centrally (see `actions_emit_effects`), so no delete
+//! path can leave a stale stack entry behind.
 //!
 //! `Msg::CreateStackedBranch` records the relationship in `StackMetadata` and
 //! reuses the existing `Effect::CreateBranch` to actually create the git branch
@@ -148,24 +151,6 @@ pub(super) fn reduce_stacked_pr(msg: Msg, state: &mut AppState) -> ReduceOutcome
                         repo_state,
                         DiagnosticKind::Error,
                         "Cannot reorder a stack that has not loaded yet".to_string(),
-                    );
-                    Vec::new()
-                }
-            } else {
-                Vec::new()
-            };
-            ReduceOutcome::Handled(effects)
-        }
-        Msg::DeleteStackBranch { repo_id, name } => {
-            let effects = if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id)
-            {
-                if matches!(repo_state.stacks, Loadable::Ready(_)) {
-                    remove_branch_from_stack(repo_state, repo_id, &name)
-                } else {
-                    super::util::push_diagnostic(
-                        repo_state,
-                        DiagnosticKind::Error,
-                        "Cannot delete from a stack that has not loaded yet".to_string(),
                     );
                     Vec::new()
                 }
@@ -531,33 +516,6 @@ mod tests {
         // Parent links are preserved by a reorder.
         assert_eq!(meta.by_name("b").unwrap().parent.as_deref(), Some("a"));
         assert_eq!(meta.by_name("c").unwrap().parent.as_deref(), Some("b"));
-    }
-
-    #[test]
-    fn delete_stack_branch_reparents_children() {
-        let repo_id = RepoId(1);
-        let mut state = state_with_repo(repo_id);
-        let mut meta = StackMetadata::new();
-        meta.branches.push(StackBranch::new("a", None, 0));
-        meta.branches
-            .push(StackBranch::new("b", Some("a".to_string()), 1));
-        meta.branches
-            .push(StackBranch::new("c", Some("b".to_string()), 2));
-        with_loaded_stack(&mut state, repo_id, meta);
-
-        reduce_stacked_pr(
-            Msg::DeleteStackBranch {
-                repo_id,
-                name: "b".to_string(),
-            },
-            &mut state,
-        );
-        let meta = meta_of(&state, repo_id).unwrap();
-        assert!(meta.by_name("b").is_none());
-        // c (formerly child of b) is reparented to b's parent a.
-        assert_eq!(meta.by_name("c").unwrap().parent.as_deref(), Some("a"));
-        // a is untouched.
-        assert!(meta.by_name("a").is_some());
     }
 
     #[test]

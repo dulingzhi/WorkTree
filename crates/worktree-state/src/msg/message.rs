@@ -1225,13 +1225,6 @@ pub enum Msg {
         /// `None` lets the backend use the stack's recorded roots.
         base_branch: Option<String>,
     },
-    /// Stacked-PR: remove a branch from the stack. Children that pointed at the
-    /// removed branch are reparented to its parent (or to root when it was a
-    /// root), preserving the rest of the chain.
-    DeleteStackBranch {
-        repo_id: RepoId,
-        name: String,
-    },
     /// Stacked-PR: (re)load this repository's stack metadata from disk.
     LoadStackMetadata {
         repo_id: RepoId,
