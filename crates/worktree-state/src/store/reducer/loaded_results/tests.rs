@@ -1462,10 +1462,17 @@ fn loaded_handlers_reschedule_when_pending() {
 
     mark_pending(&mut state, repo_id, RepoLoadsInFlight::BRANCHES);
     let effects = branches_loaded(&mut state, repo_id, Ok(Vec::new()));
-    assert_eq!(effects.len(), 1);
+    // Two effects, not one: the rescheduled branch load, plus the one-off
+    // stack-metadata load the branch list triggers (it is the "repo is open"
+    // signal the Stacked-PR metadata is fetched on).
+    assert_eq!(effects.len(), 2, "got {effects:?}");
     assert!(matches!(
         effects[0],
         Effect::LoadBranches { repo_id: rid } if rid == repo_id
+    ));
+    assert!(matches!(
+        effects[1],
+        Effect::LoadStackMetadata { repo_id: rid } if rid == repo_id
     ));
     assert!(matches!(
         repo_mut(&mut state, repo_id).branches,
@@ -1733,7 +1740,14 @@ fn loaded_handler_error_paths_record_diagnostics() {
     let repo_id = RepoId(1);
     let mut state = new_state_with_repo(repo_id);
 
-    assert!(branches_loaded(&mut state, repo_id, Err(backend_error("branches"))).is_empty());
+    // The branch list is also the trigger for the one-off stack-metadata load,
+    // so a failed branch load still schedules that one effect; every other
+    // handler stays quiet on error.
+    let effects = branches_loaded(&mut state, repo_id, Err(backend_error("branches")));
+    assert!(
+        matches!(effects.as_slice(), [Effect::LoadStackMetadata { repo_id: rid }] if *rid == repo_id),
+        "expected only the stack-metadata load, got {effects:?}"
+    );
     assert!(remotes_loaded(&mut state, repo_id, Err(backend_error("remotes"))).is_empty());
     assert!(
         remote_branches_loaded(&mut state, repo_id, Err(backend_error("remote branches")))
