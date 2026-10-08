@@ -8,8 +8,8 @@ use worktree_core::domain::{
     Branch, Commit, CommitDetails, CommitFileChange, CommitId, ContributorCommit, Diff, DiffArea,
     DiffPreviewTextSide, DiffTarget, FileDiffImage, FileDiffText, FileEntry, HistoryMode,
     LfsPointerChange, LogCursor, LogPage, RecentCommitMessage, RefMetadata, ReflogEntry, Remote,
-    RemoteBranch, RemoteTag, RepoSpec, RepoStatus, StashEntry, Submodule, SubmoduleDiffSummary,
-    Tag, UpstreamDivergence, Worktree,
+    RemoteBranch, RemoteTag, RepoSpec, RepoStatus, StackRestackOutcome, StackRestackPlan,
+    StashEntry, Submodule, SubmoduleDiffSummary, Tag, UpstreamDivergence, Worktree,
 };
 use worktree_core::error::{Error, ErrorKind};
 use worktree_core::external_merge_tool::ExternalMergeToolSelection;
@@ -60,6 +60,7 @@ mod mergetool_builtin;
 mod patch;
 mod porcelain;
 mod remotes;
+mod stack;
 mod status;
 mod submodules;
 mod tags;
@@ -463,6 +464,8 @@ impl GitRepositoryHistory for GixRepo {
         ) -> Result<CommandOutput>;
 
         fn merge_tree_preview(&self, head: &str, other: &str) -> Result<MergeTreePreview>;
+
+        fn restack_stack(&self, plan: &StackRestackPlan) -> Result<StackRestackOutcome>;
 
         fn merge_abort_with_output(&self) -> Result<CommandOutput>;
 
