@@ -231,7 +231,10 @@ jobs:
   windows-tests:
     name: Windows Tests (${{ matrix.target_platform }})
     runs-on: ${{ matrix.runs_on }}
-    timeout-minutes: 60
+    # `cargo test --workspace` from a cold cache compiles the whole tree, and
+    # Windows runners are the slowest here: 60min was borderline (observed
+    # 15min on an idle runner, 60min and cancelled when runners were busy).
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
