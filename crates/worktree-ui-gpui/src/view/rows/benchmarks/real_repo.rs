@@ -10,9 +10,17 @@ const DEFAULT_DEEP_HISTORY_LIMIT: usize = 50_000;
 const DEFAULT_HISTORY_PAGE_SIZE: usize = 1_000;
 const DEFAULT_HISTORY_WINDOW: usize = 200;
 
-/// A file that `build_repo_with_linear_history` always creates at HEAD, used by
-/// `run_cache_repeat` to exercise the BLAME history-cache domain.
-const BLAME_BENCH_PATH: &Path = Path::new("src/module_0/file_0.txt");
+/// Path of a file that `build_repo_with_linear_history` always creates at HEAD,
+/// used by `run_cache_repeat` to exercise the BLAME history-cache domain.
+///
+/// Defined as a function rather than `const BLAME_BENCH_PATH: &Path =
+/// Path::new(..)` because `Path::new` is not yet a stable const fn; that form
+/// only builds under a nightly feature and breaks `--features benchmarks` on
+/// stable toolchains (error[E0658]: cannot call conditionally-const associated
+/// function `std::path::Path::new` in constants).
+fn blame_bench_path() -> &'static Path {
+    Path::new("src/module_0/file_0.txt")
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RealRepoScenario {
@@ -273,13 +281,13 @@ impl RealRepoFixture {
         let _ = self.run_monorepo_open_and_history();
         let _ = self.repo.search_commits("commit", 100);
         let _ = self.repo.reflog_head(100);
-        let _ = self.repo.blame_file(BLAME_BENCH_PATH, None);
+        let _ = self.repo.blame_file(blame_bench_path(), None);
         // Hot pass: re-reads the caches, producing LOG, SEARCH, REFLOG and BLAME
         // hits.
         let hot = self.run_monorepo_open_and_history();
         let _ = self.repo.search_commits("commit", 100);
         let _ = self.repo.reflog_head(100);
-        let _ = self.repo.blame_file(BLAME_BENCH_PATH, None);
+        let _ = self.repo.blame_file(blame_bench_path(), None);
         hot
     }
 
