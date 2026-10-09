@@ -1693,7 +1693,7 @@ impl SidebarPaneView {
         if let Err(err) = super::super::platform_open::open_url(url)
             && let Some(root) = self.root_view.upgrade()
         {
-            let _ = root.update(cx, |root, cx| {
+            root.update(cx, |root, cx| {
                 root.push_toast(
                     components::ToastKind::Error,
                     format!("Failed to open link: {err}"),

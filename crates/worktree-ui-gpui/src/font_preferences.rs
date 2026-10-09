@@ -17,7 +17,10 @@ static SYSTEM_FONT_CATALOG: OnceLock<SystemFontCatalog> = OnceLock::new();
 /// is by far the slowest step, needs no window, and serves both catalog
 /// variants — so it gets its own cache a launch-time thread can fill while
 /// the UI is starting up.
-static FONTDB_FAMILIES: OnceLock<(Arc<[String]>, Arc<[String]>)> = OnceLock::new();
+/// The fontdb half of the system catalog as `(regular, bold)` family lists.
+type FontdbFamilies = (Arc<[String]>, Arc<[String]>);
+
+static FONTDB_FAMILIES: OnceLock<FontdbFamilies> = OnceLock::new();
 /// Scan-free stand-in for [`SYSTEM_FONT_CATALOG`] listing only the bundled
 /// families. UI callers start on this while the launch-time scan runs so
 /// window creation and the first settings open never block on font parsing;

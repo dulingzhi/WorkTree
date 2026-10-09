@@ -591,9 +591,7 @@ impl PopoverHost {
                     |this| upstream_picker_state(this).is_some(),
                     |this| &mut this.upstream_picker.upstream_picker_selected_index,
                     |this, query, _cx| {
-                        let Some((repo_id, branch)) = upstream_picker_state(this) else {
-                            return None;
-                        };
+                        let (repo_id, branch) = upstream_picker_state(this)?;
                         Some(upstream_picker::nav_targets(this, repo_id, &branch, query))
                     },
                     |this, cx| this.close_popover(cx),

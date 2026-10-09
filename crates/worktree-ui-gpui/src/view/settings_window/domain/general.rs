@@ -517,13 +517,17 @@ impl SettingsWindowView {
             .on_scroll_wheel(stop_dropdown_wheel_chaining(self.theme_scroll.clone()));
             let list = restrict_scroll_to_vertical_axis(list).into_any_element();
             general_card = general_card.child(self.dropdown_list_container(
-                "settings_window_theme_list_container",
-                "settings_window_theme_scrollbar",
+                widgets::SettingsDropdownIds {
+                    container_id: "settings_window_theme_list_container",
+                    scrollbar_id: "settings_window_theme_scrollbar",
+                },
+                widgets::SettingsDropdownMetrics {
+                    item_count: theme_mode_count,
+                    estimated_row_height_px: SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
+                    extra_height_px: SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
+                    max_list_height_px: SETTINGS_THEME_DROPDOWN_LIST_MAX_HEIGHT_PX,
+                },
                 self.theme_scroll.clone(),
-                theme_mode_count,
-                SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
-                SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
-                SETTINGS_THEME_DROPDOWN_LIST_MAX_HEIGHT_PX,
                 list,
                 theme,
             ));
@@ -577,13 +581,17 @@ impl SettingsWindowView {
             .on_scroll_wheel(stop_dropdown_wheel_chaining(self.language_scroll.clone()));
             let list = restrict_scroll_to_vertical_axis(list).into_any_element();
             general_card = general_card.child(self.dropdown_list_container(
-                "settings_window_language_list_container",
-                "settings_window_language_scrollbar",
+                widgets::SettingsDropdownIds {
+                    container_id: "settings_window_language_list_container",
+                    scrollbar_id: "settings_window_language_scrollbar",
+                },
+                widgets::SettingsDropdownMetrics {
+                    item_count: language_count,
+                    estimated_row_height_px: SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
+                    extra_height_px: SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
+                    max_list_height_px: SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
+                },
                 self.language_scroll.clone(),
-                language_count,
-                SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
-                SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
-                SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                 list,
                 theme,
             ));
@@ -607,13 +615,17 @@ impl SettingsWindowView {
             ));
             let list = restrict_scroll_to_vertical_axis(list).into_any_element();
             general_card = general_card.child(self.dropdown_list_container(
-                "settings_window_avatar_source_list_container",
-                "settings_window_avatar_source_scrollbar",
+                widgets::SettingsDropdownIds {
+                    container_id: "settings_window_avatar_source_list_container",
+                    scrollbar_id: "settings_window_avatar_source_scrollbar",
+                },
+                widgets::SettingsDropdownMetrics {
+                    item_count: source_count,
+                    estimated_row_height_px: SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
+                    extra_height_px: SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
+                    max_list_height_px: SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
+                },
                 self.avatar_source_scroll.clone(),
-                source_count,
-                SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
-                SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
-                SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                 list,
                 theme,
             ));
@@ -719,13 +731,17 @@ impl SettingsWindowView {
                         .child(self.font_options_hint(self.ui_font_family.as_str())),
                 )
                 .child(self.dropdown_list_container(
-                    "settings_window_ui_font_list_container",
-                    "settings_window_ui_font_scrollbar",
+                    widgets::SettingsDropdownIds {
+                        container_id: "settings_window_ui_font_list_container",
+                        scrollbar_id: "settings_window_ui_font_scrollbar",
+                    },
+                    widgets::SettingsDropdownMetrics {
+                        item_count: self.ui_font_options.len(),
+                        estimated_row_height_px: SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
+                        extra_height_px: 0.0,
+                        max_list_height_px: SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
+                    },
                     self.ui_font_scroll.clone(),
-                    self.ui_font_options.len(),
-                    SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
-                    0.0,
-                    SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                     list,
                     theme,
                 ));
@@ -763,13 +779,17 @@ impl SettingsWindowView {
                         .child(self.font_options_hint(self.editor_font_family.as_str())),
                 )
                 .child(self.dropdown_list_container(
-                    "settings_window_editor_font_list_container",
-                    "settings_window_editor_font_scrollbar",
+                    widgets::SettingsDropdownIds {
+                        container_id: "settings_window_editor_font_list_container",
+                        scrollbar_id: "settings_window_editor_font_scrollbar",
+                    },
+                    widgets::SettingsDropdownMetrics {
+                        item_count: self.editor_font_options.len(),
+                        estimated_row_height_px: SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
+                        extra_height_px: 0.0,
+                        max_list_height_px: SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
+                    },
                     self.editor_font_scroll.clone(),
-                    self.editor_font_options.len(),
-                    SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
-                    0.0,
-                    SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                     list,
                     theme,
                 ));
@@ -800,13 +820,17 @@ impl SettingsWindowView {
             ))
             .into_any_element();
             general_card = general_card.child(self.dropdown_list_container(
-                "settings_window_external_code_editor_list_container",
-                "settings_window_external_code_editor_scrollbar",
+                widgets::SettingsDropdownIds {
+                    container_id: "settings_window_external_code_editor_list_container",
+                    scrollbar_id: "settings_window_external_code_editor_scrollbar",
+                },
+                widgets::SettingsDropdownMetrics {
+                    item_count: self.external_editor_options.len(),
+                    estimated_row_height_px: SETTINGS_DROPDOWN_DETAIL_ROW_HEIGHT_PX,
+                    extra_height_px: SETTINGS_DROPDOWN_DETAIL_LIST_EXTRA_HEIGHT_PX,
+                    max_list_height_px: SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
+                },
                 self.external_editor_scroll.clone(),
-                self.external_editor_options.len(),
-                SETTINGS_DROPDOWN_DETAIL_ROW_HEIGHT_PX,
-                SETTINGS_DROPDOWN_DETAIL_LIST_EXTRA_HEIGHT_PX,
-                SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                 list,
                 theme,
             ));
@@ -919,13 +943,17 @@ impl SettingsWindowView {
             ));
             let list = restrict_scroll_to_vertical_axis(list).into_any_element();
             general_card = general_card.child(self.dropdown_list_container(
-                "settings_window_ai_commit_source_list_container",
-                "settings_window_ai_commit_source_scrollbar",
+                widgets::SettingsDropdownIds {
+                    container_id: "settings_window_ai_commit_source_list_container",
+                    scrollbar_id: "settings_window_ai_commit_source_scrollbar",
+                },
+                widgets::SettingsDropdownMetrics {
+                    item_count: source_count,
+                    estimated_row_height_px: SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
+                    extra_height_px: SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
+                    max_list_height_px: SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
+                },
                 self.ai_commit_source_scroll.clone(),
-                source_count,
-                SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
-                SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
-                SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                 list,
                 theme,
             ));
@@ -1034,13 +1062,17 @@ impl SettingsWindowView {
                 ));
                 let list = restrict_scroll_to_vertical_axis(list).into_any_element();
                 general_card = general_card.child(self.dropdown_list_container(
-                    "settings_window_ai_commit_provider_list_container",
-                    "settings_window_ai_commit_provider_scrollbar",
+                    widgets::SettingsDropdownIds {
+                        container_id: "settings_window_ai_commit_provider_list_container",
+                        scrollbar_id: "settings_window_ai_commit_provider_scrollbar",
+                    },
+                    widgets::SettingsDropdownMetrics {
+                        item_count: provider_count,
+                        estimated_row_height_px: SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
+                        extra_height_px: SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
+                        max_list_height_px: SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
+                    },
                     self.ai_commit_provider_scroll.clone(),
-                    provider_count,
-                    SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
-                    SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
-                    SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                     list,
                     theme,
                 ));
@@ -1130,13 +1162,17 @@ impl SettingsWindowView {
                         ));
                         let list = restrict_scroll_to_vertical_axis(list).into_any_element();
                         general_card = general_card.child(self.dropdown_list_container(
-                            "settings_window_ai_commit_model_list_container",
-                            "settings_window_ai_commit_model_scrollbar",
+                            widgets::SettingsDropdownIds {
+                                container_id: "settings_window_ai_commit_model_list_container",
+                                scrollbar_id: "settings_window_ai_commit_model_scrollbar",
+                            },
+                            widgets::SettingsDropdownMetrics {
+                                item_count: models.len(),
+                                estimated_row_height_px: SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
+                                extra_height_px: SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
+                                max_list_height_px: SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
+                            },
                             self.ai_commit_models_scroll.clone(),
-                            models.len(),
-                            SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
-                            SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
-                            SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                             list,
                             theme,
                         ));
@@ -1210,13 +1246,17 @@ impl SettingsWindowView {
             ));
             let list = restrict_scroll_to_vertical_axis(list).into_any_element();
             general_card = general_card.child(self.dropdown_list_container(
-                "settings_window_date_format_list_container",
-                "settings_window_date_format_scrollbar",
+                widgets::SettingsDropdownIds {
+                    container_id: "settings_window_date_format_list_container",
+                    scrollbar_id: "settings_window_date_format_scrollbar",
+                },
+                widgets::SettingsDropdownMetrics {
+                    item_count: DateTimeFormat::all().len(),
+                    estimated_row_height_px: SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
+                    extra_height_px: SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
+                    max_list_height_px: SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
+                },
                 self.date_format_scroll.clone(),
-                DateTimeFormat::all().len(),
-                SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
-                SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
-                SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                 list,
                 theme,
             ));
@@ -1237,13 +1277,17 @@ impl SettingsWindowView {
             .on_scroll_wheel(stop_dropdown_wheel_chaining(self.timezone_scroll.clone()));
             let list = restrict_scroll_to_vertical_axis(list).into_any_element();
             general_card = general_card.child(self.dropdown_list_container(
-                "settings_window_timezone_list_container",
-                "settings_window_timezone_scrollbar",
+                widgets::SettingsDropdownIds {
+                    container_id: "settings_window_timezone_list_container",
+                    scrollbar_id: "settings_window_timezone_scrollbar",
+                },
+                widgets::SettingsDropdownMetrics {
+                    item_count: Timezone::all().len(),
+                    estimated_row_height_px: SETTINGS_DROPDOWN_DENSE_DETAIL_ROW_HEIGHT_PX,
+                    extra_height_px: 0.0,
+                    max_list_height_px: SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
+                },
                 self.timezone_scroll.clone(),
-                Timezone::all().len(),
-                SETTINGS_DROPDOWN_DENSE_DETAIL_ROW_HEIGHT_PX,
-                0.0,
-                SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                 list,
                 theme,
             ));

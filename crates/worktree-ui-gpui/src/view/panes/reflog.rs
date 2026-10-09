@@ -646,9 +646,9 @@ impl ReflogPaneView {
                 // than hidden when nothing is undoable — so the affordance
                 // doesn't flicker as reflog entries stream in.
                 let tooltip: gpui::SharedString = if undo_available {
-                    crate::i18n::tr("panels.undo.button").into()
+                    crate::i18n::tr("panels.undo.button")
                 } else {
-                    crate::i18n::tr("panels.undo.button_nothing_tooltip").into()
+                    crate::i18n::tr("panels.undo.button_nothing_tooltip")
                 };
                 components::Button::new("reflog_undo_button", crate::i18n::tr("panels.undo.button"))
                     .start_slot(svg_icon(

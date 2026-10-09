@@ -149,6 +149,20 @@ fn settings_dropdown_height(
     )
 }
 
+/// Identifiers for a settings dropdown list shell.
+pub(super) struct SettingsDropdownIds {
+    pub container_id: &'static str,
+    pub scrollbar_id: &'static str,
+}
+
+/// Layout metrics a settings dropdown list derives its height from.
+pub(super) struct SettingsDropdownMetrics {
+    pub item_count: usize,
+    pub estimated_row_height_px: f32,
+    pub extra_height_px: f32,
+    pub max_list_height_px: f32,
+}
+
 impl SettingsWindowView {
     pub(super) fn push_main_window_toast(
         &self,
@@ -177,16 +191,22 @@ impl SettingsWindowView {
 
     pub(super) fn dropdown_list_container(
         &self,
-        container_id: &'static str,
-        scrollbar_id: &'static str,
+        ids: SettingsDropdownIds,
+        metrics: SettingsDropdownMetrics,
         scroll: UniformListScrollHandle,
-        item_count: usize,
-        estimated_row_height_px: f32,
-        extra_height_px: f32,
-        max_list_height_px: f32,
         list: AnyElement,
         theme: AppTheme,
     ) -> Stateful<gpui::Div> {
+        let SettingsDropdownIds {
+            container_id,
+            scrollbar_id,
+        } = ids;
+        let SettingsDropdownMetrics {
+            item_count,
+            estimated_row_height_px,
+            extra_height_px,
+            max_list_height_px,
+        } = metrics;
         let height = settings_dropdown_height(
             item_count,
             estimated_row_height_px,

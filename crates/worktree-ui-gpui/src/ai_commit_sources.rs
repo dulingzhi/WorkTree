@@ -321,10 +321,10 @@ fn parse_mini_toml(text: &str) -> HashMap<String, HashMap<String, String>> {
 /// Decode a `key = ` right-hand side: a quoted string keeps its inside; a
 /// bare scalar ends at the first `#` comment.
 fn strip_toml_value(raw: &str) -> String {
-    if let Some(rest) = raw.strip_prefix('"') {
-        if let Some(end) = rest.find('"') {
-            return rest[..end].to_string();
-        }
+    if let Some(rest) = raw.strip_prefix('"')
+        && let Some(end) = rest.find('"')
+    {
+        return rest[..end].to_string();
     }
     raw.split('#').next().unwrap_or_default().trim().to_string()
 }
@@ -342,10 +342,10 @@ fn resolve_copilot(env: &EnvAccess) -> Option<AiCommitSettings> {
 
 pub(crate) fn read_gh_token(env: &EnvAccess) -> Option<String> {
     for candidate in gh_hosts_candidates(env) {
-        if let Ok(text) = std::fs::read_to_string(candidate) {
-            if let Some(token) = scan_oauth_token(&text) {
-                return Some(token);
-            }
+        if let Ok(text) = std::fs::read_to_string(candidate)
+            && let Some(token) = scan_oauth_token(&text)
+        {
+            return Some(token);
         }
     }
     env.var("GH_TOKEN")

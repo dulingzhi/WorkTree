@@ -684,6 +684,9 @@ pub(crate) const COMMANDS: &[CommandEntry] = &[
 /// This list also carries ids the palette never shows, which is why it is
 /// not simply `COMMANDS`' ids: `apply-patch` is dispatched from the working
 /// copy's context menu, not from the palette.
+// Only read by the palette-consistency tests below; in a normal build nothing
+// references it, so allow the dead-code lint outside `cfg(test)`.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) const REGISTERED_COMMAND_HANDLERS: &[&str] = &[
     "add-remote",
     "add-submodule",

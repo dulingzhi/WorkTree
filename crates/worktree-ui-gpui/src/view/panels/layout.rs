@@ -34,7 +34,7 @@ pub(in crate::view) fn commit_details_author_row(
     } else {
         details.author_name.clone()
     };
-    let author_email = (!details.author_email.is_empty()).then(|| details.author_email.as_str());
+    let author_email = (!details.author_email.is_empty()).then_some(details.author_email.as_str());
     // Attach the load-watcher for the remote avatar, if any — gpui only
     // notifies whichever single view first requested a remote image, so a
     // surface that lost that race would keep its initials stand-in until an

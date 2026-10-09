@@ -150,23 +150,24 @@ pub(super) fn cached(
             // new query must not parade old results as its own. These rows were
             // vetted by the search itself, so they match any query and are never
             // re-filtered (a body-only match would otherwise vanish).
-            if repo.commit_search_query.as_deref() == Some(query) && !query.is_empty() {
-                if let Loadable::Ready(results) = &repo.commit_search {
-                    for commit in results.iter() {
-                        // Already listed in the loaded section — a second row for
-                        // it would only add noise.
-                        if loaded_ids.contains(&commit.id) {
-                            continue;
-                        }
-                        items.push(
-                            commit_row(commit, now)
-                                .section(crate::i18n::tr(
-                                    "ui.picker.commit_search.section.all_history",
-                                ))
-                                .match_any_query(),
-                        );
-                        rows.push(CommitSearchPickerRow::Commit(commit.id.clone()));
+            if repo.commit_search_query.as_deref() == Some(query)
+                && !query.is_empty()
+                && let Loadable::Ready(results) = &repo.commit_search
+            {
+                for commit in results.iter() {
+                    // Already listed in the loaded section — a second row for
+                    // it would only add noise.
+                    if loaded_ids.contains(&commit.id) {
+                        continue;
                     }
+                    items.push(
+                        commit_row(commit, now)
+                            .section(crate::i18n::tr(
+                                "ui.picker.commit_search.section.all_history",
+                            ))
+                            .match_any_query(),
+                    );
+                    rows.push(CommitSearchPickerRow::Commit(commit.id.clone()));
                 }
             }
 

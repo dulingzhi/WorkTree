@@ -104,7 +104,7 @@ impl SettingsWindowView {
         cx: &mut gpui::Context<Self>,
     ) {
         let next = self.gpg_signing_key_draft.trim().to_string();
-        let value = (!next.is_empty()).then(|| next.as_str());
+        let value = (!next.is_empty()).then_some(next.as_str());
         if self.write_gpg_config("user.signingkey", value, cx) {
             self.gpg_config.user_signing_key = next;
         }
@@ -115,7 +115,7 @@ impl SettingsWindowView {
         cx: &mut gpui::Context<Self>,
     ) {
         let next = self.gpg_program_draft.trim().to_string();
-        let value = (!next.is_empty()).then(|| next.as_str());
+        let value = (!next.is_empty()).then_some(next.as_str());
         if self.write_gpg_config("gpg.program", value, cx) {
             self.gpg_config.gpg_program = next;
         }

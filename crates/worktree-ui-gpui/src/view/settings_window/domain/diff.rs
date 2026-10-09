@@ -198,13 +198,17 @@ impl SettingsWindowView {
             ));
             let list = restrict_scroll_to_vertical_axis(list).into_any_element();
             change_tracking_card = change_tracking_card.child(self.dropdown_list_container(
-                "settings_window_change_tracking_list_container",
-                "settings_window_change_tracking_scrollbar",
+                widgets::SettingsDropdownIds {
+                    container_id: "settings_window_change_tracking_list_container",
+                    scrollbar_id: "settings_window_change_tracking_scrollbar",
+                },
+                widgets::SettingsDropdownMetrics {
+                    item_count: CHANGE_TRACKING_OPTIONS.len(),
+                    estimated_row_height_px: SETTINGS_DROPDOWN_DETAIL_ROW_HEIGHT_PX,
+                    extra_height_px: SETTINGS_DROPDOWN_DETAIL_LIST_EXTRA_HEIGHT_PX,
+                    max_list_height_px: SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
+                },
                 self.change_tracking_scroll.clone(),
-                CHANGE_TRACKING_OPTIONS.len(),
-                SETTINGS_DROPDOWN_DETAIL_ROW_HEIGHT_PX,
-                SETTINGS_DROPDOWN_DETAIL_LIST_EXTRA_HEIGHT_PX,
-                SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                 list,
                 theme,
             ));
@@ -310,13 +314,17 @@ impl SettingsWindowView {
             ));
             let list = restrict_scroll_to_vertical_axis(list).into_any_element();
             diff_card = diff_card.child(self.dropdown_list_container(
-                "settings_window_diff_content_mode_list_container",
-                "settings_window_diff_content_mode_scrollbar",
+                widgets::SettingsDropdownIds {
+                    container_id: "settings_window_diff_content_mode_list_container",
+                    scrollbar_id: "settings_window_diff_content_mode_scrollbar",
+                },
+                widgets::SettingsDropdownMetrics {
+                    item_count: DIFF_CONTENT_MODE_OPTIONS.len(),
+                    estimated_row_height_px: SETTINGS_DROPDOWN_DETAIL_ROW_HEIGHT_PX,
+                    extra_height_px: SETTINGS_DROPDOWN_DETAIL_LIST_EXTRA_HEIGHT_PX,
+                    max_list_height_px: SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
+                },
                 self.diff_content_mode_scroll.clone(),
-                DIFF_CONTENT_MODE_OPTIONS.len(),
-                SETTINGS_DROPDOWN_DETAIL_ROW_HEIGHT_PX,
-                SETTINGS_DROPDOWN_DETAIL_LIST_EXTRA_HEIGHT_PX,
-                SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                 list,
                 theme,
             ));
@@ -352,13 +360,17 @@ impl SettingsWindowView {
             ));
             let list = restrict_scroll_to_vertical_axis(list).into_any_element();
             diff_card = diff_card.child(self.dropdown_list_container(
-                "settings_window_diff_view_mode_list_container",
-                "settings_window_diff_view_mode_scrollbar",
+                widgets::SettingsDropdownIds {
+                    container_id: "settings_window_diff_view_mode_list_container",
+                    scrollbar_id: "settings_window_diff_view_mode_scrollbar",
+                },
+                widgets::SettingsDropdownMetrics {
+                    item_count: DIFF_VIEW_MODE_OPTIONS.len(),
+                    estimated_row_height_px: SETTINGS_DROPDOWN_DETAIL_ROW_HEIGHT_PX,
+                    extra_height_px: SETTINGS_DROPDOWN_DETAIL_LIST_EXTRA_HEIGHT_PX,
+                    max_list_height_px: SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
+                },
                 self.diff_view_mode_scroll.clone(),
-                DIFF_VIEW_MODE_OPTIONS.len(),
-                SETTINGS_DROPDOWN_DETAIL_ROW_HEIGHT_PX,
-                SETTINGS_DROPDOWN_DETAIL_LIST_EXTRA_HEIGHT_PX,
-                SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                 list,
                 theme,
             ));
@@ -388,13 +400,17 @@ impl SettingsWindowView {
             ));
             let list = restrict_scroll_to_vertical_axis(list).into_any_element();
             diff_card = diff_card.child(self.dropdown_list_container(
-                "settings_window_diff_scroll_sync_list_container",
-                "settings_window_diff_scroll_sync_scrollbar",
+                widgets::SettingsDropdownIds {
+                    container_id: "settings_window_diff_scroll_sync_list_container",
+                    scrollbar_id: "settings_window_diff_scroll_sync_scrollbar",
+                },
+                widgets::SettingsDropdownMetrics {
+                    item_count: DIFF_SCROLL_SYNC_OPTIONS.len(),
+                    estimated_row_height_px: SETTINGS_DROPDOWN_DETAIL_ROW_HEIGHT_PX,
+                    extra_height_px: SETTINGS_DROPDOWN_DETAIL_LIST_EXTRA_HEIGHT_PX + 18.0,
+                    max_list_height_px: SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
+                },
                 self.diff_scroll_sync_scroll.clone(),
-                DIFF_SCROLL_SYNC_OPTIONS.len(),
-                SETTINGS_DROPDOWN_DETAIL_ROW_HEIGHT_PX,
-                SETTINGS_DROPDOWN_DETAIL_LIST_EXTRA_HEIGHT_PX + 18.0,
-                SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                 list,
                 theme,
             ));

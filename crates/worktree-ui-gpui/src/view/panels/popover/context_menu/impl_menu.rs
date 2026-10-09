@@ -1568,10 +1568,12 @@ impl PopoverHost {
 
         // Keep labels aligned across entries when only some of them (e.g. the
         // checked option) carry an icon; icon-less menus stay compact.
-        let reserve_icon_column = rows.iter().any(|(item, _)| match item {
-            ContextMenuItem::Entry { icon: Some(_), .. } => true,
-            ContextMenuItem::Submenu { icon: Some(_), .. } => true,
-            _ => false,
+        let reserve_icon_column = rows.iter().any(|(item, _)| {
+            matches!(
+                item,
+                ContextMenuItem::Entry { icon: Some(_), .. }
+                    | ContextMenuItem::Submenu { icon: Some(_), .. }
+            )
         });
 
         div()

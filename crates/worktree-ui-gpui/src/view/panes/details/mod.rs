@@ -1688,14 +1688,13 @@ impl DetailsPaneView {
                 // loaded) falls back to the comparison root and the drill is
                 // cleared.
                 let display_root = self.resolve_directory_diff_root(&result);
-                if let Some(drill) = self.directory_diff_root.clone() {
-                    if drill != result.root.path {
-                        let filtered =
-                            worktree_core::diff_tree::filter_by_prefix(&result.root, &drill);
-                        if filtered.file_count == 0 && filtered.children.is_empty() {
-                            self.directory_diff_root = None;
-                            cx.notify();
-                        }
+                if let Some(drill) = self.directory_diff_root.clone()
+                    && drill != result.root.path
+                {
+                    let filtered = worktree_core::diff_tree::filter_by_prefix(&result.root, &drill);
+                    if filtered.file_count == 0 && filtered.children.is_empty() {
+                        self.directory_diff_root = None;
+                        cx.notify();
                     }
                 }
 
@@ -1784,12 +1783,12 @@ impl DetailsPaneView {
         result: &worktree_core::diff_tree::DirectoryDiffResult,
     ) -> worktree_core::diff_tree::DirectoryNode {
         let mut root = result.root.clone();
-        if let Some(drill) = self.directory_diff_root.as_ref() {
-            if drill != &result.root.path {
-                let filtered = worktree_core::diff_tree::filter_by_prefix(&result.root, drill);
-                if filtered.file_count != 0 || !filtered.children.is_empty() {
-                    root = filtered;
-                }
+        if let Some(drill) = self.directory_diff_root.as_ref()
+            && drill != &result.root.path
+        {
+            let filtered = worktree_core::diff_tree::filter_by_prefix(&result.root, drill);
+            if filtered.file_count != 0 || !filtered.children.is_empty() {
+                root = filtered;
             }
         }
         root

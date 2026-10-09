@@ -78,7 +78,7 @@ pub(in crate::view) fn build_statistics_model(
             day,
             week_start,
             7,
-            u32::from(weekday_sunday_first(day)),
+            weekday_sunday_first(day),
             &commit.author,
         );
 

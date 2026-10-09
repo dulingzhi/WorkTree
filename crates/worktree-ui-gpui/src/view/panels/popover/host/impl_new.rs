@@ -441,7 +441,7 @@ impl PopoverHost {
         let create_tag_message_input = cx.new(|cx| {
             let mut input = components::TextInput::new(
                 components::TextInputOptions {
-                    placeholder: crate::i18n::tr("ui.placeholder.annotation_message").into(),
+                    placeholder: crate::i18n::tr("ui.placeholder.annotation_message"),
                     multiline: true,
                     soft_wrap: true,
                     min_lines: 3,

@@ -6,7 +6,6 @@
 //! accessor returns `None` (no card rows at all).
 
 use super::*;
-use gpui::Stateful;
 
 impl SettingsWindowView {
     pub(in crate::view::settings_window) fn storage_card(

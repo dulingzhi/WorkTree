@@ -498,7 +498,7 @@ fn run_windowed_app(
                 })
                 .await;
             if ready {
-                let _ = cx.update(crate::font_preferences::refresh_after_catalog_scan);
+                cx.update(crate::font_preferences::refresh_after_catalog_scan);
             }
         })
         .detach();

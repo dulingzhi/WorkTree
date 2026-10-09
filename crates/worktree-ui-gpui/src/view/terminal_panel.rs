@@ -2218,7 +2218,7 @@ impl WorkTreeView {
             exit_status: None,
             viewport,
             session_seq,
-            title: kind.display_label().to_string().into(),
+            title: kind.display_label().to_string(),
         })
     }
 

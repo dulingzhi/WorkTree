@@ -413,13 +413,17 @@ impl SettingsWindowView {
             .on_scroll_wheel(stop_dropdown_wheel_chaining(self.merge_tool_scroll.clone()));
             let list = restrict_scroll_to_vertical_axis(list).into_any_element();
             merge_tool_card = merge_tool_card.child(self.dropdown_list_container(
-                "settings_window_merge_tool_list_container",
-                "settings_window_merge_tool_scrollbar",
+                widgets::SettingsDropdownIds {
+                    container_id: "settings_window_merge_tool_list_container",
+                    scrollbar_id: "settings_window_merge_tool_scrollbar",
+                },
+                widgets::SettingsDropdownMetrics {
+                    item_count: option_count,
+                    estimated_row_height_px: SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
+                    extra_height_px: SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
+                    max_list_height_px: SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
+                },
                 self.merge_tool_scroll.clone(),
-                option_count,
-                SETTINGS_DROPDOWN_COMPACT_ROW_HEIGHT_PX,
-                SETTINGS_DROPDOWN_COMPACT_LIST_EXTRA_HEIGHT_PX,
-                SETTINGS_DROPDOWN_LIST_MAX_HEIGHT_PX,
                 list,
                 theme,
             ));

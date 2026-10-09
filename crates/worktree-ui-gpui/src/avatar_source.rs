@@ -225,7 +225,7 @@ pub(crate) fn ensure_avatar_loaded(url: &SharedString, cx: &mut App) {
         let url = url.clone();
         cx.spawn(async move |cx: &mut gpui::AsyncApp| {
             resolve_avatar(&url, http).await;
-            let _ = cx.update(|cx| cx.refresh_windows());
+            cx.update(|cx| cx.refresh_windows());
         })
         .detach();
     }
@@ -315,7 +315,7 @@ fn decode_avatar(bytes: &[u8]) -> Option<Arc<RenderImage>> {
     let mut image = image::DynamicImage::from_decoder(decoder).ok()?;
     image.apply_orientation(orientation);
     let mut data = image.into_rgba8();
-    for pixel in data.chunks_exact_mut(4) {
+    for pixel in data.as_chunks_mut::<4>().0 {
         pixel.swap(0, 2);
     }
     Some(Arc::new(RenderImage::new([image::Frame::new(data)])))

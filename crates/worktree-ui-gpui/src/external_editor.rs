@@ -408,8 +408,10 @@ pub(crate) fn detected_editor_for_tests(
 /// returned immediately while a background refresh re-detects.
 const DETECTION_CACHE_TTL: Duration = Duration::from_secs(300);
 
-static DETECTED_EDITORS_CACHE: OnceLock<Mutex<Option<(Instant, Vec<DetectedExternalEditor>)>>> =
-    OnceLock::new();
+/// Cached detection pass: when it ran, plus the editors it found.
+type DetectionCache = (Instant, Vec<DetectedExternalEditor>);
+
+static DETECTED_EDITORS_CACHE: OnceLock<Mutex<Option<DetectionCache>>> = OnceLock::new();
 /// Guards against piling refresh threads when menus re-read the cache on
 /// every repaint while a refresh is already running.
 static DETECTION_REFRESH_IN_FLIGHT: AtomicBool = AtomicBool::new(false);

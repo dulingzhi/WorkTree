@@ -387,60 +387,132 @@ pub(super) fn history_avatar_metrics(
     })
 }
 
-pub(super) fn history_commit_row_canvas(
-    theme: AppTheme,
-    view: Entity<HistoryView>,
-    row_id: usize,
-    repo_id: RepoId,
-    commit_id: CommitId,
-    col_branch: Pixels,
-    col_graph: Pixels,
-    col_author: Pixels,
-    col_date: Pixels,
-    col_sha: Pixels,
-    show_graph: bool,
-    show_author: bool,
-    show_date: bool,
-    show_sha: bool,
-    show_graph_color_marker: bool,
-    is_stash_node: bool,
-    connect_from_top_col: Option<usize>,
-    graph_rows: Arc<[history_graph::GraphRow]>,
-    graph_row_ix: usize,
-    tag_names: Arc<[HistoryTextVm]>,
-    ref_items: Arc<[HistoryRefListItem]>,
-    selected_branch: Option<SelectedHistoryBranch>,
-    selected_lane: Option<super::history_graph_paint::SelectedLane>,
+/// Column x-offsets for one history row, in the order the canvas paints them.
+pub(super) struct HistoryRowColumns {
+    pub branch: Pixels,
+    pub graph: Pixels,
+    pub author: Pixels,
+    pub date: Pixels,
+    pub sha: Pixels,
+}
+
+/// Which optional decorations the history table currently shows.
+pub(super) struct HistoryRowVisibility {
+    pub show_graph: bool,
+    pub show_author: bool,
+    pub show_date: bool,
+    pub show_sha: bool,
+    pub show_graph_color_marker: bool,
+    pub is_stash_node: bool,
+}
+
+/// Graph geometry and selection state for one history row.
+pub(super) struct HistoryRowGraph {
+    pub connect_from_top_col: Option<usize>,
+    pub rows: Arc<[history_graph::GraphRow]>,
+    pub row_ix: usize,
+    pub selected_branch: Option<SelectedHistoryBranch>,
+    pub selected_lane: Option<super::history_graph_paint::SelectedLane>,
     // Whether this row's commit is reachable from the selection — the row's
     // half of the highlight. Resolved once per row build against the
     // reachability set, not derived from the lane here: membership and lane
     // coverage answer different questions once merges are involved.
-    related_to_selection: Option<bool>,
-    lane_branch_name: Option<SharedString>,
-    author: HistoryTextVm,
-    summary: HistoryTextVm,
-    when: HistoryTextVm,
-    short_sha: HistoryTextVm,
+    pub related_to_selection: Option<bool>,
+    pub lane_branch_name: Option<SharedString>,
+}
+
+/// Pre-rendered text cells for one history row.
+pub(super) struct HistoryRowText {
+    pub author: HistoryTextVm,
+    pub summary: HistoryTextVm,
+    pub when: HistoryTextVm,
+    pub short_sha: HistoryTextVm,
+}
+
+/// Everything `history_commit_row_canvas` needs beyond the view and row
+/// identity. Grouped into structs because the flat form was 35 arguments.
+pub(super) struct HistoryRowCanvasSpec {
+    pub repo_id: RepoId,
+    pub commit_id: CommitId,
+    pub columns: HistoryRowColumns,
+    pub visibility: HistoryRowVisibility,
+    pub graph: HistoryRowGraph,
+    pub tags: Arc<[HistoryTextVm]>,
+    pub refs: Arc<[HistoryRefListItem]>,
+    pub text: HistoryRowText,
     // The commit carries a cryptographic signature — a small check is painted
     // left of the sha (the "verified" convention), in the success colour.
-    signed: bool,
+    pub signed: bool,
     // Bisect decorations for an active session: the commit's verdict
     // (✗ bad / ✓ good / ⊘ skip) and whether it is the candidate currently
     // checked out (◆). Painted left of the sha, further out than the signed
     // check so the two stack without colliding.
-    bisect_mark: Option<worktree_core::services::BisectVerdict>,
-    bisect_current: bool,
+    pub bisect_mark: Option<worktree_core::services::BisectVerdict>,
+    pub bisect_current: bool,
     // Whether the row builder's remote-avatar overlay owns the avatar slot
     // (the image has resolved — see `history_table_row`). Decided once per
     // row build and passed in so prepaint and paint never disagree.
-    remote_avatar_ready: bool,
+    pub remote_avatar_ready: bool,
     // The background the row's own `div` carries (selection, HEAD, open context
     // menu), and the one it swaps in while hovered. Mirrored rather than painted
     // again: the graph's icon nodes knock their glyphs out in the row background,
     // so the canvas has to know what the row is actually showing.
-    row_bg_overlay: Option<gpui::Rgba>,
-    hover_bg_overlay: gpui::Rgba,
+    pub row_bg_overlay: Option<gpui::Rgba>,
+    pub hover_bg_overlay: gpui::Rgba,
+}
+
+pub(super) fn history_commit_row_canvas(
+    theme: AppTheme,
+    view: Entity<HistoryView>,
+    row_id: usize,
+    spec: HistoryRowCanvasSpec,
 ) -> AnyElement {
+    let HistoryRowCanvasSpec {
+        repo_id,
+        commit_id,
+        columns:
+            HistoryRowColumns {
+                branch: col_branch,
+                graph: col_graph,
+                author: col_author,
+                date: col_date,
+                sha: col_sha,
+            },
+        visibility:
+            HistoryRowVisibility {
+                show_graph,
+                show_author,
+                show_date,
+                show_sha,
+                show_graph_color_marker,
+                is_stash_node,
+            },
+        graph:
+            HistoryRowGraph {
+                connect_from_top_col,
+                rows: graph_rows,
+                row_ix: graph_row_ix,
+                selected_branch,
+                selected_lane,
+                related_to_selection,
+                lane_branch_name,
+            },
+        tags: tag_names,
+        refs: ref_items,
+        text:
+            HistoryRowText {
+                author,
+                summary,
+                when,
+                short_sha,
+            },
+        signed,
+        bisect_mark,
+        bisect_current,
+        remote_avatar_ready,
+        row_bg_overlay,
+        hover_bg_overlay,
+    } = spec;
     super::canvas::keyed_canvas(
         ("history_commit_row_canvas", row_id),
         move |bounds, window, _cx| {
@@ -1224,7 +1296,6 @@ pub(super) fn history_commit_row_canvas(
                 let commit_id = commit_id.clone();
                 let summary = summary.shared().clone();
                 let hover_author = author.shared().clone();
-                let hover_author_email = hover_author_email;
                 let hover_when = when.shared().clone();
                 let ref_items = Arc::clone(&ref_items);
                 let hitbox = hitbox.clone();

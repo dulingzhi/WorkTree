@@ -171,18 +171,16 @@ impl MainPaneView {
                 .child(message.clone())
                 .into_any_element(),
             Some(Loadable::Ready(image)) => {
-                match image.as_ref().and_then(|image| image.new.as_ref()) {
-                    Some(bytes) => gpui::img(std::sync::Arc::new(gpui::Image::from_bytes(
-                        format,
-                        bytes.clone(),
-                    )))
-                    .max_w_full()
-                    .max_h(scaled_px(320.0))
-                    .object_fit(gpui::ObjectFit::Contain)
-                    .debug_selector(|| "lfs_image_preview".to_string())
-                    .into_any_element(),
-                    None => return None,
-                }
+                let bytes = image.as_ref().and_then(|image| image.new.as_ref())?;
+                gpui::img(std::sync::Arc::new(gpui::Image::from_bytes(
+                    format,
+                    bytes.clone(),
+                )))
+                .max_w_full()
+                .max_h(scaled_px(320.0))
+                .object_fit(gpui::ObjectFit::Contain)
+                .debug_selector(|| "lfs_image_preview".to_string())
+                .into_any_element()
             }
             None => return None,
         };
