@@ -204,7 +204,6 @@ mod toast_host;
 mod tooltip;
 mod tooltip_host;
 mod update_check;
-mod user_survey;
 mod view_mode;
 mod word_diff;
 mod worktree_view;
@@ -2592,7 +2591,6 @@ impl WorkTreeView {
 
         view.drive_focused_mergetool_bootstrap();
         view.drive_submodule_diff_bootstrap();
-        // view.maybe_show_user_survey_on_startup(cx);
         view.maybe_check_for_updates_on_startup(cx);
 
         crate::app::sync_worktree_window_state(

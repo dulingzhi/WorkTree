@@ -10,9 +10,9 @@
 # misc.zh-CN.yml), diff-canvas blame tooltips, conflict-resolver fold
 # tooltips, markdown-preview availability strings, history panel chrome,
 # commit-message placeholder, repo open/init toasts, terminal preference
-# summaries and launcher errors, external-editor detection labels/errors, the
-# user-survey toast, Linux GUI/desktop-install diagnostics, platform open
-# errors, and the focused-diff window title.
+# summaries and launcher errors, external-editor detection labels/errors, Linux
+# GUI/desktop-install diagnostics, platform open errors, and the focused-diff
+# window title.
 misc:
   keep_delete:
     keep_and_close: "%{label} & close"
@@ -87,11 +87,6 @@ misc:
     custom_label: "Custom..."
     custom_detail: "Use a custom command or executable path"
     fallback_label: "External editor"
-  survey:
-    name: "WorkTree User Survey"
-    message: "Help shape WorkTree by taking a short user survey."
-    open: "Open Survey"
-    postpone: "Later"
   linux_gui:
     wsl_wayland_missing_xdg: "WAYLAND_DISPLAY is set in this WSL environment, but XDG_RUNTIME_DIR is missing. Start WorkTree from a WSLg-enabled terminal or ensure the WSLg session variables are exported."
     wsl_no_gui: "No GUI session detected in this WSL environment. WorkTree requires WSLg with WAYLAND_DISPLAY or DISPLAY set to open windows."

@@ -77,11 +77,6 @@ misc:
     custom_label: 自定义…
     custom_detail: 使用自定义命令或可执行文件路径
     fallback_label: 外部编辑器
-  survey:
-    name: WorkTree 用户问卷
-    message: "填写一份简短的用户问卷，帮助改进 WorkTree。"
-    open: 打开问卷
-    postpone: 稍后
   linux_gui:
     wsl_wayland_missing_xdg: "此 WSL 环境设置了 WAYLAND_DISPLAY，但缺少 XDG_RUNTIME_DIR。请从启用 WSLg 的终端启动 WorkTree，或确保导出了 WSLg 会话变量。"
     wsl_no_gui: "在此 WSL 环境中未检测到 GUI 会话。WorkTree 需要启用 WSLg 并设置 WAYLAND_DISPLAY 或 DISPLAY 才能打开窗口。"

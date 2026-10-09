@@ -4,10 +4,8 @@
 toast:
   clone_finished: "Clone finished: %{dest}"
   clone_aborted: "Clone aborted: %{dest}"
-  failed_save_reminder: "Failed to save %{name} reminder preference: %{err}"
   failed_open_link: "Failed to open link: %{err}"
   failed_save_preference: "Failed to save %{name} preference: %{err}"
-  failed_open_survey: "Failed to open %{name}: %{err}"
   abort: Abort
   aborting: Aborting…
   adding_submodule: Adding submodule…

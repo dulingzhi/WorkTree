@@ -26,33 +26,13 @@ struct ToastState {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum ToastAction {
-    OpenUrl {
-        url: String,
-        label: String,
-    },
-    OpenSurvey {
-        survey_id: String,
-        survey_name: String,
-        url: String,
-        label: String,
-    },
-    PostponeSurvey {
-        survey_id: String,
-        survey_name: String,
-        postpone_seconds: u64,
-        label: String,
-    },
+    OpenUrl { url: String, label: String },
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 enum ToastDismissBehavior {
     #[default]
     Remove,
-    PostponeSurvey {
-        survey_id: String,
-        survey_name: String,
-        postpone_seconds: u64,
-    },
 }
 
 pub(super) struct ToastHost {
@@ -312,44 +292,6 @@ impl ToastHost {
         );
     }
 
-    pub(super) fn push_survey_toast(
-        &mut self,
-        survey_id: &str,
-        survey_name: &str,
-        message: &str,
-        url: &str,
-        open_label: &str,
-        postpone_label: &str,
-        postpone_seconds: u64,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let _ = self.push_toast_inner(
-            components::ToastKind::Warning,
-            message.to_string(),
-            vec![
-                ToastAction::OpenSurvey {
-                    survey_id: survey_id.to_string(),
-                    survey_name: survey_name.to_string(),
-                    url: url.to_string(),
-                    label: open_label.to_string(),
-                },
-                ToastAction::PostponeSurvey {
-                    survey_id: survey_id.to_string(),
-                    survey_name: survey_name.to_string(),
-                    postpone_seconds,
-                    label: postpone_label.to_string(),
-                },
-            ],
-            ToastDismissBehavior::PostponeSurvey {
-                survey_id: survey_id.to_string(),
-                survey_name: survey_name.to_string(),
-                postpone_seconds,
-            },
-            None,
-            cx,
-        );
-    }
-
     fn push_toast_inner(
         &mut self,
         kind: components::ToastKind,
@@ -452,27 +394,6 @@ impl ToastHost {
     ) {
         match behavior {
             ToastDismissBehavior::Remove => {}
-            ToastDismissBehavior::PostponeSurvey {
-                survey_id,
-                survey_name,
-                postpone_seconds,
-            } => {
-                if let Err(err) = worktree_state::session::persist_survey_prompt_postponed(
-                    &survey_id,
-                    postpone_seconds,
-                ) {
-                    self.push_toast(
-                        components::ToastKind::Error,
-                        crate::i18n::t!(
-                            "toast.failed_save_reminder",
-                            name = survey_name,
-                            err = err
-                        )
-                        .to_string(),
-                        cx,
-                    );
-                }
-            }
         }
         self.remove_toast(id, cx);
     }
@@ -491,52 +412,6 @@ impl ToastHost {
                     );
                 }
             },
-            ToastAction::OpenSurvey {
-                survey_id,
-                survey_name,
-                url,
-                ..
-            } => {
-                if let Err(err) = worktree_state::session::persist_survey_prompt_opened(&survey_id)
-                {
-                    self.push_toast(
-                        components::ToastKind::Error,
-                        crate::i18n::t!(
-                            "toast.failed_save_preference",
-                            name = survey_name,
-                            err = err
-                        )
-                        .to_string(),
-                        cx,
-                    );
-                }
-                let open_result = super::platform_open::open_url(&url);
-                self.remove_toast(id, cx);
-                if let Err(err) = open_result {
-                    self.push_toast(
-                        components::ToastKind::Error,
-                        crate::i18n::t!("toast.failed_open_survey", name = survey_name, err = err)
-                            .to_string(),
-                        cx,
-                    );
-                }
-            }
-            ToastAction::PostponeSurvey {
-                survey_id,
-                survey_name,
-                postpone_seconds,
-                ..
-            } => {
-                self.dismiss_toast(
-                    id,
-                    ToastDismissBehavior::PostponeSurvey {
-                        survey_id,
-                        survey_name,
-                        postpone_seconds,
-                    },
-                    cx,
-                );
-            }
         }
     }
 
@@ -873,17 +748,10 @@ impl Render for ToastHost {
                         .gap_2()
                         .children(t.actions.iter().enumerate().map(|(ix, action)| {
                             let label = match action {
-                                ToastAction::OpenUrl { label, .. }
-                                | ToastAction::OpenSurvey { label, .. }
-                                | ToastAction::PostponeSurvey { label, .. } => label.clone(),
+                                ToastAction::OpenUrl { label, .. } => label.clone(),
                             };
                             let style = match action {
-                                ToastAction::PostponeSurvey { .. } => {
-                                    components::ButtonStyle::Transparent
-                                }
-                                ToastAction::OpenUrl { .. } | ToastAction::OpenSurvey { .. } => {
-                                    components::ButtonStyle::Outlined
-                                }
+                                ToastAction::OpenUrl { .. } => components::ButtonStyle::Outlined,
                             };
                             let action = action.clone();
                             components::Button::new(
@@ -1301,14 +1169,9 @@ mod tests {
         let host = cx.update(|app| {
             app.new(|cx| {
                 let mut host = ToastHost::new(light, gpui::WeakEntity::new_invalid());
-                host.push_survey_toast(
-                    "survey-id",
-                    "Survey",
-                    "Help shape WorkTree by taking a short user survey.",
-                    "https://example.com",
-                    "Open Survey",
-                    "Later",
-                    60,
+                host.push_toast(
+                    components::ToastKind::Warning,
+                    "Help shape WorkTree by taking a short user survey.".to_string(),
                     cx,
                 );
                 host
