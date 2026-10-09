@@ -77,12 +77,7 @@ jobs:
           libxkbcommon-x11-dev
     - name: Clippy (core + state + git backend)
       run: cargo clippy -p worktree-core -p worktree-state -p worktree-git-gix -- -D warnings
-    # The UI crate is clippy-clean locally, but it has never been gated on Linux
-    # CI. This step is a baseline probe: `continue-on-error` keeps a
-    # platform-specific finding from reddening the job on the first run. If it
-    # passes, drop the flag so the step gates like the others.
-    - name: Clippy (GPUI UI crate -- baseline probe)
-      continue-on-error: true
+    - name: Clippy (GPUI UI crate)
       run: cargo clippy -p worktree-ui-gpui -- -D warnings
     - name: Clippy (app — headless)
       run: cargo clippy -p worktree $APP_FEATURES -- -D warnings
