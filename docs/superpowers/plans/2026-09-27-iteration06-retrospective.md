@@ -22,7 +22,7 @@
 
 ## 3. 关键决策与结论
 
-- **P6-D1（自托管 runner）**：决定用 GitHub Actions hosted runner（仓库已 public，免费），不投入自托管。代价：`real_repo/*` 组在 hosted runner 按缺失跳过，命中率预算需专用 runner + 真仓库才严格评估。
+- **P6-D1（自托管 runner）**：决定用 GitHub Actions hosted runner（仓库已 public，免费），不投入自托管。代价：`real_repo/*` 组在 hosted runner 按缺失跳过，命中率预算需专用 runner + 真仓库才严格评估。**2026-10-09 已落实到配置**：`perf.yml` 删掉 `vars.PERF_RUNNER` 逃逸口与只在自托管上跑的 full suite / idle / app_launch 三个 step，`release-manual-main.yml` 删掉 `perf_comparison` job（其 `if: vars.PERF_RUNNER != ''` 恒假，从未实跑）。两个 workflow 现在只写死 `ubuntu-22.04`。
 - **P6-D3（T4 行为边界）**：不跳过探测，改为「离线程 + 乐观回填」。唯一真同步探测 `git --version` 后台化，主视图零信息损失。
 - **P6-D4（T5 默认开关 + 磁盘上限）**：默认开（即现状，无 enable 判定可改）+ 256 MiB 全局上限 + 32 MiB 每仓 + 7 天 TTL + 真 LRU + 设置页可清。**开关不做**（加开关=新增状态+持久化，且会让命中率指标因「用户关了」读 0%）。
 - **T4 ④**：审计后归档。09-24 审计已覆盖全部启动期同步重活，唯一瓶颈已离线程；其余全异步，且冷启动与仓库数无关。额外优化属高成本、收益不可证伪的 speculative 工作。
@@ -43,7 +43,7 @@
 
 ## 5. 遗留与风险
 
-1. **严格门控评估依赖专用自托管 runner**（P6-D1）。hosted runner 不 checkout 巨型仓库，`real_repo/*` 组按缺失跳过；命中率预算在专用 runner 上观测分布后才可收紧阈值（当前为盈亏平衡硬下限，非目标值）。
+1. **严格门控覆盖不全**（P6-D1，已闭合为「接受」而非待办）。hosted runner 不 checkout 巨型仓库也没有合成器，`real_repo/*` / `app_launch/*` / `idle/*` 三组预算按缺失跳过；命中率预算因此保留盈亏平衡硬下限，没有收紧后的目标值。2026-10-09 已把对应的自托管分支从 workflow 删除——不再存在「等 runner 就绪」这一说，要覆盖这三组只能靠本地测量或将来改主意。
 2. **本机 Windows 跑 bench 环境坑**：criterion 把位置参数当 Regex → 所有 target 被调用 → `bench_git_ops` spawn git 辅助进程触发 os error 231（Stdio::piped stdin 已知 Windows 坑）整包 panic。修法：传 `--exact <完整 bench id>` 隔离跑单 bench。release 档首次编译偶发 `target/release` 指纹文件「拒绝访问 (os error 5)」，重试即过。
 3. **T4 ④ / T6 ② 深层优化**：已审计归档 / 确认满足，不立项。
 

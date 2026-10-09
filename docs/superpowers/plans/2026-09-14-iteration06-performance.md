@@ -146,7 +146,7 @@ verbatim 前缀差异。仍然对真正落在 workdir 之外的路径返回 `Non
 
 | # | 决策 | 触发时机 |
 |---|---|---|
-| **P6-D1** | T0 结论为 C（无自持 runner）时：接受噪声门控 / 只发布不门控 / 投入自持 runner | T0 完成后立即 |
+| **P6-D1** | T0 结论为 C（无自持 runner）时：接受噪声门控 / 只发布不门控 / 投入自持 runner | **2026-09-22 已闭合**：只用 GitHub hosted runner，不投入自持 runner（结论见「第 2 件」末尾与 Wave 2 总状态；2026-10-09 已把 workflow 里的自托管逃逸口全部删除） |
 | **P6-D2** | 真实靶子仓库选谁（体积 vs 可获得性 vs 代表性） | T1 开工前 |
 | **P6-D3** | T4 允许的行为变更边界——"跳过冷启动探测"会改变启动时的信息完整度 | **2026-09-23 已闭合**：不跳过，改「离线程 + 乐观回填」（见下） |
 | **P6-D4** | T5 缓存默认开关与磁盘上限（local-first 原则：默认开还是默认关） | **2026-09-23 已闭合**：默认开 + 256 MiB + 7 天 TTL + 设置页可清（见下） |
@@ -226,7 +226,9 @@ README.md / README.zh-CN.md 均新增 `## Performance` / `## 性能` 节，4 场
 - 已修正：原 `merge_ref` 写成 `origin/stable` 导致 harness 解析失败 panic；改裸分支名 `stable`，并在 `source.git` 里建本地分支。
 - 本地 Windows 跑 bench 必须用 native 路径：`WORKTREE_PERF_REAL_REPO_ROOT="$(pwd -W)/tmp/perf-real-repo/rust"`，Git-Bash 的 `/mnt/d/...` 虚拟路径 Rust bench 二进制不识别。
 
-### 第 2 件：release 性能对比（2026-09-21 已接线，未经 CI 实跑）
+### 第 2 件：release 性能对比（2026-09-21 接线 → 2026-10-09 因 P6-D1 删除）
+
+> **2026-10-09 更新：本 job 已从 `release-manual-main.yml` 删除。** P6-D1 闭合为「只用 GitHub hosted runner」，`vars.PERF_RUNNER` 永远不会指向自托管 runner，因此该 job 的 `if: vars.PERF_RUNNER != ''` 恒假——它从未实跑，也不会再跑。与其留一段永不触发的 YAML，不如删除并在原地留注释说明缘由。`scripts/archive-perf-run.sh` 与 `scripts/compare-perf-runs.sh` **保留**，仍可用于本地 / 手工取基线对比。以下为原始接线记录，存档备查。
 
 `release-manual-main.yml` 新增 `perf_comparison` job，把 `scripts/compare-perf-runs.sh` 接进发布流程：
 
@@ -301,14 +303,15 @@ Wave 2 全部未开工：T4 冷启动四连、T5 history cache 纵深、T6 大�
 | 路径 | runs-on | 跑的 bench | 报告模式 | 门禁 |
 |---|---|---|---|---|
 | `performance-budgets`（PR subset） | ubuntu-22.04 | 合成子集 | `--skip-missing`（轻量信号） | 容忍，不阻断 |
-| `performance-budgets-full` / 未配 PERF_RUNNER | ubuntu-22.04（免费） | 合成子集（`perf-bench-list.sh` 的 44 个） | `--strict --skip-missing --skip-prefix real_repo/` | **真严格，但只针对本 runner 实际跑到的 44 个合成 bench；其余（real_repo/app_launch/idle 及未纳入 bench-list 的合成预算）按缺失跳过** |
-| `performance-budgets-full` / 配了 PERF_RUNNER+PERF_REAL_REPO_ROOT | 专用 runner | 全量含 real_repo | `--strict` | **真严格，全预算** |
+| `performance-budgets-full` | ubuntu-22.04（免费） | 合成子集（`perf-bench-list.sh` 的 44 个） | `--strict --skip-missing --skip-prefix real_repo/` | **真严格，但只针对本 runner 实际跑到的 44 个合成 bench；其余（real_repo/app_launch/idle 及未纳入 bench-list 的合成预算）按缺失跳过** |
+
+> **2026-10-09 变更**：原表第三行「配了 PERF_RUNNER + PERF_REAL_REPO_ROOT → 专用 runner 跑全量」这条路径已**删除**。P6-D1 闭合为不起自托管 runner，`perf.yml` 里的 `PERF_RUNNER` 逃逸口和只在自托管上跑的 full suite / idle / app_launch 三个 step 一并移除，现在只剩上面两行。
 
 ### 结论更新（推翻原「B 极端版 / 门控从未生效」）
 
 - 「strict 从未生效」**已不成立**：免费 hosted runner 上，本 runner 实际跑到的 44 个合成预算的严格门控现在每周真实跑（超阈值会真 `exit 2`）。
-- `PERF_RUNNER` / `PERF_REAL_REPO_ROOT` 两个仓库变量**仍可配可不配**：不配 → 仅 44 个合成 bench 真严格 + 其余按缺失跳过；配了 → real_repo 组也纳入严格门控（需要专用 runner 能 checkout 巨型仓库）。
-- **残留风险**：hosted 共享 runner 数字有噪声，44 个合成预算的夜间严格门控偶发误报；`real_repo/*` 组（对外的「性能可证明」核心数字）仍只在专用 runner 上才有。要消除这两项，仍需接入自托管 perf runner 并配置 `PERF_REAL_REPO_ROOT`——但那已从「门控前提」降级为「数字精度增强」。
+- ~~`PERF_RUNNER` / `PERF_REAL_REPO_ROOT` 两个仓库变量仍可配可不配~~ **2026-10-09 作废**：P6-D1 闭合为不起自托管 runner，这两个变量的整套逃逸路径已从 `perf.yml` 删除。现在只有一行路径：44 个合成 bench 真严格 + 其余按缺失跳过。
+- **残留风险**：hosted 共享 runner 数字有噪声，44 个合成预算的夜间严格门控偶发误报；`real_repo/*` 组（对外的「性能可证明」核心数字）在 hosted runner 上根本没有数据。~~要消除这两项，仍需接入自托管 perf runner~~ **2026-10-09 改判**：P6-D1 闭合为不起自托管 runner，这两项从此是**明确接受的上限**，不再挂在待办上。真要消除只能靠本地测量或将来推翻 P6-D1。
 - **2026-09-22 修正（follow-up commit）**：初版 hosted 回退用了 `--strict --skip-prefix real_repo/`（漏了 `--skip-missing`），会使 186 条未被 44 bench 覆盖的非 real_repo 预算全部 Alert → 门控假红。已改为 `--strict --skip-missing --skip-prefix real_repo/`。本地空 criterion 根验证：旧参数 `exit=2` / 977 行 ALERT；新参数 `exit=0` / 977 行 SKIP。CI 尚未重跑（hosted runner）。
 - 验证：`cargo test -p worktree-ui-gpui --bin perf_budget_report` 单测通过（`--skip-prefix` 解析 + 既有预算评估用例）；YAML 结构与既有条件式对齐。
 
@@ -516,4 +519,8 @@ T6 档位基准（纯新增、零冲突、解锁测量）→ T4（用户体感�
 
 ### 迭代 06 Wave 2 总状态
 
-T4（①②③ 落地 / ④ 归档）、T5（扩展域 + 护栏 + Storage 设置页 + 命中率预算，全完成）、T6（档位基准 + 虚拟化 + 增量解码，全完成）、T7（早前完成）。Wave 2 实质性收口。唯一结构性遗留：**严格门控仍依赖专用自托管 runner**（`real_repo/*` 组在 hosted runner 按缺失跳过，命中率预算需专用 runner + 真仓库才评估）——见 P6-D1。
+T4（①②③ 落地 / ④ 归档）、T5（扩展域 + 护栏 + Storage 设置页 + 命中率预算，全完成）、T6（档位基准 + 虚拟化 + 增量解码，全完成）、T7（早前完成）。Wave 2 实质性收口。
+
+**结构性遗留一项，但 P6-D1 已闭合为「接受」而非「待办」**：`real_repo/*`、`app_launch/*`、`idle/*` 三组预算在 hosted runner 上永远拿不到数据（不 checkout 巨型仓库，也没有合成器），按缺失跳过；命中率预算因此只有盈亏平衡硬下限、没有收紧后的目标值。这不是在等 runner，而是明确接受的上限。
+
+2026-10-09 落实：`perf.yml` 的 `vars.PERF_RUNNER` 逃逸口（含 full suite / idle / app_launch 三个只在自托管上跑的 step）与 `release-manual-main.yml` 的 `perf_comparison` job 全部删除，workflow 配置与「只用 GitHub hosted runner」的结论一致。CI 上真实生效的仍然只有 synthesis 那 44 个 bench 的严格门控。

@@ -91,7 +91,7 @@ pub struct StackMetadata {
 ## 10. 与 P5 / P6 边界
 
 - P5 已于 2026-09-22 取消，原「撞 P5 热文件」前提失效；`Msg` / `Effect` / reducer / UI 现在即可开工。沿用迭代 06 已定纪律：**不加 `GitRepository*` trait 的 required 方法**，用 default 方法 + state 层复用（同目录 diff T-B）。
-- 命中率阈值收紧（P6-D1）与本特性正交，独立推进（见 §11）。P6-D1 已定：用 GitHub Actions hosted runner、不起自托管；`real_repo/*` 命中率预算在 hosted runner 按缺失跳过，收紧需日后有真仓库数据才验证。
+- 命中率阈值收紧（P6-D1）与本特性正交，独立推进（见 §11）。P6-D1 已定：用 GitHub Actions hosted runner、不起自托管；`real_repo/*` 命中率预算在 hosted runner 按缺失跳过，收紧需日后有真仓库数据才验证。2026-10-09 已把 workflow 里的自托管逃逸口删除，这条结论现在在配置层面也成立。
 
 ## 11. 关联：命中率预算阈值收紧（P6-D1，独立项）
 
@@ -104,7 +104,7 @@ pub struct StackMetadata {
 | `hit_rate.reflog` | 10.0 | 二次打开走磁盘 |
 | `hit_rate.blame` | 30.0 | 内容寻址，near-always |
 
-**卡点**：hosted CI 整段跳过 `real_repo/*`，这些预算在 CI 上从不求值。收紧阈值后没有任何真仓库数据可验证，必须自托管 runner（P6-D1）。在 runner 就绪前，改数值 = 盲改，不提交。
+**卡点**：hosted CI 整段跳过 `real_repo/*`，这些预算在 CI 上从不求值；收紧阈值后没有任何真仓库数据可验证。P6-D1 已闭合为「不起自托管 runner」，且 2026-10-09 已把 `perf.yml` 的自托管分支删除，所以这个卡点**不会再被解除**。结论：改数值 = 盲改，不提交；这些阈值维持现状，直到哪天有真仓库数据（本地测量或改主意起 runner）才动。
 
 ## 12. 验证（沿用迭代 06 四腿基线）
 

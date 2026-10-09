@@ -98,10 +98,11 @@ README 的第一句话是「The fastest open-source Git GUI」「在 Chromium �
 **目标**：把「最快」从口号变成有公开数字、有 CI 守护的护城河。
 
 1. **打通 strict 门控 + 数字出仓** `M`（**不是新建基准，是让已有基建生效**）
-   - **P0 前置核查**：确认 CI 变量 `PERF_RUNNER` / `PERF_REAL_REPO_ROOT` 是否已配置。若未配置，strict 门控从未真正运行过——这是本迭代**第一个动作**，且结论可能直接改写后续排期。
+   - **P0 前置核查（2026-09-22 已由 P6-D1 回答，2026-10-09 已落实到配置）**：确认 CI 变量 `PERF_RUNNER` / `PERF_REAL_REPO_ROOT` 是否已配置。→ 结论是**不配置**：用 GitHub hosted runner，不起自托管；`perf.yml` 里的 `PERF_RUNNER` 逃逸口已删除。因此「strict 门控从未真正运行过」这句只对 `real_repo/*` / `app_launch/*` / `idle/*` 三组成立，synthesis 那 44 个 bench 的严格门控是真实生效的，本条**不再**是前置动作。
    - 为真实仓库档位固定"靶子快照"（一个公开超大仓库的稳定快照 + 版本化 manifest），消除"每次测的不是同一个仓库"的可比性问题。
    - 把 `perf.yml` 从"单一 `continue-on-error` job"拆成两层：PR 触发的轻量子集（门控）+ 周调度全量（告警），避免 PR 被 120 分钟全量阻塞。
    - 输出：README 实测表（档位 × 操作矩阵）+ 每个 release 一份 `compare-perf-runs` 对比。
+     - ⚠️ **2026-10-09 变更**：「每个 release 一份对比」这条交付路径已随 `release-manual-main.yml` 的 `perf_comparison` job 一并删除（该 job 只在自托管 runner 上触发，P6-D1 决定不起自托管 ⇒ 恒不执行）。脚本仍在，但若要恢复这条出仓路径，需要重新设计一个在 hosted runner 上跑得起来（且不需要合成器）的归档 job。
 2. **冷启动专项** `M`
    移植 C# 版四连优化：跳过冷启动探测、重活离 UI 线程、恢复 tab 不实例化全部仓库。目标值**先由 `perf-app-launch` 测出现状基线再定**，不预设数字。
 3. **history cache 纵深** `M`
