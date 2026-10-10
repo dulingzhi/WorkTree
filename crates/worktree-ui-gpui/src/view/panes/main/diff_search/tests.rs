@@ -449,7 +449,10 @@ fn diff_search_file_slice_general_collector_does_not_materialize_large_rows() {
     let payload_bytes = FILE_PREVIEW_SEARCH_SCAN_CHUNK_BYTES * 128;
     let mut source = Vec::with_capacity(payload_bytes);
     source.extend_from_slice(b"needle ");
-    source.extend(std::iter::repeat(b'x').take(FILE_PREVIEW_SEARCH_SCAN_CHUNK_BYTES));
+    source.extend(std::iter::repeat_n(
+        b'x',
+        FILE_PREVIEW_SEARCH_SCAN_CHUNK_BYTES,
+    ));
     source.push(0xff);
     source.resize(payload_bytes, b'x');
     file.write_all(source.as_slice()).expect("write temp file");
@@ -513,7 +516,10 @@ fn diff_search_file_slice_case_sensitive_collector_does_not_materialize_large_ro
     let payload_bytes = FILE_PREVIEW_SEARCH_SCAN_CHUNK_BYTES * 128;
     let mut source = Vec::with_capacity(payload_bytes);
     source.extend_from_slice(b"Needle ");
-    source.extend(std::iter::repeat(b'x').take(FILE_PREVIEW_SEARCH_SCAN_CHUNK_BYTES));
+    source.extend(std::iter::repeat_n(
+        b'x',
+        FILE_PREVIEW_SEARCH_SCAN_CHUNK_BYTES,
+    ));
     source.push(0xff);
     source.resize(payload_bytes, b'x');
     file.write_all(source.as_slice()).expect("write temp file");

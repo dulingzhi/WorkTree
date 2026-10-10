@@ -120,7 +120,7 @@ fn agent_sessions_stop_ends_the_session(cx: &mut gpui::TestAppContext) {
     click(cx, "agent_stop_session");
 
     let session_gone =
-        cx.update(|_window, app| view.read(app).agent_sessions.get(&repo_id).is_none());
+        cx.update(|_window, app| !view.read(app).agent_sessions.contains_key(&repo_id));
     assert!(
         session_gone,
         "stopping ends the session record along with the terminal session"

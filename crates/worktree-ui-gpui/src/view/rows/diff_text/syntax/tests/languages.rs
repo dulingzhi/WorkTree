@@ -188,7 +188,6 @@ fn nix_apostrophe_identifiers_do_not_open_a_string() {
 /// update operator, so Hcl's `//` line comment would grey out the rest of the
 /// line. Nothing else guards it -- every other Nix test takes the tree-sitter
 /// path -- so folding Nix back into the `Hcl | Php` arm would pass the suite.
-
 /// The reason the Nix arm exists instead of reusing the Hcl one: `//` is Nix's
 /// update operator, so Hcl's `//` line comment would grey out the rest of the
 /// line. Nothing else guards it -- every other Nix test takes the tree-sitter
@@ -223,7 +222,6 @@ fn nix_update_operator_is_not_a_line_comment() {
 
 /// Both new keyword tables, which nothing else reaches: every other Nix and
 /// Jinja test goes through `prepare_test_document`, i.e. tree-sitter.
-
 /// Both new keyword tables, which nothing else reaches: every other Nix and
 /// Jinja test goes through `prepare_test_document`, i.e. tree-sitter.
 #[test]
@@ -272,7 +270,6 @@ fn nix_and_jinja_heuristic_keyword_tables_are_covered() {
 
 /// Templates are mostly prose, and an unconditional single-quote rule painted
 /// the rest of the line from the first `It's`.
-
 /// Pins a deliberate limitation rather than an achievement.
 ///
 /// The heuristic tokenizer is per-line and has no notion of which SFC
@@ -368,7 +365,6 @@ fn vue_plain_binding_directives_produce_no_injections() {
 
 /// The other half of the guard above: skipping plain bindings must not cost
 /// highlighting for the expressions the injection actually exists to serve.
-
 /// The other half of the guard above: skipping plain bindings must not cost
 /// highlighting for the expressions the injection actually exists to serve.
 #[test]
@@ -396,7 +392,6 @@ fn vue_expression_directives_still_inject_typescript() {
 /// engine, so the outer capture wins outright. That was invisible while
 /// every interpolation was injected -- the injection carved the body out --
 /// and became visible the moment plain interpolations stopped injecting.
-
 /// Capturing the whole `(interpolation)` node paints the expression inside
 /// it, not just the braces. Upstream relies on a companion `(raw_text) @none`
 /// rule to punch the body back out, but `none` emits no token in this
@@ -427,7 +422,6 @@ fn vue_plain_interpolation_does_not_paint_its_expression_as_a_sigil() {
 /// through both the @variable override and the injection, landing on the
 /// html `(attribute_value) @string` rule -- the exact miscolouring the
 /// override exists to prevent.
-
 /// The Vue grammar allows `v-if=ok` as well as `v-if="ok"`. Only the quoted
 /// form has a `quoted_attribute_value`, so the unquoted one used to fall
 /// through both the @variable override and the injection, landing on the
@@ -454,7 +448,6 @@ fn vue_unquoted_directive_value_is_not_coloured_as_a_string() {
 /// duplicate by accident, but live.rs keeps both layers and interleaves
 /// their captures at equal depth, so the editor colours the block
 /// arbitrarily. The `lang` veto on the `type=` rules keeps it to one.
-
 /// `<script type="module" lang="ts">` matches a `type=` base rule and a
 /// `lang=` vue rule over the same `raw_text`. prepared.rs tolerates the
 /// duplicate by accident, but live.rs keeps both layers and interleaves
@@ -509,7 +502,6 @@ fn vue_script_with_both_type_and_lang_injects_exactly_one_language() {
 /// those had to stop injecting unconditionally too. Inline `style=` was both
 /// the worst offender and actively wrong (the CSS grammar reads an attribute
 /// body as a stylesheet, making `color` a type selector), so it was dropped.
-
 /// The directive guard does not cover the inherited attribute rules, so
 /// those had to stop injecting unconditionally too. Inline `style=` was both
 /// the worst offender and actively wrong (the CSS grammar reads an attribute
@@ -542,7 +534,6 @@ fn vue_static_inline_styles_do_not_flood_the_injection_cache() {
 
 /// A skipped injection still has to leave the value coloured -- that is the
 /// premise the skip rests on.
-
 /// A skipped injection still has to leave the value coloured -- that is the
 /// premise the skip rests on.
 #[test]
@@ -604,7 +595,6 @@ fn vue_injection_targets_resolve_to_working_grammars() {
 /// compiled query, so a query edit that moved TypeScript behind an
 /// `@injection.language` capture would silently stop warming it and put the
 /// stall back. Assert it stays reachable the way the warm-up can see it.
-
 /// The point of `request_highlight_spec_warmup` is to keep the expensive
 /// specs off the render path, and the expensive one a `.vue` file reaches is
 /// TypeScript (~86ms cold to compile, against Vue's own ~3ms). The warm-up
@@ -651,7 +641,6 @@ fn vue_spec_warmup_reaches_typescript_through_a_set_directive() {
 /// The warm-up runs on its own thread and races the render path by design.
 /// This is a smoke test for the plumbing: repeated requests must be cheap and
 /// must not deadlock against `OnceLock::get_or_init` on this thread.
-
 /// `lang="…"` values are read out of the document at runtime, so unlike the
 /// `#set!` targets above they cannot be enumerated from the query. Drive
 /// them end to end instead: build a real SFC for each value and check the
@@ -751,7 +740,6 @@ fn vue_lang_attribute_values_highlight_their_block() {
 /// by `#not-match? "\\slang\\s*="`, so a `lang` the vue rules do not handle
 /// used to lose the fallback *and* match nothing, leaving the block with no
 /// highlighting whatsoever.
-
 /// The failure mode this guards is specific: the html base rules are vetoed
 /// by `#not-match? "\\slang\\s*="`, so a `lang` the vue rules do not handle
 /// used to lose the fallback *and* match nothing, leaving the block with no
@@ -783,7 +771,6 @@ fn vue_unknown_lang_attribute_does_not_silently_disable_highlighting() {
 /// The tree-sitter parser is a thread-local reused across languages, with a
 /// fast path that skips `set_language`. Adding a grammar that is loaded a
 /// different way (vendored, not from crates.io) should not disturb that.
-
 /// The tree-sitter parser is a thread-local reused across languages, with a
 /// fast path that skips `set_language`. Adding a grammar that is loaded a
 /// different way (vendored, not from crates.io) should not disturb that.
@@ -847,7 +834,6 @@ fn vue_highlights_query_embeds_the_html_base_verbatim() {
 /// drops injections. The Vue injection query has the most patterns of any in
 /// the repo and anchors several on very common template nodes, which makes
 /// it the one most likely to hit the cap.
-
 /// `configure_query_cursor` caps in-progress matches at TS_QUERY_MATCH_LIMIT
 /// and nothing consults `did_exceed_match_limit`, so an overflow silently
 /// drops injections. The Vue injection query has the most patterns of any in
@@ -986,30 +972,6 @@ fn javascript_highlight_spec_compiles_injection_query() {
         spec.injection_query.is_some(),
         "JavaScript should compile and retain its injections.scm"
     );
-}
-
-fn capture_name_is_intentionally_ignored(name: &str) -> bool {
-    name == "none"
-        || name == "clean"
-        || name == "assignvalue"
-        || name == "embedded"
-        || name == "error"
-        || name == "nested"
-        || name == "spell"
-        || name == "injection.content"
-        || name.starts_with("text.")
-        || name.starts_with('_')
-}
-
-fn assert_capture_names_are_supported(language: tree_sitter::Language, source: &str) {
-    let query = tree_sitter::Query::new(&language, source).expect("query should compile");
-    for name in query.capture_names() {
-        assert!(
-            syntax_kind_from_capture_name(name).is_some()
-                || capture_name_is_intentionally_ignored(name),
-            "unsupported capture name in vendored asset: {name}"
-        );
-    }
 }
 
 #[test]
@@ -2400,73 +2362,6 @@ fn yaml_auto_single_line_highlights_block_scalar_indicators_and_sequence_mapping
     );
 }
 
-/// Every `DiffSyntaxLanguage` variant, listed by hand.
-///
-/// Deliberately not derived from the enum: the point is that adding a variant
-/// breaks a test until someone states what the new language does, rather than
-/// being silently swept into whatever the loop asserts.
-fn all_supported_languages() -> Vec<DiffSyntaxLanguage> {
-    Vec::from([
-        DiffSyntaxLanguage::Markdown,
-        DiffSyntaxLanguage::MarkdownInline,
-        DiffSyntaxLanguage::Html,
-        DiffSyntaxLanguage::Vue,
-        DiffSyntaxLanguage::Svelte,
-        DiffSyntaxLanguage::Jinja,
-        DiffSyntaxLanguage::Css,
-        DiffSyntaxLanguage::Hcl,
-        DiffSyntaxLanguage::Bicep,
-        DiffSyntaxLanguage::Lua,
-        DiffSyntaxLanguage::Makefile,
-        DiffSyntaxLanguage::Nix,
-        DiffSyntaxLanguage::Kotlin,
-        DiffSyntaxLanguage::Zig,
-        DiffSyntaxLanguage::Groovy,
-        DiffSyntaxLanguage::Clojure,
-        DiffSyntaxLanguage::Elixir,
-        DiffSyntaxLanguage::Erlang,
-        DiffSyntaxLanguage::Haskell,
-        DiffSyntaxLanguage::Julia,
-        DiffSyntaxLanguage::OCaml,
-        DiffSyntaxLanguage::OCamlInterface,
-        DiffSyntaxLanguage::Solidity,
-        DiffSyntaxLanguage::Assembly,
-        DiffSyntaxLanguage::Rust,
-        DiffSyntaxLanguage::Python,
-        DiffSyntaxLanguage::JavaScript,
-        DiffSyntaxLanguage::Jsdoc,
-        DiffSyntaxLanguage::TypeScript,
-        DiffSyntaxLanguage::Tsx,
-        DiffSyntaxLanguage::Regex,
-        DiffSyntaxLanguage::Go,
-        DiffSyntaxLanguage::GoMod,
-        DiffSyntaxLanguage::GoWork,
-        DiffSyntaxLanguage::C,
-        DiffSyntaxLanguage::Cpp,
-        DiffSyntaxLanguage::ObjectiveC,
-        DiffSyntaxLanguage::CSharp,
-        DiffSyntaxLanguage::FSharp,
-        DiffSyntaxLanguage::VisualBasic,
-        DiffSyntaxLanguage::Java,
-        DiffSyntaxLanguage::Php,
-        DiffSyntaxLanguage::Ruby,
-        DiffSyntaxLanguage::PowerShell,
-        DiffSyntaxLanguage::Swift,
-        DiffSyntaxLanguage::R,
-        DiffSyntaxLanguage::Dart,
-        DiffSyntaxLanguage::Scala,
-        DiffSyntaxLanguage::Perl,
-        DiffSyntaxLanguage::Json,
-        DiffSyntaxLanguage::Toml,
-        DiffSyntaxLanguage::Yaml,
-        DiffSyntaxLanguage::Sql,
-        DiffSyntaxLanguage::Diff,
-        DiffSyntaxLanguage::GitCommit,
-        DiffSyntaxLanguage::Bash,
-        DiffSyntaxLanguage::Xml,
-    ])
-}
-
 /// The reason queries/ocaml_highlights.scm exists rather than a reference to
 /// `tree_sitter_ocaml::HIGHLIGHTS_QUERY`: upstream names `(shebang)`, which the
 /// interface grammar has no rule for, and one unknown node type fails the whole
@@ -2493,19 +2388,6 @@ fn ocaml_query_serves_both_grammars_and_upstream_does_not() {
 }
 
 // ---- Groovy ---------------------------------------------------------------
-
-const GROOVY_FIXTURE: &[&str] = &[
-    /*  0 */ "// Build config.",
-    /*  1 */ "plugins {",
-    /*  2 */ "    id 'java'",
-    /*  3 */ "}",
-    /*  4 */ "",
-    /*  5 */ "class Demo {",
-    /*  6 */ "    static int run(int x) {",
-    /*  7 */ "        return x + 1",
-    /*  8 */ "    }",
-    /*  9 */ "}",
-];
 
 /// The quoting literals span the whole quoted form, so capturing the *node*
 /// paints `'(alpha beta)` end to end. Upstream captures the one-character
@@ -2534,7 +2416,6 @@ fn clojure_quoted_form_paints_only_its_marker() {
 /// query and adds to it. A grammar bump that changes upstream leaves the copy
 /// stale and silently diverging, which is the one failure mode a compile check
 /// cannot see.
-
 /// queries/clojure_highlights.scm opens with a verbatim copy of the upstream
 /// query and adds to it. A grammar bump that changes upstream leaves the copy
 /// stale and silently diverging, which is the one failure mode a compile check
@@ -2559,20 +2440,6 @@ fn clojure_highlights_query_embeds_the_upstream_base_verbatim() {
 
 // ---- Solidity -------------------------------------------------------------
 
-const SOLIDITY_FIXTURE: &[&str] = &[
-    /*  0 */ "// SPDX-License-Identifier: MIT",
-    /*  1 */ "pragma solidity ^0.8.0;",
-    /*  2 */ "",
-    /*  3 */ "contract Demo {",
-    /*  4 */ "    uint256 public total;",
-    /*  5 */ "",
-    /*  6 */ "    function add(uint256 x) public returns (uint256) {",
-    /*  7 */ "        total += x;",
-    /*  8 */ "        return total;",
-    /*  9 */ "    }",
-    /* 10 */ "}",
-];
-
 /// If a grammar bump ships a query that compiles as-is, the vendored copy and
 /// this test can both go.
 #[test]
@@ -2589,15 +2456,6 @@ fn solidity_upstream_query_still_needs_the_vendored_fix() {
 }
 
 // ---- Assembly -------------------------------------------------------------
-
-const ASSEMBLY_FIXTURE: &[&str] = &[
-    /*  0 */ "section .text",
-    /*  1 */ "global run",
-    /*  2 */ "run:",
-    /*  3 */ "    mov eax, 1 ; seed",
-    /*  4 */ "    add eax, edi",
-    /*  5 */ "    ret",
-];
 
 /// A documented limitation, not a bug in the wiring: tree-sitter-asm only
 /// admits a comment after an instruction, so a comment on its own line -- which
@@ -2644,7 +2502,6 @@ fn assembly_standalone_comment_lines_fall_back_to_the_heuristic() {
 /// directive reaches `is_keyword` as its bare tail, so a table spelling its
 /// entries `".text"` and `".globl"` looks complete and matches nothing.
 /// Nothing else in the suite would notice.
-
 /// The identifier scanner starts on `_` or a letter, never `.`, so a GAS
 /// directive reaches `is_keyword` as its bare tail, so a table spelling its
 /// entries `".text"` and `".globl"` looks complete and matches nothing.
@@ -2681,7 +2538,6 @@ fn assembly_gas_dot_directives_reach_the_keyword_table() {
 /// `#` is an ARM immediate (`mov r0, #1`), not a comment. Giving the Assembly
 /// arm `hash_comment: true` would grey out the operand of every such
 /// instruction, which is why it shares nothing with the Python/Ruby arm.
-
 /// `#` is an ARM immediate (`mov r0, #1`), not a comment. Giving the Assembly
 /// arm `hash_comment: true` would grey out the operand of every such
 /// instruction, which is why it shares nothing with the Python/Ruby arm.
@@ -2741,7 +2597,6 @@ fn svelte_script_and_style_blocks_inject_their_languages() {
 /// matches the default javascript rule *and* the typescript one over the same
 /// `raw_text`; live.rs keeps both layers and interleaves their captures at the
 /// same depth, so the block comes out coloured by whichever wrote last.
-
 /// The `lang` veto in svelte_injections.scm, which is the whole reason the two
 /// default rules carry a `#not-match?`. Without it a `<script lang="ts">` body
 /// matches the default javascript rule *and* the typescript one over the same
@@ -2799,7 +2654,6 @@ fn svelte_script_with_lang_injects_exactly_one_language() {
 /// Forwarding the value as `@injection.language` is what closes it. Asserting
 /// `is_some()` would be vacuous here: the broken version returned
 /// `Some(vec![])`, not `None`.
-
 /// The trap vue_injections.scm documents: the default rule is vetoed by
 /// `#not-match? "\\slang\\s*="` whenever *any* `lang` is present, so
 /// enumerating the servable values with `#any-of?` means every unlisted one --
@@ -2857,7 +2711,6 @@ fn svelte_lang_values_outside_the_default_still_inject() {
 /// The other half of the same trade-off: a `lang` no grammar here can serve
 /// injects nothing, and that must not disturb the host grammar. Same contract
 /// as `vue_unknown_lang_attribute_does_not_silently_disable_highlighting`.
-
 /// The other half of the same trade-off: a `lang` no grammar here can serve
 /// injects nothing, and that must not disturb the host grammar. Same contract
 /// as `vue_unknown_lang_attribute_does_not_silently_disable_highlighting`.
@@ -2878,7 +2731,6 @@ fn svelte_unservable_lang_leaves_the_markup_alone() {
 /// The bug in `tree_sitter_svelte_ng::INJECTIONS_QUERY` that svelte_injections.scm
 /// exists to avoid: its bare `(raw_text)` catch-all matches the body of `<style>`
 /// too, so a stylesheet gets parsed as JavaScript.
-
 /// The bug in `tree_sitter_svelte_ng::INJECTIONS_QUERY` that svelte_injections.scm
 /// exists to avoid: its bare `(raw_text)` catch-all matches the body of `<style>`
 /// too, so a stylesheet gets parsed as JavaScript.
@@ -2899,7 +2751,6 @@ fn svelte_style_block_injects_css_not_javascript() {
 /// list render emits one layer per row. Without the bare-identifier guard in
 /// svelte_injections.scm a 30-row list produced 30 cache entries against a cap
 /// of 32, evicting everything else on its own.
-
 /// The counterpart to `vue_static_inline_styles_do_not_flood_the_injection_cache`.
 /// A `.svelte` template injects per *expression*, not per file, so an ordinary
 /// list render emits one layer per row. Without the bare-identifier guard in
@@ -2933,7 +2784,6 @@ fn svelte_bare_identifier_expressions_do_not_flood_the_injection_cache() {
 }
 
 /// ...and the guard must not be so broad that real expressions stop injecting.
-
 /// ...and the guard must not be so broad that real expressions stop injecting.
 #[test]
 fn svelte_non_trivial_expressions_still_inject() {
@@ -2951,7 +2801,6 @@ fn svelte_non_trivial_expressions_still_inject() {
 /// The same tripwire vue_highlights.scm carries, for the same reason: the
 /// Svelte grammar is html-shaped, the base rules have to be present in the
 /// file, and rule order decides which capture wins.
-
 /// The same tripwire vue_highlights.scm carries, for the same reason: the
 /// Svelte grammar is html-shaped, the base rules have to be present in the
 /// file, and rule order decides which capture wins.
@@ -2979,7 +2828,6 @@ fn svelte_highlights_query_embeds_the_html_base_verbatim() {
 /// Haskell primes identifiers, OCaml opens type variables, Clojure quotes
 /// forms. Left as `HeuristicSingleQuote::String` each one runs a string from
 /// the tick to the end of the line -- the Nix bug, three more times.
-
 /// Julia is the one language in the batch where `'` is both: `A'` is the
 /// adjoint operator and `'c'` is a character literal. ValuePositionOnly tells
 /// them apart by what precedes the tick.
@@ -3000,7 +2848,6 @@ fn julia_adjoint_is_not_a_string_but_a_char_literal_is() {
 /// Every comment form the batch introduced. The heuristic runs in production
 /// for lines past MAX_TREESITTER_LINE_BYTES and in HeuristicOnly mode, and
 /// these arms are reached by nothing else.
-
 /// Per the Haskell report a run of dashes is a comment only when it is *not*
 /// followed by a symbol character; otherwise the whole run is an operator.
 /// `line_comment: Some("--")` cannot express that, so it greyed `a --> b` from
@@ -3043,7 +2890,6 @@ fn haskell_operator_sections_starting_with_dashes_are_not_comments() {
 
 /// Neighbouring entries in four of the keyword tables, each gap visible as two
 /// adjacent lines highlighting differently.
-
 /// The other half of the Solidity fix: sized types are *uniformly* absent now.
 /// Listing `uint256` alone meant `uint256 total;` highlighted and `uint8 flags;`
 /// two lines below it did not.
@@ -3137,7 +2983,6 @@ fn nix_specific_captures_survive_the_generic_identifier_rule() {
 /// the `(string_expression)` around it whichever order their rules appear in.
 /// Verified — this passes against upstream's ordering too. It is here to pin the
 /// behaviour, not the query layout.
-
 /// An escape inside a string keeps its own colour.
 ///
 /// Not an ordering guard, despite appearances: `normalize_non_overlapping_tokens`
@@ -3162,7 +3007,6 @@ fn nix_escape_sequences_outrank_the_string_rule() {
 /// Like the escape test above, this holds by node position rather than by rule
 /// order — the interpolated expression starts after the string does, so it wins
 /// its own bytes regardless.
-
 /// The interior of `"demo v${version}"` is Nix code, not string text.
 ///
 /// Like the escape test above, this holds by node position rather than by rule
@@ -3181,7 +3025,6 @@ fn nix_interpolation_interior_is_not_flat_string() {
 
 /// `buildPhase = '' … ''` is shell script, and the combined Bash injection is
 /// what makes it read as one. Only the injected layer has a concept of `if`.
-
 /// `buildPhase = '' … ''` is shell script, and the combined Bash injection is
 /// what makes it read as one. Only the injected layer has a concept of `if`.
 #[test]
@@ -3344,7 +3187,6 @@ fn jinja_extension_is_supported() {
 /// A `.j2` says the file is templated, not that it is markup. Resolving a shell
 /// or config template to the HTML-injecting reading hands the HTML grammar
 /// `cat <<EOF` and `2>&1`, which open bogus elements.
-
 /// The shell-template shape that motivated the split, end to end.
 #[test]
 fn shell_bodied_jinja_template_does_not_colour_redirects_as_tags() {
@@ -3422,7 +3264,6 @@ fn jinja_injection_targets_resolve_to_working_grammars() {
 /// Warm-up reads targets off the compiled query, and only sees `#set!`
 /// literals. If the HTML target ever moved into an `@injection.language`
 /// capture, the ~0.5ms HTML spec compile would move back onto the draw path.
-
 /// Warm-up reads targets off the compiled query, and only sees `#set!`
 /// literals. If the HTML target ever moved into an `@injection.language`
 /// capture, the ~0.5ms HTML spec compile would move back onto the draw path.
@@ -3499,7 +3340,6 @@ fn jinja_injection_query_stays_under_the_match_limit_on_a_dense_template() {
 
 /// The grammar is a young crates.io release binding through
 /// `tree-sitter-language`, so a tree-sitter bump could outrun it.
-
 /// The grammar is a young crates.io release binding through
 /// `tree-sitter-language`, so a tree-sitter bump could outrun it.
 #[test]
@@ -3553,7 +3393,6 @@ fn jinja_grammar_parses_every_dialect_it_claims() {
 /// review. F#'s `xml_doc` rule is the only one in the tree today; it arrived
 /// with the upstream `tree_sitter_fsharp::INJECTIONS_QUERY` rather than being
 /// written here.
-
 /// F# XML doc comments are the one in-tree consumer of `injection.combined`.
 ///
 /// `xml_doc` is a per-line token, so before combined support each `///` line
@@ -3595,7 +3434,6 @@ fn fsharp_xml_doc_comment_is_highlighted_as_one_xml_document() {
 /// This is not a claim that combined parses are memoised elsewhere. They are
 /// not: each of the N/64 chunks pays its own on first build, and clipping is
 /// what keeps that cost proportional to the window.
-
 /// A `(text)`-style combined rule fires once per node, so this is the query
 /// most likely to overflow the in-progress match pool. Overflow is worse for a
 /// combined layer than a single one: tree-sitter discards matches silently, and

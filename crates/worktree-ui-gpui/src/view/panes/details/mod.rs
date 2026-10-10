@@ -2030,7 +2030,7 @@ mod tests {
         let mut all = Vec::new();
         DetailsPaneView::flatten_directory_node(&root, 0, &HashSet::new(), &mut all);
         assert_eq!(all.len(), 6);
-        assert!(all.iter().any(|r| r.path == PathBuf::from("src/a.rs")));
+        assert!(all.iter().any(|r| r.path == *"src/a.rs"));
 
         // Collapse `src`: its two files disappear, `src` itself stays, depth preserved.
         let mut collapsed = HashSet::new();
@@ -2038,12 +2038,12 @@ mod tests {
         let mut partial = Vec::new();
         DetailsPaneView::flatten_directory_node(&root, 0, &collapsed, &mut partial);
         assert_eq!(partial.len(), 4);
-        assert!(partial.iter().any(|r| r.path == PathBuf::from("src")));
-        assert!(!partial.iter().any(|r| r.path == PathBuf::from("src/a.rs")));
-        assert!(!partial.iter().any(|r| r.path == PathBuf::from("src/b.rs")));
+        assert!(partial.iter().any(|r| r.path == *"src"));
+        assert!(!partial.iter().any(|r| r.path == *"src/a.rs"));
+        assert!(!partial.iter().any(|r| r.path == *"src/b.rs"));
         let docs = partial
             .iter()
-            .find(|r| r.path == PathBuf::from("docs"))
+            .find(|r| r.path == *"docs")
             .expect("docs row present");
         assert_eq!(docs.depth, 1);
     }

@@ -1436,8 +1436,10 @@ async fn a_closed_repos_stashed_buffer_cannot_wedge_the_quit_dialog(cx: &mut gpu
             "the stashed edit is unsaved while its repo is still open"
         );
         view.update(app, |this, cx| {
-            let mut state = AppState::default();
-            state.active_repo = None;
+            let state = AppState {
+                active_repo: None,
+                ..Default::default()
+            };
             push_test_state(this, Arc::new(state), cx);
         });
     });
@@ -1861,6 +1863,9 @@ async fn assert_editor_renders_the_engines_highlights(
     let _ = std::fs::remove_dir_all(&workdir);
 }
 
+// The visual lock is deliberately held for the whole test so the renderings
+// below cannot interleave with another visual test.
+#[allow(clippy::await_holding_lock)]
 #[gpui::test]
 async fn the_editor_renders_rust_highlights_as_the_engine_produced_them(
     cx: &mut gpui::TestAppContext,
@@ -1895,6 +1900,9 @@ async fn the_editor_renders_rust_highlights_as_the_engine_produced_them(
     .await;
 }
 
+// The visual lock is deliberately held for the whole test so the renderings
+// below cannot interleave with another visual test.
+#[allow(clippy::await_holding_lock)]
 #[gpui::test]
 async fn the_editor_renders_shell_highlights_as_the_engine_produced_them(
     cx: &mut gpui::TestAppContext,

@@ -6076,6 +6076,10 @@ fn activate_full_file_diff_horizontal_scroll_fixture(
     );
 }
 
+// A test fixture that mirrors the pane's diff state; the parameter list is
+// exactly the state it has to set up, so bundling it would only move the
+// same list one level down.
+#[allow(clippy::too_many_arguments)]
 fn push_working_tree_full_file_horizontal_scroll_fixture_state(
     cx: &mut gpui::VisualTestContext,
     view: &gpui::Entity<super::super::WorkTreeView>,

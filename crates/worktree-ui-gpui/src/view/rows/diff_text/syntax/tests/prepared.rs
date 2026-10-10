@@ -151,7 +151,6 @@ const OCAML_INTERFACE_FIXTURE: &[&str] = &[
 /// sharing one query file. A change that compiles against the implementation
 /// grammar can still fail against the interface one -- that is exactly why
 /// `(shebang)` had to come out of the vendored copy.
-
 const CLOJURE_FIXTURE: &[&str] = &[
     /*  0 */ "(ns demo.worker)",
     /*  1 */ "",
@@ -539,7 +538,6 @@ fn single_line_syntax_cache_isolated_by_mode_for_xml_markup() {
 /// Treating `'` as a quote painted the rest of the line as a string from the
 /// tick in `foldl'` onward. HeuristicOnly is a production path for large diffs,
 /// not just a fallback.
-
 /// The positional rule must not leak into languages where `'` really does open
 /// a string anywhere -- Rust byte and char literals are the sharp case.
 #[test]
@@ -2772,7 +2770,6 @@ fn batch_language_paths_and_fences_resolve() {
 /// The three collisions the batch had to route around. Each one is a silent
 /// regression if the identifier table is ever reordered: the file still
 /// highlights, just as the wrong language.
-
 /// The three collisions the batch had to route around. Each one is a silent
 /// regression if the identifier table is ever reordered: the file still
 /// highlights, just as the wrong language.
@@ -3127,7 +3124,6 @@ fn prepared_svelte_document_highlights_markup_and_block_tags() {
 /// reachable from the highlights query -- they arrive as injections or not at
 /// all. The `lang="ts"` veto is what keeps the default javascript rule from
 /// firing over the same `raw_text`; see the note in svelte_injections.scm.
-
 /// Three of the new languages spell something other than a string with `'`:
 /// Haskell primes identifiers, OCaml opens type variables, Clojure quotes
 /// forms. Left as `HeuristicSingleQuote::String` each one runs a string from
@@ -3160,7 +3156,6 @@ fn batch_apostrophes_do_not_open_a_string() {
 /// Julia is the one language in the batch where `'` is both: `A'` is the
 /// adjoint operator and `'c'` is a character literal. ValuePositionOnly tells
 /// them apart by what precedes the tick.
-
 /// Every comment form the batch introduced. The heuristic runs in production
 /// for lines past MAX_TREESITTER_LINE_BYTES and in HeuristicOnly mode, and
 /// these arms are reached by nothing else.
@@ -3206,7 +3201,6 @@ fn batch_heuristic_comment_forms_are_covered() {
 /// `line_comment: Some("--")` cannot express that, so it greyed `a --> b` from
 /// the dashes to the end of the line -- the worst failure mode this path has,
 /// because it hides code rather than mis-colouring it.
-
 /// Neighbouring entries in four of the keyword tables, each gap visible as two
 /// adjacent lines highlighting differently.
 #[test]
@@ -3245,7 +3239,6 @@ fn batch_keyword_tables_cover_their_neighbours() {
 /// The other half of the Solidity fix: sized types are *uniformly* absent now.
 /// Listing `uint256` alone meant `uint256 total;` highlighted and `uint8 flags;`
 /// two lines below it did not.
-
 /// The eleven keyword tables the batch added to `is_keyword`, none of which any
 /// other test reaches: every other test in this section goes through
 /// `prepare_test_document`, i.e. tree-sitter.
@@ -3304,7 +3297,6 @@ fn batch_heuristic_keyword_tables_are_covered() {
 ///
 /// Each case puts the comment opener *before* the slice, so the token can only
 /// be right if the scanner resumed in the comment state.
-
 /// The `potential_open_state_lead` fast-skip decides which bytes are even worth
 /// examining, and a language whose comment lead is missing from it has its
 /// comments run past entirely on the streamed path. Haskell's `-` had to be
@@ -3363,7 +3355,6 @@ fn streamed_slices_resume_inside_batch_line_comments() {
 /// `HeuristicBlockCommentKind`, and OCaml reuses the F# `(* *)` spec. Both are
 /// resumed from a checkpoint here, which is the only place the start/end byte
 /// tables are consulted rather than the per-line `starts_with`.
-
 /// The two block-comment kinds the batch touched: Haskell's `{- -}` is a new
 /// `HeuristicBlockCommentKind`, and OCaml reuses the F# `(* *)` spec. Both are
 /// resumed from a checkpoint here, which is the only place the start/end byte
@@ -3501,7 +3492,6 @@ fn batch_languages_emit_well_formed_tokens_on_hostile_input() {
 /// `"rem "`. Visual Basic is the only caller that notices, and it is not a
 /// language the batch touched -- exactly the kind of bystander a refactor
 /// breaks quietly.
-
 /// `heuristic_comment_range` now delegates to `line_comment_start_len`, which
 /// tests `is_ascii_whitespace()` where the old copy compared against a literal
 /// `"rem "`. Visual Basic is the only caller that notices, and it is not a
@@ -3533,7 +3523,6 @@ fn visual_basic_rem_comment_survives_the_shared_comment_decision() {
 /// claims a grammar must actually produce tokens for a line of itself. A
 /// mis-wired grammar, a query that compiles but matches nothing, or an enum
 /// variant wired to the wrong `LANGUAGE` constant all show up here as silence.
-
 /// A completeness sweep rather than a behaviour check: every language that
 /// claims a grammar must actually produce tokens for a line of itself. A
 /// mis-wired grammar, a query that compiles but matches nothing, or an enum
@@ -3658,7 +3647,6 @@ fn prepared_jinja_document_highlights_template_tags() {
 
 /// The HTML half of a template comes from the combined injection, not the
 /// Jinja grammar -- which sees only opaque `text` nodes.
-
 /// The HTML half of a template comes from the combined injection, not the
 /// Jinja grammar -- which sees only opaque `text` nodes.
 #[test]
@@ -3695,8 +3683,11 @@ fn merge_sorted_injection_ranges_normalises_for_set_included_ranges() {
     // reset, which callers must detect rather than pass on.
     assert!(merge_sorted_injection_ranges(Vec::new()).is_empty());
     // Degenerate ranges are dropped, not kept as zero-width.
-    assert!(merge_sorted_injection_ranges(vec![5..5]).is_empty());
-    assert_eq!(merge_sorted_injection_ranges(vec![2..5]), vec![2..5]);
+    #[allow(clippy::single_range_in_vec_init)]
+    {
+        assert!(merge_sorted_injection_ranges(vec![5..5]).is_empty());
+        assert_eq!(merge_sorted_injection_ranges(vec![2..5]), vec![2..5]);
+    }
     // Unsorted input is sorted: set_included_ranges rejects descending ranges.
     assert_eq!(
         merge_sorted_injection_ranges(vec![10..12, 2..5]),
@@ -3715,10 +3706,9 @@ fn merge_sorted_injection_ranges_normalises_for_set_included_ranges() {
 
 // The one-range cases are the point: a single included range is the shape
 // every non-combined injection has, and both helpers have to leave it alone.
-#[allow(clippy::single_range_in_vec_init)]
-
 /// An 8-column table row used to produce 513 ranges in one 64-line chunk, one
 /// over the ceiling, and the whole chunk lost its HTML.
+#[allow(clippy::single_range_in_vec_init)]
 #[test]
 fn dense_table_template_keeps_its_html_highlighting() {
     for cells in [4usize, 8, 16] {
@@ -3737,7 +3727,6 @@ fn dense_table_template_keeps_its_html_highlighting() {
 /// The byte ceiling had the same defect at an ordinary file size: all the HTML
 /// between two template tags is ONE `(text)` node, so a ~1800-line template
 /// tripped the 128KB ceiling in every window.
-
 /// The byte ceiling had the same defect at an ordinary file size: all the HTML
 /// between two template tags is ONE `(text)` node, so a ~1800-line template
 /// tripped the 128KB ceiling in every window.
@@ -3773,7 +3762,6 @@ fn large_template_with_one_huge_text_run_keeps_its_html_highlighting() {
 /// a `<section` whose attributes run onto the next lines straddles the window
 /// edge, and an exact clip cuts it in half. Asserted against an unclipped parse
 /// so it stays honest if the margin is ever tuned.
-
 /// The property the whole optimisation rests on, and the reason for the margin:
 /// a `<section` whose attributes run onto the next lines straddles the window
 /// edge, and an exact clip cuts it in half. Asserted against an unclipped parse
@@ -3866,7 +3854,6 @@ fn clipping_a_combined_layer_to_the_window_preserves_its_tokens() {
 
 /// The clip region is the window plus a margin on both sides, and the margin is
 /// load-bearing rather than decorative -- see the constant.
-
 /// A cut that touches nothing must leave the line's tokens exactly as they were,
 /// and must not reallocate to do it.
 #[test]

@@ -4121,6 +4121,9 @@ fn apply_state_snapshot_routes_clone_progress_errors_into_global_banner(
     });
 }
 
+// A non-trivial state snapshot reads better built field-by-field than folded
+// into an `AppState { .. }` literal.
+#[allow(clippy::field_reassign_with_default)]
 #[gpui::test]
 fn try_auth_prompt_submit_passphrase_without_secret_shows_error(cx: &mut gpui::TestAppContext) {
     let _visual_guard = crate::test_support::lock_visual_test();
@@ -4129,6 +4132,7 @@ fn try_auth_prompt_submit_passphrase_without_secret_shows_error(cx: &mut gpui::T
     let (view, cx) =
         cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
 
+    // folded into the `AppState { .. }` literal.
     let mut state = AppState::default();
     state.auth_prompt = Some(AuthPromptState {
         kind: AuthPromptKind::Passphrase,
@@ -4158,6 +4162,9 @@ fn try_auth_prompt_submit_passphrase_without_secret_shows_error(cx: &mut gpui::T
     });
 }
 
+// A non-trivial state snapshot reads better built field-by-field than folded
+// into an `AppState { .. }` literal.
+#[allow(clippy::field_reassign_with_default)]
 #[gpui::test]
 fn try_auth_prompt_submit_passphrase_dispatches_submit(cx: &mut gpui::TestAppContext) {
     let _visual_guard = crate::test_support::lock_visual_test();
@@ -4166,6 +4173,7 @@ fn try_auth_prompt_submit_passphrase_dispatches_submit(cx: &mut gpui::TestAppCon
     let (view, cx) =
         cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
 
+    // folded into the `AppState { .. }` literal.
     let mut state = AppState::default();
     state.auth_prompt = Some(AuthPromptState {
         kind: AuthPromptKind::Passphrase,
@@ -4194,6 +4202,9 @@ fn try_auth_prompt_submit_passphrase_dispatches_submit(cx: &mut gpui::TestAppCon
     );
 }
 
+// A non-trivial state snapshot reads better built field-by-field than folded
+// into an `AppState { .. }` literal.
+#[allow(clippy::field_reassign_with_default)]
 #[gpui::test]
 fn try_auth_prompt_submit_username_password_empty_username_shows_error(
     cx: &mut gpui::TestAppContext,
@@ -4204,6 +4215,7 @@ fn try_auth_prompt_submit_username_password_empty_username_shows_error(
     let (view, cx) =
         cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
 
+    // folded into the `AppState { .. }` literal.
     let mut state = AppState::default();
     state.auth_prompt = Some(AuthPromptState {
         kind: AuthPromptKind::UsernamePassword,
@@ -4235,6 +4247,9 @@ fn try_auth_prompt_submit_username_password_empty_username_shows_error(
     });
 }
 
+// A non-trivial state snapshot reads better built field-by-field than folded
+// into an `AppState { .. }` literal.
+#[allow(clippy::field_reassign_with_default)]
 #[gpui::test]
 fn try_auth_prompt_submit_username_password_dispatches_submit(cx: &mut gpui::TestAppContext) {
     let _visual_guard = crate::test_support::lock_visual_test();
@@ -4243,6 +4258,7 @@ fn try_auth_prompt_submit_username_password_dispatches_submit(cx: &mut gpui::Tes
     let (view, cx) =
         cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
 
+    // folded into the `AppState { .. }` literal.
     let mut state = AppState::default();
     state.auth_prompt = Some(AuthPromptState {
         kind: AuthPromptKind::UsernamePassword,

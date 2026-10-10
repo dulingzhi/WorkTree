@@ -134,13 +134,13 @@ fn repo_settings_prompt_is_open(view: &gpui::Entity<WorkTreeView>, app: &gpui::A
 fn repo_settings_cancel_click_closes(cx: &mut gpui::TestAppContext) {
     let (store, events, _repo, _workdir) = create_tracking_store("repo-settings-cancel");
     let repo_id = store.snapshot().active_repo.expect("expected active repo");
-    let (view, mut cx) =
+    let (view, cx) =
         cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
     cx.update(|window, app| {
         let _ = window.draw(app);
     });
 
-    open_repo_settings_prompt(&view, repo_id, &mut cx);
+    open_repo_settings_prompt(&view, repo_id, cx);
     cx.update(|_window, app| {
         assert!(
             repo_settings_prompt_is_open(&view, app),
@@ -161,14 +161,14 @@ fn repo_settings_cancel_click_closes(cx: &mut gpui::TestAppContext) {
 fn repo_settings_escape_closes(cx: &mut gpui::TestAppContext) {
     let (store, events, _repo, _workdir) = create_tracking_store("repo-settings-escape");
     let repo_id = store.snapshot().active_repo.expect("expected active repo");
-    let (view, mut cx) =
+    let (view, cx) =
         cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
     cx.update(|window, app| {
         crate::app::bind_text_input_keys_for_test(app);
         let _ = window.draw(app);
     });
 
-    open_repo_settings_prompt(&view, repo_id, &mut cx);
+    open_repo_settings_prompt(&view, repo_id, cx);
     cx.update(|_window, app| {
         assert!(
             repo_settings_prompt_is_open(&view, app),
@@ -191,14 +191,14 @@ fn repo_settings_escape_closes(cx: &mut gpui::TestAppContext) {
 fn repo_settings_renders_never_reread_the_config_snapshot(cx: &mut gpui::TestAppContext) {
     let (store, events, _repo, _workdir) = create_tracking_store("repo-settings-reread");
     let repo_id = store.snapshot().active_repo.expect("expected active repo");
-    let (view, mut cx) =
+    let (view, cx) =
         cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
     cx.update(|window, app| {
         crate::app::bind_text_input_keys_for_test(app);
         let _ = window.draw(app);
     });
 
-    open_repo_settings_prompt(&view, repo_id, &mut cx);
+    open_repo_settings_prompt(&view, repo_id, cx);
     let loads_after_open = cx.update(|_window, app| {
         view.read(app)
             .popover_host

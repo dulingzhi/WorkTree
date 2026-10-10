@@ -15,6 +15,9 @@ pub(crate) fn sync_store_snapshot(view: &WorkTreeView, cx: &mut impl gpui::AppCo
     push_test_state(view, view.store.snapshot(), cx);
 }
 
+// Only the macOS app-menu test drives this; without the matching gate it reads
+// as dead code on every other host.
+#[cfg(target_os = "macos")]
 pub(crate) fn apply_state_snapshot_for_test(
     view: &mut WorkTreeView,
     state: Arc<AppState>,

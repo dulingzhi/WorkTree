@@ -1776,8 +1776,10 @@ mod tests {
         use worktree_core::services::{InteractiveRebaseAction, InteractiveRebaseEntry};
         use worktree_state::model::{InteractiveCherryPickSetup, RepoState};
 
-        let mut state = AppState::default();
-        state.active_repo = Some(RepoId(1));
+        let mut state = AppState {
+            active_repo: Some(RepoId(1)),
+            ..Default::default()
+        };
         state.repos.push(RepoState::new_opening(
             RepoId(1),
             RepoSpec {

@@ -5613,7 +5613,7 @@ fn space_asks_before_staging_a_file_with_conflict_markers(cx: &mut gpui::TestApp
         repo_id,
         &workdir,
         &commit_id,
-        &[conflicted.clone()],
+        std::slice::from_ref(&conflicted),
         &conflicted,
     );
     repo.status = Loadable::Ready(
@@ -5682,7 +5682,7 @@ fn space_stages_a_resolved_conflict_without_asking(cx: &mut gpui::TestAppContext
         repo_id,
         &workdir,
         &commit_id,
-        &[resolved.clone()],
+        std::slice::from_ref(&resolved),
         &resolved,
     );
     repo.status = Loadable::Ready(
@@ -5766,8 +5766,7 @@ fn space_stages_every_ctrl_selected_file(cx: &mut gpui::TestAppContext) {
                 .details_pane
                 .read(app)
                 .status_multi_selection
-                .get(&repo_id)
-                .is_none()
+                .contains_key(&repo_id)
         }),
         "staging the selection must consume it"
     );

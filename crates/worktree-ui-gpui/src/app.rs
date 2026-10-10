@@ -2058,9 +2058,14 @@ mod tests {
     };
 
     /// The File-menu entries the native-menu assertions compare against;
-    /// only the tests read them, so they live here.
+    /// only the tests read them, so they live here. The macOS menu assertion
+    /// that needs them is `#[cfg(target_os = "macos")]`, so on other hosts
+    /// these would read as dead code without the matching gate.
+    #[cfg(target_os = "macos")]
     const OPEN_REPOSITORY: &str = "Open repository";
+    #[cfg(target_os = "macos")]
     const CLONE_REPOSITORY: &str = "Clone repository";
+    #[cfg(target_os = "macos")]
     const INITIALIZE_REPOSITORY: &str = "Initialize repository";
 
     use crate::test_support::lock_visual_test;

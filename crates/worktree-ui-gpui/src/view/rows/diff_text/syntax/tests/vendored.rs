@@ -39,7 +39,6 @@ fn vendored_html_injections_query_compiles() {
 /// crates.io, so nothing external will tell us when it stops matching the
 /// workspace `tree-sitter`. It binds through `tree-sitter-language`, which
 /// means a tree-sitter upgrade only stays safe while this holds.
-
 /// The Vue grammar is the one grammar we vendor rather than pull from
 /// crates.io, so nothing external will tell us when it stops matching the
 /// workspace `tree-sitter`. It binds through `tree-sitter-language`, which

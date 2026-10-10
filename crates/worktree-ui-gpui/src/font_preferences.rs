@@ -453,7 +453,7 @@ pub(crate) fn wait_for_system_font_catalog(timeout: std::time::Duration) -> bool
     #[cfg(test)]
     {
         let _ = timeout;
-        return true;
+        true
     }
 
     #[cfg(not(test))]

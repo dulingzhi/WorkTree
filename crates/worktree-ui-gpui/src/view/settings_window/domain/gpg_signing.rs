@@ -62,7 +62,7 @@ impl SettingsWindowView {
                 .push((key.to_string(), value.map(str::to_string)));
             self.gpg_save_error = None;
             cx.notify();
-            return true;
+            true
         }
 
         #[allow(unreachable_code)]

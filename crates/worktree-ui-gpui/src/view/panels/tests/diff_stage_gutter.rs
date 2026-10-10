@@ -157,7 +157,7 @@ fn stage_gutter_patch(
 ) -> Option<String> {
     cx.update(|_window, app| {
         let pane = view.read(app).main_pane.read(app);
-        let visible_ix = visible_ix_for_text(&pane, text);
+        let visible_ix = visible_ix_for_text(pane, text);
         pane.diff_stage_gutter_patch(visible_ix, kind)
     })
 }
@@ -170,7 +170,7 @@ fn stage_gutter_cell(
 ) -> (usize, gpui::Bounds<Pixels>) {
     cx.update(|_window, app| {
         let pane = view.read(app).main_pane.read(app);
-        let visible_ix = visible_ix_for_text(&pane, text);
+        let visible_ix = visible_ix_for_text(pane, text);
         let cell = *pane
             .diff_stage_gutter_cells
             .get(&(visible_ix, slot))
@@ -465,7 +465,7 @@ fn stage_gutter_button_hover_follows_the_pointer(cx: &mut gpui::TestAppContext) 
     // A context row has no button, so leaving the change row hides it again.
     let context_position = cx.update(|_window, app| {
         let pane = view.read(app).main_pane.read(app);
-        let context_ix = visible_ix_for_text(&pane, " context one");
+        let context_ix = visible_ix_for_text(pane, " context one");
         pane.diff_text_hitboxes
             .get(&(context_ix, DiffTextRegion::Inline))
             .expect("expected an inline text hitbox for the context line")

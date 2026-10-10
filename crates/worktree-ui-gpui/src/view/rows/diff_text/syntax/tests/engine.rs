@@ -711,7 +711,6 @@ fn grammar_and_highlight_spec_agree_on_supported_languages() {
 /// mapping had to avoid. Path resolution is the only thing standing between a
 /// wired-up grammar and a file that still renders as plain text, and nothing
 /// else in the suite exercises these arms.
-
 /// A `.j2` says the file is templated, not that it is markup. Resolving a shell
 /// or config template to the HTML-injecting reading hands the HTML grammar
 /// `cat <<EOF` and `2>&1`, which open bogus elements.

@@ -217,7 +217,6 @@ pub(crate) fn ensure_avatar_loaded(url: &SharedString, cx: &mut App) {
     #[cfg(test)]
     {
         let _ = cx;
-        return;
     }
     #[cfg(not(test))]
     {

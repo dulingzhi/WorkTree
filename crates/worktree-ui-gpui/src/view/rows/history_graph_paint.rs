@@ -1137,7 +1137,13 @@ mod band_tests {
         let plan = HistoryListPlan::new(true, vec![row_anchor(0, 0)]);
 
         assert_eq!(
-            worktree_band_connect_from_top_col(&plan, &[row.clone()], &dirty, Some(0), 1),
+            worktree_band_connect_from_top_col(
+                &plan,
+                std::slice::from_ref(&row),
+                &dirty,
+                Some(0),
+                1
+            ),
             Some(0),
             "the column-0 placement is the fallback the caller passes through"
         );

@@ -2309,10 +2309,7 @@ mod tests {
             mode,
         )
         .unwrap();
-        assert_eq!(
-            report,
-            vec![0x1b, b'[', b'M', 32 + 0, 32 + 1 + 0, 32 + 1 + 0]
-        );
+        assert_eq!(report, vec![0x1b, b'[', b'M', 32, (32 + 1), (32 + 1)]);
     }
 
     #[test]
@@ -2327,10 +2324,7 @@ mod tests {
             mode,
         )
         .unwrap();
-        assert_eq!(
-            report,
-            vec![0x1b, b'[', b'M', 32 + 3, 32 + 1 + 0, 32 + 1 + 0]
-        );
+        assert_eq!(report, vec![0x1b, b'[', b'M', 32 + 3, (32 + 1), (32 + 1)]);
     }
 
     #[test]

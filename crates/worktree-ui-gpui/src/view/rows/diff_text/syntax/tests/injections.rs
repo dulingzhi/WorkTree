@@ -102,7 +102,6 @@ fn markup_prose_apostrophes_do_not_open_a_string() {
 
 /// ... while a `'` in value position is still a quote, which is why the rule is
 /// positional rather than a flat "markup has no single quotes".
-
 /// ... while a `'` in value position is still a quote, which is why the rule is
 /// positional rather than a flat "markup has no single quotes".
 #[test]
@@ -300,7 +299,6 @@ fn combined_injection_gaps_are_the_complement_within_the_window() {
 /// HTML stands in for the eventual template grammar here so the test needs no
 /// new dependency. The ranges are the same shape a `(text) @injection.content`
 /// rule produces on a real template.
-
 /// Two halves of an HTML element split across a host-grammar tag must parse as
 /// one element, and the injected grammar must not colour the host bytes
 /// between them.
@@ -334,7 +332,6 @@ fn combined_injection_parses_disjoint_ranges_as_one_document() {
 
 /// The other half: nodes straddling two included ranges report a byte range
 /// covering the host bytes in between, so their captures have to be clipped.
-
 /// The other half: nodes straddling two included ranges report a byte range
 /// covering the host bytes in between, so their captures have to be clipped.
 #[test]
@@ -384,7 +381,6 @@ fn combined_injection_tokens_do_not_bleed_into_the_gaps() {
 
 /// An 8-column table row used to produce 513 ranges in one 64-line chunk, one
 /// over the ceiling, and the whole chunk lost its HTML.
-
 /// The clip region is the window plus a margin on both sides, and the margin is
 /// load-bearing rather than decorative -- see the constant.
 #[test]
@@ -425,7 +421,6 @@ fn combined_injection_clip_region_pads_the_window_on_both_sides() {
 
 /// A cut that touches nothing must leave the line's tokens exactly as they were,
 /// and must not reallocate to do it.
-
 /// Pins the ordering rather than a symptom: no in-tree grammar declares both
 /// kinds over one span yet, but with combined applied first an overlapping
 /// single would delete its tokens and repaint only part of the span.
@@ -461,7 +456,6 @@ fn combined_injection_groups_are_applied_after_the_single_ones() {
 /// `xml_doc` is a per-line token, so before combined support each `///` line
 /// was its own XML document: `<summary>` on one line and `</summary>` on
 /// another never met, and each cost an entry in the 32-slot injection cache.
-
 /// Combined layers must not touch the per-node injection cache at all.
 ///
 /// The 32-slot LRU is keyed by a single node's content hash, which a combined
@@ -509,7 +503,6 @@ fn combined_injections_do_not_consume_the_per_node_injection_cache() {
 /// forgot to clear them would truncate the *next* root parse on this thread —
 /// for any language, with no error anywhere. Asserted behaviourally so it
 /// survives tree-sitter API changes.
-
 /// The failure this would cause is invisible and global.
 ///
 /// `TS_PARSER` is pooled and its included ranges are sticky; `with_ts_parser`

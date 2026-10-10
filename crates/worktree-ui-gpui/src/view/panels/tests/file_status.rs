@@ -2611,7 +2611,7 @@ fn commit_details_file_right_click_only_opens_menu_for_added_modified_and_delete
         "worktree_ui_test_{}_commit_file_right_click_menu_only",
         std::process::id()
     ));
-    let files = vec![
+    let files = [
         (
             std::path::PathBuf::from("src/added.rs"),
             worktree_core::domain::FileStatusKind::Added,
