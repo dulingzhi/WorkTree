@@ -1135,6 +1135,7 @@ fn push_merge_request_with_output_carries_push_options() {
             merge_when_pipeline_succeeds: false,
             remove_source_branch: true,
             push_to_mr_branch: false,
+            description: Some("first cut\nwith detail".to_string()),
         })
         .expect("merge-request push");
     assert_eq!(output.exit_code, Some(0));
@@ -1153,6 +1154,13 @@ fn push_merge_request_with_output_carries_push_options() {
             .command
             .contains("-o merge_request.remove_source_branch"),
         "command label should carry the remove-source option: {}",
+        output.command
+    );
+    assert!(
+        output
+            .command
+            .contains("-o merge_request.description=first cut\\nwith detail"),
+        "command label should carry the escaped description option: {}",
         output.command
     );
     assert!(
@@ -1189,6 +1197,7 @@ fn push_merge_request_with_output_can_push_to_mr_branch() {
             merge_when_pipeline_succeeds: false,
             remove_source_branch: false,
             push_to_mr_branch: true,
+            description: None,
         })
         .expect("merge-request push to MR branch");
     assert_eq!(output.exit_code, Some(0));

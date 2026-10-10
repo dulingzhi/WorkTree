@@ -500,12 +500,17 @@ impl PopoverHost {
             .mr_push
             .mr_push_target_input
             .read_with(cx, |input, _| input.text().trim().to_string());
+        let description = self
+            .mr_push
+            .mr_push_description_input
+            .read_with(cx, |input, _| input.text().trim().to_string());
         let options = worktree_core::services::MergeRequestPushOptions {
             create: true,
             target_branch: (!target_branch.is_empty()).then_some(target_branch),
             merge_when_pipeline_succeeds: self.mr_push.mr_push_merge_when_pipeline_succeeds,
             remove_source_branch: self.mr_push.mr_push_remove_source_branch,
             push_to_mr_branch: self.mr_push.mr_push_push_to_mr_branch,
+            description: (!description.is_empty()).then_some(description),
         };
         self.store
             .dispatch(Msg::PushMergeRequest { repo_id, options });

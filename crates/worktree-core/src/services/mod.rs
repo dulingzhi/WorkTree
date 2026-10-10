@@ -389,6 +389,11 @@ pub struct MergeRequestPushOptions {
     /// Pass `-o merge_request.target=<branch>`; `None` lets the server use
     /// its default branch.
     pub target_branch: Option<String>,
+    /// Pass `-o merge_request.description=<text>`; `None` omits the option.
+    /// The push option is line-based on the wire, so `push_merge_request_*`
+    /// escapes a real newline to a literal `\n` (backslash + n) — the form
+    /// GitLab renders as a newline in the stored MR description.
+    pub description: Option<String>,
     /// Pass `-o merge_request.merge_when_pipeline_succeeds`.
     pub merge_when_pipeline_succeeds: bool,
     /// Pass `-o merge_request.remove_source_branch`.

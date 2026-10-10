@@ -295,6 +295,7 @@ fn push_merge_request_emits_effect_marks_in_flight_and_summarizes() {
         merge_when_pipeline_succeeds: false,
         remove_source_branch: true,
         push_to_mr_branch: false,
+        description: None,
     };
     let effects = reduce(
         &mut repos,

@@ -915,6 +915,14 @@ impl GixRepo {
         if let Some(target) = &options.target_branch {
             push_options.push(format!("merge_request.target={target}"));
         }
+        if let Some(description) = &options.description {
+            // Push options are line-based on the wire, so a real newline would
+            // terminate the option and corrupt the push. GitLab renders a
+            // literal `\n` (backslash + n) in the description option as a
+            // newline, so escape backslashes first, then newlines.
+            let escaped = description.replace('\\', "\\\\").replace('\n', "\\n");
+            push_options.push(format!("merge_request.description={escaped}"));
+        }
         if options.merge_when_pipeline_succeeds {
             push_options.push("merge_request.merge_when_pipeline_succeeds".to_string());
         }
