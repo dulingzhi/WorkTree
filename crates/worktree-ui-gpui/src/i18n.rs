@@ -251,7 +251,6 @@ mod tests {
 /// themselves. Only dotted lowercase identifiers are therefore checked.
 #[cfg(test)]
 mod catalog_tests {
-    use rust_i18n::Backend as _;
     use std::collections::BTreeMap;
     use std::path::{Path, PathBuf};
 
