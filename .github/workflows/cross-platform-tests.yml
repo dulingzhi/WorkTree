@@ -197,13 +197,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: Cache Rust artifacts
         uses: Swatinem/rust-cache@v2
-      # PROBE — reporting only. These tests have never run on a runner, so
-      # failures that only show up there (fonts, locale, timing) are a real
-      # possibility and must not block an unrelated push while we find out.
-      # Drop `continue-on-error` once one run has come back green; that turns
-      # this into the gate it is meant to be.
+      # A hard gate: the probe run (7da27948) came back green, and these tests
+      # are the only thing that catches UI regressions — see the inverted
+      # assertion that survived three weeks in 138235cb.
       - name: Run UI crate lib tests
-        continue-on-error: true
         run: cargo test -p worktree-ui-gpui --lib --locked
 
   macos-tests:
