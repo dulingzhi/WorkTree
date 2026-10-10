@@ -150,6 +150,7 @@ ui:
     stash_message: "Stash message"
     commit_subject: "Commit subject"
     mr_push_target: "Target branch (blank = default branch)"
+    mr_push_description: "Merge request description (AI can draft it)"
     clone_ssh_key: "/path/to/ssh/key (optional)"
     repo_settings_user: "Inherits global user.name"
     repo_settings_email: "Inherits global user.email"
