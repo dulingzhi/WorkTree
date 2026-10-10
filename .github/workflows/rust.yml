@@ -79,12 +79,7 @@ jobs:
       run: cargo clippy -p worktree-core -p worktree-state -p worktree-git-gix -- -D warnings
     - name: Clippy (GPUI UI crate)
       run: cargo clippy -p worktree-ui-gpui -- -D warnings
-    # Same crate, plus the test targets — where the warnings actually were.
-    # Baseline probe: `continue-on-error` keeps a platform-specific finding on
-    # Linux from reddening the job while we confirm it. If it passes, drop the
-    # flag so the step gates like the others.
-    - name: Clippy (GPUI UI crate -- all targets -- baseline probe)
-      continue-on-error: true
+    - name: Clippy (GPUI UI crate -- all targets)
       run: cargo clippy -p worktree-ui-gpui --all-targets -- -D warnings
     - name: Clippy (app — headless)
       run: cargo clippy -p worktree $APP_FEATURES -- -D warnings
