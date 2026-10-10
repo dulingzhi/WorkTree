@@ -141,6 +141,20 @@ pub(in crate::view) struct PopoverHost {
     pub(in crate::view::panels::popover) hunk_explanation:
         Option<hunk_explanation::HunkExplanation>,
 
+    /// The diff view's pending (or landed) AI review, paired with the file
+    /// patch it was requested against. Reset on open; every open starts a
+    /// fresh request.
+    pub(in crate::view::panels::popover) file_review: Option<file_review::FileReview>,
+
+    /// Test seams standing in for the network call test builds cannot make:
+    /// how many review requests were driven, and the patch the last one
+    /// carried.
+    #[cfg(test)]
+    pub(in crate::view::panels::popover) file_review_test_requests: usize,
+
+    #[cfg(test)]
+    pub(in crate::view::panels::popover) file_review_test_last_patch: Option<String>,
+
     /// Test seams standing in for the network call test builds cannot make:
     /// how many explanation requests were driven, and the patch the last one
     /// carried.

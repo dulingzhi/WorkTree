@@ -584,6 +584,11 @@ impl PopoverHost {
             // never carries over.
             self.hunk_explanation = None;
         }
+        if matches!(&kind, PopoverKind::FileReview { .. }) {
+            // Same contract as the explanation: every open starts a fresh
+            // request against the file as it is when the menu entry is chosen.
+            self.file_review = None;
+        }
         if matches!(&kind, PopoverKind::AutosquashConfirm { .. }) {
             // Recompute the fold from live history on every open; a plan left
             // behind by an earlier visit (or a head that has since moved) must

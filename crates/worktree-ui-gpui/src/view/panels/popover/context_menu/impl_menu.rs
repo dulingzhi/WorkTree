@@ -1451,6 +1451,21 @@ impl PopoverHost {
                     );
                 }
             }
+            ContextMenuAction::ReviewFile { repo_id, path } => {
+                // start_ opens the review popover in the menu's place, so it
+                // takes over the close-path; when it only warned (no patch, or
+                // no configured source) the menu closes as any action's
+                // aftermath does.
+                if !crate::ai_commit::current().is_configured() {
+                    self.push_toast(
+                        components::ToastKind::Warning,
+                        crate::i18n::t!("misc.ai_commit.not_configured").into_owned(),
+                        cx,
+                    );
+                } else if self.start_file_review(repo_id, &path, window, cx) {
+                    return;
+                }
+            }
             ContextMenuAction::ExplainHunk { repo_id, src_ix } => {
                 // start_ opens the explanation popover in the menu's place, so
                 // it takes over the close-path; when it only warned (no patch,

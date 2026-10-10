@@ -96,6 +96,17 @@ panels:
     stop: "Stop"
     retry: Retry
     close: Close
+  file_review:
+    title: "Review this file"
+    generating: "Asking the model…"
+    stop: "Stop"
+    retry: Retry
+    close: Close
+    clean: "No problems found."
+    line: "L%{line}"
+    severity_error: Error
+    severity_warning: Warning
+    severity_info: Nit
   repo_hooks:
     close: Close
   merge_preview:

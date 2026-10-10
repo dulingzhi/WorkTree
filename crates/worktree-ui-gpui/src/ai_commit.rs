@@ -34,6 +34,11 @@ pub(crate) const MAX_DIFF_LENGTH: usize = 4000;
 /// so this is generous for a ≤72-character answer.
 pub(crate) const MAX_OUTPUT_TOKENS: u64 = 1024;
 
+/// Output budget for one code review. A review answers with a *list* — several
+/// findings, each a line reference, a title and a suggestion — so it needs
+/// several times the headroom of the single-sentence prompts above.
+pub(crate) const MAX_REVIEW_OUTPUT_TOKENS: u64 = 4096;
+
 /// The system prompt, ported from WorkTree's `CommitPromptBuilder`.
 pub(crate) const SYSTEM_PROMPT: &str = "You are a git commit message generator. Given a diff, write a concise conventional commit message (type: description). \
 First line max 72 chars. If the diff is large, focus on the most significant changes. \
@@ -497,6 +502,199 @@ pub(crate) fn build_mr_description_request(
     }
 }
 
+/// The system prompt for the diff view's "Review this file" action — the same
+/// providers as the commit ✨, a fourth job. Unlike the other three this one
+/// asks for structured output: the panel renders a list of findings, so the
+/// reply has to be machine-readable rather than prose.
+pub(crate) const REVIEW_SYSTEM_PROMPT: &str = "You are a senior engineer reviewing one file's change before it is committed. \
+Given a unified diff patch for a single file, report the problems a reviewer would block on or flag: correctness bugs, \
+unhandled edge cases, resource leaks, race conditions, security issues, and clear violations of the conventions the \
+surrounding code already follows. Skip formatting, naming and personal preference. \
+Ground every finding in the lines shown; do not speculate about code the patch does not contain. \
+Reply with ONLY a JSON object in this shape, with no prose around it: \
+{\"findings\":[{\"severity\":\"error|warning|info\",\"line\":<new-side line number or null>,\"title\":\"<one short sentence>\",\"suggestion\":\"<one short sentence>\"}]}. \
+Use \"error\" for a defect that should block the commit, \"warning\" for something worth fixing before it ships, \
+\"info\" for a nit. Set \"line\" to the new-side line number the finding is about, or null when it covers the file as a whole. \
+If the change has nothing to report, reply {\"findings\":[]}.";
+
+/// How urgent one review finding is. Three levels, so the panel can colour
+/// findings with the theme's existing status colours instead of inventing a
+/// new scale.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ReviewSeverity {
+    Error,
+    Warning,
+    Info,
+}
+
+impl ReviewSeverity {
+    /// Accept the model's wording as well as ours — asked for
+    /// `error|warning|info`, models still answer `critical` or `nit` often
+    /// enough that mapping beats discarding the finding.
+    fn from_key(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "error" | "critical" | "blocker" => Some(Self::Error),
+            "warning" | "major" => Some(Self::Warning),
+            "info" | "minor" | "nit" => Some(Self::Info),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn label(self) -> SharedString {
+        match self {
+            Self::Error => crate::i18n::tr("panels.file_review.severity_error"),
+            Self::Warning => crate::i18n::tr("panels.file_review.severity_warning"),
+            Self::Info => crate::i18n::tr("panels.file_review.severity_info"),
+        }
+    }
+}
+
+/// One problem the model reported about the reviewed patch.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ReviewFinding {
+    pub(crate) severity: ReviewSeverity,
+    /// The new-side line number, when the finding points at a specific line.
+    pub(crate) line: Option<u32>,
+    pub(crate) title: String,
+    pub(crate) suggestion: String,
+}
+
+/// Assemble the review user content: the locale the findings should be written
+/// in first, then the patch — a whole file's worth, under the same truncation
+/// budget as commit diffs.
+pub(crate) fn build_review_user_content(patch: &str, locale: &str) -> String {
+    format!(
+        "Review this change. Write the findings in the language of this locale: {locale}.\n\n--- Patch ---\n{}",
+        truncate_diff(patch),
+    )
+}
+
+/// The single prompt text handed to a CLI generator, mirroring
+/// [`build_cli_prompt`]'s shape.
+pub(crate) fn build_review_cli_prompt(patch: &str, locale: &str) -> String {
+    format!(
+        "{}\n\n{}",
+        REVIEW_SYSTEM_PROMPT,
+        build_review_user_content(patch, locale)
+    )
+}
+
+/// Build the provider-specific request for one review. Reviews take the larger
+/// [`MAX_REVIEW_OUTPUT_TOKENS`] budget and a lower temperature than the prose
+/// prompts: the shape of the answer matters more than its variety.
+pub(crate) fn build_review_request(
+    settings: &AiCommitSettings,
+    patch: &str,
+    locale: &str,
+) -> AiCommitRequest {
+    let user_content = build_review_user_content(patch, locale);
+    let model = settings.effective_model();
+    match settings.provider {
+        AiProvider::Anthropic => AiCommitRequest {
+            url: settings.endpoint_url(),
+            headers: settings.auth_headers(),
+            body: serde_json::json!({
+                "model": model,
+                "max_tokens": MAX_REVIEW_OUTPUT_TOKENS,
+                "system": REVIEW_SYSTEM_PROMPT,
+                "messages": [{ "role": "user", "content": user_content }],
+            })
+            .to_string(),
+        },
+        AiProvider::OpenAiCompatible => AiCommitRequest {
+            url: settings.endpoint_url(),
+            headers: settings.auth_headers(),
+            body: serde_json::json!({
+                "model": model,
+                "messages": [
+                    { "role": "system", "content": REVIEW_SYSTEM_PROMPT },
+                    { "role": "user", "content": user_content },
+                ],
+                "max_tokens": MAX_REVIEW_OUTPUT_TOKENS,
+                "temperature": 0.1,
+            })
+            .to_string(),
+        },
+    }
+}
+
+/// Read one finding out of the reply's JSON. An entry with no title carries
+/// nothing to show and is dropped; a missing or unrecognised severity falls
+/// back to `Info` rather than dropping the finding — the text is still worth
+/// reading, and a lower severity is the safe direction to be wrong in.
+fn review_finding_from_json(value: &serde_json::Value) -> Option<ReviewFinding> {
+    let title = value
+        .get("title")
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|title| !title.is_empty())?;
+    let severity = value
+        .get("severity")
+        .and_then(|value| value.as_str())
+        .and_then(ReviewSeverity::from_key)
+        .unwrap_or(ReviewSeverity::Info);
+    // Models answer with a number, a string, or null — accept the first two.
+    let line = value
+        .get("line")
+        .and_then(|value| value.as_u64())
+        .and_then(|line| u32::try_from(line).ok())
+        .or_else(|| {
+            value
+                .get("line")
+                .and_then(|value| value.as_str())
+                .and_then(|line| line.trim().parse::<u32>().ok())
+        });
+    let suggestion = value
+        .get("suggestion")
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_string();
+    Some(ReviewFinding {
+        severity,
+        line,
+        title: title.to_string(),
+        suggestion,
+    })
+}
+
+/// Turn a review reply into findings. `sanitize` first — models wrap the JSON
+/// in a code fence more often than not — then accept either the documented
+/// `{"findings": […]}` object or a bare array.
+///
+/// A reply that is not JSON at all degrades to a single `Info` finding holding
+/// the text: the model still answered, and showing its words beats a parser
+/// error for an answer the user cannot act on either way. An empty findings
+/// list is a real result — a clean file — and is not an error.
+pub(crate) fn parse_review_response(raw: &str) -> Vec<ReviewFinding> {
+    let text = sanitize(raw);
+    if text.is_empty() {
+        return Vec::new();
+    }
+    let as_info_finding = || {
+        vec![ReviewFinding {
+            severity: ReviewSeverity::Info,
+            line: None,
+            title: text.clone(),
+            suggestion: String::new(),
+        }]
+    };
+    let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return as_info_finding();
+    };
+    let Some(entries) = json
+        .pointer("/findings")
+        .and_then(|value| value.as_array())
+        .or_else(|| json.as_array())
+    else {
+        return as_info_finding();
+    };
+    entries
+        .iter()
+        .filter_map(review_finding_from_json)
+        .collect()
+}
+
 /// Run one CLI generation: spawn, collect stdout/stderr, kill on timeout,
 /// and sanitize stdout as the reply. The prompt arrives as a single argv
 /// element — no shell is involved, so its contents need no escaping.
@@ -790,6 +988,26 @@ pub(crate) async fn generate_mr_description(
         |resolved| build_mr_description_request(resolved, target, commits, diff_stat, locale),
     )
     .await
+}
+
+/// One file review, over the same source dispatch. Unlike the other three this
+/// returns *findings*, not text: the reply is parsed as JSON here so the caller
+/// holds something renderable. A reply that is not JSON degrades inside
+/// [`parse_review_response`] rather than failing the generation.
+#[cfg(not(test))]
+pub(crate) async fn generate_review(
+    settings: &AiCommitSettings,
+    patch: &str,
+    locale: &str,
+) -> Result<Vec<ReviewFinding>, String> {
+    let reply = generate_from_source(
+        settings,
+        "file review",
+        build_review_cli_prompt(patch, locale),
+        |resolved| build_review_request(resolved, patch, locale),
+    )
+    .await?;
+    Ok(parse_review_response(&reply))
 }
 
 /// The source dispatch shared by every prompt: `cli_prompt` is the single
@@ -1426,5 +1644,104 @@ mod tests {
         let body: serde_json::Value = serde_json::from_str(&openai.body).unwrap();
         assert_eq!(body["messages"][0]["role"], "system");
         assert_eq!(body["messages"][0]["content"], MR_DESCRIPTION_SYSTEM_PROMPT);
+    }
+
+    #[test]
+    fn review_request_uses_the_review_prompt_and_budget() {
+        let request = build_review_request(&settings(AiProvider::Anthropic), "patch text", "en");
+        let body: serde_json::Value = serde_json::from_str(&request.body).unwrap();
+        assert_eq!(body["system"], REVIEW_SYSTEM_PROMPT);
+        assert_ne!(body["system"], EXPLAIN_SYSTEM_PROMPT);
+        assert_eq!(body["max_tokens"], MAX_REVIEW_OUTPUT_TOKENS);
+        assert!(
+            body["messages"][0]["content"]
+                .as_str()
+                .unwrap()
+                .contains("patch text")
+        );
+
+        let openai =
+            build_review_request(&settings(AiProvider::OpenAiCompatible), "patch text", "en");
+        let body: serde_json::Value = serde_json::from_str(&openai.body).unwrap();
+        assert_eq!(body["messages"][0]["content"], REVIEW_SYSTEM_PROMPT);
+        assert_eq!(body["max_tokens"], MAX_REVIEW_OUTPUT_TOKENS);
+        // Reviews run colder than the prose prompts: a list has a shape to hit.
+        assert!(body["temperature"].as_f64().unwrap() < 0.3);
+    }
+
+    #[test]
+    fn review_cli_prompt_carries_the_prompt_and_patch() {
+        let prompt = build_review_cli_prompt("@@ -1 +1 @@\n-a\n+b", "zh-CN");
+        assert!(prompt.starts_with(REVIEW_SYSTEM_PROMPT));
+        assert!(prompt.contains("zh-CN"));
+        assert!(prompt.contains("@@ -1 +1 @@"));
+    }
+
+    #[test]
+    fn parse_review_reads_the_documented_shape() {
+        let raw = r#"{"findings":[{"severity":"error","line":42,"title":"Off-by-one","suggestion":"Use ..="}]}"#;
+        let findings = parse_review_response(raw);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].severity, ReviewSeverity::Error);
+        assert_eq!(findings[0].line, Some(42));
+        assert_eq!(findings[0].title, "Off-by-one");
+        assert_eq!(findings[0].suggestion, "Use ..=");
+    }
+
+    #[test]
+    fn parse_review_survives_fences_synonyms_and_malformed_entries() {
+        // A fenced reply, severities the model chose for itself, a line given
+        // as a string, an entry with no title, and a null line.
+        let raw = "```json\n{\"findings\":[\
+                   {\"severity\":\"critical\",\"line\":\"7\",\"title\":\"Leak\",\"suggestion\":\"Close it\"},\
+                   {\"severity\":\"nit\",\"line\":null,\"title\":\"Naming\"},\
+                   {\"severity\":\"warning\",\"line\":9}]}\n```";
+        let findings = parse_review_response(raw);
+        assert_eq!(findings.len(), 2, "the titleless entry is dropped");
+        assert_eq!(findings[0].severity, ReviewSeverity::Error);
+        assert_eq!(findings[0].line, Some(7), "a numeric string is a line");
+        assert_eq!(findings[1].severity, ReviewSeverity::Info);
+        assert_eq!(findings[1].line, None);
+        assert!(
+            findings[1].suggestion.is_empty(),
+            "a missing suggestion is blank, not a placeholder"
+        );
+    }
+
+    #[test]
+    fn parse_review_accepts_a_bare_array_and_degrades_prose() {
+        let findings = parse_review_response(r#"[{"severity":"warning","line":3,"title":"Race"}]"#);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].severity, ReviewSeverity::Warning);
+
+        // Prose is not JSON, but it is still an answer: keep it as one Info
+        // finding rather than losing it to a parse error.
+        let degraded = parse_review_response("Looks fine to me.");
+        assert_eq!(degraded.len(), 1);
+        assert_eq!(degraded[0].severity, ReviewSeverity::Info);
+        assert_eq!(degraded[0].title, "Looks fine to me.");
+    }
+
+    #[test]
+    fn parse_review_reports_a_clean_file_as_no_findings() {
+        assert!(parse_review_response(r#"{"findings":[]}"#).is_empty());
+        assert!(parse_review_response("").is_empty());
+    }
+
+    #[test]
+    fn review_severity_maps_the_models_wording() {
+        assert_eq!(
+            ReviewSeverity::from_key("Error"),
+            Some(ReviewSeverity::Error)
+        );
+        assert_eq!(
+            ReviewSeverity::from_key(" NIT "),
+            Some(ReviewSeverity::Info)
+        );
+        assert_eq!(
+            ReviewSeverity::from_key("major"),
+            Some(ReviewSeverity::Warning)
+        );
+        assert_eq!(ReviewSeverity::from_key("whatever"), None);
     }
 }

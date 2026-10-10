@@ -232,6 +232,9 @@ pub(in crate::view) fn popover_width_spec(kind: &PopoverKind) -> Option<PopoverW
         // The explanation reads like prose, not a form; give it the wide
         // dialog so a normal paragraph wraps once, not three times.
         PopoverKind::HunkExplanation { .. } => Some(DIALOG_540_WIDTH),
+        // A review is a list of short lines — severity, line, one sentence —
+        // so the wide dialog keeps a finding to one or two lines each.
+        PopoverKind::FileReview { .. } => Some(DIALOG_540_WIDTH),
         PopoverKind::CreateBranchFromRefPrompt { .. }
         | PopoverKind::RenameBranchPrompt { .. }
         | PopoverKind::CheckoutRemoteBranchPrompt { .. } => Some(DIALOG_540_WIDTH),

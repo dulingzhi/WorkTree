@@ -110,4 +110,20 @@ impl PopoverHost {
         };
         crate::view::diff_utils::build_unified_patch_for_hunk(diff.lines.as_slice(), hunk_src_ix)
     }
+
+    /// One file's patch in full, looked up by path. The hunk builder above
+    /// needs a `src_ix` the caller already has; a file-level action starts
+    /// from the path on screen instead, and reviews the whole file rather
+    /// than the one hunk the cursor is in.
+    pub(in crate::view::panels::popover) fn build_unified_patch_for_path(
+        &self,
+        repo_id: RepoId,
+        path: &std::path::Path,
+    ) -> Option<String> {
+        let repo = self.state.repos.iter().find(|r| r.id == repo_id)?;
+        let Loadable::Ready(diff) = &repo.diff_state.diff else {
+            return None;
+        };
+        crate::view::diff_utils::build_unified_patch_for_path(diff.lines.as_slice(), path)
+    }
 }

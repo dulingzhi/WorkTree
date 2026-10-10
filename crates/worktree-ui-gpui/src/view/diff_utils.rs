@@ -616,6 +616,36 @@ pub(super) fn build_unified_patch_for_hunks(
     (!out.trim().is_empty()).then_some(out)
 }
 
+/// One file's patch in full — its `diff --git` header plus every hunk that
+/// follows it — located by the new-side path rather than by a hunk index.
+///
+/// The other builders above start from a hunk the caller already has; a
+/// file-level action (reviewing the file you are looking at) starts from a
+/// path instead, and the file's own header lines are what the model needs to
+/// know which file it is reading.
+pub(super) fn build_unified_patch_for_path(
+    diff: &[impl UnifiedDiffLine],
+    path: &std::path::Path,
+) -> Option<String> {
+    // Git always reports paths with forward slashes, whatever the host
+    // separator is, so a Windows `Path` has to be normalized before matching.
+    let needle = format!(" b/{}", path.to_string_lossy().replace('\\', "/"));
+    let file_start = diff.iter().position(|line| {
+        let text = line.text();
+        text.starts_with("diff --git ") && text.trim_end().ends_with(&needle)
+    })?;
+    let file_end = (file_start + 1..diff.len())
+        .find(|&ix| diff[ix].text().starts_with("diff --git "))
+        .unwrap_or(diff.len());
+
+    let mut out = String::new();
+    for line in &diff[file_start..file_end] {
+        out.push_str(line.text());
+        out.push('\n');
+    }
+    (!out.trim().is_empty()).then_some(out)
+}
+
 #[derive(Clone, Copy)]
 enum UnselectedHunkLineBehavior {
     Drop,
@@ -1153,6 +1183,50 @@ mod tests {
         let patch = build_unified_patch_for_hunks(&diff, &[4, 9]).expect("patch");
         assert!(patch.contains("@@ -1,3 +1,3 @@"));
         assert!(patch.contains("@@ -5,3 +5,4 @@"));
+    }
+
+    #[test]
+    fn build_unified_patch_for_path_covers_every_hunk_of_that_file() {
+        let diff = example_two_hunk_diff();
+        let patch =
+            build_unified_patch_for_path(&diff, std::path::Path::new("file.txt")).expect("patch");
+        assert!(patch.starts_with("diff --git a/file.txt b/file.txt"));
+        assert!(patch.contains("@@ -1,3 +1,3 @@"));
+        assert!(patch.contains("@@ -5,3 +5,4 @@"));
+        assert!(patch.contains("+line6_5"));
+    }
+
+    #[test]
+    fn build_unified_patch_for_path_stops_at_the_next_file() {
+        let diff = example_two_file_diff();
+        let patch =
+            build_unified_patch_for_path(&diff, std::path::Path::new("a.txt")).expect("patch");
+        assert!(patch.contains("+a"));
+        assert!(!patch.contains("b.txt"), "the next file stays out");
+        assert!(!patch.contains("+b"));
+
+        let second =
+            build_unified_patch_for_path(&diff, std::path::Path::new("b.txt")).expect("patch");
+        assert!(second.contains("diff --git a/b.txt b/b.txt"));
+        assert!(!second.contains("+a"));
+    }
+
+    #[test]
+    fn build_unified_patch_for_path_matches_the_whole_path_only() {
+        let diff = example_two_file_diff();
+        assert!(build_unified_patch_for_path(&diff, std::path::Path::new("nope.txt")).is_none());
+
+        // The needle is anchored to the ` b/` half of the header, so a bare
+        // `a.txt` must not reach into `x/a.txt`.
+        let nested = vec![
+            dl(K::Header, "diff --git a/x/a.txt b/x/a.txt"),
+            dl(K::Header, "--- a/x/a.txt"),
+            dl(K::Header, "+++ b/x/a.txt"),
+            dl(K::Hunk, "@@ -1,0 +1,1 @@"),
+            dl(K::Add, "+a"),
+        ];
+        assert!(build_unified_patch_for_path(&nested, std::path::Path::new("a.txt")).is_none());
+        assert!(build_unified_patch_for_path(&nested, std::path::Path::new("x/a.txt")).is_some());
     }
 
     #[test]

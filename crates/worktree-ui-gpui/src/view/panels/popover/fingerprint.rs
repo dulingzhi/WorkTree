@@ -196,6 +196,7 @@ fn repo_for_popover<'a>(state: &'a AppState, popover: &PopoverKind) -> Option<&'
         | PopoverKind::DiffHunkMenu { repo_id, .. }
         | PopoverKind::DiffEditorMenu { repo_id, .. }
         | PopoverKind::HunkExplanation { repo_id, .. }
+        | PopoverKind::FileReview { repo_id, .. }
         | PopoverKind::CommitMenu { repo_id, .. }
         | PopoverKind::StatusFileMenu { repo_id, .. }
         | PopoverKind::BranchMenu { repo_id, .. }
@@ -517,6 +518,9 @@ fn hash_repo_for_popover<H: Hasher>(repo: &RepoState, popover: &PopoverKind, has
         // repaints through cx.notify; hashing the diff would rebuild the
         // popover under the reply when an unrelated refresh lands.
         | PopoverKind::HunkExplanation { .. }
+        // The same for a review: the patch snapshot travels with the host's
+        // review state and repaints through cx.notify.
+        | PopoverKind::FileReview { .. }
         | PopoverKind::DiffContentModeSettings
         | PopoverKind::WebLinkMenu { .. }
         | PopoverKind::CommitShaLinkMenu { .. }
@@ -799,6 +803,11 @@ fn hash_popover_kind<H: Hasher>(kind: &PopoverKind, hasher: &mut H) {
             115u8.hash(hasher);
             repo_id.hash(hasher);
             src_ix.hash(hasher);
+        }
+        PopoverKind::FileReview { repo_id, path } => {
+            119u8.hash(hasher);
+            repo_id.hash(hasher);
+            path.hash(hasher);
         }
         PopoverKind::AddToGitignorePrompt {
             repo_id,

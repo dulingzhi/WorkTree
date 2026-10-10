@@ -238,6 +238,11 @@ impl PopoverHost {
             statistics_period: statistics::StatisticsPeriod::default(),
             undo_reset_mode: None,
             hunk_explanation: None,
+            file_review: None,
+            #[cfg(test)]
+            file_review_test_requests: 0,
+            #[cfg(test)]
+            file_review_test_last_patch: None,
             #[cfg(test)]
             hunk_explanation_test_requests: 0,
             #[cfg(test)]

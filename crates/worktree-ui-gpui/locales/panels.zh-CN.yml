@@ -93,6 +93,17 @@ panels:
     stop: "停止"
     retry: 重试
     close: 关闭
+  file_review:
+    title: "审查此文件"
+    generating: "正在询问模型…"
+    stop: "停止"
+    retry: 重试
+    close: 关闭
+    clean: "未发现问题。"
+    line: "第 %{line} 行"
+    severity_error: 错误
+    severity_warning: 警告
+    severity_info: 提示
   repo_hooks:
     close: 关闭
   merge_preview:

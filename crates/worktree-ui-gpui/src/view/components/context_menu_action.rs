@@ -530,6 +530,13 @@ pub(in crate::view) enum ContextMenuAction {
         repo_id: RepoId,
         src_ix: usize,
     },
+    /// Ask the configured AI source to review one file's whole change. Keyed
+    /// by path, not by `src_ix`: the review covers every hunk of the file, and
+    /// the path is what identifies it.
+    ReviewFile {
+        repo_id: RepoId,
+        path: std::path::PathBuf,
+    },
     DeleteTag {
         repo_id: RepoId,
         name: String,

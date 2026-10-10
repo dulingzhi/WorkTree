@@ -175,5 +175,22 @@ pub(super) fn model(
         }),
     });
 
+    // The AI entry rides the menu wherever a file is on screen: the review
+    // covers that file's whole patch, so the path is all it needs. Like the
+    // commit-box ✨, the source is checked at click time (files and PATH
+    // entries change between render and click), so the entry stays enabled and
+    // an unconfigured source surfaces as a warning toast.
+    items.push(ContextMenuItem::Separator);
+    items.push(ContextMenuItem::Entry {
+        label: "Review this file".into(),
+        icon: Some("icons/sparkle.svg".into()),
+        shortcut: None,
+        disabled: path.is_none(),
+        action: Box::new(ContextMenuAction::ReviewFile {
+            repo_id,
+            path: path.clone().unwrap_or_default(),
+        }),
+    });
+
     ContextMenuModel::new(items)
 }

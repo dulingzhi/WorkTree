@@ -300,6 +300,14 @@ pub(in crate::view) enum PopoverKind {
         repo_id: RepoId,
         src_ix: usize,
     },
+    /// The diff view's "Review this file" answer for one file, held open while
+    /// the AI request runs and once it lands. Keyed by path rather than a
+    /// `src_ix` — the review covers the whole file, and the path is what
+    /// survives a diff reload that moves every line's index.
+    FileReview {
+        repo_id: RepoId,
+        path: std::path::PathBuf,
+    },
     /// Actions for a web link clicked in the rendered markdown preview or in a
     /// commit message.
     WebLinkMenu {

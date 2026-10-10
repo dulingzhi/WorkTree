@@ -61,6 +61,7 @@ mod context_shortcuts;
 mod dialog;
 mod file_actions;
 mod file_history;
+mod file_review;
 mod history_ref_filter;
 mod hunk_explanation;
 mod layout;
