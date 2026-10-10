@@ -238,3 +238,176 @@ mod tests {
         );
     }
 }
+
+/// Catalogue-coverage guards.
+///
+/// The English catalogue is the source of truth: every key it defines must be
+/// translated in the other catalogues, and every semantic key a call site asks
+/// for must exist in it. Both failures are silent at runtime — a missing key
+/// renders as the raw key — so they are asserted here instead.
+///
+/// Gettext-style keys (English source text used as its own key, e.g.
+/// `tr("Checkout")`) have no English entry by design: they fall back to
+/// themselves. Only dotted lowercase identifiers are therefore checked.
+#[cfg(test)]
+mod catalog_tests {
+    use rust_i18n::Backend as _;
+    use std::collections::BTreeMap;
+    use std::path::{Path, PathBuf};
+
+    /// Every `key -> value` pair the loader embedded for `locale`.
+    fn catalog(locale: &str) -> BTreeMap<String, String> {
+        let entries = crate::_rust_i18n_backend()
+            .messages_for_locale(locale)
+            .unwrap_or_else(|| panic!("no `{locale}` catalogue was embedded"));
+        entries
+            .into_iter()
+            .map(|(key, value)| (key.into_owned(), value.into_owned()))
+            .collect()
+    }
+
+    fn collect_source_files(dir: &Path, out: &mut Vec<PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                collect_source_files(&path, out);
+            } else if path.extension().is_some_and(|ext| ext == "rs") {
+                out.push(path);
+            }
+        }
+    }
+
+    /// Every `"…"` literal handed to `tr(` / `tr_str(` / `t!(`, with the byte
+    /// offset it starts at.
+    fn key_literals(text: &str) -> Vec<(String, usize)> {
+        let mut out = Vec::new();
+        for call in ["tr(", "tr_str(", "t!("] {
+            let mut from = 0;
+            while let Some(rel) = text[from..].find(call) {
+                let after_call = from + rel + call.len();
+                let rest = &text[after_call..];
+                let trimmed = rest.trim_start();
+                // Anything but a `"` (an interpolated key, a call that takes
+                // something else): resume just past the call so a nested hit
+                // on the same line still matches.
+                let Some(after_quote) = trimmed
+                    .strip_prefix('"')
+                    .and_then(|key| key.find('"').map(|end| (key, end)))
+                else {
+                    from = after_call;
+                    continue;
+                };
+                let (key, end) = after_quote;
+                let literal = key[..end].to_string();
+                from = after_call + (rest.len() - trimmed.len()) + 1 + end + 1;
+                out.push((literal, after_call));
+            }
+        }
+        out
+    }
+
+    /// Semantic keys are dotted lowercase identifiers such as
+    /// `ui.placeholder.mr_push_target`; English source text used as its own
+    /// key is gettext style and has no English entry by design.
+    fn is_semantic_key(key: &str) -> bool {
+        key.contains('.')
+            && !key.contains(char::is_whitespace)
+            && key.split('.').all(|segment| {
+                !segment.is_empty()
+                    && segment
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+            })
+    }
+
+    fn line_of(text: &str, offset: usize) -> usize {
+        text[..offset].matches('\n').count() + 1
+    }
+
+    /// `key -> first place it is asked for`, for failure messages.
+    fn referenced_keys() -> BTreeMap<String, String> {
+        let mut files = Vec::new();
+        collect_source_files(
+            &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src"),
+            &mut files,
+        );
+        let mut out = BTreeMap::new();
+        for path in files {
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            for (key, offset) in key_literals(&text) {
+                if is_semantic_key(&key) {
+                    out.entry(key).or_insert_with(|| {
+                        format!("{}:{}", path.display(), line_of(&text, offset))
+                    });
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn both_catalogues_are_embedded() {
+        let locales = crate::_rust_i18n_backend().available_locales();
+        let locales: Vec<&str> = locales.iter().map(|locale| locale.as_ref()).collect();
+        assert!(locales.contains(&"en"), "loaded locales: {locales:?}");
+        assert!(locales.contains(&"zh-CN"), "loaded locales: {locales:?}");
+    }
+
+    #[test]
+    fn every_english_key_is_translated() {
+        let english = catalog("en");
+        let chinese = catalog("zh-CN");
+        assert!(!english.is_empty(), "the English catalogue is empty");
+        let missing: Vec<&String> = english
+            .keys()
+            .filter(|key| !chinese.contains_key(*key))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "zh-CN is missing {} translation(s): {missing:#?}",
+            missing.len()
+        );
+    }
+
+    #[test]
+    fn every_semantic_key_a_call_site_asks_for_exists() {
+        let english = catalog("en");
+        let referenced = referenced_keys();
+        // A scanner that quietly stops seeing the tree is worse than no
+        // scanner at all: fail on a suspiciously small result.
+        assert!(
+            referenced.len() > 1000,
+            "the key scanner only found {} key(s) under src/",
+            referenced.len()
+        );
+        let missing: Vec<(&String, &String)> = referenced
+            .iter()
+            .filter(|(key, _)| !english.contains_key(*key))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "{} call site(s) ask for a key the English catalogue does not define: {missing:#?}",
+            missing.len()
+        );
+    }
+
+    #[test]
+    fn english_catalogue_has_no_empty_values() {
+        let english = catalog("en");
+        let empty: Vec<&String> = english
+            .iter()
+            .filter(|(_, value)| value.trim().is_empty())
+            .map(|(key, _)| key)
+            .collect();
+        assert!(
+            empty.is_empty(),
+            "{} English value(s) are empty: {empty:#?}",
+            empty.len()
+        );
+    }
+}
