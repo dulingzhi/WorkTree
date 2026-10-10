@@ -172,6 +172,40 @@ jobs:
       - name: Run UI smoke test under selected profile
         run: cargo test -p worktree-ui-gpui smoke_tests::smoke_view_renders_without_panicking -- --exact
 
+  # The GPUI crate is excluded from every `cargo test --workspace` above, so
+  # its ~3.4k lib tests have never run in CI — which is how an inverted
+  # assertion shipped in 138235cb and stayed green (see a699d545). This job is
+  # the missing gate.
+  ui-lib-tests:
+    name: UI crate lib tests (Linux)
+    runs-on: ubuntu-22.04
+    # Compiling the GPUI crate and its test targets from a cold cache is the
+    # slowest single build in this workflow: roughly 10 minutes on an idle
+    # runner, and it is the reason the other jobs exclude it.
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Linux UI native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libxcb1-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2
+      # PROBE — reporting only. These tests have never run on a runner, so
+      # failures that only show up there (fonts, locale, timing) are a real
+      # possibility and must not block an unrelated push while we find out.
+      # Drop `continue-on-error` once one run has come back green; that turns
+      # this into the gate it is meant to be.
+      - name: Run UI crate lib tests
+        continue-on-error: true
+        run: cargo test -p worktree-ui-gpui --lib --locked
+
   macos-tests:
     name: macOS Tests (${{ matrix.name }})
     runs-on: ${{ matrix.runs_on }}
