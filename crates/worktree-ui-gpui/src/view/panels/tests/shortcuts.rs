@@ -5762,7 +5762,8 @@ fn space_stages_every_ctrl_selected_file(cx: &mut gpui::TestAppContext) {
 
     assert!(
         cx.update(|_window, app| {
-            view.read(app)
+            !view
+                .read(app)
                 .details_pane
                 .read(app)
                 .status_multi_selection
