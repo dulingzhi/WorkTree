@@ -107,6 +107,9 @@ panels:
     severity_error: Error
     severity_warning: Warning
     severity_info: Nit
+    copy: "Copy as Markdown"
+    copied: "Review copied as Markdown"
+    markdown_heading: "Review: %{path}"
   repo_hooks:
     close: Close
   merge_preview:

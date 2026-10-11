@@ -405,3 +405,57 @@ fn review_file_popover_stop_cancels_and_drops_the_late_reply(cx: &mut gpui::Test
         })
     });
 }
+
+#[gpui::test]
+fn review_file_popover_copies_the_findings_as_markdown(cx: &mut gpui::TestAppContext) {
+    let (store, events) = AppStore::new(Arc::new(TestBackend));
+    let (view, cx) =
+        cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
+
+    let repo_id = RepoId(55);
+    cx.update(|_window, app| {
+        view.update(app, |this, cx| {
+            let repo = file_review_fixture_repo(repo_id);
+            push_test_state(this, app_state_with_repo(repo, repo_id), cx);
+        });
+    });
+
+    cx.update(|window, app| {
+        let _ = window.draw(app);
+        let opened = view.update(app, |this, cx| {
+            this.popover_host.update(cx, |host, cx| {
+                host.start_file_review(repo_id, &reviewed_path(), window, cx)
+            })
+        });
+        assert!(opened);
+        view.update(app, |this, cx| {
+            this.popover_host.update(cx, |host, cx| {
+                host.finish_file_review(Ok(one_finding()), cx)
+            })
+        });
+    });
+    cx.update(|window, app| {
+        let _ = window.draw(app);
+    });
+    assert!(
+        cx.debug_bounds("file_review_findings").is_some(),
+        "the findings render before a copy is offered"
+    );
+
+    click_debug_selector(cx, "file_review_copy");
+
+    let copied = cx.update(|_window, app| app.read_from_clipboard().and_then(|item| item.text()));
+    let copied = copied.expect("copy put the review on the clipboard");
+    assert!(
+        copied.contains("src/lib.rs"),
+        "the export names the reviewed file: {copied}"
+    );
+    assert!(
+        copied.contains("Drops the error"),
+        "the export carries the finding: {copied}"
+    );
+    assert!(
+        copied.contains("Propagate it with `?`"),
+        "the export carries the suggestion: {copied}"
+    );
+}

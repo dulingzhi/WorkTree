@@ -104,6 +104,9 @@ panels:
     severity_error: 错误
     severity_warning: 警告
     severity_info: 提示
+    copy: "复制为 Markdown"
+    copied: "审查结果已复制为 Markdown"
+    markdown_heading: "审查：%{path}"
   repo_hooks:
     close: 关闭
   merge_preview:

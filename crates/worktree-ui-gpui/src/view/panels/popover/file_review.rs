@@ -229,6 +229,32 @@ fn findings_body(
         )
 }
 
+/// The Markdown a "Copy as Markdown" click puts on the clipboard: a heading
+/// naming the reviewed file, then one bullet per finding with its suggestion
+/// nested beneath it. Shaped to paste straight into a review comment.
+fn findings_to_markdown(path: &str, findings: &[ReviewFinding]) -> String {
+    let heading = crate::i18n::t!("panels.file_review.markdown_heading", path = path).into_owned();
+    let mut out = format!("# {heading}\n\n");
+    for finding in findings {
+        match finding.line {
+            Some(line) => out.push_str(&format!(
+                "- **{}** (L{line}): {}\n",
+                finding.severity.label(),
+                finding.title
+            )),
+            None => out.push_str(&format!(
+                "- **{}**: {}\n",
+                finding.severity.label(),
+                finding.title
+            )),
+        }
+        if !finding.suggestion.is_empty() {
+            out.push_str(&format!("  - {}\n", finding.suggestion));
+        }
+    }
+    out
+}
+
 /// The body shown when the model found nothing to say: a review that came back
 /// clean is a result, not an empty panel.
 fn clean_body(theme: AppTheme) -> gpui::Div {
@@ -303,7 +329,28 @@ pub(super) fn panel(
                 }
                 FileReviewPhase::Ready(findings) => {
                     dialog = dialog.section(findings_body(theme, findings, scaled_px));
-                    actions = div();
+                    let path = review.path.to_string_lossy().replace('\\', "/");
+                    let markdown = findings_to_markdown(&path, findings);
+                    let copy = components::Button::new(
+                        "file_review_copy",
+                        crate::i18n::tr("panels.file_review.copy"),
+                    )
+                    .style(components::ButtonStyle::Outlined)
+                    .on_click(theme, cx, move |this, _e, window, cx| {
+                        window.activate_window();
+                        crate::clipboard::write_text(
+                            cx,
+                            markdown.clone(),
+                            crate::clipboard::CopySource::FileReview,
+                        );
+                        this.push_toast(
+                            components::ToastKind::Success,
+                            crate::i18n::t!("panels.file_review.copied").into_owned(),
+                            cx,
+                        );
+                    })
+                    .debug_selector(|| "file_review_copy".to_string());
+                    actions = div().child(copy);
                 }
                 FileReviewPhase::Error(message) => {
                     dialog = dialog.section(
@@ -351,6 +398,53 @@ mod tests {
         assert_eq!(
             severity_color(theme, ReviewSeverity::Info),
             theme.colors.status.info.foreground
+        );
+    }
+
+    #[test]
+    fn findings_to_markdown_carries_every_finding_and_skips_what_is_missing() {
+        let findings = vec![
+            ReviewFinding {
+                severity: ReviewSeverity::Error,
+                line: Some(3),
+                title: "Drops the error".into(),
+                suggestion: "Propagate it with `?`".into(),
+            },
+            ReviewFinding {
+                severity: ReviewSeverity::Info,
+                line: None,
+                title: "Name is vague".into(),
+                suggestion: String::new(),
+            },
+        ];
+        let markdown = findings_to_markdown("src/lib.rs", &findings);
+
+        let heading = crate::i18n::t!("panels.file_review.markdown_heading", path = "src/lib.rs")
+            .into_owned();
+        assert!(
+            markdown.starts_with(&format!("# {heading}\n\n")),
+            "the reviewed file heads the export: {markdown}"
+        );
+        assert!(
+            markdown.contains(&format!(
+                "- **{}** (L3): Drops the error",
+                ReviewSeverity::Error.label()
+            )),
+            "severity, line and title survive the round trip: {markdown}"
+        );
+        assert!(
+            markdown.contains("  - Propagate it with `?`"),
+            "the suggestion nests under its finding: {markdown}"
+        );
+        // A finding with no line drops the marker, and an empty suggestion is
+        // omitted rather than rendered as an empty bullet.
+        let second = markdown
+            .lines()
+            .find(|line| line.contains("Name is vague"))
+            .expect("the second finding is exported");
+        assert!(
+            !second.contains("(L"),
+            "no line marker without a line number: {second}"
         );
     }
 }
