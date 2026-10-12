@@ -74,24 +74,26 @@ pub(super) fn rows(repo: &RepoState, query: &str) -> WorkspaceRows {
     // block instead of a short row stacked on tall ones.
     let create_item = if query.is_empty() {
         components::PickerPromptItem::from_parts([components::PickerPromptItemPart::new(
-            crate::i18n::tr("pick.worktree.create_new"),
+            crate::i18n::tr("pickers.worktree.create_new"),
         )
         .flexible(false)
         .searchable(false)
         .tooltip(false)])
     } else {
         components::PickerPromptItem::from_parts([
-            components::PickerPromptItemPart::new(crate::i18n::tr("pick.worktree.create_prefix"))
-                .flexible(false)
-                .searchable(false)
-                .tooltip(false),
+            components::PickerPromptItemPart::new(crate::i18n::tr(
+                "pickers.worktree.create_prefix",
+            ))
+            .flexible(false)
+            .searchable(false)
+            .tooltip(false),
             components::PickerPromptItemPart::new(query.to_string()).flexible(false),
         ])
     };
     items.push(
         create_item
             .secondary_parts([components::PickerPromptItemPart::new(
-                crate::i18n::t!("pick.create_row.based_off", base = base).into_owned(),
+                crate::i18n::t!("pickers.create_row.based_off", base = base).into_owned(),
             )
             .searchable(false)])
             .icon("icons/plus.svg"),
@@ -119,7 +121,7 @@ pub(super) fn rows(repo: &RepoState, query: &str) -> WorkspaceRows {
 
         if let Some(branch) = &worktree.branch {
             primary.push(components::PickerPromptItemPart::separator(
-                crate::i18n::tr("pick.worktree.on_separator"),
+                crate::i18n::tr("pickers.worktree.on_separator"),
             ));
             primary.push(
                 components::PickerPromptItemPart::new(branch.clone())

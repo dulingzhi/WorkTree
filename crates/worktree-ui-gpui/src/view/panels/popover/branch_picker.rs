@@ -224,14 +224,16 @@ pub(super) fn rows(repo: &RepoState, query: &str, now: std::time::SystemTime) ->
         let base = head_branch.unwrap_or("HEAD");
         items.push(
             components::PickerPromptItem::from_parts([
-                components::PickerPromptItemPart::new(crate::i18n::tr("pick.branch.create_prefix"))
-                    .flexible(false)
-                    .searchable(false)
-                    .tooltip(false),
+                components::PickerPromptItemPart::new(crate::i18n::tr(
+                    "pickers.branch.create_prefix",
+                ))
+                .flexible(false)
+                .searchable(false)
+                .tooltip(false),
                 components::PickerPromptItemPart::new(query.to_string()).flexible(false),
             ])
             .secondary_parts([components::PickerPromptItemPart::new(
-                crate::i18n::t!("pick.create_row.based_off", base = base).into_owned(),
+                crate::i18n::t!("pickers.create_row.based_off", base = base).into_owned(),
             )
             .searchable(false)])
             .icon("icons/plus.svg"),

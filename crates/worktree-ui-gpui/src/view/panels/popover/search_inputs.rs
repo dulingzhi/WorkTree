@@ -469,7 +469,7 @@ impl PopoverHost {
     ) -> Entity<components::TextInput> {
         let input = Self::ensure_search_input_entity(
             &mut self.workspace_picker.workspace_picker_search_input,
-            crate::i18n::tr_str("pick.worktree.placeholder"),
+            crate::i18n::tr_str("pickers.worktree.placeholder"),
             window,
             cx,
         );

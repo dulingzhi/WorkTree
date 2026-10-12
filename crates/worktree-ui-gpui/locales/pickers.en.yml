@@ -9,7 +9,7 @@
 # Titles and empty-state strings that already have keys elsewhere reuse them
 # (palette.cmd.*, ui.common.*); section headers stay English identity keys
 # localized at render time through `tr_en`.
-pick:
+pickers:
   # Detail line under a picker's create row: the ref the new branch/worktree
   # would start from.
   create_row:

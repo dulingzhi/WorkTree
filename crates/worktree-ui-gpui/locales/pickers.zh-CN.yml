@@ -4,7 +4,7 @@
 # 工作树选择器，以及仓库标签后的"+"菜单。标题与空态文案复用已有键
 # （palette.cmd.*、ui.common.*）；分区标题保持英文标识键，渲染时经
 # `tr_en` 本地化。
-pick:
+pickers:
   # 选择器创建行下方的说明行：新分支/工作树所基于的引用。
   create_row:
     based_off: "基于 %{base}"

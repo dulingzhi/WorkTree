@@ -62,7 +62,7 @@ pub(super) fn rows(repo: &RepoState, branch: &str, _query: &str) -> UpstreamRows
     if let Some(upstream) = current.as_deref() {
         items.push(
             components::PickerPromptItem::from_parts([
-                components::PickerPromptItemPart::new(crate::i18n::tr("pick.upstream.unlink"))
+                components::PickerPromptItemPart::new(crate::i18n::tr("pickers.upstream.unlink"))
                     .searchable(false)
                     .tooltip(false),
                 components::PickerPromptItemPart::separator("  "),
@@ -201,7 +201,7 @@ pub(super) fn panel(
                     div()
                         .text_sm()
                         .font_weight(FontWeight::BOLD)
-                        .child(crate::i18n::tr("pick.upstream.title")),
+                        .child(crate::i18n::tr("pickers.upstream.title")),
                 )
                 .child(
                     div()
