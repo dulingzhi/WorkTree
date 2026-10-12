@@ -20,6 +20,8 @@ palette:
   cmd:
     commit: Commit Changes
     stage-all: Stage All Changes
+    review-file: Review this file
+    review-file-needs-file: "Open a file's diff first; there is nothing to review yet."
     unstage-all: Unstage All Changes
     discard-all: Discard All Changes
     create-branch: Create Branch

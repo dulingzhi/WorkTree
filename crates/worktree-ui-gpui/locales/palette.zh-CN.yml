@@ -9,6 +9,8 @@ palette:
   cmd:
     commit: 提交更改
     stage-all: 暂存所有更改
+    review-file: 审查此文件
+    review-file-needs-file: "请先打开某个文件的 diff，现在没有可审查的内容。"
     unstage-all: 取消暂存所有更改
     discard-all: 丢弃所有更改
     create-branch: 创建分支

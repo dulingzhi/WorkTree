@@ -459,3 +459,44 @@ fn review_file_popover_copies_the_findings_as_markdown(cx: &mut gpui::TestAppCon
         "the export carries the suggestion: {copied}"
     );
 }
+
+/// The palette reaches the review the right-click menu does, without the menu:
+/// "this file" is the one the active diff view is showing.
+#[gpui::test]
+fn command_palette_review_file_reviews_the_file_in_the_diff_view(cx: &mut gpui::TestAppContext) {
+    let (store, events) = AppStore::new(Arc::new(TestBackend));
+    let (view, cx) =
+        cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
+
+    let repo_id = RepoId(56);
+    cx.update(|_window, app| {
+        view.update(app, |this, cx| {
+            let repo = file_review_fixture_repo(repo_id);
+            push_test_state(this, app_state_with_repo(repo, repo_id), cx);
+        });
+    });
+
+    cx.update(|window, app| {
+        view.update(app, |this, cx| {
+            this.execute_command("review-file", Some(window), cx)
+        });
+    });
+    cx.update(|window, app| {
+        let _ = window.draw(app);
+    });
+
+    cx.update(|_window, app| {
+        assert!(
+            popover_is_open(&view, app),
+            "the palette command opens the review popover"
+        );
+        let (requests, patch) = review_seams(&view, app);
+        assert_eq!(requests, 1, "the command drives the review request");
+        assert!(
+            patch
+                .expect("the request carries its snapshot")
+                .contains("diff --git a/src/lib.rs b/src/lib.rs"),
+            "it reviews the file the diff view is showing"
+        );
+    });
+}

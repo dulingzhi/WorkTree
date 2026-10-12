@@ -581,6 +581,22 @@ fn active_diff_target(state: &AppState) -> Option<(RepoId, DiffTarget)> {
     Some((repo_id, repo.diff_state.diff_target.clone()?))
 }
 
+/// The file a "Review this file" command reviews: the single path the active
+/// diff view is showing, whichever side of history it came from. `None` when
+/// the view shows a whole commit (or a whole range) with no file selected.
+fn reviewable_target_path(target: &DiffTarget) -> Option<std::path::PathBuf> {
+    match target {
+        DiffTarget::WorkingTree { path, .. } => Some(path.clone()),
+        DiffTarget::Commit {
+            path: Some(path), ..
+        } => Some(path.clone()),
+        DiffTarget::CommitRange {
+            path: Some(path), ..
+        } => Some(path.clone()),
+        _ => None,
+    }
+}
+
 fn active_merge_view_target(state: &AppState) -> Option<(RepoId, DiffTarget)> {
     let (repo_id, target) = active_diff_target(state)?;
     let DiffTarget::WorkingTree { path, area } = &target else {
@@ -1583,6 +1599,25 @@ impl WorkTreeView {
                         window,
                         cx,
                     );
+                }
+            }
+            "review-file" => {
+                let target = active_diff_target(&self.state).and_then(|(repo_id, target)| {
+                    reviewable_target_path(&target).map(|path| (repo_id, path))
+                });
+                match (target, window) {
+                    (Some((repo_id, path)), Some(window)) => {
+                        self.popover_host.update(cx, |host, cx| {
+                            host.start_file_review(repo_id, &path, window, cx);
+                        });
+                    }
+                    // No file is open in the diff view (a whole commit, or
+                    // nothing): there is nothing to point the review at.
+                    _ => self.push_toast(
+                        components::ToastKind::Error,
+                        crate::i18n::tr_str("palette.cmd.review-file-needs-file").to_string(),
+                        cx,
+                    ),
                 }
             }
             "show-reflog" => {

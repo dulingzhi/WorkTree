@@ -49,7 +49,7 @@ impl PopoverHost {
     /// review popover anchored where the menu was, and start the request.
     /// Returns whether the popover opened, so the caller can leave its own
     /// close-path alone when it did.
-    pub(super) fn start_file_review(
+    pub(in crate::view) fn start_file_review(
         &mut self,
         repo_id: RepoId,
         path: &std::path::Path,
