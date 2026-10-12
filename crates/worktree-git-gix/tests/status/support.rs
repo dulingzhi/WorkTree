@@ -114,19 +114,22 @@ mod support_tests {
 
     #[test]
     fn message_mentions_path_accepts_either_separator_form() {
-        // On Windows the two forms genuinely differ; elsewhere they collapse
-        // to the same string and the test still holds.
         let path = Path::new("a\\b");
+        let native = path.to_string_lossy().into_owned();
         assert!(
-            message_mentions_path("worktree at 'a\\b'", path),
-            "the native form matches"
+            message_mentions_path(&format!("worktree at '{native}'"), &path),
+            "the form the path itself carries must match"
+        );
+        // Windows rewrites separators when handing a path to git, so that form
+        // must match too. Elsewhere the two coincide and this repeats the
+        // assertion above rather than inventing a form that cannot occur.
+        let slashed = git_path_arg(&path);
+        assert!(
+            message_mentions_path(&format!("worktree at '{slashed}'"), &path),
+            "the git_path_arg form must match"
         );
         assert!(
-            message_mentions_path("worktree at 'a/b'", path),
-            "the slashed form matches"
-        );
-        assert!(
-            !message_mentions_path("worktree at 'a/c'", path),
+            !message_mentions_path("worktree at 'a/c'", &path),
             "an unrelated path does not match"
         );
     }
