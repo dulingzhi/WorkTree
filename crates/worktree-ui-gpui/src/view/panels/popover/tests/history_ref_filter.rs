@@ -142,6 +142,10 @@ fn ref_filter_popover_lists_branches_remotes_and_tags(cx: &mut gpui::TestAppCont
     cx.update(|window, app| {
         let _ = window.draw(app);
     });
+    // The live poller is off under the test scheduler, so the snapshot the rows
+    // render from has to be pushed by hand before the first click -- the same
+    // reason every toggle below syncs again afterwards.
+    sync_and_redraw(cx, &view);
 
     for selector in [
         "history_ref_filter",
@@ -178,6 +182,10 @@ fn ref_filter_popover_toggles_update_the_store_and_keep_it_open(cx: &mut gpui::T
     cx.update(|window, app| {
         let _ = window.draw(app);
     });
+    // The live poller is off under the test scheduler, so the snapshot the rows
+    // render from has to be pushed by hand before the first click -- the same
+    // reason every toggle below syncs again afterwards.
+    sync_and_redraw(cx, &view);
 
     click_debug_selector(cx, "history_ref_filter_row_refs/heads/dev");
     wait_until("the branch toggle to reach the store", || {
@@ -243,6 +251,10 @@ fn ref_filter_popover_lists_missing_filters_for_removal(cx: &mut gpui::TestAppCo
     cx.update(|window, app| {
         let _ = window.draw(app);
     });
+    // The live poller is off under the test scheduler, so the snapshot the rows
+    // render from has to be pushed by hand before the first click -- the same
+    // reason every toggle below syncs again afterwards.
+    sync_and_redraw(cx, &view);
 
     assert!(
         cx.debug_bounds("history_ref_filter_row_refs/heads/gone")
