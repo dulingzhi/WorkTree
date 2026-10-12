@@ -126,6 +126,9 @@ fn sync_and_redraw(cx: &mut gpui::VisualTestContext, view: &gpui::Entity<WorkTre
 
 #[gpui::test]
 fn ref_filter_popover_lists_branches_remotes_and_tags(cx: &mut gpui::TestAppContext) {
+    // A visual test: the assertions read rendered bounds, so it takes the
+    // visual lock the other popover tests do.
+    let _visual_guard = crate::test_support::lock_visual_test();
     let (store, events, _repo, _workdir) = create_tracking_store("ref-filter-lists");
     let repo_id = seed_refs(&store);
     let store_for_view = store.clone();
@@ -161,6 +164,7 @@ fn ref_filter_popover_lists_branches_remotes_and_tags(cx: &mut gpui::TestAppCont
 
 #[gpui::test]
 fn ref_filter_popover_toggles_update_the_store_and_keep_it_open(cx: &mut gpui::TestAppContext) {
+    let _visual_guard = crate::test_support::lock_visual_test();
     let (store, events, _repo, _workdir) = create_tracking_store("ref-filter-toggle");
     let repo_id = seed_refs(&store);
     let store_for_view = store.clone();
@@ -215,6 +219,7 @@ fn ref_filter_popover_toggles_update_the_store_and_keep_it_open(cx: &mut gpui::T
 
 #[gpui::test]
 fn ref_filter_popover_lists_missing_filters_for_removal(cx: &mut gpui::TestAppContext) {
+    let _visual_guard = crate::test_support::lock_visual_test();
     let (store, events, _repo, _workdir) = create_tracking_store("ref-filter-missing");
     let repo_id = seed_refs(&store);
     // A filter whose branch no longer exists — the shape a restored session
