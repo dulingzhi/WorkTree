@@ -79,6 +79,19 @@ impl WorkTreeView {
         &mut self,
         cx: &mut gpui::Context<Self>,
     ) {
+        // Never run this from a unit test. It writes into the runner's `$HOME`
+        // and shells out to `update-desktop-database` / `gtk-update-icon-cache`,
+        // and the spawn is a *local* task — gpui wraps it so its future may
+        // only be dropped on the spawning thread. Because every
+        // `WorkTreeView::new` spawns this task and its blocking leg is slow,
+        // the test scheduler tears the executor down while the task is still
+        // in flight; the future is then dropped on a blocking thread, and the
+        // assertion that catches it fires inside a destructor — a non-unwinding
+        // panic that aborts the whole test binary and takes unrelated tests
+        // down with it.
+        if cfg!(test) {
+            return;
+        }
         cx.spawn(
             async move |view: WeakEntity<WorkTreeView>, cx: &mut gpui::AsyncApp| {
                 let result: Result<(std::path::PathBuf, std::path::PathBuf), String> =
