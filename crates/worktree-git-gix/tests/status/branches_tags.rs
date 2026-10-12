@@ -1,5 +1,5 @@
 use super::support::{
-    assert_git_failure, git_command, git_path_arg, git_remote_url,
+    assert_git_failure, git_command, git_path_arg, git_remote_url, message_mentions_path,
     require_git_shell_for_status_integration_tests, run_git, run_git_output, write,
 };
 use std::fs;
@@ -627,7 +627,7 @@ fn delete_branch_force_rejects_unborn_current_branch_before_missing_ref_check() 
     assert_git_failure(&err, "git branch -D", GitFailureId::CommandFailed);
     let msg = err.to_string();
     assert!(
-        msg.contains("used by worktree") && msg.contains(&git_path_arg(repo)),
+        msg.contains("used by worktree") && message_mentions_path(&msg, repo),
         "unexpected delete-branch-force error: {msg}"
     );
 }
@@ -665,7 +665,7 @@ fn delete_branch_force_rejects_branch_checked_out_in_linked_worktree() {
     assert_git_failure(&err, "git branch -D", GitFailureId::CommandFailed);
     let msg = err.to_string();
     assert!(
-        msg.contains("used by worktree") && msg.contains(&linked_worktree_arg),
+        msg.contains("used by worktree") && message_mentions_path(&msg, &linked_worktree),
         "unexpected delete-branch-force error: {msg}"
     );
 
@@ -714,7 +714,7 @@ fn delete_branch_force_rejects_branch_checked_out_in_main_worktree_when_opened_f
     assert_git_failure(&err, "git branch -D", GitFailureId::CommandFailed);
     let msg = err.to_string();
     assert!(
-        msg.contains("used by worktree") && msg.contains(&git_path_arg(repo)),
+        msg.contains("used by worktree") && message_mentions_path(&msg, repo),
         "unexpected delete-branch-force error: {msg}"
     );
 

@@ -97,6 +97,41 @@ pub fn git_path_arg(path: &Path) -> String {
     }
 }
 
+/// Whether `msg` mentions `path` in either separator form. Git echoes a
+/// worktree path back in the form it registered it — forward slashes when the
+/// path arrived as an argument, backslashes when it derived one from the
+/// process cwd on Windows. Which form you get is not stable: the same three
+/// `delete_branch_force` assertions passed and then failed on the same runner
+/// image with the same git version, so pinning one form makes the suite flaky.
+pub fn message_mentions_path(msg: &str, path: &Path) -> bool {
+    let native = path.to_string_lossy();
+    msg.contains(native.as_ref()) || msg.contains(&git_path_arg(path))
+}
+
+#[cfg(test)]
+mod support_tests {
+    use super::*;
+
+    #[test]
+    fn message_mentions_path_accepts_either_separator_form() {
+        // On Windows the two forms genuinely differ; elsewhere they collapse
+        // to the same string and the test still holds.
+        let path = Path::new("a\\b");
+        assert!(
+            message_mentions_path("worktree at 'a\\b'", path),
+            "the native form matches"
+        );
+        assert!(
+            message_mentions_path("worktree at 'a/b'", path),
+            "the slashed form matches"
+        );
+        assert!(
+            !message_mentions_path("worktree at 'a/c'", path),
+            "an unrelated path does not match"
+        );
+    }
+}
+
 pub fn git_remote_url(path: &Path) -> String {
     git_path_arg(path)
 }
