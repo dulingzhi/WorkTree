@@ -1731,6 +1731,22 @@ fn rebase_onto_picker_excludes_current_branch_and_opens_confirm(cx: &mut gpui::T
         let _ = window.draw(app);
     });
 
+    // The live poller that relays store snapshots into the view is disabled
+    // under the test scheduler (see `view::poller`), so the branch picker's
+    // rows have to be pushed by hand from the store snapshot before the
+    // keystroke that selects the first row — otherwise `down enter` lands
+    // before any row exists and the confirm popover never opens. This is the
+    // same race the history-ref-filter tests sync away with `sync_and_redraw`.
+    cx.update(|_window, app| {
+        view.update(app, |this, cx| {
+            crate::view::test_support::sync_store_snapshot(this, cx);
+        });
+    });
+    cx.run_until_parked();
+    cx.update(|window, app| {
+        let _ = window.draw(app);
+    });
+
     // The current branch (main) must not be offered as a rebase target, so
     // the first picker item is "feature"; selecting it asks for confirmation
     // instead of checking it out.
