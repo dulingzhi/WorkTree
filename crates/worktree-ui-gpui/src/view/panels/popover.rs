@@ -25,6 +25,7 @@ mod discard_changes_confirm;
 mod dispatch;
 mod file_history;
 mod file_review;
+mod file_review_batch;
 mod fingerprint;
 mod force_delete_branch_confirm;
 mod force_push_confirm;

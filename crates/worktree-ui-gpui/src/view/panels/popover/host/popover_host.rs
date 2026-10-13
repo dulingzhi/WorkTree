@@ -155,6 +155,20 @@ pub(in crate::view) struct PopoverHost {
     #[cfg(test)]
     pub(in crate::view::panels::popover) file_review_test_last_patch: Option<String>,
 
+    /// The whole-change AI review in progress: every changed file, one request
+    /// at a time. Reset on open; every open starts a fresh run.
+    pub(in crate::view::panels::popover) file_review_batch:
+        Option<file_review_batch::FileReviewBatch>,
+
+    /// Test seams for the batch run, standing in for the network call test
+    /// builds cannot make: how many file requests were driven, and the patch
+    /// the last one carried.
+    #[cfg(test)]
+    pub(in crate::view::panels::popover) file_review_batch_test_requests: usize,
+
+    #[cfg(test)]
+    pub(in crate::view::panels::popover) file_review_batch_test_last_patch: Option<String>,
+
     /// Test seams standing in for the network call test builds cannot make:
     /// how many explanation requests were driven, and the patch the last one
     /// carried.

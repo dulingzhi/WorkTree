@@ -243,6 +243,11 @@ impl PopoverHost {
             file_review_test_requests: 0,
             #[cfg(test)]
             file_review_test_last_patch: None,
+            file_review_batch: None,
+            #[cfg(test)]
+            file_review_batch_test_requests: 0,
+            #[cfg(test)]
+            file_review_batch_test_last_patch: None,
             #[cfg(test)]
             hunk_explanation_test_requests: 0,
             #[cfg(test)]

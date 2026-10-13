@@ -197,6 +197,7 @@ fn repo_for_popover<'a>(state: &'a AppState, popover: &PopoverKind) -> Option<&'
         | PopoverKind::DiffEditorMenu { repo_id, .. }
         | PopoverKind::HunkExplanation { repo_id, .. }
         | PopoverKind::FileReview { repo_id, .. }
+        | PopoverKind::FileReviewBatch { repo_id }
         | PopoverKind::CommitMenu { repo_id, .. }
         | PopoverKind::StatusFileMenu { repo_id, .. }
         | PopoverKind::BranchMenu { repo_id, .. }
@@ -521,6 +522,9 @@ fn hash_repo_for_popover<H: Hasher>(repo: &RepoState, popover: &PopoverKind, has
         // The same for a review: the patch snapshot travels with the host's
         // review state and repaints through cx.notify.
         | PopoverKind::FileReview { .. }
+        // A batch carries its own snapshots per file, so it is likewise not a
+        // function of the live diff.
+        | PopoverKind::FileReviewBatch { .. }
         | PopoverKind::DiffContentModeSettings
         | PopoverKind::WebLinkMenu { .. }
         | PopoverKind::CommitShaLinkMenu { .. }
@@ -808,6 +812,10 @@ fn hash_popover_kind<H: Hasher>(kind: &PopoverKind, hasher: &mut H) {
             119u8.hash(hasher);
             repo_id.hash(hasher);
             path.hash(hasher);
+        }
+        PopoverKind::FileReviewBatch { repo_id } => {
+            121u8.hash(hasher);
+            repo_id.hash(hasher);
         }
         PopoverKind::AddToGitignorePrompt {
             repo_id,

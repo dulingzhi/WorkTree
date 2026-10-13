@@ -22,6 +22,8 @@ palette:
     stage-all: Stage All Changes
     review-file: Review this file
     review-file-needs-file: "Open a file's diff first; there is nothing to review yet."
+    review-changes: Review all changes
+    review-changes-none: "No changed files to review."
     unstage-all: Unstage All Changes
     discard-all: Discard All Changes
     create-branch: Create Branch

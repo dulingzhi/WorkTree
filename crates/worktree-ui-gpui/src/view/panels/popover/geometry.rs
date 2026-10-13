@@ -235,6 +235,8 @@ pub(in crate::view) fn popover_width_spec(kind: &PopoverKind) -> Option<PopoverW
         // A review is a list of short lines — severity, line, one sentence —
         // so the wide dialog keeps a finding to one or two lines each.
         PopoverKind::FileReview { .. } => Some(DIALOG_540_WIDTH),
+        // Same shape as one review: a list of short per-file rows.
+        PopoverKind::FileReviewBatch { .. } => Some(DIALOG_540_WIDTH),
         PopoverKind::CreateBranchFromRefPrompt { .. }
         | PopoverKind::RenameBranchPrompt { .. }
         | PopoverKind::CheckoutRemoteBranchPrompt { .. } => Some(DIALOG_540_WIDTH),

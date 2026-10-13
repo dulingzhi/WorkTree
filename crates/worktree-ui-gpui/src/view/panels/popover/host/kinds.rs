@@ -308,6 +308,12 @@ pub(in crate::view) enum PopoverKind {
         repo_id: RepoId,
         path: std::path::PathBuf,
     },
+    /// The whole change's review: every changed file, one after another,
+    /// collected into a single exportable summary. Unlike `FileReview` this is
+    /// not keyed by path — it is about the change, not one file in it.
+    FileReviewBatch {
+        repo_id: RepoId,
+    },
     /// Actions for a web link clicked in the rendered markdown preview or in a
     /// commit message.
     WebLinkMenu {

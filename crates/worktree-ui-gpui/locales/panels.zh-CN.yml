@@ -107,6 +107,17 @@ panels:
     copy: "复制为 Markdown"
     copied: "审查结果已复制为 Markdown"
     markdown_heading: "审查：%{path}"
+  file_review_batch:
+    title: "审查全部改动"
+    generating: "正在审查已改动的文件…"
+    stop: "停止"
+    close: 关闭
+    copy: "复制为 Markdown"
+    copied: "审查结果已复制为 Markdown"
+    progress: "%{done} / %{total} 个文件"
+    findings: "发现 %{count} 项"
+    clean: "无问题"
+    failed: 失败
   repo_hooks:
     close: 关闭
   merge_preview:

@@ -1601,6 +1601,38 @@ impl WorkTreeView {
                     );
                 }
             }
+            "review-changes" => {
+                if !crate::ai_commit::current().file_review_enabled {
+                    self.push_toast(
+                        components::ToastKind::Warning,
+                        crate::i18n::tr_str("misc.ai_commit.file_review_disabled").to_string(),
+                        cx,
+                    );
+                } else {
+                    let Some(repo_id) = self.active_repo_id() else {
+                        return;
+                    };
+                    let paths: Vec<_> = self
+                        .state
+                        .repos
+                        .iter()
+                        .find(|r| r.id == repo_id)
+                        .and_then(|repo| repo.worktree_status_entries())
+                        .map(|entries| entries.iter().map(|e| e.path.clone()).collect::<Vec<_>>())
+                        .unwrap_or_default();
+                    if paths.is_empty() {
+                        self.push_toast(
+                            components::ToastKind::Warning,
+                            crate::i18n::tr_str("palette.cmd.review-changes-none").to_string(),
+                            cx,
+                        );
+                    } else if let Some(window) = window {
+                        self.popover_host.update(cx, |host, cx| {
+                            host.start_file_review_batch(repo_id, paths, window, cx);
+                        });
+                    }
+                }
+            }
             "review-file" => {
                 // The palette hides the entry when the feature is off, but the
                 // command can still arrive another way (a test, or a future

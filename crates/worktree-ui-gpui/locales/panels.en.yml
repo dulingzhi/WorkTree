@@ -110,6 +110,17 @@ panels:
     copy: "Copy as Markdown"
     copied: "Review copied as Markdown"
     markdown_heading: "Review: %{path}"
+  file_review_batch:
+    title: "Review all changes"
+    generating: "Reviewing the changed files…"
+    stop: "Stop"
+    close: Close
+    copy: "Copy as Markdown"
+    copied: "Review copied as Markdown"
+    progress: "%{done} / %{total} files"
+    findings: "%{count} found"
+    clean: "No problems"
+    failed: Failed
   repo_hooks:
     close: Close
   merge_preview:

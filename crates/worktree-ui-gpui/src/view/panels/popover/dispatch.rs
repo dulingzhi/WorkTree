@@ -139,6 +139,7 @@ impl PopoverHost {
             PopoverKind::FileReview { repo_id, path } => {
                 file_review::panel(self, repo_id, path.as_path(), cx)
             }
+            PopoverKind::FileReviewBatch { repo_id } => file_review_batch::panel(self, repo_id, cx),
             PopoverKind::CommitPrompt { repo_id } => commit_prompt::panel(self, repo_id, cx),
             PopoverKind::StashPickerPrompt { repo_id, purpose } => {
                 stash_picker_prompt::panel(self, repo_id, purpose, cx)

@@ -463,6 +463,117 @@ fn review_file_popover_copies_the_findings_as_markdown(cx: &mut gpui::TestAppCon
     );
 }
 
+/// A batch run is one file at a time, and a file it cannot build a patch for is
+/// recorded and skipped rather than stalling the whole change.
+#[gpui::test]
+fn batch_review_drives_one_file_at_a_time_and_records_failures(cx: &mut gpui::TestAppContext) {
+    let _guard = crate::ai_commit::SettingsGuard::configured_with_file_review();
+    let (store, events) = AppStore::new(Arc::new(TestBackend));
+    let (view, cx) =
+        cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
+
+    let repo_id = RepoId(61);
+    cx.update(|_window, app| {
+        view.update(app, |this, cx| {
+            let repo = file_review_fixture_repo(repo_id);
+            push_test_state(this, app_state_with_repo(repo, repo_id), cx);
+        });
+    });
+
+    // Only `src/lib.rs` has a diff in the fixture; the second path stands in
+    // for a file whose patch cannot be built.
+    let paths = vec![reviewed_path(), "src/without-a-diff.rs".into()];
+    cx.update(|window, app| {
+        let opened = view.update(app, |this, cx| {
+            this.popover_host.update(cx, |host, cx| {
+                host.start_file_review_batch(repo_id, paths.clone(), window, cx)
+            })
+        });
+        assert!(opened, "a non-empty batch opens the popover");
+    });
+
+    cx.update(|_window, app| {
+        let (requests, patch) = review_batch_seams(&view, app);
+        assert_eq!(requests, 1, "only the first file is asked for at a time");
+        assert!(
+            patch
+                .expect("the first request carries a patch")
+                .contains("diff --git a/src/lib.rs b/src/lib.rs"),
+            "and it is the first file's"
+        );
+    });
+
+    // Land the first file: the run must move on to the second by itself.
+    cx.update(|_window, app| {
+        view.update(app, |this, cx| {
+            this.popover_host.update(cx, |host, cx| {
+                host.finish_file_review_batch(Ok(one_finding()), cx);
+            });
+        });
+    });
+
+    cx.update(|_window, app| {
+        let (requests, _) = review_batch_seams(&view, app);
+        assert_eq!(
+            requests, 1,
+            "the unpatchable file is skipped, not requested: {requests}"
+        );
+        let results = batch_results(&view, app);
+        assert_eq!(
+            results.len(),
+            2,
+            "and it is still recorded, so the summary cannot overclaim"
+        );
+        assert!(!results[0].1, "the reviewed file succeeded");
+        assert!(results[1].1, "the unpatchable one is recorded as failed");
+    });
+
+    cx.update(|window, app| {
+        let _ = window.draw(app);
+    });
+    assert!(
+        cx.debug_bounds("file_review_batch_results").is_some(),
+        "a finished run renders its per-file results"
+    );
+}
+
+/// The batch's requests and the patch the last one carried.
+fn review_batch_seams(
+    view: &gpui::Entity<WorkTreeView>,
+    app: &mut gpui::App,
+) -> (usize, Option<String>) {
+    view.read_with(app, |this, cx| {
+        let host = this.popover_host.read(cx);
+        (
+            host.file_review_batch_test_requests,
+            host.file_review_batch_test_last_patch.clone(),
+        )
+    })
+}
+
+/// One `(path, failed)` per finished file, in review order.
+fn batch_results(view: &gpui::Entity<WorkTreeView>, app: &mut gpui::App) -> Vec<(String, bool)> {
+    view.read_with(app, |this, cx| {
+        let host = this.popover_host.read(cx);
+        host.file_review_batch
+            .as_ref()
+            .map(|batch| {
+                batch
+                    .results
+                    .iter()
+                    .map(|(path, outcome)| {
+                        let failed = matches!(
+                            outcome,
+                            super::file_review_batch::FileReviewOutcome::Error(_)
+                        );
+                        (path.to_string_lossy().replace('\\', "/"), failed)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    })
+}
+
 /// The palette reaches the review the right-click menu does, without the menu:
 /// "this file" is the one the active diff view is showing.
 #[gpui::test]

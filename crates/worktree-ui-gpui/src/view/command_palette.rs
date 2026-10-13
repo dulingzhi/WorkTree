@@ -54,6 +54,14 @@ pub(crate) const COMMANDS: &[CommandEntry] = &[
         requires_repo: true,
     },
     CommandEntry {
+        id: "review-changes",
+        label: "palette.cmd.review-changes",
+        shortcut: Shortcut::None,
+        category: "palette.cat.working-copy",
+        keywords: "review ai audit all changes batch merge request",
+        requires_repo: true,
+    },
+    CommandEntry {
         id: "discard-all",
         label: "palette.cmd.discard-all",
         shortcut: Shortcut::None,
@@ -754,6 +762,7 @@ pub(crate) const REGISTERED_COMMAND_HANDLERS: &[&str] = &[
     "repo-settings",
     "reset-ui-scale",
     "restack",
+    "review-changes",
     "review-file",
     "search-commits",
     "show-reflog",

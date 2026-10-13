@@ -232,7 +232,7 @@ fn findings_body(
 /// The Markdown a "Copy as Markdown" click puts on the clipboard: a heading
 /// naming the reviewed file, then one bullet per finding with its suggestion
 /// nested beneath it. Shaped to paste straight into a review comment.
-fn findings_to_markdown(path: &str, findings: &[ReviewFinding]) -> String {
+pub(super) fn findings_to_markdown(path: &str, findings: &[ReviewFinding]) -> String {
     let heading = crate::i18n::t!("panels.file_review.markdown_heading", path = path).into_owned();
     let mut out = format!("# {heading}\n\n");
     for finding in findings {
