@@ -99,7 +99,7 @@ impl AiProvider {
 /// strings; empty means "fall back to the provider default". The other
 /// sources resolve their credentials at generation time and persist nothing
 /// but the choice of source.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct AiCommitSettings {
     pub(crate) source: crate::ai_commit_sources::AiSource,
     pub(crate) provider: AiProvider,
@@ -112,6 +112,29 @@ pub(crate) struct AiCommitSettings {
     pub(crate) model: String,
     pub(crate) endpoint: String,
     pub(crate) custom_command: String,
+    /// Whether the AI "Review this file" feature is offered at all. Independent
+    /// of `is_configured()`: a configured source can still be told not to
+    /// review. Defaults to enabled so existing sessions keep the feature.
+    pub(crate) file_review_enabled: bool,
+    /// When set, opening a file's diff auto-starts a review without a menu
+    /// click. Only meaningful when `file_review_enabled` is true.
+    pub(crate) file_review_auto: bool,
+}
+
+impl Default for AiCommitSettings {
+    fn default() -> Self {
+        Self {
+            source: Default::default(),
+            provider: Default::default(),
+            api_key: Default::default(),
+            bearer_auth: false,
+            model: Default::default(),
+            endpoint: Default::default(),
+            custom_command: Default::default(),
+            file_review_enabled: true,
+            file_review_auto: false,
+        }
+    }
 }
 
 impl AiCommitSettings {
@@ -276,6 +299,11 @@ pub(crate) fn init_from_session(ui_session: &session::UiSession) {
             .ai_commit_custom_command
             .clone()
             .unwrap_or_default(),
+        // File-review defaults to on; `auto` defaults to off. A missing value
+        // in an old session file keeps the feature enabled rather than
+        // silently hiding it.
+        file_review_enabled: ui_session.ai_file_review_enabled.unwrap_or(true),
+        file_review_auto: ui_session.ai_file_review_auto.unwrap_or(false),
     });
 }
 

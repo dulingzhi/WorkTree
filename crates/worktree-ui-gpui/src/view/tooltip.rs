@@ -200,6 +200,11 @@ impl WorkTreeView {
                             ai_commit_api_key: None,
                             ai_commit_model: None,
                             ai_commit_endpoint: None,
+                            // The file-review switches ride the same
+                            // persistence path as the commit settings, so this
+                            // snapshot leaves them untouched too.
+                            ai_file_review_enabled: None,
+                            ai_file_review_auto: None,
                             ui_scale_percent: Some(this.ui_scale_percent),
                             ui_density: Some(this.ui_density.key().to_string()),
                             ui_font_family: Some(font_preferences.ui_font_family),

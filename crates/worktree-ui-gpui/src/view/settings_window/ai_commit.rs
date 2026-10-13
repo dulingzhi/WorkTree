@@ -93,6 +93,8 @@ impl SettingsWindowView {
             model: self.ai_commit_model_draft.clone(),
             endpoint: self.ai_commit_endpoint_draft.clone(),
             custom_command: self.ai_commit_custom_command_draft.clone(),
+            file_review_enabled: self.ai_file_review_enabled,
+            file_review_auto: self.ai_file_review_auto,
         });
         self.persist_preferences(cx);
     }
@@ -147,6 +149,10 @@ impl SettingsWindowView {
                 model: self.ai_commit_model_draft.clone(),
                 endpoint: self.ai_commit_endpoint_draft.clone(),
                 custom_command: self.ai_commit_custom_command_draft.clone(),
+                // This snapshot only reaches `fetch_models`; the file-review
+                // switches are not part of a model-list request and must not
+                // break every time the settings struct grows a field.
+                ..Default::default()
             };
             cx.spawn(async move |pane, cx| {
                 let result = crate::ai_commit::fetch_models(&settings).await;
@@ -182,5 +188,32 @@ impl SettingsWindowView {
         self.ai_commit_model_input
             .update(cx, |input, cx| input.set_text(model, cx));
         self.persist_ai_commit_settings(cx);
+    }
+
+    /// Toggle the AI "Review this file" master switch. Persists through the
+    /// same path as the commit settings so the process-global and the session
+    /// file stay in sync.
+    pub(super) fn set_ai_file_review_enabled(
+        &mut self,
+        enabled: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self.ai_file_review_enabled == enabled {
+            return;
+        }
+        self.ai_file_review_enabled = enabled;
+        self.persist_ai_commit_settings(cx);
+        cx.notify();
+    }
+
+    /// Toggle auto-review: when on, opening a file's diff starts a review
+    /// without a menu click. Only meaningful while `ai_file_review_enabled`.
+    pub(super) fn set_ai_file_review_auto(&mut self, auto: bool, cx: &mut gpui::Context<Self>) {
+        if self.ai_file_review_auto == auto {
+            return;
+        }
+        self.ai_file_review_auto = auto;
+        self.persist_ai_commit_settings(cx);
+        cx.notify();
     }
 }

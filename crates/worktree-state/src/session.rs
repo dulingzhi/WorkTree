@@ -53,6 +53,12 @@ pub struct UiSession {
     pub ai_commit_api_key: Option<String>,
     pub ai_commit_model: Option<String>,
     pub ai_commit_endpoint: Option<String>,
+    /// AI "Review this file" feature: independent of the commit-message
+    /// source. `None` keeps the default (enabled).
+    pub ai_file_review_enabled: Option<bool>,
+    /// Auto-start a review when a file's diff opens. `None` keeps the default
+    /// (off). Only meaningful when `ai_file_review_enabled` is true.
+    pub ai_file_review_auto: Option<bool>,
     pub ui_scale_percent: Option<u32>,
     /// UI density key (`comfortable`/`compact`); `None` follows the
     /// comfortable default. Stored as a string so future tiers load from old
@@ -210,6 +216,8 @@ pub struct UiSessionFile {
     pub ai_commit_api_key: Option<String>,
     pub ai_commit_model: Option<String>,
     pub ai_commit_endpoint: Option<String>,
+    pub ai_file_review_enabled: Option<bool>,
+    pub ai_file_review_auto: Option<bool>,
     pub ui_scale_percent: Option<u32>,
     pub ui_density: Option<String>,
     pub ui_font_family: Option<String>,
@@ -339,6 +347,8 @@ pub fn load_from_path(path: &Path) -> UiSession {
         ai_commit_api_key: file.ai_commit_api_key,
         ai_commit_model: file.ai_commit_model,
         ai_commit_endpoint: file.ai_commit_endpoint,
+        ai_file_review_enabled: file.ai_file_review_enabled,
+        ai_file_review_auto: file.ai_file_review_auto,
         ui_scale_percent: file.ui_scale_percent,
         ui_density: file.ui_density,
         ui_font_family: file.ui_font_family,
@@ -808,6 +818,8 @@ pub struct UiSettings {
     pub ai_commit_api_key: Option<String>,
     pub ai_commit_model: Option<String>,
     pub ai_commit_endpoint: Option<String>,
+    pub ai_file_review_enabled: Option<bool>,
+    pub ai_file_review_auto: Option<bool>,
     pub ui_scale_percent: Option<u32>,
     pub ui_density: Option<String>,
     pub ui_font_family: Option<String>,
@@ -922,6 +934,12 @@ fn persist_ui_settings_impl(settings: UiSettings, path: &Path) -> io::Result<()>
         }
         if let Some(endpoint) = settings.ai_commit_endpoint {
             file.ai_commit_endpoint = Some(endpoint);
+        }
+        if let Some(enabled) = settings.ai_file_review_enabled {
+            file.ai_file_review_enabled = Some(enabled);
+        }
+        if let Some(auto) = settings.ai_file_review_auto {
+            file.ai_file_review_auto = Some(auto);
         }
         if let Some(percent) = settings.ui_scale_percent {
             file.ui_scale_percent = Some(percent);

@@ -166,6 +166,10 @@ pub(crate) struct SettingsWindowView {
     ai_commit_model_input: Entity<components::TextInput>,
     ai_commit_api_key_input: Entity<components::TextInput>,
     ai_commit_endpoint_input: Entity<components::TextInput>,
+    /// AI "Review this file" master switch (persisted); the local mirror the
+    /// toggle renders from.
+    ai_file_review_enabled: bool,
+    ai_file_review_auto: bool,
     merge_tool_selection: ExternalMergeToolSelection,
     merge_tool_scroll: UniformListScrollHandle,
     /// Mirrors the custom-command input even when the selection is not
@@ -353,6 +357,8 @@ impl SettingsWindowView {
         let ai_commit_api_key_draft = ai_commit_current.api_key;
         let ai_commit_endpoint_draft = ai_commit_current.endpoint;
         let ai_commit_custom_command_draft = ai_commit_current.custom_command;
+        let ai_file_review_enabled = ai_commit_current.file_review_enabled;
+        let ai_file_review_auto = ai_commit_current.file_review_auto;
         // Seeded from the session file only — construction never installs the
         // process global so tests stay side-effect free; the setter and app
         // startup own installation.
@@ -876,6 +882,8 @@ impl SettingsWindowView {
             ai_commit_model_input,
             ai_commit_api_key_input,
             ai_commit_endpoint_input,
+            ai_file_review_enabled,
+            ai_file_review_auto,
             merge_tool_selection,
             merge_tool_scroll: UniformListScrollHandle::default(),
             merge_tool_custom_command_draft,
@@ -946,6 +954,8 @@ impl SettingsWindowView {
             ai_commit_api_key: Some(ai_commit.api_key),
             ai_commit_model: Some(ai_commit.model),
             ai_commit_endpoint: Some(ai_commit.endpoint),
+            ai_file_review_enabled: Some(ai_commit.file_review_enabled),
+            ai_file_review_auto: Some(ai_commit.file_review_auto),
             ui_scale_percent: Some(self.ui_scale_percent),
             ui_density: Some(self.ui_density.key().to_string()),
             ui_font_family: Some(self.ui_font_family.clone()),

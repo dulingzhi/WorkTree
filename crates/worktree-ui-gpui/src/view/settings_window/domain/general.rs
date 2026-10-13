@@ -1221,6 +1221,40 @@ impl SettingsWindowView {
                             .child(tr_str("settings.ai_commit.privacy_hint")),
                     );
             }
+
+            // The file-review switches sit outside the source-specific blocks
+            // above: they belong to the review feature, which runs on whatever
+            // source is configured — including one this window has not
+            // configured yet.
+            let file_review_row = self
+                .toggle_row(
+                    "settings_window_ai_file_review_enabled",
+                    tr_str("settings.ai_commit.file_review_enabled"),
+                    self.ai_file_review_enabled,
+                    theme,
+                )
+                .border_color(no_separator)
+                .on_click(cx.listener(|this, _e: &ClickEvent, _window, cx| {
+                    this.set_ai_file_review_enabled(!this.ai_file_review_enabled, cx);
+                }));
+            general_card = general_card.child(file_review_row);
+
+            // Auto-review only means anything while the feature is on, so the
+            // switch is hidden rather than left dead on screen.
+            if self.ai_file_review_enabled {
+                let file_review_auto_row = self
+                    .toggle_row(
+                        "settings_window_ai_file_review_auto",
+                        tr_str("settings.ai_commit.file_review_auto"),
+                        self.ai_file_review_auto,
+                        theme,
+                    )
+                    .border_color(no_separator)
+                    .on_click(cx.listener(|this, _e: &ClickEvent, _window, cx| {
+                        this.set_ai_file_review_auto(!this.ai_file_review_auto, cx);
+                    }));
+                general_card = general_card.child(file_review_auto_row);
+            }
         }
 
         general_card = general_card

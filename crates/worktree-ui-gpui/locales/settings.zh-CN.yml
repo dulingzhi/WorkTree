@@ -100,6 +100,8 @@ settings:
     models_loading: "正在获取模型列表…"
     models_failed: "获取模型列表失败：%{error}"
     privacy_hint: "API Key 仅保存在本地会话文件中。生成提交信息时会把暂存差异发送给所选服务。"
+    file_review_enabled: "审查此文件（AI）"
+    file_review_auto: "打开差异时自动开始审查"
   ui_scale:
     detail_default: 默认缩放
     detail_fit_more: 在屏幕上显示更多内容

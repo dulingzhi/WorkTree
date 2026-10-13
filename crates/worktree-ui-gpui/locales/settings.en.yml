@@ -102,6 +102,8 @@ settings:
     models_loading: "Fetching model list…"
     models_failed: "Failed to fetch models: %{error}"
     privacy_hint: "The API key is stored locally in the session file. Generating a message sends the staged diff to the selected service."
+    file_review_enabled: "Review this file (AI)"
+    file_review_auto: "Start a review automatically when a diff opens"
   ui_scale:
     detail_default: Default scale
     detail_fit_more: Fit more on screen
