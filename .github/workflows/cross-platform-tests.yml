@@ -201,18 +201,19 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: Cache Rust artifacts
         uses: Swatinem/rust-cache@v2
-      # Probe mode again: this job has never actually come back green on a
-      # runner. Its first blocker — a SIGABRT from the Linux desktop-install
-      # task — is fixed by 210efc51, but with the abort gone ten real failures
-      # surface instead: seven `yaml_*` tests that need full history (covered by
-      # the `fetch-depth` above), one ref-filter test that wants a local branch
-      # ref, and eleven `pick.*` translations the embedded zh-CN catalog does
-      # not carry on Linux even though `locales/pickers.zh-CN.yml` defines them
-      # (not reproducible on Windows; needs a Linux toolchain to chase). Until
-      # a run is clean this stays a probe so it cannot block unrelated pushes.
-      # Re-promote it to a hard gate once it is.
+      # Hard gate. The flaky/aborting blockers that kept this job in probe mode
+      # are all resolved and validated clean on run 38279175212
+      # (`test result: ok. 3501 passed; 0 failed; 5 ignored` on the Linux
+      # runner):
+      #   * SIGABRT from the Linux desktop-install local task — fixed by 210efc51
+      #   * seven `yaml_*` tests needing full history — `fetch-depth: 0` above
+      #   * history-ref-filter race — sync the store snapshot before the first
+      #     click + a visual-test lock (0191ba24, e5df72b9)
+      #   * eleven `pick.*` translations missing on Linux — root-key collision
+      #     with the interactive-rebase "pick" verb, renamed to `pickers:`
+      #     (bdc7608c)
+      # This job now blocks the `dev`/`main` gates like every other test job.
       - name: Run UI crate lib tests
-        continue-on-error: true
         run: cargo test -p worktree-ui-gpui --lib --locked
 
   macos-tests:
