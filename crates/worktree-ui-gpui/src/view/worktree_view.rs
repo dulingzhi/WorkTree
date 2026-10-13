@@ -135,6 +135,14 @@ pub struct WorkTreeView {
         Option<worktree_state::model::SubmoduleTrustPromptState>,
     pub(super) pending_submodule_trust_check:
         Option<worktree_state::model::SubmoduleTrustCheckState>,
+    /// Auto-review: the file whose diff just opened, waiting for the next frame
+    /// — the popover needs a `Window`, which only `render` has. See
+    /// `drive_auto_file_review`.
+    pub(super) pending_auto_file_review: Option<(RepoId, std::path::PathBuf)>,
+    /// The `(repo, diff_target_rev)` auto-review already fired for. The rev
+    /// only moves when the diff target actually changes, so this is what keeps
+    /// the review from re-firing on every redraw of the same file.
+    pub(super) auto_file_review_fired_for: Option<(RepoId, u64)>,
     pub(super) pending_worktree_branch_removals: FxHashMap<(RepoId, std::path::PathBuf), String>,
     pub(super) startup_crash_report: Option<StartupCrashReport>,
     #[cfg(target_os = "macos")]

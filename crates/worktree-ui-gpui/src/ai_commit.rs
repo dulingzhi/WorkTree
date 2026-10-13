@@ -360,6 +360,17 @@ impl SettingsGuard {
             ..Default::default()
         })
     }
+
+    /// File review on *and* auto-start on: opening a diff reviews itself.
+    pub(crate) fn configured_with_auto_file_review() -> Self {
+        Self::install(AiCommitSettings {
+            provider: AiProvider::Anthropic,
+            api_key: "sk-test".to_string(),
+            file_review_enabled: true,
+            file_review_auto: true,
+            ..Default::default()
+        })
+    }
 }
 
 #[cfg(test)]

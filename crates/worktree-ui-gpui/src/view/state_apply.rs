@@ -157,6 +157,7 @@ impl WorkTreeView {
         }
 
         self.state = next;
+        self.drive_auto_file_review();
         self.command_palette.update(cx, |palette, cx| {
             palette.set_has_active_repo(self.state.active_repo.is_some(), cx);
         });
@@ -225,6 +226,40 @@ impl WorkTreeView {
         git_runtime_changed
             || prev_banner_error != next_banner_error
             || prev_auth_prompt != self.state.auth_prompt
+    }
+
+    /// Queue an auto-review for the file whose diff just opened.
+    ///
+    /// Keyed on `diff_target_rev`, which the store bumps only when the target
+    /// itself changes — that is what stops this from re-firing on every redraw
+    /// of the file already on screen. The popover opens on the next frame:
+    /// `start_file_review` needs a `Window`, and only `render` has one.
+    pub(super) fn drive_auto_file_review(&mut self) {
+        let settings = crate::ai_commit::current();
+        if !settings.file_review_enabled || !settings.file_review_auto {
+            return;
+        }
+        // An unconfigured source warns on a click; there is no click here to
+        // hang the warning on, so auto-review stays silent instead.
+        if !settings.is_configured() {
+            return;
+        }
+        let Some((repo_id, target)) = active_diff_target(&self.state) else {
+            return;
+        };
+        // A whole-commit diff has no single file to review.
+        let Some(path) = reviewable_target_path(&target) else {
+            return;
+        };
+        let Some(repo) = self.state.repos.iter().find(|repo| repo.id == repo_id) else {
+            return;
+        };
+        let rev = repo.diff_state.diff_target_rev;
+        if self.auto_file_review_fired_for == Some((repo_id, rev)) {
+            return;
+        }
+        self.auto_file_review_fired_for = Some((repo_id, rev));
+        self.pending_auto_file_review = Some((repo_id, path));
     }
 }
 

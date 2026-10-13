@@ -598,3 +598,87 @@ fn command_palette_review_file_stays_shut_when_the_feature_is_off(cx: &mut gpui:
         assert!(patch.is_none(), "and captures no snapshot");
     });
 }
+
+/// With auto switched on, opening a file's diff reviews it without a menu
+/// click — and only once: a redraw of the same file must not re-send.
+#[gpui::test]
+fn auto_review_starts_when_a_file_diff_opens_and_not_again_on_redraw(
+    cx: &mut gpui::TestAppContext,
+) {
+    let _guard = crate::ai_commit::SettingsGuard::configured_with_auto_file_review();
+    let (store, events) = AppStore::new(Arc::new(TestBackend));
+    let (view, cx) =
+        cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
+
+    let repo_id = RepoId(59);
+    cx.update(|_window, app| {
+        view.update(app, |this, cx| {
+            let repo = file_review_fixture_repo(repo_id);
+            push_test_state(this, app_state_with_repo(repo, repo_id), cx);
+        });
+    });
+    cx.update(|window, app| {
+        let _ = window.draw(app);
+    });
+
+    cx.update(|_window, app| {
+        assert!(
+            popover_is_open(&view, app),
+            "auto-review opens the popover without a click"
+        );
+        let (requests, patch) = review_seams(&view, app);
+        assert_eq!(requests, 1, "and drives exactly one request");
+        assert!(
+            patch
+                .expect("the auto review captures a snapshot")
+                .contains("diff --git a/src/lib.rs b/src/lib.rs"),
+            "of the file the diff view is showing"
+        );
+    });
+
+    // The same file, re-rendered: `diff_target_rev` has not moved, so the
+    // review must not fire again.
+    cx.update(|_window, app| {
+        view.update(app, |this, cx| {
+            let repo = file_review_fixture_repo(repo_id);
+            push_test_state(this, app_state_with_repo(repo, repo_id), cx);
+        });
+    });
+    cx.update(|window, app| {
+        let _ = window.draw(app);
+    });
+    cx.update(|_window, app| {
+        let (requests, _) = review_seams(&view, app);
+        assert_eq!(requests, 1, "a redraw of the same file sends nothing new");
+    });
+}
+
+/// The auto switch is what turns it on — not merely having a configured
+/// source. Without it, opening a diff stays quiet.
+#[gpui::test]
+fn auto_review_stays_quiet_while_the_auto_switch_is_off(cx: &mut gpui::TestAppContext) {
+    let _guard = crate::ai_commit::SettingsGuard::configured_with_file_review();
+    let (store, events) = AppStore::new(Arc::new(TestBackend));
+    let (view, cx) =
+        cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
+
+    let repo_id = RepoId(60);
+    cx.update(|_window, app| {
+        view.update(app, |this, cx| {
+            let repo = file_review_fixture_repo(repo_id);
+            push_test_state(this, app_state_with_repo(repo, repo_id), cx);
+        });
+    });
+    cx.update(|window, app| {
+        let _ = window.draw(app);
+    });
+
+    cx.update(|_window, app| {
+        assert!(
+            !popover_is_open(&view, app),
+            "a configured source alone opens nothing"
+        );
+        let (requests, _) = review_seams(&view, app);
+        assert_eq!(requests, 0, "and sends nothing");
+    });
+}

@@ -2618,6 +2618,8 @@ impl WorkTreeView {
             pending_force_remove_worktree_prompt: None,
             pending_submodule_trust_prompt: None,
             pending_submodule_trust_check: None,
+            pending_auto_file_review: None,
+            auto_file_review_fired_for: None,
             pending_worktree_branch_removals: FxHashMap::default(),
             startup_crash_report,
             #[cfg(target_os = "macos")]
@@ -4359,6 +4361,15 @@ impl Render for WorkTreeView {
                 window,
                 cx,
             );
+        }
+
+        // Auto-review: the diff view just opened a file and the switch is on.
+        // Open it in the generating state, exactly as a menu click would —
+        // see `drive_auto_file_review` for why the decision is made there.
+        if let Some((repo_id, path)) = self.pending_auto_file_review.take() {
+            self.popover_host.update(cx, |host, cx| {
+                host.start_file_review(repo_id, &path, window, cx);
+            });
         }
 
         let decorations = window.window_decorations();
