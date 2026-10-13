@@ -321,6 +321,56 @@ pub(crate) fn lock_test_settings() -> std::sync::MutexGuard<'static, ()> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
+/// Installs settings on the global for the lifetime of one test and restores
+/// [`AiCommitSettings::default`] on drop.
+///
+/// Held together with [`lock_test_settings`], so a test that depends on the
+/// global — including one that only depends on it *staying* enabled — cannot
+/// run while another test has switched the file-review feature off.
+#[cfg(test)]
+pub(crate) struct SettingsGuard {
+    _lock: std::sync::MutexGuard<'static, ()>,
+}
+
+#[cfg(test)]
+impl SettingsGuard {
+    pub(crate) fn install(settings: AiCommitSettings) -> Self {
+        let lock = lock_test_settings();
+        set_current(settings);
+        Self { _lock: lock }
+    }
+
+    /// A configured source with the file-review feature turned on — the state
+    /// every pre-existing review test assumes.
+    pub(crate) fn configured_with_file_review() -> Self {
+        Self::install(AiCommitSettings {
+            provider: AiProvider::Anthropic,
+            api_key: "sk-test".to_string(),
+            file_review_enabled: true,
+            ..Default::default()
+        })
+    }
+
+    /// The same source with only the file-review switch flipped.
+    pub(crate) fn configured_without_file_review() -> Self {
+        Self::install(AiCommitSettings {
+            provider: AiProvider::Anthropic,
+            api_key: "sk-test".to_string(),
+            file_review_enabled: false,
+            ..Default::default()
+        })
+    }
+}
+
+#[cfg(test)]
+impl Drop for SettingsGuard {
+    fn drop(&mut self) {
+        // `_lock` is still held here (fields drop after `drop` returns), so the
+        // restore and every other test's setup stay ordered.
+        set_current(AiCommitSettings::default());
+    }
+}
+
 /// Truncate an over-long diff, marking the cut so the model knows there was
 /// more. Splits on a char boundary so the result stays valid UTF-8.
 pub(crate) fn truncate_diff(diff: &str) -> std::borrow::Cow<'_, str> {

@@ -102,6 +102,9 @@ fn one_finding() -> Vec<crate::ai_commit::ReviewFinding> {
 
 #[gpui::test]
 fn diff_editor_menu_offers_the_review_entry(cx: &mut gpui::TestAppContext) {
+    // The switch is a process global and tests run in parallel: hold it on for
+    // the duration rather than relying on the default.
+    let _guard = crate::ai_commit::SettingsGuard::configured_with_file_review();
     let (store, events) = AppStore::new(Arc::new(TestBackend));
     let (view, cx) =
         cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
@@ -464,6 +467,7 @@ fn review_file_popover_copies_the_findings_as_markdown(cx: &mut gpui::TestAppCon
 /// "this file" is the one the active diff view is showing.
 #[gpui::test]
 fn command_palette_review_file_reviews_the_file_in_the_diff_view(cx: &mut gpui::TestAppContext) {
+    let _guard = crate::ai_commit::SettingsGuard::configured_with_file_review();
     let (store, events) = AppStore::new(Arc::new(TestBackend));
     let (view, cx) =
         cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
@@ -498,5 +502,99 @@ fn command_palette_review_file_reviews_the_file_in_the_diff_view(cx: &mut gpui::
                 .contains("diff --git a/src/lib.rs b/src/lib.rs"),
             "it reviews the file the diff view is showing"
         );
+    });
+}
+
+/// The switch is offered as "off", not "on but useless": with the feature
+/// switched off the menu does not carry the entry at all, so there is nothing
+/// to click and nothing for a click to warn about.
+#[gpui::test]
+fn diff_editor_menu_drops_the_review_entry_when_the_feature_is_off(cx: &mut gpui::TestAppContext) {
+    let _guard = crate::ai_commit::SettingsGuard::configured_without_file_review();
+    let (store, events) = AppStore::new(Arc::new(TestBackend));
+    let (view, cx) =
+        cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
+
+    let repo_id = RepoId(57);
+    cx.update(|_window, app| {
+        view.update(app, |this, cx| {
+            let repo = file_review_fixture_repo(repo_id);
+            push_test_state(this, app_state_with_repo(repo, repo_id), cx);
+        });
+    });
+
+    let model = cx
+        .update(|_window, app| {
+            view.update(app, |this, cx| {
+                this.popover_host.update(cx, |host, cx| {
+                    host.context_menu_model(
+                        &PopoverKind::DiffEditorMenu {
+                            repo_id,
+                            area: DiffArea::Unstaged,
+                            path: Some(reviewed_path()),
+                            hunk_patch: None,
+                            hunks_count: 2,
+                            lines_patch: None,
+                            discard_lines_patch: None,
+                            lines_count: 0,
+                            copy_text: None,
+                            copy_target: None,
+                        },
+                        cx,
+                    )
+                })
+            })
+        })
+        .expect("expected diff editor menu model");
+
+    let labels: Vec<&str> = model
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            ContextMenuItem::Entry { label, .. } => Some(label.as_ref()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        !labels.contains(&"Review this file"),
+        "a switched-off feature is not offered, rather than offered dead: {labels:?}"
+    );
+}
+
+/// The command still exists in the registry, so it can be invoked without the
+/// palette (a test, or a future keybinding). The switch is enforced where the
+/// command lands, not only where it is listed.
+#[gpui::test]
+fn command_palette_review_file_stays_shut_when_the_feature_is_off(cx: &mut gpui::TestAppContext) {
+    let _guard = crate::ai_commit::SettingsGuard::configured_without_file_review();
+    let (store, events) = AppStore::new(Arc::new(TestBackend));
+    let (view, cx) =
+        cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
+
+    let repo_id = RepoId(58);
+    cx.update(|_window, app| {
+        view.update(app, |this, cx| {
+            let repo = file_review_fixture_repo(repo_id);
+            push_test_state(this, app_state_with_repo(repo, repo_id), cx);
+        });
+    });
+
+    cx.update(|window, app| {
+        view.update(app, |this, cx| {
+            this.execute_command("review-file", Some(window), cx)
+        });
+    });
+    cx.update(|window, app| {
+        let _ = window.draw(app);
+    });
+
+    cx.update(|_window, app| {
+        assert!(
+            !popover_is_open(&view, app),
+            "a switched-off feature opens no popover"
+        );
+        let (requests, patch) = review_seams(&view, app);
+        assert_eq!(requests, 0, "and sends no request");
+        assert!(patch.is_none(), "and captures no snapshot");
     });
 }

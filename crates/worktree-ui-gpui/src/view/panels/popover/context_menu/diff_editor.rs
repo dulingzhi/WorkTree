@@ -180,17 +180,22 @@ pub(super) fn model(
     // commit-box ✨, the source is checked at click time (files and PATH
     // entries change between render and click), so the entry stays enabled and
     // an unconfigured source surfaces as a warning toast.
-    items.push(ContextMenuItem::Separator);
-    items.push(ContextMenuItem::Entry {
-        label: "Review this file".into(),
-        icon: Some("icons/sparkle.svg".into()),
-        shortcut: None,
-        disabled: path.is_none(),
-        action: Box::new(ContextMenuAction::ReviewFile {
-            repo_id,
-            path: path.clone().unwrap_or_default(),
-        }),
-    });
+    // An off switch is a standing preference rather than a runtime condition,
+    // so — unlike the source check — it is decided here: the entry simply is
+    // not offered. Everything below still applies when the feature is on.
+    if crate::ai_commit::current().file_review_enabled {
+        items.push(ContextMenuItem::Separator);
+        items.push(ContextMenuItem::Entry {
+            label: "Review this file".into(),
+            icon: Some("icons/sparkle.svg".into()),
+            shortcut: None,
+            disabled: path.is_none(),
+            action: Box::new(ContextMenuAction::ReviewFile {
+                repo_id,
+                path: path.clone().unwrap_or_default(),
+            }),
+        });
+    }
 
     ContextMenuModel::new(items)
 }

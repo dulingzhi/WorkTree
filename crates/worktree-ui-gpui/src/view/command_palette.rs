@@ -802,9 +802,13 @@ impl std::ops::Deref for CommandMatch {
 const KEYWORD_MATCH_PENALTY: i32 = 100_000;
 
 pub(crate) fn filtered_commands(has_active_repo: bool, query: &str) -> Vec<CommandMatch> {
+    // A switched-off feature is not offered at all; the dispatch in `view` still
+    // guards it, because a command can arrive from a source other than this list.
+    let file_review_enabled = crate::ai_commit::current().file_review_enabled;
     let available = COMMANDS
         .iter()
-        .filter(|cmd| !cmd.requires_repo || has_active_repo);
+        .filter(|cmd| !cmd.requires_repo || has_active_repo)
+        .filter(|cmd| file_review_enabled || cmd.id != "review-file");
 
     if query.is_empty() {
         return available
@@ -1611,11 +1615,30 @@ mod tests {
 
     #[test]
     fn filtered_commands_without_query_lists_everything_available() {
+        // "Everything" now means "every command whose feature is switched on",
+        // so the file-review switch is pinned on for the count to mean
+        // anything — another test may have switched it off.
+        let _guard =
+            crate::ai_commit::SettingsGuard::install(crate::ai_commit::AiCommitSettings::default());
         let with_repo = filtered_commands(true, "");
         let without_repo = filtered_commands(false, "");
         assert_eq!(with_repo.len(), COMMANDS.len());
         assert!(without_repo.len() < with_repo.len());
         assert!(with_repo.iter().all(|m| m.positions.is_empty()));
+    }
+
+    #[test]
+    fn filtered_commands_drops_review_file_when_the_feature_is_switched_off() {
+        let _guard = crate::ai_commit::SettingsGuard::configured_without_file_review();
+        let matches = filtered_commands(true, "");
+        assert!(
+            !matches.iter().any(|m| m.id == "review-file"),
+            "a switched-off command is not offered"
+        );
+        assert!(
+            matches.iter().any(|m| m.id == "stage-all"),
+            "the switch removes one command, not the whole list"
+        );
     }
 
     #[test]

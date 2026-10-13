@@ -44,6 +44,7 @@ misc:
     commit_message_placeholder: 输入提交信息
   ai_commit:
     not_configured: "尚未配置 AI 提交信息——请在 设置 → 通用 中选择提供商并填写 API Key。"
+    file_review_disabled: "AI 文件审查已关闭——请在 设置 → 通用 中重新开启。"
     no_staged_changes: "还没有已暂存的更改——请先暂存更改再生成提交信息。"
     empty_diff: "暂存差异为空，没有可供模型描述的内容。"
     failed: "AI 生成提交信息失败：%{error}"

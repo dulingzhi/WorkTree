@@ -1456,7 +1456,13 @@ impl PopoverHost {
                 // takes over the close-path; when it only warned (no patch, or
                 // no configured source) the menu closes as any action's
                 // aftermath does.
-                if !crate::ai_commit::current().is_configured() {
+                if !crate::ai_commit::current().file_review_enabled {
+                    self.push_toast(
+                        components::ToastKind::Warning,
+                        crate::i18n::t!("misc.ai_commit.file_review_disabled").into_owned(),
+                        cx,
+                    );
+                } else if !crate::ai_commit::current().is_configured() {
                     self.push_toast(
                         components::ToastKind::Warning,
                         crate::i18n::t!("misc.ai_commit.not_configured").into_owned(),

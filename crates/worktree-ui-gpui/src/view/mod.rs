@@ -1602,22 +1602,33 @@ impl WorkTreeView {
                 }
             }
             "review-file" => {
-                let target = active_diff_target(&self.state).and_then(|(repo_id, target)| {
-                    reviewable_target_path(&target).map(|path| (repo_id, path))
-                });
-                match (target, window) {
-                    (Some((repo_id, path)), Some(window)) => {
-                        self.popover_host.update(cx, |host, cx| {
-                            host.start_file_review(repo_id, &path, window, cx);
-                        });
-                    }
-                    // No file is open in the diff view (a whole commit, or
-                    // nothing): there is nothing to point the review at.
-                    _ => self.push_toast(
-                        components::ToastKind::Error,
-                        crate::i18n::tr_str("palette.cmd.review-file-needs-file").to_string(),
+                // The palette hides the entry when the feature is off, but the
+                // command can still arrive another way (a test, or a future
+                // keybinding), so the switch is enforced where it matters.
+                if !crate::ai_commit::current().file_review_enabled {
+                    self.push_toast(
+                        components::ToastKind::Warning,
+                        crate::i18n::tr_str("misc.ai_commit.file_review_disabled").to_string(),
                         cx,
-                    ),
+                    );
+                } else {
+                    let target = active_diff_target(&self.state).and_then(|(repo_id, target)| {
+                        reviewable_target_path(&target).map(|path| (repo_id, path))
+                    });
+                    match (target, window) {
+                        (Some((repo_id, path)), Some(window)) => {
+                            self.popover_host.update(cx, |host, cx| {
+                                host.start_file_review(repo_id, &path, window, cx);
+                            });
+                        }
+                        // No file is open in the diff view (a whole commit, or
+                        // nothing): there is nothing to point the review at.
+                        _ => self.push_toast(
+                            components::ToastKind::Error,
+                            crate::i18n::tr_str("palette.cmd.review-file-needs-file").to_string(),
+                            cx,
+                        ),
+                    }
                 }
             }
             "show-reflog" => {
