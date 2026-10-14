@@ -110,12 +110,22 @@ pub(in crate::view) fn agent_worktree_layout(
     }
 }
 
+/// A stable identity for one agent session. It equals the `session_seq` of the
+/// terminal instance the agent runs in, which `next_terminal_session_seq`
+/// allocates monotonically — so it is unique per session and orders sessions by
+/// start time (a higher id started later). Iteration 07-1 lets a repo run
+/// several sessions at once; this id is the map key that keeps them apart.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub(in crate::view) struct AgentSessionId(pub u64);
+
 /// One recorded agent session. The terminal instance itself lives in the
 /// main repo tab's terminal session (closing it ends the session); the agent
 /// runs in `worktree_path`, whose state is measured against `baseline` (its
 /// creation commit). The worktree outlives the session on purpose — it is
 /// merged or cleaned up through the regular worktree management UI.
 pub(in crate::view) struct AgentSessionState {
+    /// Stable id, equal to the owning terminal instance's `session_seq`.
+    pub id: AgentSessionId,
     pub kind: AgentKind,
     pub baseline: CommitId,
     pub worktree_path: std::path::PathBuf,
@@ -218,6 +228,7 @@ mod tests {
 
     fn session_with_worktree() -> AgentSessionState {
         AgentSessionState {
+            id: AgentSessionId(1),
             kind: AgentKind::ClaudeCode,
             baseline: CommitId("aaaa111122223333444455556666777788889999".into()),
             worktree_path: std::path::PathBuf::from("/repos/agent-1"),

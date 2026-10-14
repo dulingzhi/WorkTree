@@ -54,7 +54,10 @@ pub struct WorkTreeView {
     pub(super) terminal_sessions: FxHashMap<RepoId, RepoTerminalSession>,
     /// Agent workbench sessions (claude code / codex): one per repo,
     /// keyed alongside the terminal session that hosts them.
-    pub(super) agent_sessions: FxHashMap<RepoId, agent_workbench::AgentSessionState>,
+    pub(super) agent_sessions: FxHashMap<
+        RepoId,
+        FxHashMap<agent_workbench::AgentSessionId, agent_workbench::AgentSessionState>,
+    >,
     pub(super) terminal_panel_height: Pixels,
     pub(super) terminal_panel_resize: Option<TerminalPanelResizeState>,
     pub(super) next_terminal_session_seq: u64,

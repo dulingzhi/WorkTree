@@ -47,6 +47,7 @@ impl MainPaneView {
             let session = root_view
                 .agent_sessions
                 .values()
+                .flat_map(|sessions| sessions.values())
                 .find(|session| session.worktree_repo_id == Some(active_id))?;
             let target = root_view
                 .state

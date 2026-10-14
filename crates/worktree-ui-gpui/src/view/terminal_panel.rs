@@ -2072,15 +2072,20 @@ impl WorkTreeView {
             return;
         };
         let session_seq = instance.session_seq;
+        let session_id = agent_workbench::AgentSessionId(session_seq);
         let Some(session) = self.terminal_sessions.get_mut(&repo_id) else {
             return;
         };
         session.instances.push(instance);
         session.active_index = session.instances.len() - 1;
 
-        self.agent_sessions.insert(
-            repo_id,
+        // 07-1: a repo hosts several sessions now. Each session is one
+        // terminal instance keyed by its `session_seq`; insert (don't
+        // overwrite) so concurrent sessions coexist.
+        self.agent_sessions.entry(repo_id).or_default().insert(
+            session_id,
             agent_workbench::AgentSessionState {
+                id: session_id,
                 kind,
                 baseline,
                 worktree_path,
@@ -2107,12 +2112,40 @@ impl WorkTreeView {
     /// Show what the running agent changed: open (or activate) the agent
     /// worktree's own repo tab and compare its live working tree against
     /// the session baseline there — the standard diff view, with
-    /// line-level staging for path-level accept.
+    /// line-level staging for path-level accept. With several sessions per
+    /// repo, this targets the most recently started one (highest id).
     pub(in crate::view) fn view_agent_changes(&mut self, cx: &mut gpui::Context<Self>) {
         let Some(repo_id) = self.active_repo_id() else {
             return;
         };
-        let Some(session) = self.agent_sessions.get(&repo_id) else {
+        let Some(session_id) = self
+            .agent_sessions
+            .get(&repo_id)
+            .and_then(|sessions| sessions.values().max_by_key(|s| s.id.0).map(|s| s.id))
+        else {
+            self.push_toast(
+                components::ToastKind::Warning,
+                crate::i18n::tr_str("chrome.agent.no_session").to_string(),
+                cx,
+            );
+            return;
+        };
+        self.view_agent_changes_for_session(repo_id, session_id, cx);
+    }
+
+    /// Like [`Self::view_agent_changes`] but for one explicitly chosen
+    /// session — the launcher's per-card "View changes" calls this directly.
+    pub(in crate::view) fn view_agent_changes_for_session(
+        &mut self,
+        repo_id: RepoId,
+        session_id: agent_workbench::AgentSessionId,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(session) = self
+            .agent_sessions
+            .get(&repo_id)
+            .and_then(|sessions| sessions.get(&session_id))
+        else {
             self.push_toast(
                 components::ToastKind::Warning,
                 crate::i18n::tr_str("chrome.agent.no_session").to_string(),
@@ -2147,8 +2180,10 @@ impl WorkTreeView {
                         // Remember the worktree tab so the diff view can
                         // resolve this session from it later.
                         let _ = this.update(cx, |root, _| {
-                            if let Some(session) = root.agent_sessions.get_mut(&repo_id) {
-                                session.worktree_repo_id = Some(target_id);
+                            if let Some(sessions) = root.agent_sessions.get_mut(&repo_id) {
+                                if let Some(session) = sessions.get_mut(&session_id) {
+                                    session.worktree_repo_id = Some(target_id);
+                                }
                             }
                         });
                         store.dispatch(Msg::CompareWithWorkingTree {
@@ -2375,6 +2410,52 @@ impl WorkTreeView {
         // The agent session's terminal died with the terminal session; its
         // baseline is meaningless without the terminal that produced it.
         self.agent_sessions.remove(&repo_id);
+        if !self.active_repo_has_open_terminal() {
+            self.deactivate_terminal_cursor_blink();
+        }
+        self.sync_terminal_indicator_views(cx);
+        cx.notify();
+    }
+
+    /// Stop one agent session (07-1: a repo may host several). Shuts down only
+    /// that session's terminal instance — leaving any other tabs/sessions for
+    /// the repo running — and drops its record. The worktree itself is left
+    /// for the regular worktree management UI.
+    pub(in crate::view) fn close_agent_session(
+        &mut self,
+        repo_id: RepoId,
+        session_id: agent_workbench::AgentSessionId,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if let Some(sessions) = self.agent_sessions.get_mut(&repo_id) {
+            sessions.remove(&session_id);
+            if sessions.is_empty() {
+                self.agent_sessions.remove(&repo_id);
+            }
+        }
+
+        let mut terminal_emptied = false;
+        if let Some(session) = self.terminal_sessions.get_mut(&repo_id) {
+            if let Some(index) = session
+                .instances
+                .iter()
+                .position(|instance| instance.session_seq == session_id.0)
+            {
+                let instance = session.instances.remove(index);
+                shutdown_terminal_instance(&instance, false);
+                if session.instances.is_empty() {
+                    terminal_emptied = true;
+                } else if session.active_index > index {
+                    session.active_index -= 1;
+                } else if session.active_index >= session.instances.len() {
+                    session.active_index = session.instances.len() - 1;
+                }
+            }
+        }
+        if terminal_emptied {
+            self.terminal_sessions.remove(&repo_id);
+        }
+
         if !self.active_repo_has_open_terminal() {
             self.deactivate_terminal_cursor_blink();
         }

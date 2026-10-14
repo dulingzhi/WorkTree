@@ -1,7 +1,7 @@
 use super::*;
 
 use super::branch::create_tracking_store;
-use crate::view::agent_workbench::{AgentKind, AgentSessionState};
+use crate::view::agent_workbench::{AgentKind, AgentSessionId, AgentSessionState};
 use worktree_core::domain::CommitId;
 
 fn click(cx: &mut gpui::VisualTestContext, selector: &'static str) {
@@ -27,21 +27,25 @@ fn click(cx: &mut gpui::VisualTestContext, selector: &'static str) {
     });
 }
 
+/// Open the roster with the given sessions seeded (each is `(id, worktree_path)`).
+/// Seeding only inserts — it never clears other sessions already in state.
 fn open_roster(
     cx: &mut gpui::VisualTestContext,
     view: &gpui::Entity<WorkTreeView>,
     repo_id: RepoId,
-    seed_session: bool,
+    seeds: &[(u64, &str)],
 ) {
     cx.update(|window, app| {
         view.update(app, |this, cx| {
-            if seed_session {
-                this.agent_sessions.insert(
-                    repo_id,
+            let inner = this.agent_sessions.entry(repo_id).or_default();
+            for (id, path) in seeds {
+                inner.insert(
+                    AgentSessionId(*id),
                     AgentSessionState {
+                        id: AgentSessionId(*id),
                         kind: AgentKind::ClaudeCode,
                         baseline: CommitId("aaaa111122223333444455556666777788889999".into()),
-                        worktree_path: std::path::PathBuf::from("/repos/agent-1770000000"),
+                        worktree_path: std::path::PathBuf::from(path),
                         worktree_repo_id: None,
                     },
                 );
@@ -66,19 +70,19 @@ fn agent_sessions_roster_renders_the_running_session(cx: &mut gpui::TestAppConte
     let (view, cx) =
         cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
 
-    open_roster(cx, &view, repo_id, true);
+    open_roster(cx, &view, repo_id, &[(1, "/repos/agent-1770000000")]);
 
     assert!(
         cx.debug_bounds("agent_sessions_popover").is_some(),
         "the roster should render"
     );
     assert!(
-        cx.debug_bounds("agent_session_card").is_some(),
+        cx.debug_bounds("agent_session_card_1").is_some(),
         "the running session's card should render"
     );
     assert!(
-        cx.debug_bounds("agent_view_changes").is_some()
-            && cx.debug_bounds("agent_stop_session").is_some(),
+        cx.debug_bounds("agent_view_changes_1").is_some()
+            && cx.debug_bounds("agent_stop_session_1").is_some(),
         "the card carries view-changes and stop actions"
     );
     assert!(
@@ -88,7 +92,7 @@ fn agent_sessions_roster_renders_the_running_session(cx: &mut gpui::TestAppConte
     assert!(
         cx.debug_bounds("agent_start_claude").is_some()
             && cx.debug_bounds("agent_start_codex").is_some(),
-        "start entries are always offered (a second session replaces the first)"
+        "start entries are always offered (a second session joins the first)"
     );
 }
 
@@ -99,7 +103,7 @@ fn agent_sessions_roster_without_a_session_shows_the_hint(cx: &mut gpui::TestApp
     let (view, cx) =
         cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
 
-    open_roster(cx, &view, repo_id, false);
+    open_roster(cx, &view, repo_id, &[]);
 
     assert!(
         cx.debug_bounds("agent_session_empty").is_some(),
@@ -115,9 +119,9 @@ fn agent_sessions_stop_ends_the_session(cx: &mut gpui::TestAppContext) {
     let (view, cx) =
         cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
 
-    open_roster(cx, &view, repo_id, true);
+    open_roster(cx, &view, repo_id, &[(1, "/repos/agent-1770000000")]);
 
-    click(cx, "agent_stop_session");
+    click(cx, "agent_stop_session_1");
 
     let session_gone =
         cx.update(|_window, app| !view.read(app).agent_sessions.contains_key(&repo_id));
@@ -133,4 +137,39 @@ fn agent_sessions_stop_ends_the_session(cx: &mut gpui::TestAppContext) {
             != Some(PopoverKind::AgentSessions { repo_id })
     });
     assert!(popover_closed, "the roster closes after its action");
+}
+
+#[gpui::test]
+fn agent_sessions_roster_lists_each_session(cx: &mut gpui::TestAppContext) {
+    let (store, events, _repo, _workdir) = create_tracking_store("agent-roster-multi");
+    let repo_id = store.snapshot().active_repo.expect("expected active repo");
+    let (view, cx) =
+        cx.add_window_view(|window, cx| WorkTreeView::new(store, events, None, window, cx));
+
+    open_roster(
+        cx,
+        &view,
+        repo_id,
+        &[(1, "/repos/agent-1"), (2, "/repos/agent-2")],
+    );
+
+    assert!(
+        cx.debug_bounds("agent_session_card_1").is_some()
+            && cx.debug_bounds("agent_session_card_2").is_some(),
+        "every running session gets its own card"
+    );
+
+    click(cx, "agent_stop_session_1");
+
+    let (first_gone, second_survives, still_tracked) = cx.update(|_window, app| {
+        let sessions = view.read(app).agent_sessions.get(&repo_id);
+        (
+            sessions.map_or(true, |m| !m.contains_key(&AgentSessionId(1))),
+            sessions.map_or(false, |m| m.contains_key(&AgentSessionId(2))),
+            view.read(app).agent_sessions.contains_key(&repo_id),
+        )
+    });
+    assert!(first_gone, "stopping one session removes only that record");
+    assert!(second_survives, "the other session keeps running");
+    assert!(still_tracked, "the repo still hosts the surviving session");
 }
