@@ -47,6 +47,11 @@ fn open_roster(
                         baseline: CommitId("aaaa111122223333444455556666777788889999".into()),
                         worktree_path: std::path::PathBuf::from(path),
                         worktree_repo_id: None,
+                        auto_snapshot: false,
+                        last_snapshot_unix_secs: 0,
+                        snapshot_count: 0,
+                        snapshot_interval_secs:
+                            crate::view::agent_workbench::DEFAULT_AUTO_SNAPSHOT_INTERVAL_SECS,
                     },
                 );
             }
@@ -93,6 +98,11 @@ fn agent_sessions_roster_renders_the_running_session(cx: &mut gpui::TestAppConte
         cx.debug_bounds("agent_start_claude").is_some()
             && cx.debug_bounds("agent_start_codex").is_some(),
         "start entries are always offered (a second session joins the first)"
+    );
+    assert!(
+        cx.debug_bounds("agent_toggle_auto_1").is_some()
+            && cx.debug_bounds("agent_snapshot_now_1").is_some(),
+        "each card exposes the auto-snapshot toggle and a manual snapshot button"
     );
 }
 

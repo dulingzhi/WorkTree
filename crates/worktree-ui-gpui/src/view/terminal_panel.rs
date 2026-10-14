@@ -43,6 +43,61 @@ const TERMINAL_MIN_GRID_ROWS: u16 = 2;
 const TERMINAL_MIN_GRID_COLS: u16 = 8;
 const TERMINAL_CARET_WIDTH_RATIO: f32 = 0.12;
 const TERMINAL_CARET_MIN_WIDTH_PX: f32 = 2.0;
+
+// ---------------------------------------------------------------------------
+// Iteration 07-3: automatic agent-worktree snapshots.
+//
+// A single background task (`WorkTreeView::agent_snapshot_scheduler`) ticks
+// every `AGENT_SNAPSHOT_TICK_SECS` and, for each session whose `auto_snapshot`
+// flag is on and whose interval has elapsed, stages everything in the worktree
+// and commits it as a `[agent-snapshot]` commit. The worktree owns its own
+// branch (created by `git worktree add`), so these commits never touch the
+// user's main working tree. A per-session "Snapshot now" button drives the
+// same commit path on demand.
+// ---------------------------------------------------------------------------
+
+/// How often the snapshot scheduler wakes to check for due sessions (seconds).
+const AGENT_SNAPSHOT_TICK_SECS: u64 = 30;
+
+/// A scheduled snapshot for one agent session. Cheap to clone; carries
+/// everything [`perform_agent_snapshot`] and
+/// [`WorkTreeView::apply_snapshot_result`] need so the blocking git work can
+/// run off the UI thread.
+#[derive(Clone)]
+struct AgentSnapshotJob {
+    repo_id: RepoId,
+    session_id: agent_workbench::AgentSessionId,
+    worktree_path: PathBuf,
+    snapshot_count: u64,
+}
+
+/// Current unix seconds, or 0 if the system clock is before the epoch.
+fn now_unix_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Stage and commit an agent worktree as a `[agent-snapshot]` commit. Returns
+/// the new snapshot count, or the git error. A clean tree returns the unchanged
+/// count so the caller can still advance the timer without a no-op commit.
+fn perform_agent_snapshot(job: &AgentSnapshotJob) -> Result<u64, String> {
+    panels::git_output(&job.worktree_path, &["add", "-A"])?;
+    let status = panels::git_output(&job.worktree_path, &["status", "--porcelain"])?;
+    if status.trim().is_empty() {
+        return Ok(job.snapshot_count);
+    }
+    let next = job.snapshot_count + 1;
+    let message = format!(
+        "[agent-snapshot] session={} seq={} unix={}",
+        job.session_id.0,
+        next,
+        now_unix_secs()
+    );
+    panels::git_output(&job.worktree_path, &["commit", "-m", message.as_str()])?;
+    Ok(next)
+}
 const TERMINAL_CARET_MAX_WIDTH_PX: f32 = 3.0;
 const TERMINAL_CARET_VERTICAL_INSET_PX: f32 = 1.0;
 const TERMINAL_CARET_RADIUS_PX: f32 = 0.0;
@@ -2120,11 +2175,17 @@ impl WorkTreeView {
                 baseline,
                 worktree_path,
                 worktree_repo_id: None,
+                auto_snapshot: false,
+                last_snapshot_unix_secs: 0,
+                snapshot_count: 0,
+                snapshot_interval_secs: agent_workbench::DEFAULT_AUTO_SNAPSHOT_INTERVAL_SECS,
             },
         );
         // 07-2: persist the session record so it survives a restart and can be
         // rehydrated (and resumed) on the next launch.
         self.persist_agent_sessions_for_repo(repo_id, &workdir);
+        // 07-3: start the auto-snapshot scheduler once (idempotent).
+        self.ensure_agent_snapshot_scheduler(cx);
         self.spawn_terminal_event_task(repo_id, session_seq, cx);
         self.reset_terminal_cursor_blink(cx);
         self.sync_terminal_indicator_views(cx);
@@ -2525,6 +2586,10 @@ impl WorkTreeView {
                         kind: session.kind.storage_key().to_string(),
                         baseline: session.baseline.0.to_string(),
                         worktree_path: session::path_storage_key(&session.worktree_path),
+                        auto_snapshot: session.auto_snapshot,
+                        last_snapshot_unix_secs: session.last_snapshot_unix_secs,
+                        snapshot_count: session.snapshot_count,
+                        snapshot_interval_secs: session.snapshot_interval_secs,
                     })
                     .collect()
             })
@@ -2568,6 +2633,10 @@ impl WorkTreeView {
                         baseline: CommitId(record.baseline.as_str().into()),
                         worktree_path,
                         worktree_repo_id: None,
+                        auto_snapshot: record.auto_snapshot,
+                        last_snapshot_unix_secs: record.last_snapshot_unix_secs,
+                        snapshot_count: record.snapshot_count,
+                        snapshot_interval_secs: record.snapshot_interval_secs,
                     },
                 );
                 surviving.push(record.clone());
@@ -2649,7 +2718,204 @@ impl WorkTreeView {
         self.reset_terminal_cursor_blink(cx);
         self.sync_terminal_indicator_views(cx);
         self.focus_terminal_view(repo_id, window, cx);
+        // 07-3: a resumed session may have auto-snapshot enabled; ensure the
+        // scheduler is live so its timer is honoured.
+        self.ensure_agent_snapshot_scheduler(cx);
         cx.notify();
+    }
+
+    /// Spawn the snapshot scheduler once. It is a no-op under tests (no live
+    /// executor) and when it is already running.
+    fn ensure_agent_snapshot_scheduler(&mut self, cx: &mut gpui::Context<Self>) {
+        if self.agent_snapshot_scheduler.is_some() {
+            return;
+        }
+        if !crate::ui_runtime::current().uses_live_store_poller() {
+            // The test scheduler would treat a sleeping loop as forever-pending
+            // work; only run the real timer when a live executor exists.
+            return;
+        }
+        self.agent_snapshot_scheduler = Some(cx.spawn(
+            async move |view: gpui::WeakEntity<WorkTreeView>, cx: &mut gpui::AsyncApp| {
+                loop {
+                    smol::Timer::after(std::time::Duration::from_secs(AGENT_SNAPSHOT_TICK_SECS))
+                        .await;
+                    let jobs = match view.update(cx, |view, _cx| view.collect_due_snapshots()) {
+                        Ok(jobs) => jobs,
+                        Err(_) => break,
+                    };
+                    for job in jobs {
+                        let job_work = job.clone();
+                        let result = smol::unblock(move || perform_agent_snapshot(&job_work)).await;
+                        if view
+                            .update(cx, |view, cx| {
+                                view.apply_snapshot_result(job, result, cx, false)
+                            })
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                }
+            },
+        ));
+    }
+
+    /// Collect every session whose auto-snapshot timer has elapsed and whose
+    /// worktree still exists.
+    fn collect_due_snapshots(&self) -> Vec<AgentSnapshotJob> {
+        let now = now_unix_secs();
+        let mut jobs = Vec::new();
+        for (&repo_id, sessions) in &self.agent_sessions {
+            for (&session_id, session) in sessions {
+                if !session.auto_snapshot {
+                    continue;
+                }
+                let interval = session.snapshot_interval_secs.max(1);
+                if now.saturating_sub(session.last_snapshot_unix_secs) < interval {
+                    continue;
+                }
+                if !session.worktree_path.exists() {
+                    continue;
+                }
+                jobs.push(AgentSnapshotJob {
+                    repo_id,
+                    session_id,
+                    worktree_path: session.worktree_path.clone(),
+                    snapshot_count: session.snapshot_count,
+                });
+            }
+        }
+        jobs
+    }
+
+    /// Build a one-off snapshot job for the given session (used by the manual
+    /// "Snapshot now" action). `None` if the session is unknown or its worktree
+    /// is gone.
+    fn collect_one_snapshot_job(
+        &self,
+        repo_id: RepoId,
+        session_id: agent_workbench::AgentSessionId,
+    ) -> Option<AgentSnapshotJob> {
+        let session = self.agent_sessions.get(&repo_id)?.get(&session_id)?;
+        if !session.worktree_path.exists() {
+            return None;
+        }
+        Some(AgentSnapshotJob {
+            repo_id,
+            session_id,
+            worktree_path: session.worktree_path.clone(),
+            snapshot_count: session.snapshot_count,
+        })
+    }
+
+    /// Record a snapshot outcome: bump the in-memory count/timer, persist the
+    /// record, and (for manual runs, `notify_on_error = true`) surface a toast.
+    /// The scheduler passes `false` to stay quiet; the manual button passes
+    /// `true`.
+    fn apply_snapshot_result(
+        &mut self,
+        job: AgentSnapshotJob,
+        result: Result<u64, String>,
+        cx: &mut gpui::Context<Self>,
+        notify_on_error: bool,
+    ) {
+        let applied = {
+            let Some(sessions) = self.agent_sessions.get_mut(&job.repo_id) else {
+                return;
+            };
+            let Some(session) = sessions.get_mut(&job.session_id) else {
+                return;
+            };
+            match result {
+                Ok(new_count) => {
+                    session.snapshot_count = new_count;
+                    session.last_snapshot_unix_secs = now_unix_secs();
+                    Ok(new_count)
+                }
+                Err(err) => Err(err),
+            }
+        };
+        match applied {
+            Ok(new_count) => {
+                if let Some(workdir) = self.repo_workdir(job.repo_id) {
+                    self.persist_agent_sessions_for_repo(job.repo_id, &workdir);
+                }
+                if notify_on_error {
+                    self.push_toast(
+                        components::ToastKind::Success,
+                        crate::i18n::t!("chrome.agent.snapshot_ok", n = new_count.to_string())
+                            .to_string(),
+                        cx,
+                    );
+                }
+                cx.notify();
+            }
+            Err(err) => {
+                if notify_on_error {
+                    self.push_toast(
+                        components::ToastKind::Error,
+                        crate::i18n::t!("chrome.agent.snapshot_failed", err = err).to_string(),
+                        cx,
+                    );
+                }
+            }
+        }
+    }
+
+    /// Toggle auto-snapshot for a session. Enabling starts the timer fresh so
+    /// the first snapshot lands after a full interval.
+    pub(in crate::view) fn set_agent_session_auto_snapshot(
+        &mut self,
+        repo_id: RepoId,
+        session_id: agent_workbench::AgentSessionId,
+        enabled: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(sessions) = self.agent_sessions.get_mut(&repo_id) else {
+            return;
+        };
+        let Some(session) = sessions.get_mut(&session_id) else {
+            return;
+        };
+        session.auto_snapshot = enabled;
+        if enabled {
+            session.last_snapshot_unix_secs = now_unix_secs();
+        }
+        if let Some(workdir) = self.repo_workdir(repo_id) {
+            self.persist_agent_sessions_for_repo(repo_id, &workdir);
+        }
+        self.ensure_agent_snapshot_scheduler(cx);
+        cx.notify();
+    }
+
+    /// Manually snapshot a session right now (the per-card "Snapshot now"
+    /// button). Runs the blocking git work off the UI thread and toasts the
+    /// result.
+    pub(in crate::view) fn snapshot_agent_session_now(
+        &mut self,
+        repo_id: RepoId,
+        session_id: agent_workbench::AgentSessionId,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(job) = self.collect_one_snapshot_job(repo_id, session_id) else {
+            self.push_toast(
+                components::ToastKind::Warning,
+                crate::i18n::tr_str("chrome.agent.no_session").to_string(),
+                cx,
+            );
+            return;
+        };
+        cx.spawn(
+            async move |view: gpui::WeakEntity<WorkTreeView>, cx: &mut gpui::AsyncApp| {
+                let job_work = job.clone();
+                let result = smol::unblock(move || perform_agent_snapshot(&job_work)).await;
+                let _ = view.update(cx, |view, cx| {
+                    view.apply_snapshot_result(job, result, cx, true);
+                });
+            },
+        )
+        .detach();
     }
 
     /// Close a single terminal tab. Closing the last tab closes the panel.

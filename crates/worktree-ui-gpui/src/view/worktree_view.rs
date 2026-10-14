@@ -58,6 +58,9 @@ pub struct WorkTreeView {
         RepoId,
         FxHashMap<agent_workbench::AgentSessionId, agent_workbench::AgentSessionState>,
     >,
+    /// Iteration 07-3: the single background task that auto-snapshots agent
+    /// worktrees on a timer. `None` until the first agent session starts.
+    pub(super) agent_snapshot_scheduler: Option<gpui::Task<()>>,
     pub(super) terminal_panel_height: Pixels,
     pub(super) terminal_panel_resize: Option<TerminalPanelResizeState>,
     pub(super) next_terminal_session_seq: u64,

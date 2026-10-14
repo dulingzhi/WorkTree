@@ -40,6 +40,8 @@ pub(super) fn panel(
                             session.worktree_path.display().to_string(),
                             short.to_string(),
                             live,
+                            session.auto_snapshot,
+                            session.snapshot_count,
                         )
                     })
                     .collect::<Vec<_>>()
@@ -51,7 +53,7 @@ pub(super) fn panel(
 
     match sessions {
         Some(sessions) if !sessions.is_empty() => {
-            for (id, kind, worktree, baseline_short, live) in sessions {
+            for (id, kind, worktree, baseline_short, live, auto, snap_count) in sessions {
                 body = body
                     .child(
                         div()
@@ -82,6 +84,20 @@ pub(super) fn panel(
                                     .text_xs()
                                     .text_color(theme.colors.foreground.secondary)
                                     .child(format!("baseline {baseline_short}")),
+                            )
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(theme.colors.foreground.secondary)
+                                    .child(format!(
+                                        "{} · {} snapshots",
+                                        if auto {
+                                            crate::i18n::tr("chrome.agent.auto_on")
+                                        } else {
+                                            crate::i18n::tr("chrome.agent.auto_off")
+                                        },
+                                        snap_count
+                                    )),
                             ),
                     )
                     .child({
@@ -127,6 +143,58 @@ pub(super) fn panel(
                                             move |this, _e, _window, cx| {
                                                 let _ = this.root_view.update(cx, |root, cx| {
                                                     root.close_agent_session(repo_id, id, cx)
+                                                });
+                                                this.close_popover(cx);
+                                            },
+                                        ),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .debug_selector(|| format!("agent_toggle_auto_{}", id.0))
+                                    .child(
+                                        components::Button::new(
+                                            format!("agent_toggle_auto_{}", id.0),
+                                            if auto {
+                                                crate::i18n::tr("chrome.agent.auto_on")
+                                            } else {
+                                                crate::i18n::tr("chrome.agent.auto_off")
+                                            },
+                                        )
+                                        .style(if auto {
+                                            components::ButtonStyle::Filled
+                                        } else {
+                                            components::ButtonStyle::Outlined
+                                        })
+                                        .on_click(
+                                            theme,
+                                            cx,
+                                            move |this, _e, _window, cx| {
+                                                let _ = this.root_view.update(cx, |root, cx| {
+                                                    root.set_agent_session_auto_snapshot(
+                                                        repo_id, id, !auto, cx,
+                                                    )
+                                                });
+                                                this.close_popover(cx);
+                                            },
+                                        ),
+                                    ),
+                            )
+                            .child(
+                                div()
+                                    .debug_selector(|| format!("agent_snapshot_now_{}", id.0))
+                                    .child(
+                                        components::Button::new(
+                                            format!("agent_snapshot_now_{}", id.0),
+                                            crate::i18n::tr("chrome.agent.snapshot_now"),
+                                        )
+                                        .style(components::ButtonStyle::Outlined)
+                                        .on_click(
+                                            theme,
+                                            cx,
+                                            move |this, _e, _window, cx| {
+                                                let _ = this.root_view.update(cx, |root, cx| {
+                                                    root.snapshot_agent_session_now(repo_id, id, cx)
                                                 });
                                                 this.close_popover(cx);
                                             },

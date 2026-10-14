@@ -294,6 +294,27 @@ pub struct AgentSessionRecord {
     pub baseline: String,
     /// The agent worktree directory, as a storage key (bytes/utf16le prefix).
     pub worktree_path: String,
+    /// Iteration 07-3: whether the worktree is auto-snapshotted (git-committed)
+    /// on a timer. Defaults to `false` so sessions recorded before 07-3 are not
+    /// auto-committed until the user opts in.
+    #[serde(default)]
+    pub auto_snapshot: bool,
+    /// Unix seconds of the last successful snapshot (or clean-tree skip).
+    #[serde(default)]
+    pub last_snapshot_unix_secs: u64,
+    /// Number of snapshots committed so far.
+    #[serde(default)]
+    pub snapshot_count: u64,
+    /// Auto-snapshot cadence in seconds. `#[serde(default = "...")]` keeps
+    /// records written before 07-3 valid; new sessions default to 300 (5 min).
+    #[serde(default = "default_snapshot_interval_secs")]
+    pub snapshot_interval_secs: u64,
+}
+
+/// Default auto-snapshot cadence (5 minutes) used when a persisted record
+/// predates iteration 07-3.
+fn default_snapshot_interval_secs() -> u64 {
+    300
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -2114,12 +2135,14 @@ mod stacked_pr_session_tests {
                 kind: "claude_code".to_string(),
                 baseline: "aaaa111122223333".to_string(),
                 worktree_path: path_storage_key(&PathBuf::from("/tmp/agent-repo/agent-1")),
+                ..Default::default()
             },
             AgentSessionRecord {
                 id: 7,
                 kind: "codex".to_string(),
                 baseline: "bbbb222233334444".to_string(),
                 worktree_path: path_storage_key(&PathBuf::from("/tmp/agent-repo/agent-2")),
+                ..Default::default()
             },
         ];
         persist_agent_sessions_to_path(&workdir, &records, &path).unwrap();
@@ -2139,6 +2162,7 @@ mod stacked_pr_session_tests {
                 kind: "claude_code".to_string(),
                 baseline: "aaaa111122223333".to_string(),
                 worktree_path: path_storage_key(&PathBuf::from("/tmp/agent-repo/agent-1")),
+                ..Default::default()
             }],
             &path,
         )

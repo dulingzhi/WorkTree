@@ -144,6 +144,10 @@ pub(in crate::view) struct AgentSessionId(pub u64);
 /// runs in `worktree_path`, whose state is measured against `baseline` (its
 /// creation commit). The worktree outlives the session on purpose — it is
 /// merged or cleaned up through the regular worktree management UI.
+/// Iteration 07-3: default auto-snapshot cadence (5 minutes). Per-session
+/// overrides live in [`AgentSessionState::snapshot_interval_secs`].
+pub(in crate::view) const DEFAULT_AUTO_SNAPSHOT_INTERVAL_SECS: u64 = 300;
+
 pub(in crate::view) struct AgentSessionState {
     /// Stable id, equal to the owning terminal instance's `session_seq`.
     pub id: AgentSessionId,
@@ -154,6 +158,14 @@ pub(in crate::view) struct AgentSessionState {
     /// The diff view resolves the session through it (the worktree tab's
     /// repo id is not the repo id the session is keyed by).
     pub worktree_repo_id: Option<RepoId>,
+    /// Iteration 07-3: auto-snapshot (git-commit the worktree) on a timer.
+    pub auto_snapshot: bool,
+    /// Unix seconds of the last successful snapshot (or clean-tree skip).
+    pub last_snapshot_unix_secs: u64,
+    /// Number of snapshots committed so far.
+    pub snapshot_count: u64,
+    /// Auto-snapshot cadence in seconds.
+    pub snapshot_interval_secs: u64,
 }
 
 /// The inputs the diff view needs to offer path-level reject while an agent
@@ -254,6 +266,10 @@ mod tests {
             baseline: CommitId("aaaa111122223333444455556666777788889999".into()),
             worktree_path: std::path::PathBuf::from("/repos/agent-1"),
             worktree_repo_id: Some(RepoId(7)),
+            auto_snapshot: false,
+            last_snapshot_unix_secs: 0,
+            snapshot_count: 0,
+            snapshot_interval_secs: DEFAULT_AUTO_SNAPSHOT_INTERVAL_SECS,
         }
     }
 
