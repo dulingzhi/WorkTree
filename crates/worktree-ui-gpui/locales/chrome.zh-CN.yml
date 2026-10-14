@@ -152,6 +152,10 @@ chrome:
     aggregate_reject: "拒绝"
     aggregate_accepted: "已接受 #{n} 个会话（已创建快照）"
     aggregate_accept_failed: "无法全部接受：{err}"
+    pr_description: "生成 PR/MR 描述"
+    pr_description_ready: "已根据 agent 改动生成 PR/MR 描述"
+    pr_description_no_session: "没有可用于描述的 agent 会话"
+    pr_description_no_changes: "agent 会话中无待处理改动"
 
   forge_request:
     no_remote: "此仓库没有 GitHub 或 GitLab 远程"

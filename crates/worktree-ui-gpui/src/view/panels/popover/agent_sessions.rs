@@ -223,6 +223,40 @@ pub(super) fn panel(
                                             },
                                         ),
                                     ),
+                            )
+                            .child(
+                                div()
+                                    .debug_selector(|| format!("agent_pr_description_{}", id.0))
+                                    .child(
+                                        components::Button::new(
+                                            format!("agent_pr_description_{}", id.0),
+                                            crate::i18n::tr("chrome.agent.pr_description"),
+                                        )
+                                        .style(components::ButtonStyle::Outlined)
+                                        .on_click(
+                                            theme,
+                                            cx,
+                                            move |this, _e, window, cx| {
+                                                if let Some(anchor) = this.popover_anchor.clone() {
+                                                    this.open_popover(
+                                                        PopoverKind::MergeRequestPushPrompt {
+                                                            repo_id,
+                                                        },
+                                                        anchor,
+                                                        window,
+                                                        cx,
+                                                    );
+                                                }
+                                                this.start_agent_description_generation(
+                                                    repo_id,
+                                                    super::submit::AgentDescriptionScope::Session(
+                                                        id,
+                                                    ),
+                                                    cx,
+                                                );
+                                            },
+                                        ),
+                                    ),
                             );
                         // A rehydrated session has no live terminal until it is
                         // resumed, so only offer "Resume" then.

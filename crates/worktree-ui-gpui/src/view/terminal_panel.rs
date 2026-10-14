@@ -5470,7 +5470,8 @@ mod tests {
 /// 07-4: pull changed paths out of `git status --porcelain` output. Handles
 /// the plain `XY path` form and the rename `R  old -> new` form (keeping the
 /// new path). Untracked (`??`) and unmerged (`UU`, etc.) paths are included.
-fn parse_agent_porcelain_paths(output: &str) -> Vec<std::path::PathBuf> {
+/// `pub(in crate::view)` so the PR-description adapter (submit.rs) reuses it.
+pub(in crate::view) fn parse_agent_porcelain_paths(output: &str) -> Vec<std::path::PathBuf> {
     let mut paths = Vec::new();
     for line in output.lines() {
         if line.len() < 4 {

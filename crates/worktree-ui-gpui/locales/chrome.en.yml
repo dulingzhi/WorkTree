@@ -162,6 +162,10 @@ chrome:
     aggregate_reject: "Reject"
     aggregate_accepted: "Accepted #{n} session(s); snapshots created"
     aggregate_accept_failed: "Could not accept all sessions: {err}"
+    pr_description: "Generate PR/MR description"
+    pr_description_ready: "PR/MR description generated from agent changes"
+    pr_description_no_session: "No agent session available to describe"
+    pr_description_no_changes: "No pending changes in the agent session(s)"
 
   forge_request:
     no_remote: "No GitHub or GitLab remote found for this repository"

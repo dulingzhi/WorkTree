@@ -235,6 +235,34 @@ pub(super) fn panel(
                         });
                     }),
                 ),
+        )
+        .child(
+            div()
+                .debug_selector(|| "agent_agg_pr_description".to_string())
+                .child(
+                    components::Button::new(
+                        "agent_agg_pr_description",
+                        crate::i18n::tr("chrome.agent.pr_description"),
+                    )
+                    .style(components::ButtonStyle::Outlined)
+                    .on_click(theme, cx, move |this, _e, window, cx| {
+                        // 07-5: route every session's changes into the PR/MR
+                        // description generator via the push prompt.
+                        if let Some(anchor) = this.popover_anchor.clone() {
+                            this.open_popover(
+                                PopoverKind::MergeRequestPushPrompt { repo_id },
+                                anchor,
+                                window,
+                                cx,
+                            );
+                        }
+                        this.start_agent_description_generation(
+                            repo_id,
+                            super::submit::AgentDescriptionScope::All,
+                            cx,
+                        );
+                    }),
+                ),
         );
 
     components::context_menu(

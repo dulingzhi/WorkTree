@@ -621,6 +621,90 @@ impl PopoverHost {
         cx.notify();
     }
 
+    /// 07-5: generate a PR/MR description from an agent session's (or all
+    /// sessions') worktree changes, reusing the same AI generator as the MR
+    /// push prompt. The description lands in the MR push description field, so
+    /// the caller opens `MergeRequestPushPrompt` first and this fills it live.
+    pub(in crate::view::panels) fn start_agent_description_generation(
+        &mut self,
+        repo_id: RepoId,
+        scope: AgentDescriptionScope,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self.mr_push.mr_push_description_generating {
+            return;
+        }
+        if !crate::ai_commit::current().is_configured() {
+            self.push_toast(
+                components::ToastKind::Warning,
+                crate::i18n::tr_str("misc.ai_commit.not_configured").to_string(),
+                cx,
+            );
+            return;
+        }
+        // Read baseline + worktree per target session from the root view's
+        // session roster (cheap, synchronous — no git here).
+        let Some(targets) = self.root_view.upgrade().map(|root| {
+            let root = root.read(cx);
+            gather_agent_description_targets(root, repo_id, scope)
+        }) else {
+            self.push_toast(
+                components::ToastKind::Error,
+                crate::i18n::tr_str("chrome.agent.pr_description_no_session").to_string(),
+                cx,
+            );
+            return;
+        };
+        if targets.is_empty() {
+            self.push_toast(
+                components::ToastKind::Error,
+                crate::i18n::tr_str("chrome.agent.pr_description_no_session").to_string(),
+                cx,
+            );
+            return;
+        }
+        self.mr_push.mr_push_description_generating = true;
+        self.mr_push.mr_push_description_error = None;
+        cx.notify();
+
+        // The request needs git and the network; test builds exercise the
+        // state machine through `finish_mr_description_generation`.
+        #[cfg(not(test))]
+        {
+            let settings = crate::ai_commit::current();
+            let locale = rust_i18n::locale();
+            cx.spawn(async move |this, cx| {
+                let collected =
+                    smol::unblock(move || collect_agent_description_context(&targets)).await;
+                let ok = collected.is_ok();
+                let result = match collected {
+                    Err(message) => Err(message),
+                    Ok((commits, diff_stat, target_label)) => {
+                        crate::ai_commit::generate_mr_description(
+                            &settings,
+                            &target_label,
+                            &commits,
+                            &diff_stat,
+                            &locale,
+                        )
+                        .await
+                    }
+                };
+                let _ = this.update(cx, |host, cx| {
+                    host.finish_mr_description_generation(result, cx);
+                    if ok {
+                        host.push_toast(
+                            components::ToastKind::Success,
+                            crate::i18n::tr_str("chrome.agent.pr_description_ready").to_string(),
+                            cx,
+                        );
+                    }
+                });
+            })
+            .detach();
+        }
+    }
+
     pub(super) fn submit_stash_branch(
         &mut self,
         window: &mut Window,
@@ -954,5 +1038,144 @@ impl PopoverHost {
             force,
         });
         self.close_popover(cx);
+    }
+}
+
+/// 07-5: which agent changes feed a generated PR/MR description.
+#[derive(Clone, Copy)]
+pub(in crate::view::panels) enum AgentDescriptionScope {
+    /// One session's worktree changes (uncommitted + any session commits).
+    Session(crate::view::agent_workbench::AgentSessionId),
+    /// Every session in the repo, combined into one description.
+    All,
+}
+
+/// 07-5: collect `(session id, worktree path, baseline sha)` tuples for the
+/// requested scope, read from the root view's agent session roster. Synchronous
+/// and allocation-only — the git work happens in [`collect_agent_description_context`].
+fn gather_agent_description_targets(
+    root: &crate::view::WorkTreeView,
+    repo_id: RepoId,
+    scope: AgentDescriptionScope,
+) -> Vec<(
+    crate::view::agent_workbench::AgentSessionId,
+    std::path::PathBuf,
+    String,
+)> {
+    let Some(sessions) = root.agent_sessions.get(&repo_id) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    match scope {
+        AgentDescriptionScope::Session(id) => {
+            if let Some(state) = sessions.get(&id) {
+                out.push((
+                    id,
+                    state.worktree_path.clone(),
+                    state.baseline.0.to_string(),
+                ));
+            }
+        }
+        AgentDescriptionScope::All => {
+            for (id, state) in sessions {
+                out.push((
+                    *id,
+                    state.worktree_path.clone(),
+                    state.baseline.0.to_string(),
+                ));
+            }
+        }
+    }
+    out
+}
+
+/// 07-5: build the `(commits, diffstat, target)` context the shared MR
+/// description generator expects, from one or more agent sessions' worktree
+/// changes measured against each session's baseline. Blocking — callers wrap it
+/// in `smol::unblock`. Changed paths come from `git status --porcelain`; the
+/// diffstat from `git diff --stat <baseline> -- <paths>`; commits from
+/// `git log <baseline>..HEAD` (empty when the agent's work is still
+/// uncommitted, in which case a single descriptive entry is synthesized).
+///
+/// The three-element tuple is returned as one value; `type_complexity` is
+/// allowed because the three parts are always produced and consumed together.
+#[allow(clippy::type_complexity)]
+fn collect_agent_description_context(
+    targets: &[(
+        crate::view::agent_workbench::AgentSessionId,
+        std::path::PathBuf,
+        String,
+    )],
+) -> Result<(Vec<(String, String)>, String, String), String> {
+    let mut commits: Vec<(String, String)> = Vec::new();
+    let mut diff_parts: Vec<String> = Vec::new();
+    let mut target_label = String::new();
+    for (_id, worktree, baseline) in targets {
+        let porcelain = merge_request_push::git_output(worktree, &["status", "--porcelain"])
+            .unwrap_or_default();
+        let paths = crate::view::terminal_panel::parse_agent_porcelain_paths(&porcelain);
+        if paths.is_empty() {
+            continue;
+        }
+        let mut args: Vec<String> =
+            vec!["diff".to_string(), "--stat".to_string(), baseline.clone()];
+        args.push("--".to_string());
+        for path in &paths {
+            args.push(path.to_string_lossy().into_owned());
+        }
+        let arg_refs: Vec<&str> = args.iter().map(|a| a.as_str()).collect();
+        let stat = merge_request_push::git_output(worktree, &arg_refs).unwrap_or_default();
+        if !stat.trim().is_empty() {
+            diff_parts.push(format!("### Worktree {}\n{}", worktree.display(), stat));
+        }
+        let log_range = format!("{baseline}..HEAD");
+        let log = merge_request_push::git_output(
+            worktree,
+            &["log", "--pretty=%h%x1f%s%x1e", log_range.as_str()],
+        )
+        .unwrap_or_default();
+        let session_commits = merge_request_push::parse_mr_description_commits(&log);
+        commits.extend(session_commits);
+        if target_label.is_empty() {
+            target_label = baseline.clone();
+        }
+    }
+    if diff_parts.is_empty() {
+        return Err(crate::i18n::tr_str("chrome.agent.pr_description_no_changes").to_string());
+    }
+    if target_label.is_empty() {
+        target_label = "agent sessions".to_string();
+    }
+    let diff_stat = diff_parts.join("\n\n");
+    // No commits between baseline and HEAD means the agent's work is still
+    // uncommitted in the worktree; give the model one descriptive entry so the
+    // prompt is not empty — the diffstat already carries the file-level detail.
+    if commits.is_empty() {
+        commits.push((
+            target_label.clone(),
+            "Agent worktree changes (uncommitted)".to_string(),
+        ));
+    }
+    Ok((commits, diff_stat, target_label))
+}
+
+#[cfg(test)]
+mod agent_description_tests {
+    use super::*;
+
+    #[test]
+    fn collect_agent_description_context_reports_when_no_session_has_changes() {
+        // No targets means no worktree was scanned, so there is nothing to
+        // describe — the context collector must short-circuit with the
+        // localized "no changes" error rather than calling the generator.
+        let result = collect_agent_description_context(&[]);
+        assert!(
+            result.is_err(),
+            "an empty target list must not produce a description context"
+        );
+        assert_eq!(
+            result.unwrap_err(),
+            crate::i18n::tr_str("chrome.agent.pr_description_no_changes").to_string()
+        );
     }
 }
