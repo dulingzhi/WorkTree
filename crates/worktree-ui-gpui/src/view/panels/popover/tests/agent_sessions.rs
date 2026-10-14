@@ -164,8 +164,8 @@ fn agent_sessions_roster_lists_each_session(cx: &mut gpui::TestAppContext) {
     let (first_gone, second_survives, still_tracked) = cx.update(|_window, app| {
         let sessions = view.read(app).agent_sessions.get(&repo_id);
         (
-            sessions.map_or(true, |m| !m.contains_key(&AgentSessionId(1))),
-            sessions.map_or(false, |m| m.contains_key(&AgentSessionId(2))),
+            sessions.is_none_or(|m| !m.contains_key(&AgentSessionId(1))),
+            sessions.is_some_and(|m| m.contains_key(&AgentSessionId(2))),
             view.read(app).agent_sessions.contains_key(&repo_id),
         )
     });

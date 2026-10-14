@@ -2180,10 +2180,12 @@ impl WorkTreeView {
                         // Remember the worktree tab so the diff view can
                         // resolve this session from it later.
                         let _ = this.update(cx, |root, _| {
-                            if let Some(sessions) = root.agent_sessions.get_mut(&repo_id) {
-                                if let Some(session) = sessions.get_mut(&session_id) {
-                                    session.worktree_repo_id = Some(target_id);
-                                }
+                            if let Some(session) = root
+                                .agent_sessions
+                                .get_mut(&repo_id)
+                                .and_then(|sessions| sessions.get_mut(&session_id))
+                            {
+                                session.worktree_repo_id = Some(target_id);
                             }
                         });
                         store.dispatch(Msg::CompareWithWorkingTree {
@@ -2435,21 +2437,20 @@ impl WorkTreeView {
         }
 
         let mut terminal_emptied = false;
-        if let Some(session) = self.terminal_sessions.get_mut(&repo_id) {
-            if let Some(index) = session
+        if let Some(session) = self.terminal_sessions.get_mut(&repo_id)
+            && let Some(index) = session
                 .instances
                 .iter()
                 .position(|instance| instance.session_seq == session_id.0)
-            {
-                let instance = session.instances.remove(index);
-                shutdown_terminal_instance(&instance, false);
-                if session.instances.is_empty() {
-                    terminal_emptied = true;
-                } else if session.active_index > index {
-                    session.active_index -= 1;
-                } else if session.active_index >= session.instances.len() {
-                    session.active_index = session.instances.len() - 1;
-                }
+        {
+            let instance = session.instances.remove(index);
+            shutdown_terminal_instance(&instance, false);
+            if session.instances.is_empty() {
+                terminal_emptied = true;
+            } else if session.active_index > index {
+                session.active_index -= 1;
+            } else if session.active_index >= session.instances.len() {
+                session.active_index = session.instances.len() - 1;
             }
         }
         if terminal_emptied {
