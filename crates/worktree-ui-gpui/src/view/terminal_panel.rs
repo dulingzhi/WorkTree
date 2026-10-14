@@ -1920,6 +1920,7 @@ impl WorkTreeView {
         if removed_repo_ids.is_empty() && !needs_rehydration {
             return;
         }
+        let had_removals = !removed_repo_ids.is_empty();
         for repo_id in removed_repo_ids {
             if let Some(session) = self.terminal_sessions.remove(&repo_id) {
                 for instance in &session.instances {
@@ -1945,10 +1946,16 @@ impl WorkTreeView {
             self.rehydrate_agent_sessions_for_repo(repo_id, &workdir);
         }
 
-        if !self.active_repo_has_open_terminal() {
-            self.deactivate_terminal_cursor_blink();
+        // Only terminal-session removals affect indicators and cursor blink.
+        // Rehydration only touches `agent_sessions` (the agent roster) and must
+        // not recompute `open_terminal_repo_ids`, which the tab/action bars own
+        // and that `sync_terminal_indicator_views` would otherwise clobber.
+        if had_removals {
+            if !self.active_repo_has_open_terminal() {
+                self.deactivate_terminal_cursor_blink();
+            }
+            self.sync_terminal_indicator_views(cx);
         }
-        self.sync_terminal_indicator_views(cx);
         cx.notify();
     }
 
