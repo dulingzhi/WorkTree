@@ -576,6 +576,14 @@ impl PopoverHost {
                 root.load_agent_aggregate(repo_id, cx);
             });
         }
+        // 07-6: kick off the reflog safety scan when the safety-review
+        // popover opens (UI-crate-local load, not a store Msg).
+        if let PopoverKind::AgentSafetyReview { repo_id } = &kind {
+            let repo_id = *repo_id;
+            let _ = self.root_view.update(cx, |root, cx| {
+                root.load_agent_safety_review(repo_id, cx);
+            });
+        }
         if matches!(&kind, PopoverKind::CherryPickCommitConfirm { .. }) {
             self.cherry_pick_mainline = None;
         }

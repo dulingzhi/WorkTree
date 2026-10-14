@@ -3010,6 +3010,98 @@ impl WorkTreeView {
         .detach();
     }
 
+    /// 07-6: load (or reload) the per-session high-risk-operation review for a
+    /// repo. Each session's worktree reflog is scanned off the UI thread with
+    /// `git log -g --format=%gs`; results land on `agent_safety_review` and
+    /// trigger a re-render. A concurrent in-flight load is skipped so a reopen
+    /// while one is running does not pile up tasks.
+    pub(in crate::view) fn load_agent_safety_review(
+        &mut self,
+        repo_id: RepoId,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self
+            .agent_safety_review
+            .get(&repo_id)
+            .map(|state| state.loading)
+            .unwrap_or(false)
+        {
+            return;
+        }
+        let Some(sessions) = self.agent_sessions.get(&repo_id) else {
+            self.agent_safety_review.insert(
+                repo_id,
+                agent_workbench::AgentSafetyState {
+                    loading: false,
+                    sessions: Vec::new(),
+                },
+            );
+            cx.notify();
+            return;
+        };
+        let jobs: Vec<(
+            agent_workbench::AgentSessionId,
+            agent_workbench::AgentKind,
+            std::path::PathBuf,
+            CommitId,
+        )> = sessions
+            .values()
+            .map(|s| (s.id, s.kind, s.worktree_path.clone(), s.baseline.clone()))
+            .collect();
+        self.agent_safety_review.insert(
+            repo_id,
+            agent_workbench::AgentSafetyState {
+                loading: true,
+                sessions: Vec::new(),
+            },
+        );
+        cx.notify();
+        cx.spawn(
+            async move |view: gpui::WeakEntity<WorkTreeView>, cx: &mut gpui::AsyncApp| {
+                let collected: Vec<agent_workbench::AgentSafetySession> =
+                    smol::unblock(move || {
+                        jobs.into_iter()
+                            .map(|(id, kind, worktree_path, baseline)| {
+                                match crate::view::panels::git_output(
+                                    &worktree_path,
+                                    &["log", "-g", "--format=%gs"],
+                                ) {
+                                    Ok(output) => agent_workbench::AgentSafetySession {
+                                        id,
+                                        kind,
+                                        worktree_path,
+                                        baseline,
+                                        findings: agent_workbench::scan_high_risk_reflog(&output),
+                                        error: None,
+                                    },
+                                    Err(error) => agent_workbench::AgentSafetySession {
+                                        id,
+                                        kind,
+                                        worktree_path,
+                                        baseline,
+                                        findings: Vec::new(),
+                                        error: Some(error),
+                                    },
+                                }
+                            })
+                            .collect()
+                    })
+                    .await;
+                let _ = view.update(cx, |view, cx| {
+                    view.agent_safety_review.insert(
+                        repo_id,
+                        agent_workbench::AgentSafetyState {
+                            loading: false,
+                            sessions: collected,
+                        },
+                    );
+                    cx.notify();
+                });
+            },
+        )
+        .detach();
+    }
+
     /// 07-4: reject one path in a session's worktree — restore it from the
     /// session baseline (the same primitive the per-file "Restore file"
     /// button in the diff view uses) — then reload the aggregate.

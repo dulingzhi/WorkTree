@@ -156,6 +156,11 @@ chrome:
     pr_description_ready: "已根据 agent 改动生成 PR/MR 描述"
     pr_description_no_session: "没有可用于描述的 agent 会话"
     pr_description_no_changes: "agent 会话中无待处理改动"
+    safety_title: "Agent 安全检查"
+    safety_open: "安全检查"
+    safety_scanning: "正在扫描 reflog…"
+    safety_clean: "未记录到改写历史的操作"
+    safety_dismiss: "关闭"
 
   forge_request:
     no_remote: "此仓库没有 GitHub 或 GitLab 远程"

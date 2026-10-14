@@ -166,6 +166,11 @@ chrome:
     pr_description_ready: "PR/MR description generated from agent changes"
     pr_description_no_session: "No agent session available to describe"
     pr_description_no_changes: "No pending changes in the agent session(s)"
+    safety_title: "Agent safety review"
+    safety_open: "Safety review"
+    safety_scanning: "Scanning reflogs…"
+    safety_clean: "No history-rewriting operations recorded"
+    safety_dismiss: "Dismiss"
 
   forge_request:
     no_remote: "No GitHub or GitLab remote found for this repository"

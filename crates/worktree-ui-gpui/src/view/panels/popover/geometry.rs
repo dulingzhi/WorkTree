@@ -225,6 +225,7 @@ pub(in crate::view) fn popover_width_spec(kind: &PopoverKind) -> Option<PopoverW
         PopoverKind::MergeRequestPushPrompt { .. } => Some(DIALOG_440_WIDTH),
         PopoverKind::AgentSessions { .. } => Some(DIALOG_440_WIDTH),
         PopoverKind::AgentSessionsAggregate { .. } => Some(DIALOG_540_WIDTH),
+        PopoverKind::AgentSafetyReview { .. } => Some(DIALOG_540_WIDTH),
         PopoverKind::RepoSettingsPrompt { .. } => Some(DIALOG_440_WIDTH),
         PopoverKind::UndoLastActionPrompt { .. } => Some(DIALOG_440_WIDTH),
         PopoverKind::AssumeUnchangedManager { .. } => Some(DIALOG_540_WIDTH),

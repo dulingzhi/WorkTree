@@ -263,6 +263,28 @@ pub(super) fn panel(
                         );
                     }),
                 ),
+        )
+        .child(
+            div()
+                .debug_selector(|| "agent_agg_safety".to_string())
+                .child(
+                    components::Button::new(
+                        "agent_agg_safety",
+                        crate::i18n::tr("chrome.agent.safety_open"),
+                    )
+                    .style(components::ButtonStyle::Outlined)
+                    .on_click(theme, cx, move |this, _e, window, cx| {
+                        // 07-6: open the per-session safety review.
+                        if let Some(anchor) = this.popover_anchor.clone() {
+                            this.open_popover(
+                                PopoverKind::AgentSafetyReview { repo_id },
+                                anchor,
+                                window,
+                                cx,
+                            );
+                        }
+                    }),
+                ),
         );
 
     components::context_menu(

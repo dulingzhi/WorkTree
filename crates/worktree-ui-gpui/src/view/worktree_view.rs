@@ -64,6 +64,10 @@ pub struct WorkTreeView {
     /// Iteration 07-4: cross-session aggregated change list, loaded on demand
     /// when the `AgentSessionsAggregate` popover opens. Keyed by owner repo.
     pub(super) agent_aggregate: FxHashMap<RepoId, agent_workbench::AgentAggregateState>,
+    /// Iteration 07-6: per-session high-risk (history-rewriting) operation
+    /// review, loaded on demand when the `AgentSafetyReview` popover opens.
+    /// Keyed by owner repo.
+    pub(super) agent_safety_review: FxHashMap<RepoId, agent_workbench::AgentSafetyState>,
     pub(super) terminal_panel_height: Pixels,
     pub(super) terminal_panel_resize: Option<TerminalPanelResizeState>,
     pub(super) next_terminal_session_seq: u64,

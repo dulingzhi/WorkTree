@@ -74,6 +74,29 @@ pub(super) fn panel(
             ),
     );
 
+    // 07-6: jump to the per-session safety review (history-rewriting op scan).
+    body = body.child(
+        div()
+            .debug_selector(|| "agent_open_safety".to_string())
+            .child(
+                components::Button::new(
+                    "agent_open_safety",
+                    crate::i18n::tr("chrome.agent.safety_open"),
+                )
+                .style(components::ButtonStyle::Outlined)
+                .on_click(theme, cx, move |this, _e, window, cx| {
+                    if let Some(anchor) = this.popover_anchor.clone() {
+                        this.open_popover(
+                            PopoverKind::AgentSafetyReview { repo_id },
+                            anchor,
+                            window,
+                            cx,
+                        );
+                    }
+                }),
+            ),
+    );
+
     match sessions {
         Some(sessions) if !sessions.is_empty() => {
             for (id, kind, worktree, baseline_short, live, auto, snap_count) in sessions {

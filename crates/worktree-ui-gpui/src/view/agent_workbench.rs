@@ -191,6 +191,85 @@ pub(in crate::view) struct AgentAggregateState {
     pub sessions: Vec<AgentAggregateSession>,
 }
 
+/// 07-6: one session's high-risk-operation findings inside the safety review.
+/// `findings` are `(reflog_subject, risk_note)` pairs from scanning the
+/// session worktree's `git reflog`; `error` is set when the scan failed.
+#[derive(Clone)]
+pub(in crate::view) struct AgentSafetySession {
+    pub id: AgentSessionId,
+    pub kind: AgentKind,
+    pub worktree_path: std::path::PathBuf,
+    pub baseline: CommitId,
+    /// Each destructive / history-rewriting operation the reflog recorded.
+    pub findings: Vec<(String, &'static str)>,
+    /// Set when `git reflog` failed for this worktree.
+    pub error: Option<String>,
+}
+
+/// 07-6: the per-repo safety-review state backing `AgentSafetyReview`.
+/// `loading` is true while the off-thread reflog scan is in flight.
+#[derive(Clone)]
+pub(in crate::view) struct AgentSafetyState {
+    pub loading: bool,
+    pub sessions: Vec<AgentSafetySession>,
+}
+
+/// 07-6: one dangerous-operation rule the safety review flags. `token` is
+/// matched case-insensitively as a substring of a scanned reflog subject line;
+/// `risk` is shown to the user.
+pub(in crate::view) struct HighRiskRule {
+    pub token: &'static str,
+    pub risk: &'static str,
+}
+
+/// 07-6: destructive git operations as they appear in `git reflog` subjects.
+/// This is the authoritative signal for what *actually* rewrote history, so the
+/// safety review scans each session's reflog for these tokens.
+pub(in crate::view) const AGENT_REFLOG_RISK_RULES: &[HighRiskRule] = &[
+    HighRiskRule {
+        token: "reset: moving to",
+        risk: "A reset rewrote the branch tip — work after the baseline may be unrecoverable \
+               without the reflog.",
+    },
+    HighRiskRule {
+        token: "rebase (",
+        risk: "A rebase rewrote history; conflicts may have dropped or altered commits.",
+    },
+    HighRiskRule {
+        token: "am:",
+        risk: "`git am` applied patches by rewriting history.",
+    },
+    HighRiskRule {
+        token: "commit (amend):",
+        risk: "An amend replaced the last commit — its old SHA is gone from history.",
+    },
+    HighRiskRule {
+        token: "branch: Deleted",
+        risk: "A branch was deleted.",
+    },
+    HighRiskRule {
+        token: "checkout: moving from",
+        risk: "A branch switch changed the working tree's checked-out commit.",
+    },
+];
+
+/// 07-6: scan reflog subject text for destructive git operations. Pure and
+/// case-insensitive so it is unit-testable without a repository. Returns each
+/// matching line paired with its risk note (one match per line, first rule wins).
+pub(in crate::view) fn scan_high_risk_reflog(reflog: &str) -> Vec<(String, &'static str)> {
+    let mut out = Vec::new();
+    for line in reflog.lines() {
+        let lower = line.to_lowercase();
+        for rule in AGENT_REFLOG_RISK_RULES {
+            if lower.contains(&rule.token.to_lowercase()) {
+                out.push((line.trim().to_string(), rule.risk));
+                break;
+            }
+        }
+    }
+    out
+}
+
 /// The inputs the diff view needs to offer path-level reject while an agent
 /// compare is on screen: a working-tree-tracking range whose base is the
 /// session's baseline, with a concrete file selected. `None` for any other
@@ -377,6 +456,38 @@ mod tests {
             resolve_agent_baseline("  \n", "\n"),
             None,
             "no resolvable point means no session"
+        );
+    }
+
+    #[test]
+    fn scan_high_risk_reflog_flags_destructive_history_ops() {
+        let reflog = "\
+commit (amend): updated message
+reset: moving to HEAD~1
+rebase (abc123): reorder
+merge main: Fast-forward
+normal commit";
+        let found = scan_high_risk_reflog(reflog);
+        let lines: Vec<&str> = found.iter().map(|(l, _)| l.as_str()).collect();
+        assert!(
+            lines.iter().any(|l| l.contains("reset: moving to")),
+            "reset flagged"
+        );
+        assert!(
+            lines.iter().any(|l| l.contains("rebase (")),
+            "rebase flagged"
+        );
+        assert!(
+            lines.iter().any(|l| l.contains("commit (amend)")),
+            "amend flagged"
+        );
+        assert!(
+            !lines.iter().any(|l| l.contains("merge main")),
+            "plain merge not flagged"
+        );
+        assert!(
+            !lines.iter().any(|l| l.contains("normal commit")),
+            "plain commit not flagged"
         );
     }
 }

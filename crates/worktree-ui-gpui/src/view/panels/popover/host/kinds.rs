@@ -465,6 +465,12 @@ pub(in crate::view) enum PopoverKind {
     AgentSessionsAggregate {
         repo_id: RepoId,
     },
+    /// 07-6: per-repo safety review — scans each agent session's git reflog
+    /// for history-rewriting operations (reset/rebase/amend/branch delete) and
+    /// offers Stop / Snapshot / Dismiss actions per session.
+    AgentSafetyReview {
+        repo_id: RepoId,
+    },
     /// Per-repository settings (local git config overrides): user name,
     /// email, and commit signing. Empty fields inherit the global config.
     RepoSettingsPrompt {
