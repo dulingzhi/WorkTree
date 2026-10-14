@@ -267,11 +267,33 @@ pub struct UiSessionFile {
     /// `StackMetadata` is never written (the key is simply absent).
     #[serde(default)]
     pub repo_stack_metadata: Option<BTreeMap<String, StackMetadata>>,
+    /// Agent-workbench sessions (iteration 07-2), keyed by the repository
+    /// workdir storage key. `None` for a repo with no recorded sessions; an
+    /// empty vector is never written (the key is simply absent).
+    #[serde(default)]
+    pub repo_agent_sessions: Option<BTreeMap<String, Vec<AgentSessionRecord>>>,
     pub repo_history_modes: Option<BTreeMap<String, HistoryModeSetting>>,
     pub repo_history_scopes: Option<BTreeMap<String, HistoryScopeSetting>>,
     pub repo_history_author_filters: Option<BTreeMap<String, Option<String>>>,
     pub repo_history_ref_filters: Option<BTreeMap<String, Vec<String>>>,
     pub repo_fetch_prune_deleted_remote_tracking_branches: Option<BTreeMap<String, bool>>,
+}
+
+/// One persisted agent-workbench session. Mirrors the UI crate's
+/// `AgentSessionState` minus runtime-only fields (`worktree_repo_id`, which is
+/// assigned when "view changes" opens the worktree's repo tab and is not stable
+/// across restarts). Keyed in [`UiSessionFile::repo_agent_sessions`] by the
+/// repository workdir storage key. Iteration 07-2.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+pub struct AgentSessionRecord {
+    /// Stable id, equal to the owning terminal instance's `session_seq`.
+    pub id: u64,
+    /// Agent kind discriminator ("claude_code" / "codex"), snake_case.
+    pub kind: String,
+    /// Baseline commit the worktree's changes are measured against.
+    pub baseline: String,
+    /// The agent worktree directory, as a storage key (bytes/utf16le prefix).
+    pub worktree_path: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -1505,6 +1527,59 @@ fn persist_stack_metadata_impl(
     })
 }
 
+/// Load the persisted agent-workbench sessions for `workdir`. Returns an empty
+/// vector when the repo has no recorded sessions or no session file exists.
+pub fn load_agent_sessions(workdir: &Path) -> Vec<AgentSessionRecord> {
+    let Some(session_file_path) = default_session_file_path() else {
+        return Vec::new();
+    };
+    load_agent_sessions_from_path(workdir, &session_file_path)
+}
+
+pub fn load_agent_sessions_from_path(
+    workdir: &Path,
+    session_file_path: &Path,
+) -> Vec<AgentSessionRecord> {
+    let workdir_key = path_storage_key(workdir);
+    let Some(file) = load_file(session_file_path) else {
+        return Vec::new();
+    };
+    file.repo_agent_sessions
+        .and_then(|entry| entry.get(&workdir_key).cloned())
+        .unwrap_or_default()
+}
+
+/// Persist a repository's agent-workbench sessions to the session file. An empty
+/// slice removes the key entirely rather than writing an empty vector.
+pub fn persist_agent_sessions(workdir: &Path, records: &[AgentSessionRecord]) -> io::Result<()> {
+    let Some(session_file_path) = default_session_file_path() else {
+        return Ok(());
+    };
+    persist_agent_sessions_to_path(workdir, records, &session_file_path)
+}
+
+pub fn persist_agent_sessions_to_path(
+    workdir: &Path,
+    records: &[AgentSessionRecord],
+    session_file_path: &Path,
+) -> io::Result<()> {
+    with_session_file_persist_lock(|| {
+        let mut file = load_file(session_file_path).unwrap_or_default();
+        file.version = CURRENT_SESSION_FILE_VERSION;
+        let workdir_key = path_storage_key(workdir);
+        let entry = file.repo_agent_sessions.get_or_insert_with(BTreeMap::new);
+        if records.is_empty() {
+            entry.remove(&workdir_key);
+            if entry.is_empty() {
+                file.repo_agent_sessions = None;
+            }
+        } else {
+            entry.insert(workdir_key, records.to_vec());
+        }
+        persist_to_path(session_file_path, &file)
+    })
+}
+
 fn parse_repos(
     open_repos_raw: Vec<String>,
     active_repo_raw: Option<String>,
@@ -1967,7 +2042,11 @@ fn app_state_dir() -> Option<PathBuf> {
 
 #[cfg(test)]
 mod stacked_pr_session_tests {
-    use super::{load_file, load_stack_metadata_from_path, persist_stack_metadata_to_path};
+    use super::{
+        AgentSessionRecord, load_agent_sessions_from_path, load_file,
+        load_stack_metadata_from_path, path_storage_key, persist_agent_sessions_to_path,
+        persist_stack_metadata_to_path,
+    };
     use std::path::PathBuf;
     use worktree_core::domain::{StackBranch, StackMetadata};
 
@@ -2023,5 +2102,67 @@ mod stacked_pr_session_tests {
             "V3 file without repo_stack_metadata must still load"
         );
         assert!(load_stack_metadata_from_path(&PathBuf::from("/tmp/stack-repo"), &path).is_none());
+    }
+
+    #[test]
+    fn agent_sessions_round_trip() {
+        let path = test_path("agent-sessions-round-trip");
+        let workdir = PathBuf::from("/tmp/agent-repo");
+        let records = vec![
+            AgentSessionRecord {
+                id: 1,
+                kind: "claude_code".to_string(),
+                baseline: "aaaa111122223333".to_string(),
+                worktree_path: path_storage_key(&PathBuf::from("/tmp/agent-repo/agent-1")),
+            },
+            AgentSessionRecord {
+                id: 7,
+                kind: "codex".to_string(),
+                baseline: "bbbb222233334444".to_string(),
+                worktree_path: path_storage_key(&PathBuf::from("/tmp/agent-repo/agent-2")),
+            },
+        ];
+        persist_agent_sessions_to_path(&workdir, &records, &path).unwrap();
+        assert_eq!(load_agent_sessions_from_path(&workdir, &path), records);
+        // A different repo must not see these records.
+        assert!(load_agent_sessions_from_path(&PathBuf::from("/tmp/other-repo"), &path).is_empty());
+    }
+
+    #[test]
+    fn persist_empty_agent_sessions_removes_key() {
+        let path = test_path("agent-sessions-empty");
+        let workdir = PathBuf::from("/tmp/agent-repo");
+        persist_agent_sessions_to_path(
+            &workdir,
+            &[AgentSessionRecord {
+                id: 1,
+                kind: "claude_code".to_string(),
+                baseline: "aaaa111122223333".to_string(),
+                worktree_path: path_storage_key(&PathBuf::from("/tmp/agent-repo/agent-1")),
+            }],
+            &path,
+        )
+        .unwrap();
+        assert!(!load_agent_sessions_from_path(&workdir, &path).is_empty());
+        persist_agent_sessions_to_path(&workdir, &[], &path).unwrap();
+        assert!(load_agent_sessions_from_path(&workdir, &path).is_empty());
+    }
+
+    #[test]
+    fn load_agent_sessions_survives_missing_field() {
+        // A V3 session file written before iteration 07-2 (no
+        // `repo_agent_sessions` field) must still deserialize, so existing
+        // sessions are not discarded.
+        let path = test_path("agent-sessions-missing-field");
+        std::fs::write(
+            &path,
+            r#"{"version":3,"open_repos":["/tmp/agent-repo"],"active_repo":null}"#,
+        )
+        .unwrap();
+        assert!(
+            load_file(&path).is_some(),
+            "V3 file without repo_agent_sessions must still load"
+        );
+        assert!(load_agent_sessions_from_path(&PathBuf::from("/tmp/agent-repo"), &path).is_empty());
     }
 }

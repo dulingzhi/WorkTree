@@ -15,7 +15,7 @@ use rustc_hash::FxHasher;
 #[cfg(unix)]
 use rustix::process::{Pid, Signal, kill_process_group};
 use std::hash::{Hash, Hasher};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// How long a save-and-close waits for the dispatched writes to land before
 /// closing anyway. A wedged command must not leave the user unable to quit.
@@ -1912,7 +1912,12 @@ impl WorkTreeView {
             .copied()
             .filter(|repo_id| !active_repo_ids.contains(repo_id))
             .collect();
-        if removed_repo_ids.is_empty() {
+        let needs_rehydration = self
+            .state
+            .repos
+            .iter()
+            .any(|repo| !self.agent_sessions.contains_key(&repo.id));
+        if removed_repo_ids.is_empty() && !needs_rehydration {
             return;
         }
         for repo_id in removed_repo_ids {
@@ -1925,6 +1930,21 @@ impl WorkTreeView {
             }
             self.agent_sessions.remove(&repo_id);
         }
+
+        // 07-2: rehydrate persisted agent sessions for repos that just
+        // appeared (startup + repo re-open). Idempotent — once a repo key
+        // exists in `agent_sessions` we skip it.
+        let repos_to_rehydrate: Vec<(RepoId, PathBuf)> = self
+            .state
+            .repos
+            .iter()
+            .filter(|repo| !self.agent_sessions.contains_key(&repo.id))
+            .map(|repo| (repo.id, repo.spec.workdir.clone()))
+            .collect();
+        for (repo_id, workdir) in repos_to_rehydrate {
+            self.rehydrate_agent_sessions_for_repo(repo_id, &workdir);
+        }
+
         if !self.active_repo_has_open_terminal() {
             self.deactivate_terminal_cursor_blink();
         }
@@ -2067,11 +2087,14 @@ impl WorkTreeView {
             let repo_name = terminal_repo_name(&workdir);
             self.open_terminal_for_repo(repo_id, workdir.clone(), repo_name, window, cx);
         }
-        let Some(instance) = self.spawn_agent_terminal_instance(&worktree_path, program, kind, cx)
+        let candidate_seq = self.next_terminal_session_seq;
+        let Some(instance) =
+            self.spawn_agent_terminal_instance(&worktree_path, program, kind, candidate_seq, cx)
         else {
             return;
         };
         let session_seq = instance.session_seq;
+        self.next_terminal_session_seq = self.next_terminal_session_seq.wrapping_add(1).max(1);
         let session_id = agent_workbench::AgentSessionId(session_seq);
         let Some(session) = self.terminal_sessions.get_mut(&repo_id) else {
             return;
@@ -2092,6 +2115,9 @@ impl WorkTreeView {
                 worktree_repo_id: None,
             },
         );
+        // 07-2: persist the session record so it survives a restart and can be
+        // rehydrated (and resumed) on the next launch.
+        self.persist_agent_sessions_for_repo(repo_id, &workdir);
         self.spawn_terminal_event_task(repo_id, session_seq, cx);
         self.reset_terminal_cursor_blink(cx);
         self.sync_terminal_indicator_views(cx);
@@ -2217,6 +2243,7 @@ impl WorkTreeView {
         workdir: &std::path::Path,
         program: std::path::PathBuf,
         kind: agent_workbench::AgentKind,
+        session_seq: u64,
         cx: &mut gpui::Context<Self>,
     ) -> Option<TerminalInstance> {
         let window_id = 0u64;
@@ -2233,8 +2260,6 @@ impl WorkTreeView {
                 }
             };
 
-        let session_seq = self.next_terminal_session_seq;
-        self.next_terminal_session_seq = self.next_terminal_session_seq.wrapping_add(1).max(1);
         let focus_handle = cx.focus_handle().tab_index(0).tab_stop(false);
         let theme = self.theme;
 
@@ -2457,10 +2482,166 @@ impl WorkTreeView {
             self.terminal_sessions.remove(&repo_id);
         }
 
+        // 07-2: drop the record (or the whole repo key when this was the last
+        // session) from the session file so rehydration does not resurrect it.
+        if let Some(workdir) = self.repo_workdir(repo_id) {
+            self.persist_agent_sessions_for_repo(repo_id, &workdir);
+        }
+
         if !self.active_repo_has_open_terminal() {
             self.deactivate_terminal_cursor_blink();
         }
         self.sync_terminal_indicator_views(cx);
+        cx.notify();
+    }
+
+    /// The on-disk workdir for `repo_id`, if the repo is still loaded.
+    fn repo_workdir(&self, repo_id: RepoId) -> Option<PathBuf> {
+        self.state
+            .repos
+            .iter()
+            .find(|repo| repo.id == repo_id)
+            .map(|repo| repo.spec.workdir.clone())
+    }
+
+    /// Persist every agent session currently recorded for `repo_id`. An empty
+    /// set removes the repo's key from the session file.
+    fn persist_agent_sessions_for_repo(&self, repo_id: RepoId, workdir: &Path) {
+        let records: Vec<session::AgentSessionRecord> = self
+            .agent_sessions
+            .get(&repo_id)
+            .map(|sessions| {
+                sessions
+                    .values()
+                    .map(|session| session::AgentSessionRecord {
+                        id: session.id.0,
+                        kind: session.kind.storage_key().to_string(),
+                        baseline: session.baseline.0.to_string(),
+                        worktree_path: session::path_storage_key(&session.worktree_path),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let _ = session::persist_agent_sessions(workdir, &records);
+    }
+
+    /// Load persisted agent sessions for `repo_id` from the session file and
+    /// insert them into `agent_sessions` (without a live terminal — they are
+    /// re-attached via "resume"). Records whose worktree directory no longer
+    /// exists are pruned from disk. `next_terminal_session_seq` is raised above
+    /// every restored id so newly started sessions never collide.
+    fn rehydrate_agent_sessions_for_repo(&mut self, repo_id: RepoId, workdir: &Path) {
+        let records = session::load_agent_sessions(workdir);
+        if records.is_empty() {
+            // Mark the repo as seen (an empty map) so we don't re-read an empty
+            // file on every snapshot; `close_agent_session` removes the key when
+            // a session is actually stopped, which re-enables rehydration.
+            self.agent_sessions.entry(repo_id).or_default();
+            return;
+        }
+        let mut surviving: Vec<session::AgentSessionRecord> = Vec::new();
+        {
+            let entries = self.agent_sessions.entry(repo_id).or_default();
+            for record in &records {
+                let worktree_path = session::path_from_storage_key(&record.worktree_path);
+                if !worktree_path.exists() {
+                    continue;
+                }
+                let Some(kind) = agent_workbench::AgentKind::from_storage_key(&record.kind) else {
+                    continue;
+                };
+                self.next_terminal_session_seq = self
+                    .next_terminal_session_seq
+                    .max(record.id.wrapping_add(1));
+                entries.insert(
+                    agent_workbench::AgentSessionId(record.id),
+                    agent_workbench::AgentSessionState {
+                        id: agent_workbench::AgentSessionId(record.id),
+                        kind,
+                        baseline: CommitId(record.baseline.as_str().into()),
+                        worktree_path,
+                        worktree_repo_id: None,
+                    },
+                );
+                surviving.push(record.clone());
+            }
+        }
+        // Persist the pruned set so deleted-worktree records don't reappear on
+        // the next restart.
+        let _ = session::persist_agent_sessions(workdir, &surviving);
+    }
+
+    /// Re-launch a persisted (rehydrated) agent session's terminal in its
+    /// existing worktree — the "replay" half of iteration 07-2. The session
+    /// record is already in `agent_sessions` (from rehydration); this attaches
+    /// a live terminal to it, reusing the same id so close/view still resolve.
+    /// If the worktree was deleted, the record is pruned instead.
+    pub(in crate::view) fn resume_agent_session(
+        &mut self,
+        repo_id: RepoId,
+        session_id: agent_workbench::AgentSessionId,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(session) = self
+            .agent_sessions
+            .get(&repo_id)
+            .and_then(|sessions| sessions.get(&session_id))
+        else {
+            return;
+        };
+        let worktree_path = session.worktree_path.clone();
+        let kind = session.kind;
+        if !worktree_path.exists() {
+            if let Some(sessions) = self.agent_sessions.get_mut(&repo_id) {
+                sessions.remove(&session_id);
+            }
+            if let Some(workdir) = self.repo_workdir(repo_id) {
+                self.persist_agent_sessions_for_repo(repo_id, &workdir);
+            }
+            self.push_toast(
+                components::ToastKind::Warning,
+                crate::i18n::tr("chrome.agent.worktree_missing").to_string(),
+                cx,
+            );
+            cx.notify();
+            return;
+        }
+
+        // Ensure the main repo tab has a terminal session to host the agent
+        // instance, then spawn the agent terminal reusing the session's id.
+        if !self.terminal_sessions.contains_key(&repo_id) {
+            let Some(workdir) = self.repo_workdir(repo_id) else {
+                return;
+            };
+            let repo_name = terminal_repo_name(&workdir);
+            self.open_terminal_for_repo(repo_id, workdir, repo_name, window, cx);
+        }
+        let search_paths = agent_workbench::system_search_paths();
+        let Some(program) =
+            agent_workbench::find_executable_in_paths(kind.executable(), &search_paths)
+        else {
+            self.push_toast(
+                components::ToastKind::Error,
+                crate::i18n::t!("chrome.agent.not_installed", name = kind.executable()).to_string(),
+                cx,
+            );
+            return;
+        };
+        let Some(instance) =
+            self.spawn_agent_terminal_instance(&worktree_path, program, kind, session_id.0, cx)
+        else {
+            return;
+        };
+        let Some(session) = self.terminal_sessions.get_mut(&repo_id) else {
+            return;
+        };
+        session.instances.push(instance);
+        session.active_index = session.instances.len() - 1;
+        self.spawn_terminal_event_task(repo_id, session_id.0, cx);
+        self.reset_terminal_cursor_blink(cx);
+        self.sync_terminal_indicator_views(cx);
+        self.focus_terminal_view(repo_id, window, cx);
         cx.notify();
     }
 

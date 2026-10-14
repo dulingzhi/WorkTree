@@ -34,6 +34,27 @@ impl AgentKind {
             AgentKind::Codex => "Codex",
         }
     }
+
+    /// The snake_case storage key for this agent kind, used in the on-disk
+    /// session file. Stable across releases so persisted sessions reload even
+    /// after the enum gains variants.
+    pub(in crate::view) fn storage_key(self) -> &'static str {
+        match self {
+            AgentKind::ClaudeCode => "claude_code",
+            AgentKind::Codex => "codex",
+        }
+    }
+
+    /// Reverse of [`Self::storage_key`]. Returns `None` for unknown keys so a
+    /// session written by a newer build with an agent we don't recognize is
+    /// skipped rather than breaking rehydration.
+    pub(in crate::view) fn from_storage_key(key: &str) -> Option<Self> {
+        match key {
+            "claude_code" => Some(AgentKind::ClaudeCode),
+            "codex" => Some(AgentKind::Codex),
+            _ => None,
+        }
+    }
 }
 
 /// Find `name` among `paths` (a PATH split), requiring the executable bit

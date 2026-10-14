@@ -133,6 +133,8 @@ chrome:
     roster_empty: "没有运行中的 agent 会话。启动会话会在本仓库旁创建专用工作树——你的工作树不受影响。"
     view_changes: "查看改动"
     stop_session: "停止会话"
+    resume: "恢复会话"
+    worktree_missing: "agent 工作树已不存在，会话已移除"
     start: "启动 %{agent}"
     baseline_label: "Agent 会话起点（%{agent}）"
 

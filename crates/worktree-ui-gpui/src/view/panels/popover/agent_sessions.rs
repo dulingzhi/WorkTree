@@ -25,11 +25,21 @@ pub(super) fn panel(
                     .map(|(id, session)| {
                         let baseline = session.baseline.0.as_ref();
                         let short = &baseline[..baseline.len().min(8)];
+                        let live = root_view
+                            .terminal_sessions
+                            .get(&repo_id)
+                            .map(|s| {
+                                s.instances
+                                    .iter()
+                                    .any(|instance| instance.session_seq == id.0)
+                            })
+                            .unwrap_or(false);
                         (
                             *id,
                             session.kind,
                             session.worktree_path.display().to_string(),
                             short.to_string(),
+                            live,
                         )
                     })
                     .collect::<Vec<_>>()
@@ -41,7 +51,7 @@ pub(super) fn panel(
 
     match sessions {
         Some(sessions) if !sessions.is_empty() => {
-            for (id, kind, worktree, baseline_short) in sessions {
+            for (id, kind, worktree, baseline_short, live) in sessions {
                 body = body
                     .child(
                         div()
@@ -74,8 +84,8 @@ pub(super) fn panel(
                                     .child(format!("baseline {baseline_short}")),
                             ),
                     )
-                    .child(
-                        div()
+                    .child({
+                        let mut actions = div()
                             .flex()
                             .items_center()
                             .gap(scaled_px(6.0))
@@ -122,8 +132,36 @@ pub(super) fn panel(
                                             },
                                         ),
                                     ),
-                            ),
-                    );
+                            );
+                        // A rehydrated session has no live terminal until it is
+                        // resumed, so only offer "Resume" then.
+                        if !live {
+                            actions = actions.child(
+                                div()
+                                    .debug_selector(|| format!("agent_resume_session_{}", id.0))
+                                    .child(
+                                        components::Button::new(
+                                            format!("agent_resume_session_{}", id.0),
+                                            crate::i18n::tr("chrome.agent.resume"),
+                                        )
+                                        .style(components::ButtonStyle::Filled)
+                                        .on_click(
+                                            theme,
+                                            cx,
+                                            move |this, _e, window, cx| {
+                                                let _ = this.root_view.update(cx, |root, cx| {
+                                                    root.resume_agent_session(
+                                                        repo_id, id, window, cx,
+                                                    )
+                                                });
+                                                this.close_popover(cx);
+                                            },
+                                        ),
+                                    ),
+                            );
+                        }
+                        actions
+                    });
             }
         }
         _ => {

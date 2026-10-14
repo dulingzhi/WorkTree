@@ -143,6 +143,8 @@ chrome:
     roster_empty: "No agent session is running. Starting one creates a dedicated worktree beside this repository — your working tree stays untouched."
     view_changes: "View changes"
     stop_session: "Stop session"
+    resume: "Resume session"
+    worktree_missing: "The agent worktree no longer exists; the session was removed"
     start: "Start %{agent}"
     baseline_label: "Agent session start (%{agent})"
 
