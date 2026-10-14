@@ -61,6 +61,9 @@ pub struct WorkTreeView {
     /// Iteration 07-3: the single background task that auto-snapshots agent
     /// worktrees on a timer. `None` until the first agent session starts.
     pub(super) agent_snapshot_scheduler: Option<gpui::Task<()>>,
+    /// Iteration 07-4: cross-session aggregated change list, loaded on demand
+    /// when the `AgentSessionsAggregate` popover opens. Keyed by owner repo.
+    pub(super) agent_aggregate: FxHashMap<RepoId, agent_workbench::AgentAggregateState>,
     pub(super) terminal_panel_height: Pixels,
     pub(super) terminal_panel_resize: Option<TerminalPanelResizeState>,
     pub(super) next_terminal_session_seq: u64,

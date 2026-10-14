@@ -568,6 +568,14 @@ impl PopoverHost {
         // tooltip from re-showing on top of the popover.
         crate::view::tooltip::set_tooltips_suppressed_by_overlay(true, cx);
         self.request_lazy_popover_repo_data(&kind);
+        // 07-4: kick off the cross-session change scan when the aggregate
+        // popover opens (UI-crate-local load, not a store Msg).
+        if let PopoverKind::AgentSessionsAggregate { repo_id } = &kind {
+            let repo_id = *repo_id;
+            let _ = self.root_view.update(cx, |root, cx| {
+                root.load_agent_aggregate(repo_id, cx);
+            });
+        }
         if matches!(&kind, PopoverKind::CherryPickCommitConfirm { .. }) {
             self.cherry_pick_mainline = None;
         }

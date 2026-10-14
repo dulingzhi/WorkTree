@@ -129,6 +129,9 @@ impl PopoverHost {
             }
             PopoverKind::Statistics { repo_id } => statistics::panel(self, repo_id, cx),
             PopoverKind::AgentSessions { repo_id } => agent_sessions::panel(self, repo_id, cx),
+            PopoverKind::AgentSessionsAggregate { repo_id } => {
+                agent_aggregate::panel(self, repo_id, cx)
+            }
             PopoverKind::RepoSettingsPrompt { repo_id } => repo_settings::panel(self, repo_id, cx),
             PopoverKind::UndoLastActionPrompt { repo_id } => {
                 undo_last_action::panel(self, repo_id, cx)

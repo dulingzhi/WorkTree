@@ -460,6 +460,11 @@ pub(in crate::view) enum PopoverKind {
     AgentSessions {
         repo_id: RepoId,
     },
+    /// 07-4: cross-session aggregated view — every agent session's changed
+    /// paths in one panel, with batch accept (snapshot) / reject (restore).
+    AgentSessionsAggregate {
+        repo_id: RepoId,
+    },
     /// Per-repository settings (local git config overrides): user name,
     /// email, and commit signing. Empty fields inherit the global config.
     RepoSettingsPrompt {

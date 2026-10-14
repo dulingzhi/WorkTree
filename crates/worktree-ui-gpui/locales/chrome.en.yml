@@ -152,6 +152,16 @@ chrome:
     worktree_missing: "The agent worktree no longer exists; the session was removed"
     start: "Start %{agent}"
     baseline_label: "Agent session start (%{agent})"
+    aggregate_open: "Aggregated view"
+    aggregate_title: "Agent changes across sessions"
+    aggregate_scanning: "Scanning worktrees…"
+    aggregate_empty: "No pending agent changes across sessions"
+    aggregate_accept_all: "Accept all (snapshot)"
+    aggregate_reject_all: "Reject all"
+    aggregate_reject_session: "Reject all in session"
+    aggregate_reject: "Reject"
+    aggregate_accepted: "Accepted #{n} session(s); snapshots created"
+    aggregate_accept_failed: "Could not accept all sessions: {err}"
 
   forge_request:
     no_remote: "No GitHub or GitLab remote found for this repository"

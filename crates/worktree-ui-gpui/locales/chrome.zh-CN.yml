@@ -142,6 +142,16 @@ chrome:
     worktree_missing: "agent 工作树已不存在，会话已移除"
     start: "启动 %{agent}"
     baseline_label: "Agent 会话起点（%{agent}）"
+    aggregate_open: "聚合视图"
+    aggregate_title: "跨会话 agent 改动"
+    aggregate_scanning: "正在扫描工作树…"
+    aggregate_empty: "各会话均无待处理改动"
+    aggregate_accept_all: "全部接受（快照）"
+    aggregate_reject_all: "全部拒绝"
+    aggregate_reject_session: "拒绝本会话全部"
+    aggregate_reject: "拒绝"
+    aggregate_accepted: "已接受 #{n} 个会话（已创建快照）"
+    aggregate_accept_failed: "无法全部接受：{err}"
 
   forge_request:
     no_remote: "此仓库没有 GitHub 或 GitLab 远程"

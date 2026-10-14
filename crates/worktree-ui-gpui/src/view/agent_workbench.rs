@@ -168,6 +168,29 @@ pub(in crate::view) struct AgentSessionState {
     pub snapshot_interval_secs: u64,
 }
 
+/// 07-4: one session's changed-path summary inside the cross-session
+/// aggregated view. `paths` are the worktree's uncommitted changes versus
+/// the session baseline — i.e. what the agent has produced that is not yet
+/// checkpointed away (an auto-snapshot commit empties this list).
+#[derive(Clone)]
+pub(in crate::view) struct AgentAggregateSession {
+    pub id: AgentSessionId,
+    pub kind: AgentKind,
+    pub worktree_path: std::path::PathBuf,
+    pub baseline: CommitId,
+    pub paths: Vec<std::path::PathBuf>,
+    /// Set when `git status --porcelain` failed for this worktree.
+    pub error: Option<String>,
+}
+
+/// 07-4: the per-repo aggregated change list backing `AgentSessionsAggregate`.
+/// `loading` is true while the off-thread `git status` scan is in flight.
+#[derive(Clone)]
+pub(in crate::view) struct AgentAggregateState {
+    pub loading: bool,
+    pub sessions: Vec<AgentAggregateSession>,
+}
+
 /// The inputs the diff view needs to offer path-level reject while an agent
 /// compare is on screen: a working-tree-tracking range whose base is the
 /// session's baseline, with a concrete file selected. `None` for any other

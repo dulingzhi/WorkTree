@@ -51,6 +51,29 @@ pub(super) fn panel(
 
     let mut body = div().flex().flex_col().gap(scaled_px(6.0)).px_2().py_1();
 
+    // 07-4: jump from the roster to the cross-session aggregated view.
+    body = body.child(
+        div()
+            .debug_selector(|| "agent_open_aggregate".to_string())
+            .child(
+                components::Button::new(
+                    "agent_open_aggregate",
+                    crate::i18n::tr("chrome.agent.aggregate_open"),
+                )
+                .style(components::ButtonStyle::Outlined)
+                .on_click(theme, cx, move |this, _e, window, cx| {
+                    if let Some(anchor) = this.popover_anchor.clone() {
+                        this.open_popover(
+                            PopoverKind::AgentSessionsAggregate { repo_id },
+                            anchor,
+                            window,
+                            cx,
+                        );
+                    }
+                }),
+            ),
+    );
+
     match sessions {
         Some(sessions) if !sessions.is_empty() => {
             for (id, kind, worktree, baseline_short, live, auto, snap_count) in sessions {

@@ -2597,6 +2597,7 @@ impl WorkTreeView {
             terminal_sessions: FxHashMap::default(),
             agent_sessions: FxHashMap::default(),
             agent_snapshot_scheduler: None,
+            agent_aggregate: FxHashMap::default(),
             terminal_panel_height: px(TERMINAL_PANEL_DEFAULT_HEIGHT_PX),
             terminal_panel_resize: None,
             next_terminal_session_seq: 1,

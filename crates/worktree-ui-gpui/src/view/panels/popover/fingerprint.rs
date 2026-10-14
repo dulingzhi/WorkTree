@@ -219,7 +219,8 @@ fn repo_for_popover<'a>(state: &'a AppState, popover: &PopoverKind) -> Option<&'
         | PopoverKind::HistoryRefFilter { repo_id }
         | PopoverKind::CommitShaLinkMenu { repo_id, .. }
         | PopoverKind::ReflogEntryMenu { repo_id, .. }
-        | PopoverKind::AgentSessions { repo_id } => Some(*repo_id),
+        | PopoverKind::AgentSessions { repo_id }
+        | PopoverKind::AgentSessionsAggregate { repo_id } => Some(*repo_id),
         PopoverKind::RepoSettingsPrompt { repo_id } => Some(*repo_id),
     }?;
 
@@ -547,6 +548,7 @@ fn hash_repo_for_popover<H: Hasher>(repo: &RepoState, popover: &PopoverKind, has
         // Root-held session state; every action closes the popover, so the
         // content is computed fresh per open and never needs a repo rehash.
         | PopoverKind::AgentSessions { .. }
+        | PopoverKind::AgentSessionsAggregate { .. }
         // Field contents are owned by the text inputs; the popover is
         // computed fresh per open and every action closes it.
         | PopoverKind::RepoSettingsPrompt { .. } => {}
@@ -1065,6 +1067,12 @@ fn hash_popover_kind<H: Hasher>(kind: &PopoverKind, hasher: &mut H) {
         // every action closes the popover, so each open renders fresh.
         PopoverKind::AgentSessions { repo_id } => {
             117u8.hash(hasher);
+            repo_id.hash(hasher);
+        }
+        // 07-4: same root-held session state as the roster, plus the
+        // aggregated change list; each open re-renders fresh.
+        PopoverKind::AgentSessionsAggregate { repo_id } => {
+            119u8.hash(hasher);
             repo_id.hash(hasher);
         }
 

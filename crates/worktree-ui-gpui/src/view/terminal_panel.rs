@@ -2918,6 +2918,360 @@ impl WorkTreeView {
         .detach();
     }
 
+    /// 07-4: load (or reload) the cross-session aggregated change list for a
+    /// repo. Each session's worktree is scanned off the UI thread with
+    /// `git status --porcelain`; results land on `agent_aggregate` and
+    /// trigger a re-render. A concurrent in-flight load is skipped so a
+    /// reopen while one is running does not pile up tasks.
+    pub(in crate::view) fn load_agent_aggregate(
+        &mut self,
+        repo_id: RepoId,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self
+            .agent_aggregate
+            .get(&repo_id)
+            .map(|state| state.loading)
+            .unwrap_or(false)
+        {
+            return;
+        }
+        let Some(sessions) = self.agent_sessions.get(&repo_id) else {
+            self.agent_aggregate.insert(
+                repo_id,
+                agent_workbench::AgentAggregateState {
+                    loading: false,
+                    sessions: Vec::new(),
+                },
+            );
+            cx.notify();
+            return;
+        };
+        let jobs: Vec<(
+            agent_workbench::AgentSessionId,
+            agent_workbench::AgentKind,
+            std::path::PathBuf,
+            CommitId,
+        )> = sessions
+            .values()
+            .map(|s| (s.id, s.kind, s.worktree_path.clone(), s.baseline.clone()))
+            .collect();
+        self.agent_aggregate.insert(
+            repo_id,
+            agent_workbench::AgentAggregateState {
+                loading: true,
+                sessions: Vec::new(),
+            },
+        );
+        cx.notify();
+        cx.spawn(
+            async move |view: gpui::WeakEntity<WorkTreeView>, cx: &mut gpui::AsyncApp| {
+                let collected: Vec<agent_workbench::AgentAggregateSession> =
+                    smol::unblock(move || {
+                        jobs.into_iter()
+                            .map(|(id, kind, worktree_path, baseline)| {
+                                match crate::view::panels::git_output(
+                                    &worktree_path,
+                                    &["status", "--porcelain"],
+                                ) {
+                                    Ok(output) => agent_workbench::AgentAggregateSession {
+                                        id,
+                                        kind,
+                                        worktree_path,
+                                        baseline,
+                                        paths: parse_agent_porcelain_paths(&output),
+                                        error: None,
+                                    },
+                                    Err(error) => agent_workbench::AgentAggregateSession {
+                                        id,
+                                        kind,
+                                        worktree_path,
+                                        baseline,
+                                        paths: Vec::new(),
+                                        error: Some(error),
+                                    },
+                                }
+                            })
+                            .collect()
+                    })
+                    .await;
+                let _ = view.update(cx, |view, cx| {
+                    view.agent_aggregate.insert(
+                        repo_id,
+                        agent_workbench::AgentAggregateState {
+                            loading: false,
+                            sessions: collected,
+                        },
+                    );
+                    cx.notify();
+                });
+            },
+        )
+        .detach();
+    }
+
+    /// 07-4: reject one path in a session's worktree — restore it from the
+    /// session baseline (the same primitive the per-file "Restore file"
+    /// button in the diff view uses) — then reload the aggregate.
+    pub(in crate::view) fn reject_agent_path(
+        &mut self,
+        repo_id: RepoId,
+        session_id: agent_workbench::AgentSessionId,
+        path: std::path::PathBuf,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let (worktree, baseline) = match self
+            .agent_sessions
+            .get(&repo_id)
+            .and_then(|sessions| sessions.get(&session_id))
+        {
+            Some(session) => (
+                session.worktree_path.clone(),
+                session.baseline.0.to_string(),
+            ),
+            None => return,
+        };
+        let path_arg = path.display().to_string();
+        let path_display = path_arg.clone();
+        cx.spawn(
+            async move |view: gpui::WeakEntity<WorkTreeView>, cx: &mut gpui::AsyncApp| {
+                let result = smol::unblock(move || {
+                    crate::view::panels::git_output(
+                        &worktree,
+                        &["checkout", baseline.as_str(), "--", path_arg.as_str()],
+                    )
+                })
+                .await;
+                let _ = view.update(cx, |view, cx| match result {
+                    Ok(_) => {
+                        view.load_agent_aggregate(repo_id, cx);
+                    }
+                    Err(error) => {
+                        view.push_toast(
+                            components::ToastKind::Error,
+                            crate::i18n::t!(
+                                "chrome.agent.restore_failed",
+                                path = path_display.as_str(),
+                                err = error
+                            )
+                            .to_string(),
+                            cx,
+                        );
+                    }
+                });
+            },
+        )
+        .detach();
+    }
+
+    /// 07-4: reject every changed path in one session at once.
+    pub(in crate::view) fn reject_agent_session_all(
+        &mut self,
+        repo_id: RepoId,
+        session_id: agent_workbench::AgentSessionId,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let paths: Vec<String> = self
+            .agent_aggregate
+            .get(&repo_id)
+            .and_then(|state| state.sessions.iter().find(|s| s.id == session_id))
+            .map(|s| s.paths.iter().map(|p| p.display().to_string()).collect())
+            .unwrap_or_default();
+        if paths.is_empty() {
+            return;
+        }
+        let (worktree, baseline) = match self
+            .agent_sessions
+            .get(&repo_id)
+            .and_then(|sessions| sessions.get(&session_id))
+        {
+            Some(session) => (
+                session.worktree_path.clone(),
+                session.baseline.0.to_string(),
+            ),
+            None => return,
+        };
+        Self::reject_agent_worktree_paths(repo_id, vec![(worktree, baseline, paths)], cx);
+    }
+
+    /// 07-4: reject every changed path across every session of a repo, then
+    /// reload the aggregate once (a single reload avoids the per-call load
+    /// guard racing with itself when several sessions reject together).
+    pub(in crate::view) fn reject_agent_all_sessions(
+        &mut self,
+        repo_id: RepoId,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let worktrees: Vec<(std::path::PathBuf, String, Vec<String>)> = self
+            .agent_sessions
+            .get(&repo_id)
+            .map(|sessions| {
+                sessions
+                    .values()
+                    .filter_map(|session| {
+                        let paths: Vec<String> = self
+                            .agent_aggregate
+                            .get(&repo_id)
+                            .and_then(|state| state.sessions.iter().find(|s| s.id == session.id))
+                            .map(|s| s.paths.iter().map(|p| p.display().to_string()).collect())
+                            .unwrap_or_default();
+                        if paths.is_empty() {
+                            None
+                        } else {
+                            Some((
+                                session.worktree_path.clone(),
+                                session.baseline.0.to_string(),
+                                paths,
+                            ))
+                        }
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        if worktrees.is_empty() {
+            return;
+        }
+        // One batch checkout across every worktree, then a single reload —
+        // multiple tasks would trip the `load_agent_aggregate` in-flight guard.
+        Self::reject_agent_worktree_paths(repo_id, worktrees, cx);
+    }
+
+    /// 07-4: accept every session's current state by checkpointing it — one
+    /// snapshot commit per worktree (reuses `perform_agent_snapshot`), so
+    /// the accepted work survives as a reviewable point. A single toast sums
+    /// the outcome up instead of one per session.
+    pub(in crate::view) fn accept_agent_all_sessions(
+        &mut self,
+        repo_id: RepoId,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let jobs: Vec<AgentSnapshotJob> = self
+            .agent_sessions
+            .get(&repo_id)
+            .map(|sessions| {
+                sessions
+                    .keys()
+                    .filter_map(|id| self.collect_one_snapshot_job(repo_id, *id))
+                    .collect()
+            })
+            .unwrap_or_default();
+        if jobs.is_empty() {
+            return;
+        }
+        cx.spawn(
+            async move |view: gpui::WeakEntity<WorkTreeView>, cx: &mut gpui::AsyncApp| {
+                let results: Vec<(agent_workbench::AgentSessionId, Result<u64, String>)> =
+                    smol::unblock(move || {
+                        jobs.into_iter()
+                            .map(|job| {
+                                let id = job.session_id;
+                                let result = perform_agent_snapshot(&job);
+                                (id, result)
+                            })
+                            .collect()
+                    })
+                    .await;
+                let _ = view.update(cx, |view, cx| {
+                    let mut accepted: u64 = 0;
+                    let mut first_err: Option<String> = None;
+                    for (id, result) in results {
+                        match result {
+                            Ok(count) => {
+                                accepted += 1;
+                                if let Some(session) = view
+                                    .agent_sessions
+                                    .get_mut(&repo_id)
+                                    .and_then(|sessions| sessions.get_mut(&id))
+                                {
+                                    session.snapshot_count = count;
+                                    session.last_snapshot_unix_secs = now_unix_secs();
+                                }
+                            }
+                            Err(error) => {
+                                if first_err.is_none() {
+                                    first_err = Some(error);
+                                }
+                            }
+                        }
+                    }
+                    if let Some(workdir) = view.repo_workdir(repo_id) {
+                        view.persist_agent_sessions_for_repo(repo_id, &workdir);
+                    }
+                    if let Some(error) = first_err {
+                        view.push_toast(
+                            components::ToastKind::Error,
+                            crate::i18n::t!(
+                                "chrome.agent.aggregate_accept_failed",
+                                err = error.as_str()
+                            )
+                            .to_string(),
+                            cx,
+                        );
+                    } else {
+                        view.push_toast(
+                            components::ToastKind::Success,
+                            crate::i18n::t!("chrome.agent.aggregate_accepted", n = accepted)
+                                .to_string(),
+                            cx,
+                        );
+                    }
+                    cx.notify();
+                });
+            },
+        )
+        .detach();
+    }
+
+    /// 07-4: restore every listed path in each given worktree from its
+    /// baseline in one off-thread pass, then reload the aggregate a single
+    /// time. `worktrees` is `(worktree_path, baseline_sha, changed_paths)`.
+    fn reject_agent_worktree_paths(
+        repo_id: RepoId,
+        worktrees: Vec<(std::path::PathBuf, String, Vec<String>)>,
+        cx: &mut gpui::Context<WorkTreeView>,
+    ) {
+        if worktrees.iter().all(|(_, _, paths)| paths.is_empty()) {
+            return;
+        }
+        cx.spawn(
+            async move |view: gpui::WeakEntity<WorkTreeView>, cx: &mut gpui::AsyncApp| {
+                let first_err = smol::unblock(move || {
+                    let mut err: Option<String> = None;
+                    for (worktree, baseline, paths) in &worktrees {
+                        if paths.is_empty() {
+                            continue;
+                        }
+                        let mut args: Vec<String> =
+                            vec!["checkout".to_string(), baseline.clone(), "--".to_string()];
+                        args.extend(paths.iter().cloned());
+                        let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+                        if let Err(error) = crate::view::panels::git_output(worktree, &arg_refs) {
+                            err.get_or_insert(error);
+                        }
+                    }
+                    err
+                })
+                .await;
+                let _ = view.update(cx, |view, cx| {
+                    if let Some(error) = first_err {
+                        view.push_toast(
+                            components::ToastKind::Error,
+                            crate::i18n::t!(
+                                "chrome.agent.restore_failed",
+                                path = "*",
+                                err = error.as_str()
+                            )
+                            .to_string(),
+                            cx,
+                        );
+                    }
+                    view.load_agent_aggregate(repo_id, cx);
+                });
+            },
+        )
+        .detach();
+    }
+
     /// Close a single terminal tab. Closing the last tab closes the panel.
     pub(in crate::view) fn close_terminal_tab(
         &mut self,
@@ -5110,5 +5464,63 @@ mod tests {
         }
         let _ = shell.wait();
         let _ = idle.wait();
+    }
+}
+
+/// 07-4: pull changed paths out of `git status --porcelain` output. Handles
+/// the plain `XY path` form and the rename `R  old -> new` form (keeping the
+/// new path). Untracked (`??`) and unmerged (`UU`, etc.) paths are included.
+fn parse_agent_porcelain_paths(output: &str) -> Vec<std::path::PathBuf> {
+    let mut paths = Vec::new();
+    for line in output.lines() {
+        if line.len() < 4 {
+            continue;
+        }
+        // Two status chars + a space, then the path (or `old -> new`).
+        let rest = &line[3..];
+        let path = match rest.find(" -> ") {
+            Some(idx) => &rest[idx + 4..],
+            None => rest,
+        };
+        paths.push(std::path::PathBuf::from(path));
+    }
+    paths.sort();
+    paths.dedup();
+    paths
+}
+
+#[cfg(test)]
+mod agent_aggregate_tests {
+    use super::*;
+
+    #[test]
+    fn parse_agent_porcelain_paths_handles_forms() {
+        let output = concat!(
+            " M src/lib.rs\n",
+            "A  src/added.rs\n",
+            "?? untracked.txt\n",
+            "UU conflict.rs\n",
+            "R  old_name.rs -> new_name.rs\n",
+            " D deleted.rs\n",
+        );
+        let paths = parse_agent_porcelain_paths(output);
+        assert_eq!(
+            paths,
+            vec![
+                std::path::PathBuf::from("conflict.rs"),
+                std::path::PathBuf::from("deleted.rs"),
+                std::path::PathBuf::from("new_name.rs"),
+                std::path::PathBuf::from("src/added.rs"),
+                std::path::PathBuf::from("src/lib.rs"),
+                std::path::PathBuf::from("untracked.txt"),
+            ],
+            "paths are sorted, deduped, and renames keep the new name"
+        );
+    }
+
+    #[test]
+    fn parse_agent_porcelain_paths_tolerates_empty_and_short() {
+        assert!(parse_agent_porcelain_paths("").is_empty());
+        assert!(parse_agent_porcelain_paths("  ").is_empty());
     }
 }

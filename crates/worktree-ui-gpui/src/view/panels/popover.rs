@@ -3,6 +3,7 @@ use worktree_core::services::InteractiveRebaseAction;
 
 mod add_repo_menu;
 mod add_to_gitignore_prompt;
+mod agent_aggregate;
 mod agent_sessions;
 mod app_menu;
 mod assume_unchanged_manager;
