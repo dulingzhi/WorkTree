@@ -4,6 +4,7 @@
 //! unset), never an empty string in the config.
 
 use super::*;
+use worktree_state::identity_profiles::IdentityProfile;
 
 /// One field's draft state: what the input holds, and the placeholder that
 /// says what inheriting would mean.
@@ -201,6 +202,76 @@ impl PopoverHost {
     fn dismiss_prompt_popover_window(&mut self, cx: &mut gpui::Context<Self>) {
         self.close_popover(cx);
     }
+
+    /// Fill the draft from a saved profile. Only touches the in-memory draft
+    /// (inputs + tri-state signing); the existing Apply button is what commits
+    /// it to the repo's local git config, keeping one write path.
+    pub(super) fn apply_identity_profile_to_draft(
+        &mut self,
+        profile: &IdentityProfile,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.repo_settings
+            .repo_settings_user_input
+            .update(cx, |input, cx| {
+                input.set_text(profile.user_name.clone(), cx);
+                cx.notify();
+            });
+        self.repo_settings
+            .repo_settings_email_input
+            .update(cx, |input, cx| {
+                input.set_text(profile.user_email.clone(), cx);
+                cx.notify();
+            });
+        self.repo_settings.repo_settings_sign_commits = profile.sign_commits;
+        cx.notify();
+    }
+
+    /// Persist the current draft as a named profile. Empty names are rejected
+    /// into the profile-error row rather than writing an unnamed entry; a name
+    /// that already exists overwrites that profile (upsert by name).
+    pub(super) fn save_identity_profile(&mut self, cx: &mut gpui::Context<Self>) {
+        let name = self
+            .repo_settings
+            .repo_settings_profile_name_input
+            .read_with(cx, |input, _| input.text().trim().to_string());
+        if name.is_empty() {
+            self.repo_settings.repo_settings_profile_error =
+                Some(crate::i18n::tr_str("input.repo_settings.profile_name_required").into());
+            cx.notify();
+            return;
+        }
+        let profile = IdentityProfile {
+            name: name.clone(),
+            user_name: self
+                .repo_settings
+                .repo_settings_user_input
+                .read_with(cx, |input, _| input.text().to_string()),
+            user_email: self
+                .repo_settings
+                .repo_settings_email_input
+                .read_with(cx, |input, _| input.text().to_string()),
+            sign_commits: self.repo_settings.repo_settings_sign_commits,
+        };
+        let mut profiles = worktree_state::identity_profiles::load_identity_profiles();
+        profiles.upsert(profile);
+        match worktree_state::identity_profiles::persist_identity_profiles(&profiles) {
+            Ok(()) => {
+                self.repo_settings.repo_settings_identity_profiles = profiles.profiles;
+                self.repo_settings.repo_settings_profile_error = None;
+                self.repo_settings
+                    .repo_settings_profile_name_input
+                    .update(cx, |input, cx| {
+                        input.set_text(String::new(), cx);
+                        cx.notify();
+                    });
+            }
+            Err(message) => {
+                self.repo_settings.repo_settings_profile_error = Some(message.to_string().into());
+            }
+        }
+        cx.notify();
+    }
 }
 
 pub(super) fn panel(
@@ -378,6 +449,112 @@ pub(super) fn panel(
                     .child(crate::i18n::tr(prune_row(prune_state))),
             ),
     );
+
+    // Identity profiles: a click fills the draft (user/email/sign), reusing
+    // the existing Apply path to commit. The list is empty until the user
+    // saves one via the row below.
+    let profiles = &this.repo_settings.repo_settings_identity_profiles;
+    if !profiles.is_empty() {
+        let mut profile_rows = div().flex().flex_col().gap(scaled_px(2.0)).px_1();
+        for profile in profiles {
+            let name = profile.name.clone();
+            let summary = format!("{} <{}>", profile.user_name, profile.user_email);
+            let debug_label = format!("repo_settings_profile_{}", profile.name);
+            let name_for_click = name.clone();
+            profile_rows = profile_rows.child(
+                div()
+                    .id(SharedString::from(name.clone()))
+                    .debug_selector(move || debug_label.clone())
+                    .flex()
+                    .items_center()
+                    .gap(scaled_px(6.0))
+                    .px_1()
+                    .rounded(scaled_px(4.0))
+                    .cursor(gpui::CursorStyle::PointingHand)
+                    .on_click(cx.listener(move |this, _e: &ClickEvent, _w, cx| {
+                        let profiles = this.repo_settings.repo_settings_identity_profiles.clone();
+                        if let Some(profile) = profiles.iter().find(|p| p.name == name_for_click) {
+                            this.apply_identity_profile_to_draft(profile, cx);
+                        }
+                    }))
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(theme.colors.foreground.primary)
+                            .child(name),
+                    )
+                    .child(div().flex_1())
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(theme.colors.foreground.secondary)
+                            .child(summary),
+                    ),
+            );
+        }
+        body = body.child(
+            div()
+                .id("repo_settings_profiles_section")
+                .debug_selector(|| "repo_settings_profiles_section".to_string())
+                .flex()
+                .flex_col()
+                .gap(scaled_px(4.0))
+                .px_1()
+                .pt(scaled_px(4.0))
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(theme.colors.foreground.secondary)
+                        .child(crate::i18n::tr_str("input.repo_settings.profiles_title")),
+                )
+                .child(profile_rows),
+        );
+    }
+
+    // Save-as-profile row: name the current draft and persist it.
+    let profile_error = this
+        .repo_settings
+        .repo_settings_profile_error
+        .clone()
+        .map(|message| {
+            div()
+                .id("repo_settings_profile_error")
+                .debug_selector(|| "repo_settings_profile_error".to_string())
+                .px_1()
+                .text_xs()
+                .text_color(theme.colors.status.danger.foreground)
+                .line_clamp(2)
+                .child(message)
+        });
+
+    body = body
+        .child(
+            div()
+                .id("repo_settings_save_profile_row")
+                .debug_selector(|| "repo_settings_save_profile_row".to_string())
+                .flex()
+                .items_center()
+                .gap(scaled_px(6.0))
+                .px_1()
+                .pt(scaled_px(4.0))
+                .child(
+                    div()
+                        .w(scaled_px(150.0))
+                        .min_w(px(0.0))
+                        .child(this.repo_settings.repo_settings_profile_name_input.clone()),
+                )
+                .child(
+                    components::Button::new(
+                        "repo_settings_save_profile_btn",
+                        crate::i18n::tr_str("input.repo_settings.profile_save"),
+                    )
+                    .style(components::ButtonStyle::Subtle)
+                    .on_click(theme, cx, |this, _e, _w, cx| {
+                        this.save_identity_profile(cx);
+                    }),
+                ),
+        )
+        .children(profile_error);
 
     let error_row = this
         .repo_settings

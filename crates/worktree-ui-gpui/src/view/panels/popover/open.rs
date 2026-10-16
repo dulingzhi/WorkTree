@@ -1198,6 +1198,10 @@ impl PopoverHost {
                 }
                 PopoverKind::RepoSettingsPrompt { repo_id } => {
                     let theme = self.theme;
+                    // Load the saved identity profiles once on open (app-level
+                    // presets), independent of whether a repo resolves below.
+                    self.repo_settings.repo_settings_identity_profiles =
+                        worktree_state::identity_profiles::load_identity_profiles().profiles;
                     // Read the snapshot now (the panel consumes it) and seed
                     // the drafts from the local overrides. `self.popover` is
                     // still the previous kind here, so resolve via the arm's.
@@ -1229,6 +1233,13 @@ impl PopoverHost {
                             input.clear_transient_key_presses();
                             input.set_theme(theme, cx);
                             input.set_text(current.user_email.clone().unwrap_or_default(), cx);
+                            cx.notify();
+                        });
+                    self.repo_settings
+                        .repo_settings_profile_name_input
+                        .update(cx, |input, cx| {
+                            input.clear_transient_key_presses();
+                            input.set_theme(theme, cx);
                             cx.notify();
                         });
                     self.repo_settings.repo_settings_sign_commits = current.sign_commits;

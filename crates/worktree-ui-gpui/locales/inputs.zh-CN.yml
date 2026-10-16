@@ -45,6 +45,10 @@ input:
     fetch_prune_on: "已启用"
     fetch_prune_off: "已禁用"
     apply: "应用"
+    profiles_title: "身份档案"
+    profile_save: "存为档案"
+    profile_name_placeholder: "档案名称"
+    profile_name_required: "请填写档案名称"
   stash:
     title: "创建贮藏"
     stash: "贮藏"

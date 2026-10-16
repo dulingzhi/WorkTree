@@ -254,6 +254,17 @@ pub(in crate::view::panels::popover) struct RepoSettingsState {
     /// the panel so it is re-read on every open, never between renders.
     pub(in crate::view::panels::popover) repo_settings_current:
         Option<crate::view::panels::popover::repo_settings::RepoSettingsCurrent>,
+    /// Saved identity profiles (app-level presets), loaded once when the
+    /// repo-settings popover opens. Selecting one fills the draft; the existing
+    /// Apply path then commits it to the repo's local git config.
+    pub(in crate::view::panels::popover) repo_settings_identity_profiles:
+        Vec<worktree_state::identity_profiles::IdentityProfile>,
+    /// Name for the "save current as profile" action.
+    pub(in crate::view::panels::popover) repo_settings_profile_name_input:
+        Entity<components::TextInput>,
+    /// Error shown on the profile-save row (e.g. empty name), kept separate
+    /// from `repo_settings_error` so the two concerns don't clobber each other.
+    pub(in crate::view::panels::popover) repo_settings_profile_error: Option<SharedString>,
     pub(in crate::view::panels::popover) repo_settings_focus: DialogFocus,
     /// Test seam: how many times the repo-settings config snapshot was read
     /// from disk. An open and an apply each read once; renders must read

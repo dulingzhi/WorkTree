@@ -394,6 +394,17 @@ impl PopoverHost {
             ));
         }
 
+        let repo_settings_profile_name_input = cx.new(|cx| {
+            components::TextInput::new(
+                components::TextInputOptions {
+                    placeholder: crate::i18n::tr("input.repo_settings.profile_name_placeholder"),
+                    ..Default::default()
+                },
+                window,
+                cx,
+            )
+        });
+
         RepoSettingsState {
             repo_settings_user_input,
             repo_settings_email_input,
@@ -401,6 +412,9 @@ impl PopoverHost {
             repo_settings_fetch_prune: true,
             repo_settings_error: None,
             repo_settings_current: None,
+            repo_settings_identity_profiles: Vec::new(),
+            repo_settings_profile_name_input,
+            repo_settings_profile_error: None,
             #[cfg(test)]
             repo_settings_test_loads: 0,
             repo_settings_focus,

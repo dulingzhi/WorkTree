@@ -52,6 +52,10 @@ input:
     fetch_prune_on: "Enabled"
     fetch_prune_off: "Disabled"
     apply: "Apply"
+    profiles_title: "Identity profiles"
+    profile_save: "Save as profile"
+    profile_name_placeholder: "Profile name"
+    profile_name_required: "Profile name is required"
   stash:
     title: "Create stash"
     stash: "Stash"

@@ -1947,7 +1947,7 @@ pub(crate) fn default_session_file_path_for_effect() -> Option<PathBuf> {
     default_session_file_path()
 }
 
-fn running_under_test_harness() -> bool {
+pub(crate) fn running_under_test_harness() -> bool {
     let Ok(exe) = env::current_exe() else {
         return false;
     };
@@ -2032,7 +2032,7 @@ pub fn app_data_dir_linux(xdg_data_home: Option<&OsStr>, home: Option<&OsStr>) -
     Some(home.join(".local/share/worktree"))
 }
 
-fn app_state_dir() -> Option<PathBuf> {
+pub(crate) fn app_state_dir() -> Option<PathBuf> {
     // Follow XDG on linux; otherwise fall back to platform conventions.
     #[cfg(target_os = "linux")]
     {
