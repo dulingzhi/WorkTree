@@ -94,6 +94,7 @@ palette:
     show-reflog: 显示引用日志
     back: 后退
     forward: 前进
+    keyboard-shortcuts: 键盘快捷键
 
   cat:
     commit: 提交
@@ -110,3 +111,4 @@ palette:
     submodules: 子模块
     worktrees: 工作树
     history: 历史
+    app: 应用

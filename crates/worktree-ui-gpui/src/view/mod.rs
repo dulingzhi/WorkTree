@@ -1822,6 +1822,11 @@ impl WorkTreeView {
                     self.store.dispatch(Msg::GlobalNavForward { repo_id });
                 }
             }
+            "keyboard-shortcuts" => {
+                if let Some(window) = window {
+                    self.open_popover_centered(PopoverKind::KeyboardShortcuts, window, cx);
+                }
+            }
             _ => {}
         }
     }

@@ -595,6 +595,7 @@ impl PopoverHost {
             | PopoverKind::InteractiveRebaseAutosquashMenu => {
                 self.context_menu_view(kind.clone(), cx)
             }
+            PopoverKind::KeyboardShortcuts => keyboard_shortcuts::panel(self, cx),
             PopoverKind::RebaseReword {
                 ix,
                 original_action,

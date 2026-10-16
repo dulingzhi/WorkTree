@@ -29,6 +29,8 @@ pub(in crate::view) enum AppMenuAction {
     InstallDesktopIntegration,
     Quit,
     CloseWindow,
+    /// 08-5: open the keyboard-shortcut cheatsheet. Repo-less, so no payload.
+    KeyboardShortcuts,
 }
 
 #[derive(Clone, Copy)]

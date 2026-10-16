@@ -683,9 +683,16 @@ pub(crate) const COMMANDS: &[CommandEntry] = &[
     },
     // TODO: "undo"              - Undo (Edit)
     // TODO: "redo"              - Redo (Edit)
-    // TODO: "keyboard-shortcuts" - Keyboard Shortcuts (Help)
     // TODO: "file-history"     - File History (History)
     // TODO: "search-commits"   - Search Commits (Navigation)
+    CommandEntry {
+        id: "keyboard-shortcuts",
+        label: "palette.cmd.keyboard-shortcuts",
+        shortcut: Shortcut::None,
+        category: "palette.cat.app",
+        keywords: "shortcuts keys bindings cheatsheet help discoverable keyboard",
+        requires_repo: false,
+    },
 ];
 
 /// Every command id `WorkTreeView::execute_command` has an arm for.
@@ -739,6 +746,7 @@ pub(crate) const REGISTERED_COMMAND_HANDLERS: &[&str] = &[
     "forward",
     "import-coverage",
     "increase-ui-scale",
+    "keyboard-shortcuts",
     "locate-file-in-explorer",
     "manage-assume-unchanged",
     "manage-hooks",

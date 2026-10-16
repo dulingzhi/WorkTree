@@ -8,6 +8,9 @@ ui:
     search_input_not_initialized: 搜索输入未初始化
     no_matches: 无匹配项
     cancel: 取消
+  shortcuts:
+    title: 键盘快捷键
+    intro: 已绑定快捷键的命令。具体按键因平台而异。
   picker:
     filter:
       repositories: 筛选仓库

@@ -388,6 +388,7 @@ pub(in crate::view) fn popover_width_spec(kind: &PopoverKind) -> Option<PopoverW
         PopoverKind::RebaseReword { .. } => Some(DIALOG_440_WIDTH),
         PopoverKind::InteractiveRebaseActionMenu { .. } => Some(REBASE_ACTION_MENU_WIDTH),
         PopoverKind::InteractiveRebaseAutosquashMenu => Some(REBASE_AUTOSQUASH_MENU_WIDTH),
+        PopoverKind::KeyboardShortcuts => Some(DIALOG_540_WIDTH),
     }
 }
 

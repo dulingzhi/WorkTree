@@ -42,6 +42,18 @@ pub(super) fn model(this: &PopoverHost) -> ContextMenuModel {
             AppMenuAction::CommandPalette,
         );
     }
+    // Always available: the cheatsheet lists every bound shortcut, so it is the
+    // natural first stop when a binding is forgotten. Repo-less, so never
+    // disabled.
+    push_entry(
+        &mut items,
+        &mut debug_selectors,
+        "app_menu_keyboard_shortcuts",
+        "Keyboard Shortcuts",
+        Shortcut::None,
+        false,
+        AppMenuAction::KeyboardShortcuts,
+    );
     push_entry(
         &mut items,
         &mut debug_selectors,
@@ -159,6 +171,10 @@ pub(super) fn activate(
         AppMenuAction::CommandPalette => {
             this.close_popover_and_restore_focus(window, cx);
             window.dispatch_action(Box::new(ToggleCommandPalette), cx);
+        }
+        AppMenuAction::KeyboardShortcuts => {
+            this.close_popover_and_restore_focus(window, cx);
+            this.open_popover_centered(PopoverKind::KeyboardShortcuts, window, cx);
         }
         AppMenuAction::LocateFileInExplorer => {
             this.close_popover_and_restore_focus(window, cx);

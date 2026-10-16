@@ -105,6 +105,7 @@ palette:
     show-reflog: Show Reflog
     back: Navigate Back
     forward: Navigate Forward
+    keyboard-shortcuts: Keyboard Shortcuts
 
   # Category headers, one per distinct `category` value in `COMMANDS`.
   cat:
@@ -122,3 +123,4 @@ palette:
     submodules: Submodules
     worktrees: Worktrees
     history: History
+    app: App

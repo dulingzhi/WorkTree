@@ -134,7 +134,8 @@ fn repo_for_popover<'a>(state: &'a AppState, popover: &PopoverKind) -> Option<&'
         | PopoverKind::DiffActionMenu
         | PopoverKind::MergetoolSettingsMenu
         | PopoverKind::ChangeTrackingSettings
-        | PopoverKind::UiScalePicker => None,
+        | PopoverKind::UiScalePicker
+        | PopoverKind::KeyboardShortcuts => None,
 
         // Popovers that implicitly use the currently active repo.
         PopoverKind::BranchPicker { .. }
@@ -553,7 +554,8 @@ fn hash_repo_for_popover<H: Hasher>(repo: &RepoState, popover: &PopoverKind, has
         | PopoverKind::AgentSafetyReview { .. }
         // Field contents are owned by the text inputs; the popover is
         // computed fresh per open and every action closes it.
-        | PopoverKind::RepoSettingsPrompt { .. } => {}
+        | PopoverKind::RepoSettingsPrompt { .. }
+        | PopoverKind::KeyboardShortcuts => {}
     }
 }
 
@@ -1134,6 +1136,9 @@ fn hash_popover_kind<H: Hasher>(kind: &PopoverKind, hasher: &mut H) {
         }
         PopoverKind::InteractiveRebaseAutosquashMenu => {
             79u8.hash(hasher);
+        }
+        PopoverKind::KeyboardShortcuts => {
+            122u8.hash(hasher);
         }
         PopoverKind::ReflogEntryMenu {
             repo_id,

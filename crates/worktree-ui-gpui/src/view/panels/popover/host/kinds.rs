@@ -503,6 +503,11 @@ pub(in crate::view) enum PopoverKind {
         can_drop: bool,
     },
     InteractiveRebaseAutosquashMenu,
+    /// 08-5: in-app keyboard-shortcut cheatsheet — a centered, repo-less dialog
+    /// listing every command that carries a shortcut. Its contents are static
+    /// (`COMMANDS`), so it needs no repo id, no lazy data load, and no
+    /// fingerprint repo binding.
+    KeyboardShortcuts,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -16,6 +16,9 @@ ui:
     search_input_not_initialized: Search input not initialized
     no_matches: No matches
     cancel: Cancel
+  shortcuts:
+    title: Keyboard Shortcuts
+    intro: Commands that have a keyboard shortcut. Bindings follow your platform.
   picker:
     filter:
       repositories: Filter repositories

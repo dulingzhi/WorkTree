@@ -36,6 +36,7 @@ mod geometry;
 mod history_ref_filter;
 mod host;
 mod hunk_explanation;
+mod keyboard_shortcuts;
 mod merge_abort_confirm;
 mod merge_commit_confirm;
 mod merge_preview;
