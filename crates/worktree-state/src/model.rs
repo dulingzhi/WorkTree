@@ -1266,6 +1266,10 @@ pub struct RepoState {
     /// alongside the combined-status rollup. Empty until the checks pass lands;
     /// only open PRs are polled, so settled PRs stay empty here.
     pub pull_request_check_runs: FxHashMap<u64, Vec<CheckRun>>,
+    /// Read-only PR conversation comments, keyed by PR number. Populated by a
+    /// capped per-PR fetch; only open PRs are polled, so settled PRs stay
+    /// empty here.
+    pub pull_request_comments: FxHashMap<u64, Vec<PullRequestComment>>,
     /// Imported line coverage for the diff view's overlay. Session-scoped
     /// on purpose: reports are large and regenerable, so they never
     /// persist.
@@ -1462,6 +1466,7 @@ impl RepoState {
             coverage: None,
             pull_requests_rev: 0,
             pull_request_check_runs: FxHashMap::default(),
+            pull_request_comments: FxHashMap::default(),
             remotes_rev: 0,
             remote_branches: Loadable::NotLoaded,
             remote_branches_rev: 0,
@@ -1699,6 +1704,23 @@ impl RepoState {
             changed = true;
         }
         if changed {
+            self.pull_requests_rev = self.pull_requests_rev.wrapping_add(1);
+            self.bump_branch_sidebar_rev();
+        }
+    }
+
+    /// Replace the read-only comment list for one PR. Bumps the PR revision
+    /// (and therefore the sidebar PR section + any open PR menu) only when the
+    /// content actually changed, so a repeated load of the same comments is a
+    /// no-op for rendering.
+    pub(crate) fn set_pull_request_comments(
+        &mut self,
+        number: u64,
+        comments: Vec<PullRequestComment>,
+    ) {
+        let stored = self.pull_request_comments.entry(number).or_default();
+        if stored.as_slice() != comments.as_slice() {
+            *stored = comments;
             self.pull_requests_rev = self.pull_requests_rev.wrapping_add(1);
             self.bump_branch_sidebar_rev();
         }
@@ -3753,6 +3775,40 @@ mod tests {
             },
         );
         assert_eq!(repo.pull_requests_rev, after_reload);
+    }
+
+    /// Comments land one PR at a time after the list, so the sidebar must only
+    /// rebuild when the comment set actually changed — not on every poll that
+    /// re-returns the same conversation.
+    #[test]
+    fn set_pull_request_comments_bumps_rev_only_on_real_changes() {
+        let mut repo = new_repo();
+        repo.set_pull_requests(Loadable::Ready(vec![sample_pull_request(7)]));
+        let before = repo.pull_requests_rev;
+
+        let comments = vec![PullRequestComment {
+            author: "jai".to_string(),
+            body: "nice".to_string(),
+            created_at: None,
+            html_url: None,
+        }];
+        repo.set_pull_request_comments(7, comments.clone());
+        assert_eq!(repo.pull_requests_rev, before + 1);
+        // Identical reload → no bump.
+        repo.set_pull_request_comments(7, comments);
+        assert_eq!(repo.pull_requests_rev, before + 1);
+        // Different content → bump.
+        repo.set_pull_request_comments(
+            7,
+            vec![PullRequestComment {
+                author: "sam".to_string(),
+                body: "rebase".to_string(),
+                created_at: None,
+                html_url: None,
+            }],
+        );
+        assert_eq!(repo.pull_requests_rev, before + 2);
+        assert_eq!(repo.pull_request_comments.get(&7).unwrap().len(), 1);
     }
 
     #[test]

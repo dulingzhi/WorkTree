@@ -1675,13 +1675,36 @@ impl SidebarPaneView {
                         .await
                             && (checks.state.is_some() || !checks.check_runs.is_empty())
                         {
-                            store.dispatch(Msg::Internal(
-                                InternalMsg::PullRequestChecksLoaded {
-                                    repo_id,
-                                    number: pull_request.number,
-                                    checks,
-                                },
-                            ));
+                            store.dispatch(Msg::Internal(InternalMsg::PullRequestChecksLoaded {
+                                repo_id,
+                                number: pull_request.number,
+                                checks,
+                            }));
+                        }
+                    }
+                    // Read-only PR conversation comments for the same capped
+                    // set of open PRs. Best-effort: a failure is logged and the
+                    // PR row simply has no comments section.
+                    for pull_request in pull_requests
+                        .iter()
+                        .filter(|pull_request| {
+                            pull_request.state == worktree_core::domain::PullRequestState::Open
+                        })
+                        .take(super::super::github::PULL_REQUEST_COMMENTS_CAP)
+                    {
+                        if let Ok(comments) = super::super::github::fetch_pull_request_comments(
+                            &slug,
+                            pull_request.number,
+                            token.as_deref(),
+                        )
+                        .await
+                            && !comments.is_empty()
+                        {
+                            store.dispatch(Msg::Internal(InternalMsg::PullRequestCommentsLoaded {
+                                repo_id,
+                                number: pull_request.number,
+                                comments,
+                            }));
                         }
                     }
                 }

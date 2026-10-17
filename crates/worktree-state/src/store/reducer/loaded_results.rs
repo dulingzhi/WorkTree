@@ -407,6 +407,16 @@ pub(super) fn reduce_loaded_results(msg: Msg, state: &mut AppState) -> ReduceOut
             }
             Vec::new()
         }
+        Msg::Internal(crate::msg::InternalMsg::PullRequestCommentsLoaded {
+            repo_id,
+            number,
+            comments,
+        }) => {
+            if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
+                repo_state.set_pull_request_comments(number, comments);
+            }
+            Vec::new()
+        }
         other => return ReduceOutcome::NotHandled(other),
     };
     ReduceOutcome::Handled(effects)

@@ -304,6 +304,18 @@ pub enum CheckRunConclusion {
     StartupFailure,
 }
 
+/// A single read-only PR conversation comment, from either the issue
+/// conversation (`/issues/{n}/comments`) or the review thread
+/// (`/pulls/{n}/comments`). Kept minimal: the author, the body, and optional
+/// timestamps/links for display. The UI renders these without any write path.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PullRequestComment {
+    pub author: String,
+    pub body: String,
+    pub created_at: Option<String>,
+    pub html_url: Option<String>,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FileEntryKind {
     File,

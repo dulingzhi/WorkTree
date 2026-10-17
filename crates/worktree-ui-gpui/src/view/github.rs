@@ -16,7 +16,7 @@ use std::time::Duration;
 use serde_json::Value;
 use worktree_core::domain::{
     CheckRun, CheckRunConclusion, CheckRunStatus, CommitId, PullRequest, PullRequestChecks,
-    PullRequestChecksState, PullRequestState, Remote,
+    PullRequestChecksState, PullRequestComment, PullRequestState, Remote,
 };
 use worktree_core::error::{Error, ErrorKind};
 
@@ -320,6 +320,122 @@ fn worse_check(a: PullRequestChecksState, b: PullRequestChecksState) -> PullRequ
         PullRequestChecksState::Error => 3,
     };
     if rank(a) >= rank(b) { a } else { b }
+}
+
+/// How many PRs get a read-only comment fetch during a listing refresh. Same
+/// rate-limit reasoning as [`PULL_REQUEST_CHECKS_CAP`]: the per-PR requests are
+/// the bottleneck, so only the first page of open PRs is polled.
+#[cfg_attr(test, allow(dead_code))]
+pub(super) const PULL_REQUEST_COMMENTS_CAP: usize = 10;
+
+/// REST endpoint for a PR's issue-conversation comments.
+#[cfg_attr(test, allow(dead_code))]
+pub(super) fn issue_comments_api_url(slug: &RepoSlug, number: u64) -> String {
+    format!(
+        "https://api.github.com/repos/{}/{}/issues/{}/comments",
+        slug.owner, slug.repo, number
+    )
+}
+
+/// REST endpoint for a PR's review (diff) comments.
+#[cfg_attr(test, allow(dead_code))]
+pub(super) fn review_comments_api_url(slug: &RepoSlug, number: u64) -> String {
+    format!(
+        "https://api.github.com/repos/{}/{}/pulls/{}/comments",
+        slug.owner, slug.repo, number
+    )
+}
+
+/// Fetch the read-only PR conversation: the issue thread plus the review
+/// thread, merged and sorted by `created_at`. Either endpoint failing is
+/// non-fatal — the other still contributes, and a total failure yields an empty
+/// list rather than dropping the whole PR row.
+#[cfg_attr(test, allow(dead_code))]
+pub(super) async fn fetch_pull_request_comments(
+    slug: &RepoSlug,
+    number: u64,
+    token: Option<&str>,
+) -> Result<Vec<PullRequestComment>, Error> {
+    let headers = github_headers(token);
+    let issue_comments = match http::get_json(
+        issue_comments_api_url(slug, number),
+        headers.clone(),
+        GITHUB_API_TIMEOUT,
+    )
+    .await
+    {
+        Ok(response) => parse_comments(response.status.into(), &response.body).unwrap_or_default(),
+        Err(err) => {
+            worktree_core::applog_warn!(
+                "github api: issue comments request failed for #{number}: {err}"
+            );
+            Vec::new()
+        }
+    };
+    let review_comments = match http::get_json(
+        review_comments_api_url(slug, number),
+        headers,
+        GITHUB_API_TIMEOUT,
+    )
+    .await
+    {
+        Ok(response) => parse_comments(response.status.into(), &response.body).unwrap_or_default(),
+        Err(err) => {
+            worktree_core::applog_warn!(
+                "github api: review comments request failed for #{number}: {err}"
+            );
+            Vec::new()
+        }
+    };
+    let mut comments = issue_comments;
+    comments.extend(review_comments);
+    comments.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+    comments.truncate(50);
+    Ok(comments)
+}
+
+/// Parse a comments listing (issue or review thread) into read-only comments.
+/// Entries without a body are dropped; a malformed or non-2xx response errors
+/// so the caller can treat it as "no comments" rather than misleading data.
+#[cfg_attr(test, allow(dead_code))]
+pub(super) fn parse_comments(status: u16, body: &[u8]) -> Result<Vec<PullRequestComment>, String> {
+    if !(200..300).contains(&status) {
+        return Err(api_error_detail(status, body));
+    }
+    let json: Value =
+        serde_json::from_slice(body).map_err(|err| format!("invalid response JSON: {err}"))?;
+    let entries = json
+        .as_array()
+        .ok_or_else(|| "expected a comments array".to_string())?;
+    Ok(entries.iter().filter_map(comment_from_json).collect())
+}
+
+#[cfg_attr(test, allow(dead_code))]
+fn comment_from_json(entry: &Value) -> Option<PullRequestComment> {
+    let author = entry
+        .pointer("/user/login")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let body = entry
+        .get("body")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let created_at = entry
+        .get("created_at")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let html_url = entry
+        .get("html_url")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    Some(PullRequestComment {
+        author,
+        body,
+        created_at,
+        html_url,
+    })
 }
 
 /// Parse a PR listing. Entries the API shape no longer matches (no number)

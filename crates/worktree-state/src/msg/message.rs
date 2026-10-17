@@ -1354,6 +1354,11 @@ pub enum InternalMsg {
         number: u64,
         checks: PullRequestChecks,
     },
+    PullRequestCommentsLoaded {
+        repo_id: RepoId,
+        number: u64,
+        comments: Vec<PullRequestComment>,
+    },
     RecentCommitMessagesLoaded {
         repo_id: RepoId,
         request_rev: u64,

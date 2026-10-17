@@ -114,6 +114,26 @@ fn model_for_pull_request(
             ));
         }
     }
+    // Read-only PR conversation: a capped, truncated preview of the comments
+    // behind the PR. Purely informational — no write path, no links.
+    if let Some(repo) = repo
+        && let Some(comments) = repo.pull_request_comments.get(&number)
+        && !comments.is_empty()
+    {
+        items.push(ContextMenuItem::Separator);
+        items.push(ContextMenuItem::Label(
+            format!("{} comments", comments.len()).into(),
+        ));
+        for comment in comments.iter().take(6) {
+            items.push(ContextMenuItem::Label(comment_preview(comment).into()));
+        }
+        let remaining = comments.len() - comments.iter().take(6).count();
+        if remaining > 0 {
+            items.push(ContextMenuItem::Label(
+                format!("… and {remaining} more").into(),
+            ));
+        }
+    }
     if !url.is_empty() {
         items.push(ContextMenuItem::Entry {
             label: "Open in web browser".into(),
@@ -189,13 +209,32 @@ fn check_run_status_text(run: &worktree_core::domain::CheckRun) -> &'static str 
     }
 }
 
+/// One-line, capped preview of a PR comment for the read-only menu block: the
+/// author, then the first non-empty line of the body truncated to a sane width.
+fn comment_preview(comment: &worktree_core::domain::PullRequestComment) -> String {
+    let first_line = comment
+        .body
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or_default();
+    let first_line = if first_line.chars().count() > 80 {
+        let truncated: String = first_line.chars().take(80).collect();
+        format!("{truncated}…")
+    } else {
+        first_line.to_string()
+    };
+    format!("{}: {}", comment.author, first_line)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::path::PathBuf;
     use std::sync::Arc;
     use worktree_core::domain::{
-        Branch, CommitId, PullRequest, PullRequestChecksState, PullRequestState, RepoSpec,
+        Branch, CommitId, PullRequest, PullRequestChecksState, PullRequestComment,
+        PullRequestState, RepoSpec,
     };
 
     fn github_repo_state() -> RepoState {
@@ -332,5 +371,48 @@ mod tests {
                 .iter()
                 .all(|item| !matches!(item, ContextMenuItem::Label(_)))
         );
+    }
+
+    #[test]
+    fn model_shows_loaded_comments_read_only() {
+        let mut repo = github_repo_state();
+        repo.pull_request_comments.insert(
+            7u64,
+            vec![
+                PullRequestComment {
+                    author: "jai".to_string(),
+                    body: "Looks good to me\nSecond line".to_string(),
+                    created_at: Some("2026-01-01T00:00:00Z".to_string()),
+                    html_url: Some(
+                        "https://github.com/acme/widgets/pull/7#issuecomment-1".to_string(),
+                    ),
+                },
+                PullRequestComment {
+                    author: "sam".to_string(),
+                    body: "  \nPlease rebase".to_string(),
+                    created_at: None,
+                    html_url: None,
+                },
+            ],
+        );
+        let model = model_for_pull_request(Some(&repo), RepoId(1), 7);
+
+        // The comments section is read-only: a count label plus one preview per
+        // comment. They never become actionable entries — the entry count stays
+        // the four GitHub-derived actions (Checkout / Review / Open / Copy).
+        let labels: Vec<String> = model
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                ContextMenuItem::Label(label) => Some(label.as_ref().to_string()),
+                _ => None,
+            })
+            .collect();
+        assert!(labels.iter().any(|label| label == "2 comments"));
+        assert!(labels.iter().any(|label| label == "jai: Looks good to me"));
+        // The second comment's first non-empty line ("Please rebase") survives
+        // the leading blank/whitespace line.
+        assert!(labels.iter().any(|label| label == "sam: Please rebase"));
+        assert_eq!(entry_actions(&model).len(), 4);
     }
 }

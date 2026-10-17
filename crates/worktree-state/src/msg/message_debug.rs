@@ -175,6 +175,16 @@ impl std::fmt::Debug for InternalMsg {
                 .field("number", number)
                 .field("checks", checks)
                 .finish(),
+            InternalMsg::PullRequestCommentsLoaded {
+                repo_id,
+                number,
+                comments,
+            } => f
+                .debug_struct("PullRequestCommentsLoaded")
+                .field("repo_id", repo_id)
+                .field("number", number)
+                .field("comments", comments)
+                .finish(),
             InternalMsg::RecentCommitMessagesLoaded {
                 repo_id,
                 request_rev,
