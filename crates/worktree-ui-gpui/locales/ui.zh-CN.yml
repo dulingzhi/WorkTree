@@ -143,6 +143,7 @@ ui:
     mr_push_target: "目标分支（留空 = 默认分支）"
     mr_push_description: "合并请求描述（可由 AI 起草）"
     clone_ssh_key: "/path/to/ssh/key（可选）"
+    clone_access_token: "ghp_xxx（仅用于本次克隆，绝不存储）"
     repo_settings_user: "继承全局 user.name"
     repo_settings_email: "继承全局 user.email"
   prompt:

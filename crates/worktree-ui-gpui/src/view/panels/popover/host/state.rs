@@ -233,6 +233,10 @@ pub(in crate::view::panels::popover) struct CloneRepoState {
     /// Optional per-clone SSH key path: rides the clone as
     /// `core.sshCommand` and persists onto the new `origin` remote.
     pub(in crate::view::panels::popover) clone_ssh_key_input: Entity<components::TextInput>,
+    /// Optional per-clone personal access token (https clones only). It is
+    /// embedded into the clone URL at clone time and stripped afterwards, so
+    /// WorkTree never persists the secret (08-2).
+    pub(in crate::view::panels::popover) clone_access_token_input: Entity<components::TextInput>,
     pub(in crate::view::panels::popover) clone_repo_focus: DialogFocus,
     pub(in crate::view::panels::popover) clone_repo_browse_focus_handle: FocusHandle,
 }

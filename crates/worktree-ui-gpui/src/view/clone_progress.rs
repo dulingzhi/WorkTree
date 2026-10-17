@@ -109,6 +109,7 @@ mod tests {
             seq: 1,
             output_tail: VecDeque::new(),
             ssh_key: None,
+            access_token: None,
         }
     }
 

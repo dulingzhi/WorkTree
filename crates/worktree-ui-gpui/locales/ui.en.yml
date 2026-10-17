@@ -155,6 +155,7 @@ ui:
     mr_push_target: "Target branch (blank = default branch)"
     mr_push_description: "Merge request description (AI can draft it)"
     clone_ssh_key: "/path/to/ssh/key (optional)"
+    clone_access_token: "ghp_xxx (used only for this clone, never stored)"
     repo_settings_user: "Inherits global user.name"
     repo_settings_email: "Inherits global user.email"
   prompt:

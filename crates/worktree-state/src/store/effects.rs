@@ -2568,7 +2568,8 @@ pub(super) fn schedule_effect(
             dest,
             ssh_key,
             auth,
-        } => clone::schedule_clone_repo(executor, msg_tx, url, dest, ssh_key, auth),
+            access_token,
+        } => clone::schedule_clone_repo(executor, msg_tx, url, dest, ssh_key, access_token, auth),
         Effect::AbortCloneRepo { dest } => clone::schedule_abort_clone_repo(msg_tx, dest),
         Effect::ExportPatch {
             repo_id,

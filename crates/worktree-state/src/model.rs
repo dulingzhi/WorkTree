@@ -661,6 +661,9 @@ pub enum AuthRetryOperation {
         url: String,
         dest: PathBuf,
         ssh_key: Option<String>,
+        /// Carried across an auth retry so a PAT clone that fails for auth
+        /// reasons is re-run with the same token (08-2).
+        access_token: Option<String>,
     },
 }
 
@@ -730,6 +733,9 @@ pub struct CloneOpState {
     /// The per-clone SSH key the operation started with, so an auth retry
     /// re-runs the clone with the same key rather than dropping it.
     pub ssh_key: Option<String>,
+    /// The per-clone PAT the operation started with, so an auth retry
+    /// re-runs the clone with the same token rather than dropping it (08-2).
+    pub access_token: Option<String>,
     pub status: CloneOpStatus,
     pub progress: CloneProgressMeter,
     pub seq: u64,

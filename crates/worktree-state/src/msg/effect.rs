@@ -391,6 +391,9 @@ pub enum Effect {
         dest: PathBuf,
         ssh_key: Option<String>,
         auth: Option<StagedGitAuth>,
+        /// Optional personal access token for https clones, forwarded to the
+        /// clone effect so it can be embedded into the clone URL (08-2).
+        access_token: Option<String>,
     },
     AbortCloneRepo {
         dest: PathBuf,

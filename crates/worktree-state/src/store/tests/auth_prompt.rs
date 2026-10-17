@@ -367,6 +367,7 @@ fn clone_finished_auth_error_sets_clone_retry_prompt() {
             url,
             dest: dest.clone(),
             ssh_key: None,
+            access_token: None,
         }
     );
     assert!(prompt.reason.contains("could not read Username"));
@@ -401,6 +402,7 @@ fn clone_finished_ssh_publickey_error_sets_passphrase_prompt() {
             url,
             dest: dest.clone(),
             ssh_key: None,
+            access_token: None,
         }
     );
     assert!(prompt.reason.contains("Permission denied (publickey)"));
@@ -705,6 +707,7 @@ fn submit_auth_prompt_replays_clone_operation() {
             url: url.clone(),
             dest: dest.clone(),
             ssh_key: None,
+            access_token: None,
         },
     });
 
@@ -755,6 +758,7 @@ fn submit_auth_prompt_clears_repo_scoped_clone_banner_before_retry() {
             url: url.clone(),
             dest: dest.clone(),
             ssh_key: None,
+            access_token: None,
         },
     });
 
@@ -806,6 +810,7 @@ fn submit_auth_prompt_preserves_non_clone_banner_when_replaying_clone() {
             url: url.clone(),
             dest: dest.clone(),
             ssh_key: None,
+            access_token: None,
         },
     });
 

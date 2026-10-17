@@ -620,6 +620,11 @@ pub enum Msg {
         /// `core.sshCommand` and persisted to the new remote's `sshkey`
         /// config, so later fetch/pull/push keep using it (02-4 convention).
         ssh_key: Option<String>,
+        /// Optional personal access token for https clones. It is embedded
+        /// into the clone URL's userinfo (`x-access-token:<token>`) at clone
+        /// time and stripped from the new remote right after a successful
+        /// clone, so WorkTree never persists the secret to disk (08-2).
+        access_token: Option<String>,
     },
     AbortCloneRepo {
         dest: PathBuf,

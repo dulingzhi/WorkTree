@@ -213,7 +213,17 @@ impl PopoverHost {
             .clone_ssh_key_input
             .read_with(cx, |input, _| input.text().trim().to_string());
         let ssh_key = (!ssh_key.is_empty()).then_some(ssh_key);
-        self.store.dispatch(Msg::CloneRepo { url, dest, ssh_key });
+        let access_token = self
+            .clone_repo
+            .clone_access_token_input
+            .read_with(cx, |input, _| input.text().trim().to_string());
+        let access_token = (!access_token.is_empty()).then_some(access_token);
+        self.store.dispatch(Msg::CloneRepo {
+            url,
+            dest,
+            ssh_key,
+            access_token,
+        });
         self.close_popover(cx);
     }
 

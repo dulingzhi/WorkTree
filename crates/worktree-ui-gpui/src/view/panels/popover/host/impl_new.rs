@@ -334,10 +334,22 @@ impl PopoverHost {
             )
         });
 
+        let clone_access_token_input = cx.new(|cx| {
+            components::TextInput::new(
+                components::TextInputOptions {
+                    placeholder: crate::i18n::tr("ui.placeholder.clone_access_token"),
+                    ..Default::default()
+                },
+                window,
+                cx,
+            )
+        });
+
         for input in [
             &clone_repo_url_input,
             &clone_repo_parent_dir_input,
             &clone_ssh_key_input,
+            &clone_access_token_input,
         ] {
             subscriptions.push(Self::prompt_enter_subscription(
                 input,
@@ -352,6 +364,7 @@ impl PopoverHost {
             clone_repo_url_input,
             clone_repo_parent_dir_input,
             clone_ssh_key_input,
+            clone_access_token_input,
             clone_repo_browse_focus_handle,
             clone_repo_focus,
         }

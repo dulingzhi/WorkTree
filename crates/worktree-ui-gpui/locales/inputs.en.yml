@@ -37,6 +37,7 @@ input:
     url_label: "Repository URL / Path"
     destination_label: "Destination parent folder"
     ssh_key_label: "SSH key (optional)"
+    access_token_label: "Personal access token (optional, https only)"
     select_folder: "Clone into folder"
     clone: "Clone"
   repo_settings:

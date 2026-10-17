@@ -1391,6 +1391,7 @@ fn build_network_baseline_state(url: &str, dest: &Path) -> AppState {
             url: url.to_string(),
             dest: dest.to_path_buf(),
             ssh_key: None,
+            access_token: None,
         },
     );
     state

@@ -310,6 +310,7 @@ fn auth_prompt_for_clone(
     url: &str,
     dest: &std::path::Path,
     ssh_key: Option<&str>,
+    access_token: Option<&str>,
     error: &worktree_core::error::Error,
 ) -> Option<AuthPromptState> {
     let kind = util::detect_auth_prompt_kind(error)?;
@@ -320,6 +321,7 @@ fn auth_prompt_for_clone(
             url: url.to_string(),
             dest: dest.to_path_buf(),
             ssh_key: ssh_key.map(str::to_string),
+            access_token: access_token.map(str::to_string),
         },
     })
 }
@@ -350,9 +352,17 @@ fn retry_msg_for_auth_operation(operation: AuthRetryOperation) -> Option<Msg> {
                 push_after_commit,
             }
         }),
-        AuthRetryOperation::Clone { url, dest, ssh_key } => {
-            Some(Msg::CloneRepo { url, dest, ssh_key })
-        }
+        AuthRetryOperation::Clone {
+            url,
+            dest,
+            ssh_key,
+            access_token,
+        } => Some(Msg::CloneRepo {
+            url,
+            dest,
+            ssh_key,
+            access_token,
+        }),
     }
 }
 

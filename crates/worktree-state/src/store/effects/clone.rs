@@ -609,6 +609,7 @@ pub(super) fn schedule_clone_repo(
     url: String,
     dest: PathBuf,
     ssh_key: Option<String>,
+    access_token: Option<String>,
     auth: Option<StagedGitAuth>,
 ) {
     let active_clone = Arc::new(ActiveCloneHandle::new());
@@ -642,9 +643,21 @@ pub(super) fn schedule_clone_repo(
                 quote_clone_ssh_key(key)
             ));
         }
+        // Embed an optional PAT into the clone URL's userinfo for https
+        // clones. The token rides only this `git clone` invocation; the clean
+        // `url` is what gets logged and what git would otherwise persist to
+        // `remote.origin.url`. We strip the token from the new remote right
+        // after a successful clone (below), so WorkTree never writes the
+        // secret to disk (08-2).
+        let authed_url = access_token
+            .as_deref()
+            .filter(|token| !token.trim().is_empty())
+            .and_then(|token| embed_access_token(&url, token));
+        let clone_arg: &str = authed_url.as_deref().unwrap_or(&url);
+        let token_embedded = authed_url.is_some();
         cmd.arg("clone")
             .arg("--progress")
-            .arg(&url)
+            .arg(clone_arg)
             .arg(&dest)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -822,6 +835,20 @@ pub(super) fn schedule_clone_repo(
                     .arg("remote.origin.sshkey")
                     .arg(key);
                 let _ = persist.output();
+            }
+            // Strip the PAT from the new remote's URL so the secret is not
+            // persisted into `.git/config` of the cloned repository (08-2).
+            // Best-effort: a failure here never fails the clone itself.
+            if token_embedded {
+                let mut strip = git_command();
+                strip
+                    .arg("-C")
+                    .arg(&dest)
+                    .arg("remote")
+                    .arg("set-url")
+                    .arg("origin")
+                    .arg(&url);
+                let _ = strip.output();
             }
         }
 
@@ -1089,6 +1116,24 @@ mod tests {
             Some("ssh-passphrase-b")
         );
     }
+
+    #[test]
+    fn embed_access_token_rewrites_https_userinfo_and_skips_other_schemes() {
+        assert_eq!(
+            embed_access_token("https://github.com/org/repo.git", "ghp_abc"),
+            Some("https://x-access-token:ghp_abc@github.com/org/repo.git".to_string())
+        );
+        // A token containing `@` is percent-encoded so it cannot prematurely
+        // end the userinfo and bleed into the host portion.
+        assert_eq!(
+            embed_access_token("https://github.com/org/repo.git", "a@b"),
+            Some("https://x-access-token:a%40b@github.com/org/repo.git".to_string())
+        );
+        // Non-http(s) schemes and schemeless paths must never embed a token.
+        assert_eq!(embed_access_token("ssh://git@github.com/org/repo.git", "tok"), None);
+        assert_eq!(embed_access_token("git@example.com:org/repo.git", "tok"), None);
+        assert_eq!(embed_access_token("/local/path/repo", "tok"), None);
+    }
 }
 
 /// Single-quote a key path for the shell git spawns for `core.sshCommand`,
@@ -1096,4 +1141,42 @@ mod tests {
 /// `quoted_ssh_key_path`, kept local because that helper is backend-private.
 fn quote_clone_ssh_key(path: &str) -> String {
     format!("'{}'", path.replace('\'', "'\\''"))
+}
+
+/// Embed a personal access token into an http(s) clone URL as the
+/// `x-access-token:<token>` userinfo. Returns `None` for schemes that do not
+/// carry userinfo credentials (ssh, git, file, or schemeless paths), in which
+/// case the caller clones with the original URL. The token is percent-encoded
+/// so characters that would otherwise break URL parsing (notably `@`, `:`,
+/// `/`, `?`, `#`) are safe; git/libcurl URL-decodes the userinfo before using
+/// it as the HTTP basic-auth password.
+fn embed_access_token(url: &str, token: &str) -> Option<String> {
+    let scheme_end = explicit_url_scheme_end(url)?;
+    let scheme = &url[..scheme_end];
+    if scheme != "https" && scheme != "http" {
+        return None;
+    }
+    let rest = url.get(scheme_end + 3..)?;
+    let encoded = percent_encode_userinfo(token);
+    Some(format!("{scheme}://x-access-token:{encoded}@{rest}"))
+}
+
+/// Percent-encode the characters that are unsafe inside a URL userinfo
+/// password: `@` (would prematurely end the userinfo), plus `:`, `/`, `?`,
+/// `#`, `%` and whitespace. Everything else — including the sub-delims
+/// `!$&'()*+,;=` and the unreserved set — is passed through unchanged.
+fn percent_encode_userinfo(token: &str) -> String {
+    const SAFE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz\
+        0123456789-._~!$&'()*+,;=";
+    let mut out = String::with_capacity(token.len());
+    for &b in token.as_bytes() {
+        if SAFE.contains(&b) {
+            out.push(b as char);
+        } else {
+            out.push('%');
+            out.push(char::from_digit((b >> 4) as u32, 16).unwrap_or('0'));
+            out.push(char::from_digit((b & 0x0f) as u32, 16).unwrap_or('0'));
+        }
+    }
+    out
 }

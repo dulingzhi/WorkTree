@@ -4100,6 +4100,7 @@ fn apply_state_snapshot_routes_clone_progress_errors_into_global_banner(
         seq: 1,
         output_tail: std::collections::VecDeque::new(),
         ssh_key: None,
+        access_token: None,
     });
     let next = Arc::new(next);
 
@@ -4141,6 +4142,7 @@ fn try_auth_prompt_submit_passphrase_without_secret_shows_error(cx: &mut gpui::T
             url: "git@example.com:repo.git".to_string(),
             dest: PathBuf::from("/tmp/repo"),
             ssh_key: None,
+            access_token: None,
         },
     });
     let state = Arc::new(state);
@@ -4182,6 +4184,7 @@ fn try_auth_prompt_submit_passphrase_dispatches_submit(cx: &mut gpui::TestAppCon
             url: "git@example.com:repo.git".to_string(),
             dest: PathBuf::from("/tmp/repo"),
             ssh_key: None,
+            access_token: None,
         },
     });
     let state = Arc::new(state);
@@ -4224,6 +4227,7 @@ fn try_auth_prompt_submit_username_password_empty_username_shows_error(
             url: "https://example.com/repo.git".to_string(),
             dest: PathBuf::from("/tmp/repo"),
             ssh_key: None,
+            access_token: None,
         },
     });
     let state = Arc::new(state);
@@ -4267,6 +4271,7 @@ fn try_auth_prompt_submit_username_password_dispatches_submit(cx: &mut gpui::Tes
             url: "https://example.com/repo.git".to_string(),
             dest: PathBuf::from("/tmp/repo"),
             ssh_key: None,
+            access_token: None,
         },
     });
     let state = Arc::new(state);

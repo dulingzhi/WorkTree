@@ -345,6 +345,7 @@ fn clone_repo_effect_clones_local_repo_and_emits_finished_and_open_repo() {
             dest: dest.clone(),
             auth: None,
             ssh_key: None,
+            access_token: None,
         },
     );
 
@@ -429,6 +430,7 @@ fn clone_repo_effect_abort_removes_partially_created_destination() {
             dest: dest.clone(),
             auth: None,
             ssh_key: None,
+            access_token: None,
         },
     );
 

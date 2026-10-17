@@ -98,6 +98,20 @@ pub(super) fn panel(this: &mut PopoverHost, cx: &mut gpui::Context<PopoverHost>)
                 .min_w(px(0.0))
                 .child(this.clone_repo.clone_ssh_key_input.clone()),
         )
+        .child(input_label(
+            theme,
+            crate::i18n::tr_str("input.clone_repo.access_token_label"),
+        ))
+        .child(
+            div()
+                .id("clone_access_token_row")
+                .debug_selector(|| "clone_access_token_input".to_string())
+                .px_2()
+                .pb_1()
+                .w_full()
+                .min_w(px(0.0))
+                .child(this.clone_repo.clone_access_token_input.clone()),
+        )
         .child(div().border_t_1().border_color(theme.colors.stroke.default))
         .child(
             div()

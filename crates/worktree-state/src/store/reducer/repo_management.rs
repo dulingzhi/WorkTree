@@ -989,11 +989,13 @@ pub(super) fn clone_repo(
     url: String,
     dest: PathBuf,
     ssh_key: Option<String>,
+    access_token: Option<String>,
 ) -> Vec<Effect> {
     state.clone = Some(CloneOpState {
         url: Arc::<str>::from(url.as_str()),
         dest: Arc::new(dest.clone()),
         ssh_key: ssh_key.clone(),
+        access_token: access_token.clone(),
         status: CloneOpStatus::Running,
         progress: CloneProgressMeter::default(),
         seq: 0,
@@ -1004,6 +1006,7 @@ pub(super) fn clone_repo(
         dest,
         ssh_key,
         auth: None,
+        access_token,
     }]
 }
 
@@ -1123,6 +1126,7 @@ pub(super) fn clone_repo_finished(
             url: Arc::<str>::from(url.as_str()),
             dest: Arc::new(dest),
             ssh_key: state.clone.as_ref().and_then(|op| op.ssh_key.clone()),
+            access_token: state.clone.as_ref().and_then(|op| op.access_token.clone()),
             status: match result {
                 Ok(_) => CloneOpStatus::FinishedOk,
                 Err(e) => CloneOpStatus::FinishedErr(format_failure_summary(
@@ -1388,9 +1392,12 @@ pub(super) fn reduce_repo_management(
                 state, repo_id, enabled,
             )
         }
-        Msg::CloneRepo { url, dest, ssh_key } => {
-            repo_management::clone_repo(state, url, dest, ssh_key)
-        }
+        Msg::CloneRepo {
+            url,
+            dest,
+            ssh_key,
+            access_token,
+        } => repo_management::clone_repo(state, url, dest, ssh_key, access_token),
         Msg::AbortCloneRepo { dest } => repo_management::abort_clone_repo(state, dest),
         Msg::Internal(crate::msg::InternalMsg::CloneRepoProgress { dest, line }) => {
             repo_management::clone_repo_progress(state, dest, line)
@@ -1398,7 +1405,14 @@ pub(super) fn reduce_repo_management(
         Msg::Internal(crate::msg::InternalMsg::CloneRepoFinished { url, dest, result }) => {
             let auth_prompt = result.as_ref().err().and_then(|error| {
                 let ssh_key = state.clone.as_ref().and_then(|op| op.ssh_key.clone());
-                auth_prompt_for_clone(&url, &dest, ssh_key.as_deref(), error)
+                let access_token = state.clone.as_ref().and_then(|op| op.access_token.clone());
+                auth_prompt_for_clone(
+                    &url,
+                    &dest,
+                    ssh_key.as_deref(),
+                    access_token.as_deref(),
+                    error,
+                )
             });
             let effects = repo_management::clone_repo_finished(state, url, dest, result);
             if let Some(prompt) = auth_prompt {
