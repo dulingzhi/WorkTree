@@ -1130,8 +1130,14 @@ mod tests {
             Some("https://x-access-token:a%40b@github.com/org/repo.git".to_string())
         );
         // Non-http(s) schemes and schemeless paths must never embed a token.
-        assert_eq!(embed_access_token("ssh://git@github.com/org/repo.git", "tok"), None);
-        assert_eq!(embed_access_token("git@example.com:org/repo.git", "tok"), None);
+        assert_eq!(
+            embed_access_token("ssh://git@github.com/org/repo.git", "tok"),
+            None
+        );
+        assert_eq!(
+            embed_access_token("git@example.com:org/repo.git", "tok"),
+            None
+        );
         assert_eq!(embed_access_token("/local/path/repo", "tok"), None);
     }
 }
