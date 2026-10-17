@@ -403,7 +403,7 @@ pub(super) fn reduce_loaded_results(msg: Msg, state: &mut AppState) -> ReduceOut
             checks,
         }) => {
             if let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) {
-                repo_state.set_pull_request_checks(number, checks);
+                repo_state.set_pull_request_checks(number, &checks);
             }
             Vec::new()
         }

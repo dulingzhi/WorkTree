@@ -15,7 +15,8 @@ use std::time::Duration;
 
 use serde_json::Value;
 use worktree_core::domain::{
-    CommitId, PullRequest, PullRequestChecksState, PullRequestState, Remote,
+    CheckRun, CheckRunConclusion, CheckRunStatus, CommitId, PullRequest, PullRequestChecks,
+    PullRequestChecksState, PullRequestState, Remote,
 };
 use worktree_core::error::{Error, ErrorKind};
 
@@ -162,32 +163,163 @@ pub(super) async fn fetch_pull_requests(slug: &RepoSlug) -> Result<Vec<PullReque
     Ok(pull_requests)
 }
 
-/// Read the combined status of one pull request head. The caller supplies
-/// the token — one resolution covers the whole checks pass, which is one
-/// `gh auth token` subprocess instead of one per head. `Ok(None)` means the
-/// commit reports no statuses at all — common for repositories whose CI is
-/// all check-runs (GitHub Actions) — and renders as "no chip" rather than a
-/// misleading "pending". The check-runs rollup is a deferred follow-up.
+/// Read the combined status *and* the GitHub Actions check-runs of one pull
+/// request head, and roll them into a single [`PullRequestChecks`] — the legacy
+/// combined status chip plus the per-run detail. The caller supplies the token;
+/// one resolution covers the whole checks pass (one `gh auth token` subprocess
+/// instead of one per head). Check-runs are the deferred follow-up that the
+/// combined-status path could not see: a repo whose CI is entirely GitHub
+/// Actions reports zero combined statuses, so the chip stayed empty.
 #[cfg_attr(test, allow(dead_code))]
 pub(super) async fn fetch_pull_request_checks(
     slug: &RepoSlug,
     sha: &str,
     token: Option<&str>,
-) -> Result<Option<PullRequestChecksState>, Error> {
-    let response = http::get_json(
+) -> Result<PullRequestChecks, Error> {
+    let headers = github_headers(token);
+    let combined = match http::get_json(
         combined_status_api_url(slug, sha),
-        github_headers(token),
+        headers.clone(),
         GITHUB_API_TIMEOUT,
     )
     .await
-    .map_err(|err| {
-        worktree_core::applog_warn!("github api: status request failed for {sha}: {err}");
-        Error::new(ErrorKind::Backend(err.to_string()))
-    })?;
-    parse_combined_status(response.status.into(), &response.body).map_err(|err| {
-        worktree_core::applog_warn!("github api: status parse failed for {sha}: {err}");
-        Error::new(ErrorKind::Backend(err))
+    {
+        Ok(response) => {
+            parse_combined_status(response.status.into(), &response.body).unwrap_or(None)
+        }
+        Err(err) => {
+            worktree_core::applog_warn!("github api: status request failed for {sha}: {err}");
+            None
+        }
+    };
+    let check_runs =
+        match http::get_json(check_runs_api_url(slug, sha), headers, GITHUB_API_TIMEOUT).await {
+            Ok(response) => {
+                parse_check_runs(response.status.into(), &response.body).unwrap_or_default()
+            }
+            Err(err) => {
+                worktree_core::applog_warn!(
+                    "github api: check-runs request failed for {sha}: {err}"
+                );
+                Vec::new()
+            }
+        };
+    let state = rollup_checks(combined, &check_runs);
+    Ok(PullRequestChecks { state, check_runs })
+}
+
+/// REST endpoint for the commit's check runs.
+pub(super) fn check_runs_api_url(slug: &RepoSlug, sha: &str) -> String {
+    format!(
+        "https://api.github.com/repos/{}/{}/commits/{}/check-runs",
+        slug.owner, slug.repo, sha
+    )
+}
+
+/// Parse a `/check-runs` listing into individual runs. Entries without a name are
+/// dropped; a non-2xx response or malformed body errors so the caller can treat
+/// it as "no runs" rather than a misleading empty list.
+pub(super) fn parse_check_runs(status: u16, body: &[u8]) -> Result<Vec<CheckRun>, String> {
+    if !(200..300).contains(&status) {
+        return Err(api_error_detail(status, body));
+    }
+    let json: Value =
+        serde_json::from_slice(body).map_err(|err| format!("invalid response JSON: {err}"))?;
+    let entries = json
+        .get("check_runs")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "expected a check_runs array".to_string())?;
+    Ok(entries.iter().filter_map(check_run_from_json).collect())
+}
+
+fn check_run_from_json(entry: &Value) -> Option<CheckRun> {
+    let name = entry
+        .get("name")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    if name.is_empty() {
+        return None;
+    }
+    let status = match entry.get("status").and_then(Value::as_str) {
+        Some("in_progress") => CheckRunStatus::InProgress,
+        Some("completed") => CheckRunStatus::Completed,
+        _ => CheckRunStatus::Queued,
+    };
+    let conclusion = entry
+        .get("conclusion")
+        .and_then(Value::as_str)
+        .and_then(check_run_conclusion_from_str);
+    let details_url = entry
+        .get("details_url")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    Some(CheckRun {
+        name,
+        status,
+        conclusion,
+        details_url,
     })
+}
+
+fn check_run_conclusion_from_str(value: &str) -> Option<CheckRunConclusion> {
+    match value {
+        "success" => Some(CheckRunConclusion::Success),
+        "failure" => Some(CheckRunConclusion::Failure),
+        "neutral" => Some(CheckRunConclusion::Neutral),
+        "cancelled" => Some(CheckRunConclusion::Cancelled),
+        "skipped" => Some(CheckRunConclusion::Skipped),
+        "timed_out" => Some(CheckRunConclusion::TimedOut),
+        "action_required" => Some(CheckRunConclusion::ActionRequired),
+        "stale" => Some(CheckRunConclusion::Stale),
+        "startup_failure" => Some(CheckRunConclusion::StartupFailure),
+        _ => None,
+    }
+}
+
+/// Fold the combined status and the individual check runs into one verdict.
+/// `None` means "no signal yet" (renders as no chip); a run in flight yields
+/// `Pending`, a failed/errored run `Failure`, success `Success`, and neutral or
+/// skipped runs are ignored so they do not mask a real verdict.
+fn rollup_checks(
+    combined: Option<PullRequestChecksState>,
+    check_runs: &[CheckRun],
+) -> Option<PullRequestChecksState> {
+    let mut state = combined;
+    for run in check_runs {
+        let run_state = match run.status {
+            CheckRunStatus::Queued | CheckRunStatus::InProgress => {
+                Some(PullRequestChecksState::Pending)
+            }
+            CheckRunStatus::Completed => match run.conclusion {
+                Some(CheckRunConclusion::Success) => Some(PullRequestChecksState::Success),
+                Some(CheckRunConclusion::Neutral) | Some(CheckRunConclusion::Skipped) => None,
+                _ => Some(PullRequestChecksState::Failure),
+            },
+        };
+        state = merge_checks(state, run_state);
+    }
+    state
+}
+
+fn merge_checks(
+    a: Option<PullRequestChecksState>,
+    b: Option<PullRequestChecksState>,
+) -> Option<PullRequestChecksState> {
+    match (a, b) {
+        (None, x) | (x, None) => x,
+        (Some(x), Some(y)) => Some(worse_check(x, y)),
+    }
+}
+
+fn worse_check(a: PullRequestChecksState, b: PullRequestChecksState) -> PullRequestChecksState {
+    let rank = |state: PullRequestChecksState| match state {
+        PullRequestChecksState::Pending => 0,
+        PullRequestChecksState::Success => 1,
+        PullRequestChecksState::Failure => 2,
+        PullRequestChecksState::Error => 3,
+    };
+    if rank(a) >= rank(b) { a } else { b }
 }
 
 /// Parse a PR listing. Entries the API shape no longer matches (no number)

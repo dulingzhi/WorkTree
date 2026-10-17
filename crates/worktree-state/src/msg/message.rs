@@ -1352,7 +1352,7 @@ pub enum InternalMsg {
     PullRequestChecksLoaded {
         repo_id: RepoId,
         number: u64,
-        checks: PullRequestChecksState,
+        checks: PullRequestChecks,
     },
     RecentCommitMessagesLoaded {
         repo_id: RepoId,

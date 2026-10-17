@@ -1262,6 +1262,10 @@ pub struct RepoState {
     /// git backend involvement).
     pub pull_requests: Loadable<Arc<Vec<PullRequest>>>,
     pub pull_requests_rev: u64,
+    /// Per-PR check runs keyed by PR number (GitHub Actions check-runs), loaded
+    /// alongside the combined-status rollup. Empty until the checks pass lands;
+    /// only open PRs are polled, so settled PRs stay empty here.
+    pub pull_request_check_runs: FxHashMap<u64, Vec<CheckRun>>,
     /// Imported line coverage for the diff view's overlay. Session-scoped
     /// on purpose: reports are large and regenerable, so they never
     /// persist.
@@ -1457,6 +1461,7 @@ impl RepoState {
             pull_requests: Loadable::NotLoaded,
             coverage: None,
             pull_requests_rev: 0,
+            pull_request_check_runs: FxHashMap::default(),
             remotes_rev: 0,
             remote_branches: Loadable::NotLoaded,
             remote_branches_rev: 0,
@@ -1675,7 +1680,7 @@ impl RepoState {
 
     /// Lands the CI verdict for one PR of the loaded list. No-op when the
     /// list no longer carries that number (a reload replaced it meanwhile).
-    pub(crate) fn set_pull_request_checks(&mut self, number: u64, checks: PullRequestChecksState) {
+    pub(crate) fn set_pull_request_checks(&mut self, number: u64, checks: &PullRequestChecks) {
         let Loadable::Ready(pull_requests) = &mut self.pull_requests else {
             return;
         };
@@ -1683,12 +1688,20 @@ impl RepoState {
         let Some(pull_request) = pull_requests.iter_mut().find(|pr| pr.number == number) else {
             return;
         };
-        if pull_request.checks == Some(checks) {
-            return;
+        let mut changed = false;
+        if pull_request.checks != checks.state {
+            pull_request.checks = checks.state;
+            changed = true;
         }
-        pull_request.checks = Some(checks);
-        self.pull_requests_rev = self.pull_requests_rev.wrapping_add(1);
-        self.bump_branch_sidebar_rev();
+        let stored = self.pull_request_check_runs.entry(number).or_default();
+        if stored.as_slice() != checks.check_runs.as_slice() {
+            *stored = checks.check_runs.clone();
+            changed = true;
+        }
+        if changed {
+            self.pull_requests_rev = self.pull_requests_rev.wrapping_add(1);
+            self.bump_branch_sidebar_rev();
+        }
     }
 
     pub(crate) fn set_remote_branches(&mut self, remote_branches: Loadable<Vec<RemoteBranch>>) {
@@ -3690,12 +3703,30 @@ mod tests {
         ]));
         let before = repo.pull_requests_rev;
 
-        repo.set_pull_request_checks(7, PullRequestChecksState::Success);
+        repo.set_pull_request_checks(
+            7,
+            &PullRequestChecks {
+                state: Some(PullRequestChecksState::Success),
+                check_runs: vec![],
+            },
+        );
         assert_eq!(repo.pull_requests_rev, before + 1);
-        repo.set_pull_request_checks(7, PullRequestChecksState::Success);
+        repo.set_pull_request_checks(
+            7,
+            &PullRequestChecks {
+                state: Some(PullRequestChecksState::Success),
+                check_runs: vec![],
+            },
+        );
         assert_eq!(repo.pull_requests_rev, before + 1);
 
-        repo.set_pull_request_checks(8, PullRequestChecksState::Pending);
+        repo.set_pull_request_checks(
+            8,
+            &PullRequestChecks {
+                state: Some(PullRequestChecksState::Pending),
+                check_runs: vec![],
+            },
+        );
         assert_eq!(repo.pull_requests_rev, before + 2);
         assert_eq!(
             repo.pull_requests,
@@ -3714,7 +3745,13 @@ mod tests {
         // A reload replaced the list while a status call was in flight.
         repo.set_pull_requests(Loadable::Ready(vec![sample_pull_request(9)]));
         let after_reload = repo.pull_requests_rev;
-        repo.set_pull_request_checks(7, PullRequestChecksState::Failure);
+        repo.set_pull_request_checks(
+            7,
+            &PullRequestChecks {
+                state: Some(PullRequestChecksState::Failure),
+                check_runs: vec![],
+            },
+        );
         assert_eq!(repo.pull_requests_rev, after_reload);
     }
 

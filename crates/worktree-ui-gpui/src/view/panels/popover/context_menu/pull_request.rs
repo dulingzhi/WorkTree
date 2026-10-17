@@ -102,6 +102,18 @@ fn model_for_pull_request(
             }),
         });
     }
+    // Read-only check-run summary: the per-run CI detail behind the rollup chip.
+    if let Some(repo) = repo
+        && let Some(runs) = repo.pull_request_check_runs.get(&number)
+        && !runs.is_empty()
+    {
+        items.push(ContextMenuItem::Separator);
+        for run in runs {
+            items.push(ContextMenuItem::Label(
+                format!("{} · {}", run.name, check_run_status_text(run)).into(),
+            ));
+        }
+    }
     if !url.is_empty() {
         items.push(ContextMenuItem::Entry {
             label: "Open in web browser".into(),
@@ -139,20 +151,42 @@ fn resolve_pr_base_commit(
     repo: &RepoState,
     base_ref: &str,
 ) -> Option<worktree_core::domain::CommitId> {
-    if let Loadable::Ready(branches) = &repo.branches {
-        if let Some(branch) = branches.iter().find(|branch| branch.name == base_ref) {
-            return Some(branch.target.clone());
-        }
+    if let Loadable::Ready(branches) = &repo.branches
+        && let Some(branch) = branches.iter().find(|branch| branch.name == base_ref)
+    {
+        return Some(branch.target.clone());
     }
-    if let Loadable::Ready(remote_branches) = &repo.remote_branches {
-        if let Some(branch) = remote_branches
+    if let Loadable::Ready(remote_branches) = &repo.remote_branches
+        && let Some(branch) = remote_branches
             .iter()
             .find(|branch| branch.name == base_ref)
-        {
-            return Some(branch.target.clone());
-        }
+    {
+        return Some(branch.target.clone());
     }
     None
+}
+
+/// Human-readable one-line status for a single check run, used in the read-only
+/// CI detail block of the PR menu. Status drives the live states (queued /
+/// in progress); a completed run is described by its conclusion when present.
+fn check_run_status_text(run: &worktree_core::domain::CheckRun) -> &'static str {
+    use worktree_core::domain::{CheckRunConclusion, CheckRunStatus};
+    match run.status {
+        CheckRunStatus::Queued => "queued",
+        CheckRunStatus::InProgress => "in progress",
+        CheckRunStatus::Completed => match run.conclusion {
+            Some(CheckRunConclusion::Success) => "passed",
+            Some(CheckRunConclusion::Failure) => "failed",
+            Some(CheckRunConclusion::Neutral) => "neutral",
+            Some(CheckRunConclusion::Cancelled) => "cancelled",
+            Some(CheckRunConclusion::Skipped) => "skipped",
+            Some(CheckRunConclusion::TimedOut) => "timed out",
+            Some(CheckRunConclusion::ActionRequired) => "action required",
+            Some(CheckRunConclusion::Stale) => "stale",
+            Some(CheckRunConclusion::StartupFailure) => "startup failure",
+            None => "completed",
+        },
+    }
 }
 
 #[cfg(test)]
@@ -266,7 +300,7 @@ mod tests {
     }
 
     #[test]
-    fn model_drops_every_action_when_the_repo_has_no_github_remote() {
+    fn model_drops_github_actions_but_keeps_local_review_when_no_github_remote() {
         let mut repo = github_repo_state();
         repo.remotes = Loadable::Ready(Arc::new(vec![Remote {
             name: "origin".to_string(),
@@ -274,8 +308,15 @@ mod tests {
         }]));
         let model = model_for_pull_request(Some(&repo), RepoId(1), 7);
 
-        // No slug → no remote, no URL: only the header remains.
-        assert!(entry_actions(&model).is_empty());
+        // No GitHub slug → no remote name, no web URL: Checkout / Open / Copy
+        // (all GitHub-only) are suppressed. "Review changes" opens a local
+        // base..head diff and needs neither, so it stays.
+        let actions = entry_actions(&model);
+        assert_eq!(actions.len(), 1);
+        assert!(matches!(
+            actions[0],
+            ContextMenuAction::ReviewPullRequestChanges { .. }
+        ));
     }
 
     #[test]

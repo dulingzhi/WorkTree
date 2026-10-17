@@ -265,6 +265,45 @@ pub enum PullRequestChecksState {
     Error,
 }
 
+/// Aggregated CI result for a pull-request head: the rollup verdict plus the
+/// individual check runs it was derived from. The rollup folds the legacy
+/// combined status and GitHub Actions check-runs into one
+/// `PullRequestChecksState`; `check_runs` keeps the per-run detail for display.
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
+pub struct PullRequestChecks {
+    pub state: Option<PullRequestChecksState>,
+    pub check_runs: Vec<CheckRun>,
+}
+
+/// A single GitHub Actions / third-party check run attached to a commit.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CheckRun {
+    pub name: String,
+    pub status: CheckRunStatus,
+    pub conclusion: Option<CheckRunConclusion>,
+    pub details_url: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum CheckRunStatus {
+    Queued,
+    InProgress,
+    Completed,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum CheckRunConclusion {
+    Success,
+    Failure,
+    Neutral,
+    Cancelled,
+    Skipped,
+    TimedOut,
+    ActionRequired,
+    Stale,
+    StartupFailure,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FileEntryKind {
     File,

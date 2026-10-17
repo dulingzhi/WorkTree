@@ -3586,7 +3586,10 @@ fn pull_request_list_load_messages_drive_the_loadable() {
         Msg::Internal(crate::msg::InternalMsg::PullRequestChecksLoaded {
             repo_id: RepoId(1),
             number: 7,
-            checks: worktree_core::domain::PullRequestChecksState::Success,
+            checks: worktree_core::domain::PullRequestChecks {
+                state: Some(worktree_core::domain::PullRequestChecksState::Success),
+                check_runs: vec![],
+            },
         }),
     );
     assert!(matches!(

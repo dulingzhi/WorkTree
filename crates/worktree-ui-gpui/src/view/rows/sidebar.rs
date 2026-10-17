@@ -2713,8 +2713,9 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::time::{Duration, Instant, SystemTime};
     use worktree_core::domain::{
-        Branch, Commit, CommitId, DiffTarget, LogPage, PullRequest, PullRequestChecksState, Remote,
-        RemoteBranch, RepoSpec, Upstream, UpstreamDivergence, Worktree,
+        Branch, Commit, CommitId, DiffTarget, LogPage, PullRequest, PullRequestChecks,
+        PullRequestChecksState, Remote, RemoteBranch, RepoSpec, Upstream, UpstreamDivergence,
+        Worktree,
     };
     use worktree_core::services::{GitBackend, GitRepository, Result};
     use worktree_state::msg::{InternalMsg, Msg};
@@ -4333,7 +4334,10 @@ mod tests {
         store_for_assert.dispatch(Msg::Internal(InternalMsg::PullRequestChecksLoaded {
             repo_id,
             number: 7,
-            checks: PullRequestChecksState::Success,
+            checks: PullRequestChecks {
+                state: Some(PullRequestChecksState::Success),
+                check_runs: vec![],
+            },
         }));
         wait_until(cx, "pull requests loaded", |_cx| {
             let snapshot = store_for_assert.snapshot();

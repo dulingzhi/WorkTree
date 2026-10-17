@@ -1667,18 +1667,21 @@ impl SidebarPaneView {
                         if sha.is_empty() {
                             continue;
                         }
-                        if let Ok(Some(checks)) = super::super::github::fetch_pull_request_checks(
+                        if let Ok(checks) = super::super::github::fetch_pull_request_checks(
                             &slug,
                             sha,
                             token.as_deref(),
                         )
                         .await
+                            && (checks.state.is_some() || !checks.check_runs.is_empty())
                         {
-                            store.dispatch(Msg::Internal(InternalMsg::PullRequestChecksLoaded {
-                                repo_id,
-                                number: pull_request.number,
-                                checks,
-                            }));
+                            store.dispatch(Msg::Internal(
+                                InternalMsg::PullRequestChecksLoaded {
+                                    repo_id,
+                                    number: pull_request.number,
+                                    checks,
+                                },
+                            ));
                         }
                     }
                 }
