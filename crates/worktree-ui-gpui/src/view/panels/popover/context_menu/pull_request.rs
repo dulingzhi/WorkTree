@@ -45,13 +45,32 @@ fn model_for_pull_request(
         None => (String::new(), String::new(), String::new()),
     };
 
+    // Resolve the PR's head commit and base ref so the "Review changes" entry can
+    // open the local base..head diff. Both commits must be resolvable locally;
+    // when either is missing the entry is omitted.
+    let (head_sha, base_ref, base_commit) = match repo {
+        Some(repo) => {
+            let pr = match &repo.pull_requests {
+                Loadable::Ready(pull_requests) => pull_requests
+                    .iter()
+                    .find(|pull_request| pull_request.number == number),
+                _ => None,
+            };
+            let head_sha = pr.map(|pr| pr.head_sha.clone());
+            let base_ref = pr.map(|pr| pr.base_ref.clone()).unwrap_or_default();
+            let base_commit = resolve_pr_base_commit(repo, &base_ref);
+            (head_sha, base_ref, base_commit)
+        }
+        None => (None, String::new(), None),
+    };
+
     let mut items = vec![ContextMenuItem::Header(
         crate::i18n::t!("cm.pr.menu_title", number = number)
             .to_string()
             .into(),
     )];
     if !title.is_empty() {
-        items.push(ContextMenuItem::Label(title.into()));
+        items.push(ContextMenuItem::Label(title.clone().into()));
     }
     items.push(ContextMenuItem::Separator);
 
@@ -65,6 +84,21 @@ fn model_for_pull_request(
                 repo_id,
                 remote,
                 number,
+            }),
+        });
+    }
+    if let (Some(base), Some(head)) = (&base_commit, &head_sha) {
+        items.push(ContextMenuItem::Entry {
+            label: crate::i18n::t!("cm.pr.review_changes").to_string().into(),
+            icon: Some("icons/open_external.svg".into()),
+            shortcut: None,
+            disabled: false,
+            action: Box::new(ContextMenuAction::ReviewPullRequestChanges {
+                repo_id,
+                base: base.clone(),
+                head: head.clone(),
+                from_label: base_ref.clone(),
+                to_label: title.clone(),
             }),
         });
     }
@@ -97,13 +131,37 @@ fn origin_remote_name(remotes: &[Remote]) -> Option<String> {
         .map(|remote| remote.name.clone())
 }
 
+/// Resolve a PR base ref to a commit id for the local base..head diff, mirroring
+/// how the branch menu resolves a branch tip: prefer the local branch, then the
+/// remote-tracking branch whose short name matches. Returns `None` when the ref
+/// is not loaded or absent locally (e.g. a fork base never fetched).
+fn resolve_pr_base_commit(
+    repo: &RepoState,
+    base_ref: &str,
+) -> Option<worktree_core::domain::CommitId> {
+    if let Loadable::Ready(branches) = &repo.branches {
+        if let Some(branch) = branches.iter().find(|branch| branch.name == base_ref) {
+            return Some(branch.target.clone());
+        }
+    }
+    if let Loadable::Ready(remote_branches) = &repo.remote_branches {
+        if let Some(branch) = remote_branches
+            .iter()
+            .find(|branch| branch.name == base_ref)
+        {
+            return Some(branch.target.clone());
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::path::PathBuf;
     use std::sync::Arc;
     use worktree_core::domain::{
-        CommitId, PullRequest, PullRequestChecksState, PullRequestState, RepoSpec,
+        Branch, CommitId, PullRequest, PullRequestChecksState, PullRequestState, RepoSpec,
     };
 
     fn github_repo_state() -> RepoState {
@@ -127,6 +185,12 @@ mod tests {
             state: PullRequestState::Open,
             draft: false,
             checks: Some(PullRequestChecksState::Success),
+        }]));
+        repo.branches = Loadable::Ready(Arc::new(vec![Branch {
+            name: "main".to_string(),
+            target: CommitId("bb2222222222222222222222222222222222222222".into()),
+            upstream: None,
+            divergence: None,
         }]));
         repo
     }
@@ -159,6 +223,7 @@ mod tests {
             labels,
             vec![
                 "Checkout".to_string(),
+                crate::i18n::t!("cm.pr.review_changes").to_string(),
                 "Open in web browser".to_string(),
                 "Copy link address".to_string(),
             ]
@@ -176,10 +241,25 @@ mod tests {
         ));
         assert!(matches!(
             actions[1],
-            ContextMenuAction::OpenWebUrl { url } if url == "https://github.com/acme/widgets/pull/7"
+            ContextMenuAction::ReviewPullRequestChanges {
+                repo_id,
+                base,
+                head,
+                from_label,
+                to_label,
+            }
+                if *repo_id == RepoId(1)
+                    && *base == CommitId("bb2222222222222222222222222222222222222222".into())
+                    && *head == CommitId("aa1111111111111111111111111111111111111111".into())
+                    && from_label == "main"
+                    && to_label == "Fix merge dialog focus"
         ));
         assert!(matches!(
             actions[2],
+            ContextMenuAction::OpenWebUrl { url } if url == "https://github.com/acme/widgets/pull/7"
+        ));
+        assert!(matches!(
+            actions[3],
             ContextMenuAction::CopyLinkAddress { url }
                 if url == "https://github.com/acme/widgets/pull/7"
         ));

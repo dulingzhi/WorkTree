@@ -812,6 +812,21 @@ impl PopoverHost {
                     number,
                 });
             }
+            ContextMenuAction::ReviewPullRequestChanges {
+                repo_id,
+                base,
+                head,
+                from_label,
+                to_label,
+            } => {
+                self.store.dispatch(Msg::CompareCommitRange {
+                    repo_id,
+                    from: base,
+                    to: head,
+                    from_label,
+                    to_label,
+                });
+            }
             ContextMenuAction::DeleteBranch { repo_id, name } => {
                 let _ = self.root_view.update(cx, |root, _| {
                     root.pending_force_delete_branch_centered = false;

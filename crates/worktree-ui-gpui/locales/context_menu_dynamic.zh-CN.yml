@@ -9,6 +9,7 @@ cm:
   open_in: "在 %{name} 中打开"
   pr:
     menu_title: "拉取请求 #%{number}"
+    review_changes: "查看改动"
   tag:
     tags_on: "%{short} 上的标签"
     create_on: "在 %{short} 上创建标签 %{name}"

@@ -267,6 +267,16 @@ pub(in crate::view) enum ContextMenuAction {
         remote: String,
         number: u64,
     },
+    /// Open the local base..head diff for a pull request (GitHub "Files changed"),
+    /// reusing the in-app two-point comparison. `base`/`head` are the resolved
+    /// commit ids; `from_label`/`to_label` are display names for the comparison.
+    ReviewPullRequestChanges {
+        repo_id: RepoId,
+        base: CommitId,
+        head: CommitId,
+        from_label: String,
+        to_label: String,
+    },
     /// Open the forge's prefilled create-request page (GitHub compare /
     /// GitLab merge-request form) for the active repo's current branch.
     CreateWebRequestPage,
