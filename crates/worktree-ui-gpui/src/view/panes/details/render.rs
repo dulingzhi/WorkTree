@@ -388,6 +388,10 @@ impl DetailsPaneView {
                 push_after_commit: self.commit_push_after_enabled,
             });
         } else {
+            // Iteration 08-1: `BeforeCommit` hooks fire from `apply_state_snapshot`
+            // when `commit_in_flight` transitions to non-zero (inside
+            // `WorkTreeView`'s own update), so we must NOT re-enter `WorkTreeView`
+            // from here.
             self.store.dispatch(Msg::Commit {
                 repo_id,
                 message: message.trim().to_string(),
@@ -579,7 +583,7 @@ impl DetailsPaneView {
         };
         let find = |id: &CommitId| page.commits.iter().find(|c| &c.id == id).cloned();
         let mut commits = Vec::new();
-        if let Some(to) = range.to.as_ref().and_then(&find) {
+        if let Some(to) = range.to.as_ref().and_then(find) {
             commits.push(to);
         }
         if let Some(from) = find(&range.from) {

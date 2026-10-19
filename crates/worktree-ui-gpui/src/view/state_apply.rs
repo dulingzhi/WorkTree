@@ -39,6 +39,19 @@ impl WorkTreeView {
         }
 
         for next_repo in &next.repos {
+            // Iteration 08-1: fire `RepositoryOpened` hooks exactly once per repo
+            // when it becomes open/ready — the reducer's load-completion point.
+            // `FxHashSet::insert` returns true only on the first sighting.
+            if matches!(next_repo.open, Loadable::Ready(()))
+                && self.extension_opened_repos.insert(next_repo.id)
+            {
+                self.run_extension_hooks(
+                    ExtensionHookEvent::RepositoryOpened,
+                    Some(next_repo.spec.workdir.clone()),
+                    cx,
+                );
+            }
+
             let (old_diag_len, old_cmd_len) = self
                 .state
                 .repos
@@ -153,6 +166,53 @@ impl WorkTreeView {
             if self.recent_repos_menu_fingerprint != recent_repos {
                 self.recent_repos_menu_fingerprint = recent_repos;
                 crate::app::refresh_macos_app_menus(cx);
+            }
+        }
+
+        // Iteration 08-1: fire `BeforeCommit` hooks when a repo's in-flight commit
+        // count goes from zero to non-zero — i.e. a commit was just initiated,
+        // before it completes. This is symmetric to the `AfterCommit` detection
+        // below and, unlike firing from the popover commit handler, runs inside
+        // this `WorkTreeView` update so it cannot re-enter `WorkTreeView`'s own
+        // update (which would panic the gpui entity map).
+        for next_repo in &next.repos {
+            let started = self
+                .state
+                .repos
+                .iter()
+                .find(|r| r.id == next_repo.id)
+                .is_some_and(|old_repo| {
+                    old_repo.commit_in_flight == 0 && next_repo.commit_in_flight > 0
+                });
+            if started {
+                self.run_extension_hooks(
+                    ExtensionHookEvent::BeforeCommit,
+                    Some(next_repo.spec.workdir.clone()),
+                    cx,
+                );
+            }
+        }
+
+        // Iteration 08-1: fire `AfterCommit` hooks when a repo's in-flight commit
+        // count settles back to zero with no error — i.e. the commit succeeded.
+        // A failed commit leaves `last_error` set and must not trigger this.
+        for next_repo in &next.repos {
+            let fired = self
+                .state
+                .repos
+                .iter()
+                .find(|r| r.id == next_repo.id)
+                .is_some_and(|old_repo| {
+                    old_repo.commit_in_flight > 0
+                        && next_repo.commit_in_flight == 0
+                        && next_repo.last_error.is_none()
+                });
+            if fired {
+                self.run_extension_hooks(
+                    ExtensionHookEvent::AfterCommit,
+                    Some(next_repo.spec.workdir.clone()),
+                    cx,
+                );
             }
         }
 

@@ -12,6 +12,7 @@ use palette::IntoColor;
 
 use super::shortcut_labels::Shortcut;
 use super::{WorkTreeView, components, restrict_scroll_to_vertical_axis};
+use worktree_core::extensions::Extensions;
 
 pub(crate) struct CommandEntry {
     pub(crate) id: &'static str,
@@ -796,65 +797,120 @@ pub(crate) const REGISTERED_COMMAND_HANDLERS: &[&str] = &[
 ];
 
 /// A palette entry that survived filtering, plus the label byte positions the
-/// query matched (for highlighting, relative to the translated label). Derefs
-/// to the entry so callers keep using `cmd.id` directly; `cmd.label` /
-/// `cmd.category` are translation keys, resolved with `tr_str` at display
-/// time.
+/// query matched (for highlighting, relative to the displayed label).
+///
+/// Builtin commands and extension commands share one uniform shape: `id` is the
+/// dispatch id (extension ids carry an `ext:` prefix so they never collide with
+/// builtin ids), `label` is the already-resolved display string (builtins
+/// localized via `tr_str`, extensions the raw user label), `category` is the
+/// group-header translation key, and `shortcut` is the binding (extensions have
+/// none). Display and dispatch sites read the fields directly; no `Deref` is
+/// needed because the struct owns everything the row renderer touches.
 #[derive(Clone)]
 pub(crate) struct CommandMatch {
-    pub(crate) entry: &'static CommandEntry,
+    pub(crate) id: SharedString,
+    pub(crate) label: SharedString,
+    pub(crate) category: &'static str,
+    pub(crate) shortcut: Shortcut,
     pub(crate) positions: Vec<usize>,
-}
-
-impl std::ops::Deref for CommandMatch {
-    type Target = CommandEntry;
-
-    fn deref(&self) -> &CommandEntry {
-        self.entry
-    }
 }
 
 /// Keeps keyword matches below every label match in the ranking, whatever the
 /// two raw scores are.
 const KEYWORD_MATCH_PENALTY: i32 = 100_000;
 
-pub(crate) fn filtered_commands(has_active_repo: bool, query: &str) -> Vec<CommandMatch> {
+/// Flattened search candidate. Kept separate from [`CommandMatch`] so the
+/// fuzzy matcher can reach the keyword fallback (which the rendered row does
+/// not need) without widening the public match shape.
+#[derive(Clone)]
+struct Candidate {
+    id: SharedString,
+    label: SharedString,
+    category: &'static str,
+    shortcut: Shortcut,
+    keywords: SharedString,
+}
+
+fn candidate_to_match(c: Candidate, positions: Vec<usize>) -> CommandMatch {
+    CommandMatch {
+        id: c.id,
+        label: c.label,
+        category: c.category,
+        shortcut: c.shortcut,
+        positions,
+    }
+}
+
+pub(crate) fn filtered_commands(
+    extensions: &Extensions,
+    has_active_repo: bool,
+    query: &str,
+) -> Vec<CommandMatch> {
     // A switched-off feature is not offered at all; the dispatch in `view` still
     // guards it, because a command can arrive from a source other than this list.
     let file_review_enabled = crate::ai_commit::current().file_review_enabled;
-    let available = COMMANDS
+
+    // Flatten builtin and extension commands into one uniform candidate list.
+    // `label` is the resolved display string (builtins localized, extensions raw)
+    // so matching and rendering need no per-source branching afterwards.
+    let mut candidates: Vec<Candidate> = Vec::new();
+    for entry in COMMANDS
         .iter()
         .filter(|cmd| !cmd.requires_repo || has_active_repo)
-        .filter(|cmd| file_review_enabled || cmd.id != "review-file");
+        .filter(|cmd| file_review_enabled || cmd.id != "review-file")
+    {
+        candidates.push(Candidate {
+            id: entry.id.into(),
+            label: SharedString::from(tr_str(entry.label)),
+            category: entry.category,
+            shortcut: entry.shortcut,
+            keywords: entry.keywords.into(),
+        });
+    }
+    for cmd in extensions.commands.iter() {
+        // Skip unusable rows: id/label/command are all required. The loader
+        // already tolerates a bad file, but a partially-filled table row should
+        // not pollute the palette.
+        if cmd.id.is_empty() || cmd.label.is_empty() || cmd.command.is_empty() {
+            continue;
+        }
+        if !cmd.requires_repo || has_active_repo {
+            candidates.push(Candidate {
+                id: SharedString::from(format!("ext:{}", cmd.id)),
+                label: SharedString::from(cmd.label.as_str()),
+                category: "palette.cat.extension",
+                shortcut: Shortcut::None,
+                // Searchable by id so users can find an extension the way they
+                // named it.
+                keywords: SharedString::from(cmd.id.as_str()),
+            });
+        }
+    }
 
     if query.is_empty() {
-        return available
-            .map(|entry| CommandMatch {
-                entry,
-                positions: Vec::new(),
-            })
+        return candidates
+            .into_iter()
+            .map(|c| candidate_to_match(c, Vec::new()))
             .collect();
     }
 
-    let mut out: Vec<(i32, usize, CommandMatch)> = available
+    let mut out: Vec<(i32, usize, CommandMatch)> = candidates
+        .into_iter()
         .enumerate()
-        .filter_map(|(order, entry)| {
-            // Match against the translated label so the query can be typed in
-            // the active language ("提交" finds the commit command under zh-CN)
-            // while the English `keywords` below stay reachable as a fallback.
-            fuzzy_subsequence_match(tr_str(entry.label), query)
-                .map(|(score, positions)| (score, order, CommandMatch { entry, positions }))
+        .filter_map(|(order, c)| {
+            // Match against the resolved label so the query can be typed in the
+            // active language ("提交" finds the commit command under zh-CN); the
+            // `keywords` below stay reachable as a fallback.
+            fuzzy_subsequence_match(&c.label, query)
+                .map(|(score, positions)| (score, order, candidate_to_match(c.clone(), positions)))
                 .or_else(|| {
                     // Keyword hits carry no highlight positions and sort behind
                     // every label hit.
-                    fuzzy_subsequence_match(entry.keywords, query).map(|(score, _)| {
+                    fuzzy_subsequence_match(&c.keywords, query).map(|(score, _)| {
                         (
                             score + KEYWORD_MATCH_PENALTY,
                             order,
-                            CommandMatch {
-                                entry,
-                                positions: Vec::new(),
-                            },
+                            candidate_to_match(c, Vec::new()),
                         )
                     })
                 })
@@ -863,7 +919,7 @@ pub(crate) fn filtered_commands(has_active_repo: bool, query: &str) -> Vec<Comma
 
     out.sort_by(|a, b| {
         a.0.cmp(&b.0)
-            .then_with(|| tr_str(a.2.label).len().cmp(&tr_str(b.2.label).len()))
+            .then_with(|| a.2.label.len().cmp(&b.2.label.len()))
             .then_with(|| a.1.cmp(&b.1))
     });
     out.into_iter().map(|(_, _, m)| m).collect()
@@ -907,6 +963,11 @@ pub(crate) struct CommandPaletteView {
     root_view: WeakEntity<WorkTreeView>,
     theme: AppTheme,
     has_active_repo: bool,
+    /// Snapshot of the loaded extension config, pushed from `WorkTreeView`
+    /// when the palette opens. Holding it locally (rather than reading
+    /// `root_view` during a rebuild) avoids a re-entrant `WorkTreeView`
+    /// update while the palette is itself being updated. Iteration 08-1.
+    extensions: Extensions,
     open: bool,
     query: SharedString,
     matches: Vec<CommandMatch>,
@@ -949,6 +1010,7 @@ impl CommandPaletteView {
             root_view,
             theme,
             has_active_repo,
+            extensions: Extensions::default(),
             open: false,
             query: SharedString::default(),
             matches: Vec::new(),
@@ -976,6 +1038,19 @@ impl CommandPaletteView {
             return;
         }
         self.has_active_repo = has_active_repo;
+        if self.open {
+            self.rebuild_cached_results();
+            self.clamp_selection();
+            cx.notify();
+        }
+    }
+
+    /// Replace the cached extension config with `extensions`. Called by
+    /// `WorkTreeView` right before the palette opens so `rebuild_cached_results`
+    /// can surface extension commands without re-entering `WorkTreeView`'s
+    /// update. Iteration 08-1.
+    pub(crate) fn set_extensions(&mut self, extensions: Extensions, cx: &mut gpui::Context<Self>) {
+        self.extensions = extensions;
         if self.open {
             self.rebuild_cached_results();
             self.clamp_selection();
@@ -1031,7 +1106,11 @@ impl CommandPaletteView {
     }
 
     fn rebuild_cached_results(&mut self) {
-        self.matches = filtered_commands(self.has_active_repo, self.query.as_ref());
+        // Use the locally cached extension snapshot (set via `set_extensions`
+        // when the palette opens) so extension commands appear alongside the
+        // builtins without re-entering `WorkTreeView`'s update. Iteration 08-1.
+        let extensions = self.extensions.clone();
+        self.matches = filtered_commands(&extensions, self.has_active_repo, self.query.as_ref());
         self.rows.clear();
         self.command_row_indices.clear();
 
@@ -1149,7 +1228,7 @@ impl CommandPaletteView {
                 .selected_index
                 .and_then(|index| self.matches.get(index))
                 .or_else(|| self.matches.first())
-                .map(|command| SharedString::from(command.id));
+                .map(|command| command.id.clone());
             if let Some(command) = command {
                 self.close_and_notify_root(Some(command), window, cx);
             }
@@ -1237,7 +1316,7 @@ impl CommandPaletteView {
                     ),
                     PaletteRow::Command(command_index) => {
                         let command = self.matches.get(command_index)?;
-                        let command_id: SharedString = command.id.into();
+                        let command_id: SharedString = command.id.clone();
                         let command_id_for_click = command_id.clone();
                         let command_row = div()
                             // Without an id gpui never repaints on mouse-move,
@@ -1261,11 +1340,7 @@ impl CommandPaletteView {
                             .overflow_hidden()
                             .flex_1()
                             .min_w(px(0.0))
-                            .child(self.render_label(
-                                tr_str(command.label),
-                                &command.positions,
-                                cx,
-                            ));
+                            .child(self.render_label(&command.label, &command.positions, cx));
 
                         let mut content = command_row.child(label);
                         if let Some(shortcut_text) = command.shortcut.label() {
@@ -1572,11 +1647,11 @@ mod tests {
 
     #[test]
     fn keyword_matches_find_commands_their_label_no_longer_spells_out() {
-        let matches = filtered_commands(true, "recent");
+        let matches = filtered_commands(&Extensions::default(), true, "recent");
 
-        let ids = matches.iter().map(|m| m.id).collect::<Vec<_>>();
+        let ids = matches.iter().map(|m| m.id.clone()).collect::<Vec<_>>();
         assert!(
-            ids.contains(&"switch-repository"),
+            ids.contains(&"switch-repository".into()),
             "expected the repository switcher to stay reachable by its old wording, got {ids:?}"
         );
         let switcher = matches
@@ -1591,7 +1666,7 @@ mod tests {
 
     #[test]
     fn label_matches_outrank_keyword_matches() {
-        let matches = filtered_commands(true, "re");
+        let matches = filtered_commands(&Extensions::default(), true, "re");
         let first = matches.first().expect("at least one match");
 
         assert!(
@@ -1620,12 +1695,12 @@ mod tests {
 
     #[test]
     fn filtered_commands_ranks_prefix_hits_first_and_keeps_positions() {
-        let matches = filtered_commands(true, "push");
+        let matches = filtered_commands(&Extensions::default(), true, "push");
         let first = matches.first().expect("at least one match");
-        assert_eq!(tr_str(first.label), "Push");
+        assert_eq!(first.label.as_ref(), "Push");
         assert_eq!(first.positions, vec![0, 1, 2, 3]);
         assert!(
-            matches.iter().any(|m| tr_str(m.label) == "Force Push"),
+            matches.iter().any(|m| m.label.as_ref() == "Force Push"),
             "substring hits elsewhere in the label must still be included"
         );
     }
@@ -1637,8 +1712,8 @@ mod tests {
         // anything — another test may have switched it off.
         let _guard =
             crate::ai_commit::SettingsGuard::install(crate::ai_commit::AiCommitSettings::default());
-        let with_repo = filtered_commands(true, "");
-        let without_repo = filtered_commands(false, "");
+        let with_repo = filtered_commands(&Extensions::default(), true, "");
+        let without_repo = filtered_commands(&Extensions::default(), false, "");
         assert_eq!(with_repo.len(), COMMANDS.len());
         assert!(without_repo.len() < with_repo.len());
         assert!(with_repo.iter().all(|m| m.positions.is_empty()));
@@ -1647,7 +1722,7 @@ mod tests {
     #[test]
     fn filtered_commands_drops_review_file_when_the_feature_is_switched_off() {
         let _guard = crate::ai_commit::SettingsGuard::configured_without_file_review();
-        let matches = filtered_commands(true, "");
+        let matches = filtered_commands(&Extensions::default(), true, "");
         assert!(
             !matches.iter().any(|m| m.id == "review-file"),
             "a switched-off command is not offered"
@@ -1660,7 +1735,7 @@ mod tests {
 
     #[test]
     fn visual_list_index_accounts_for_grouped_and_search_headers() {
-        let grouped = filtered_commands(true, "");
+        let grouped = filtered_commands(&Extensions::default(), true, "");
         let branch_index = grouped
             .iter()
             .position(|command| command.id == "create-branch")
@@ -1671,7 +1746,7 @@ mod tests {
             "Commit, Working Copy, and Branch headers precede Create Branch"
         );
 
-        let results = filtered_commands(true, "branch");
+        let results = filtered_commands(&Extensions::default(), true, "branch");
         assert_eq!(
             command_list_item_index(&results, 0, true),
             1,
@@ -1682,43 +1757,150 @@ mod tests {
     #[test]
     fn locate_file_in_explorer_is_a_repository_command() {
         assert_eq!(
-            filtered_commands(true, "open in file explorer")
+            filtered_commands(&Extensions::default(), true, "open in file explorer")
                 .first()
-                .map(|command| command.id),
-            Some("locate-file-in-explorer")
+                .map(|command| command.id.clone()),
+            Some("locate-file-in-explorer".into())
         );
         // Keep the previous label and common synonyms searchable.
         assert!(
-            filtered_commands(true, "show")
+            filtered_commands(&Extensions::default(), true, "show")
                 .iter()
                 .any(|command| command.id == "locate-file-in-explorer")
         );
         assert!(
-            filtered_commands(false, "open in file explorer").is_empty(),
+            filtered_commands(&Extensions::default(), false, "open in file explorer").is_empty(),
             "there is no file to open without a repository"
         );
     }
 
     #[test]
     fn rename_branch_is_available_for_repository_commands() {
-        let matches = filtered_commands(true, "rename branch");
+        let matches = filtered_commands(&Extensions::default(), true, "rename branch");
         assert_eq!(
-            matches.first().map(|command| command.id),
-            Some("rename-branch")
+            matches.first().map(|command| command.id.clone()),
+            Some("rename-branch".into())
         );
         assert!(
-            filtered_commands(false, "rename branch").is_empty(),
+            filtered_commands(&Extensions::default(), false, "rename branch").is_empty(),
             "Rename Branch requires an active repository"
         );
     }
 
     #[test]
     fn rebase_onto_is_available_for_repository_commands() {
-        let matches = filtered_commands(true, "rebase onto");
-        assert_eq!(matches.first().map(|command| command.id), Some("rebase"));
+        let matches = filtered_commands(&Extensions::default(), true, "rebase onto");
+        assert_eq!(
+            matches.first().map(|command| command.id.clone()),
+            Some("rebase".into())
+        );
         assert!(
-            filtered_commands(false, "rebase onto").is_empty(),
+            filtered_commands(&Extensions::default(), false, "rebase onto").is_empty(),
             "Rebase Onto requires an active repository"
+        );
+    }
+
+    #[test]
+    fn extension_commands_merge_into_the_palette_with_ext_prefix() {
+        let mut ext = Extensions::default();
+        ext.commands
+            .push(worktree_core::extensions::ExtensionCommand {
+                id: "fmt".into(),
+                label: "Run cargo fmt".into(),
+                command: "cargo fmt".into(),
+                requires_repo: true,
+                confirm: false,
+            });
+        ext.commands
+            .push(worktree_core::extensions::ExtensionCommand {
+                id: "global".into(),
+                label: "Global sync".into(),
+                command: "rsync -a ~/x ~/y".into(),
+                requires_repo: false,
+                confirm: true,
+            });
+
+        let with_repo = filtered_commands(&ext, true, "");
+        assert!(
+            with_repo.iter().any(|m| m.id == "ext:fmt"),
+            "repo-only extension shows with an active repo"
+        );
+        assert!(
+            with_repo.iter().any(|m| m.id == "ext:global"),
+            "global extension shows with an active repo"
+        );
+
+        let without_repo = filtered_commands(&ext, false, "");
+        assert!(
+            !without_repo.iter().any(|m| m.id == "ext:fmt"),
+            "repo-only extension is hidden without an active repo"
+        );
+        assert!(
+            without_repo.iter().any(|m| m.id == "ext:global"),
+            "global extension shows without an active repo"
+        );
+
+        let fmt = with_repo.iter().find(|m| m.id == "ext:fmt").unwrap();
+        assert_eq!(fmt.category, "palette.cat.extension");
+        assert_eq!(fmt.shortcut, Shortcut::None);
+        // The displayed label is the raw user text, not a translation key.
+        assert_eq!(fmt.label.as_ref(), "Run cargo fmt");
+    }
+
+    #[test]
+    fn extension_commands_match_on_raw_label_and_id() {
+        let mut ext = Extensions::default();
+        ext.commands
+            .push(worktree_core::extensions::ExtensionCommand {
+                id: "deploy".into(),
+                label: "Ship to staging".into(),
+                command: "scripts/deploy.sh".into(),
+                requires_repo: true,
+                confirm: false,
+            });
+        assert!(
+            filtered_commands(&ext, true, "staging")
+                .iter()
+                .any(|m| m.id == "ext:deploy"),
+            "query matches the raw extension label"
+        );
+        assert!(
+            filtered_commands(&ext, true, "deploy")
+                .iter()
+                .any(|m| m.id == "ext:deploy"),
+            "query matches the extension id as a fallback keyword"
+        );
+    }
+
+    #[test]
+    fn extension_rows_with_missing_fields_are_skipped() {
+        let mut ext = Extensions::default();
+        // id present but label/command empty -> unusable, must be dropped.
+        ext.commands
+            .push(worktree_core::extensions::ExtensionCommand {
+                id: "broken".into(),
+                label: String::new(),
+                command: String::new(),
+                requires_repo: true,
+                confirm: false,
+            });
+        // A complete row still appears.
+        ext.commands
+            .push(worktree_core::extensions::ExtensionCommand {
+                id: "ok".into(),
+                label: "Okay command".into(),
+                command: "true".into(),
+                requires_repo: true,
+                confirm: false,
+            });
+        let matches = filtered_commands(&ext, true, "");
+        assert!(
+            !matches.iter().any(|m| m.id == "ext:broken"),
+            "a row missing label/command must not pollute the palette"
+        );
+        assert!(
+            matches.iter().any(|m| m.id == "ext:ok"),
+            "a complete row is preserved"
         );
     }
 }

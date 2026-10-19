@@ -31,6 +31,7 @@ use worktree_core::domain::{
     Branch, Commit, CommitId, DiffArea, DiffTarget, FileStatus, FileStatusKind, Tag,
     UpstreamDivergence,
 };
+use worktree_core::extensions::ExtensionHookEvent;
 use worktree_core::file_diff::FileDiffRow;
 use worktree_core::process::current_git_runtime;
 use worktree_core::services::{PullMode, RemoteUrlKind, ResetMode};
@@ -806,6 +807,10 @@ impl WorkTreeView {
         let fallback_focus = self.main_pane.read(cx).diff_panel_focus_handle.clone();
         let has_active_repo = self.active_repo_id().is_some();
         self.command_palette.update(cx, |palette, cx| {
+            // Iteration 08-1: hand the palette its own copy of the extension
+            // config so it can show extension commands without re-entering this
+            // `WorkTreeView` update.
+            palette.set_extensions(self.extensions.clone(), cx);
             palette.open(restore_focus, fallback_focus, has_active_repo, window, cx);
         });
     }
@@ -1827,8 +1832,182 @@ impl WorkTreeView {
                     self.open_popover_centered(PopoverKind::KeyboardShortcuts, window, cx);
                 }
             }
+            id if id.starts_with("ext:") => self.run_extension_command(id, window, cx),
             _ => {}
         }
+    }
+
+    /// Execute a user-declared extension command. The palette only ever sends
+    /// ids carrying an `ext:` prefix, which this method strips to look the
+    /// command up in [`WorkTreeView::extensions`].
+    ///
+    /// The script runs through the platform shell (`cmd /C` on Windows, `sh -c`
+    /// elsewhere) in the active repository's working directory (or the app data
+    /// dir when `requires_repo` is false), so cross-platform `cargo fmt`,
+    /// `git push`, etc. behave as the user typed them. The run is offloaded to
+    /// `smol::unblock` so the UI thread never blocks, and the captured
+    /// stdout/stderr/exit status is surfaced as a toast.
+    ///
+    /// Iteration 08-1, v1: `confirm` is parsed and stored but not yet enforced
+    /// with a pre-run prompt — commands run directly. This matches the v1
+    /// acceptance (palette merge + hooks); a confirmation modal is a follow-up.
+    fn run_extension_command(
+        &mut self,
+        ext_id: &str,
+        _window: Option<&mut Window>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let user_id = match ext_id.strip_prefix("ext:") {
+            Some(id) => id,
+            None => return,
+        };
+        let Some(cmd) = self.extensions.commands.iter().find(|c| c.id == user_id) else {
+            self.push_toast(
+                components::ToastKind::Error,
+                format!("Extension command `{user_id}` was not found in extensions.toml"),
+                cx,
+            );
+            return;
+        };
+        if cmd.command.is_empty() {
+            self.push_toast(
+                components::ToastKind::Error,
+                format!("Extension command `{user_id}` has no script to run"),
+                cx,
+            );
+            return;
+        }
+
+        let workdir = if cmd.requires_repo {
+            match self.active_repo_workdir() {
+                Some(dir) => dir,
+                None => {
+                    self.push_toast(
+                        components::ToastKind::Error,
+                        crate::i18n::t!("chrome.editor.no_active_repo").to_string(),
+                        cx,
+                    );
+                    return;
+                }
+            }
+        } else {
+            session::app_data_dir().unwrap_or_else(|| std::path::PathBuf::from("."))
+        };
+
+        let script = cmd.command.clone();
+        let label = cmd.label.clone();
+        let weak_view = cx.entity().downgrade();
+
+        cx.spawn(async move |_this, cx| {
+            let outcome = smol::unblock(move || {
+                let (shell, arg) = if cfg!(windows) {
+                    ("cmd", "/C")
+                } else {
+                    ("sh", "-c")
+                };
+                std::process::Command::new(shell)
+                    .current_dir(&workdir)
+                    .args([arg, &script])
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped())
+                    .output()
+            })
+            .await;
+
+            let (kind, message) = match outcome {
+                Ok(output) => {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    let body = if !stderr.trim().is_empty() {
+                        stderr.to_string()
+                    } else {
+                        stdout.to_string()
+                    };
+                    let mut msg = format!(
+                        "Extension `{}` exited with {}",
+                        label,
+                        output
+                            .status
+                            .code()
+                            .map_or_else(|| "a signal".to_string(), |code| code.to_string())
+                    );
+                    let trimmed = body.trim();
+                    if !trimmed.is_empty() {
+                        let mut snippet = trimmed.to_string();
+                        if snippet.chars().count() > 500 {
+                            snippet = format!(
+                                "{}\n…(truncated)",
+                                snippet.chars().take(500).collect::<String>()
+                            );
+                        }
+                        msg.push_str(&format!("\n{snippet}"));
+                    }
+                    (components::ToastKind::Success, msg)
+                }
+                Err(err) => (
+                    components::ToastKind::Error,
+                    format!("Extension `{label}` failed to start: {err}"),
+                ),
+            };
+
+            let _ = weak_view.update(cx, |view, cx| {
+                view.push_toast(kind, message, cx);
+            });
+        })
+        .detach();
+    }
+
+    /// Fire every extension hook registered for `event`. Hooks run the same
+    /// shell pipeline as palette commands (see [`WorkTreeView::run_extension_command`])
+    /// in `workdir`, falling back to the app data dir when none is supplied.
+    /// Failures surface as error toasts; successful runs stay silent so hooks
+    /// keep out of the way. Iteration 08-1, v1.
+    pub(in crate::view) fn run_extension_hooks(
+        &mut self,
+        event: ExtensionHookEvent,
+        workdir: Option<std::path::PathBuf>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let hooks = select_extension_hooks(&self.extensions, event, workdir.as_deref());
+        if hooks.is_empty() {
+            return;
+        }
+        let weak_view = cx.entity().downgrade();
+        cx.spawn(async move |_this, cx| {
+            for (command, dir) in hooks {
+                let outcome = smol::unblock({
+                    let command = command.clone();
+                    let dir = dir.clone();
+                    move || {
+                        let (shell, arg) = if cfg!(windows) {
+                            ("cmd", "/C")
+                        } else {
+                            ("sh", "-c")
+                        };
+                        std::process::Command::new(shell)
+                            .current_dir(&dir)
+                            .args([arg, &command])
+                            .stdin(std::process::Stdio::null())
+                            .stdout(std::process::Stdio::piped())
+                            .stderr(std::process::Stdio::piped())
+                            .output()
+                    }
+                })
+                .await;
+                if let Err(err) = outcome {
+                    let event = event;
+                    let _ = weak_view.update(cx, |view, cx| {
+                        view.push_toast(
+                            components::ToastKind::Error,
+                            format!("Extension hook `{event:?}` failed to start: {err}"),
+                            cx,
+                        );
+                    });
+                }
+            }
+        })
+        .detach();
     }
 
     /// Whether a popover, dialog, prompt, or context menu is currently open
@@ -2555,6 +2734,13 @@ impl WorkTreeView {
 
         let mut view = Self {
             state: Arc::clone(&initial_state),
+            // Iteration 08-1: load the declarative extension config once at
+            // view construction. Missing/unreadable/unparseable files degrade
+            // to an empty config (no commands, no hooks) rather than failing.
+            extensions: session::app_data_dir()
+                .map(|dir| worktree_core::extensions::load_extensions(&dir.join("extensions.toml")))
+                .unwrap_or_default(),
+            extension_opened_repos: Default::default(),
             window_handle: window.window_handle(),
             _ui_model: ui_model,
             store,
@@ -4077,7 +4263,7 @@ impl WorkTreeView {
         });
     }
 
-    fn active_repo_workdir(&self) -> Option<std::path::PathBuf> {
+    pub(in crate::view) fn active_repo_workdir(&self) -> Option<std::path::PathBuf> {
         let repo_id = self.active_repo_id()?;
         self.state
             .repos
@@ -5058,6 +5244,85 @@ impl Render for WorkTreeView {
         }
 
         root
+    }
+}
+
+/// Select the extension hooks that should run for `event`, resolving each
+/// command's working directory. `workdir` takes precedence; when `None` the app
+/// data dir is used as the fallback. Pure and side-effect free so it can be
+/// unit-tested without spawning processes. Iteration 08-1, v1.
+fn select_extension_hooks(
+    extensions: &worktree_core::extensions::Extensions,
+    event: ExtensionHookEvent,
+    workdir: Option<&std::path::Path>,
+) -> Vec<(String, std::path::PathBuf)> {
+    let fallback = session::app_data_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+    extensions
+        .hooks
+        .iter()
+        .filter(|h| h.event == event && !h.command.is_empty())
+        .map(|h| {
+            let dir = workdir
+                .map(|p| p.to_path_buf())
+                .unwrap_or_else(|| fallback.clone());
+            (h.command.clone(), dir)
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod extension_hook_tests {
+    use super::*;
+    use std::path::Path;
+    use worktree_core::extensions::{ExtensionHook, ExtensionHookEvent};
+
+    fn hook(event: ExtensionHookEvent, command: &str) -> ExtensionHook {
+        ExtensionHook {
+            event,
+            command: command.to_string(),
+        }
+    }
+
+    #[test]
+    fn selects_only_hooks_for_the_matching_event() {
+        let mut ext = worktree_core::extensions::Extensions::default();
+        ext.hooks
+            .push(hook(ExtensionHookEvent::BeforeCommit, "echo before"));
+        ext.hooks
+            .push(hook(ExtensionHookEvent::AfterCommit, "echo after"));
+        ext.hooks
+            .push(hook(ExtensionHookEvent::RepositoryOpened, "echo opened"));
+
+        let before = select_extension_hooks(&ext, ExtensionHookEvent::BeforeCommit, None);
+        assert_eq!(before.len(), 1);
+        assert_eq!(before[0].0, "echo before");
+
+        let after = select_extension_hooks(&ext, ExtensionHookEvent::AfterCommit, None);
+        assert_eq!(after.len(), 1);
+        assert_eq!(after[0].0, "echo after");
+
+        let opened = select_extension_hooks(&ext, ExtensionHookEvent::RepositoryOpened, None);
+        assert_eq!(opened.len(), 1);
+        assert_eq!(opened[0].0, "echo opened");
+    }
+
+    #[test]
+    fn skips_hooks_with_empty_commands() {
+        let mut ext = worktree_core::extensions::Extensions::default();
+        ext.hooks.push(hook(ExtensionHookEvent::BeforeCommit, ""));
+        let selected = select_extension_hooks(&ext, ExtensionHookEvent::BeforeCommit, None);
+        assert!(selected.is_empty());
+    }
+
+    #[test]
+    fn prefers_explicit_workdir_over_fallback() {
+        let mut ext = worktree_core::extensions::Extensions::default();
+        ext.hooks
+            .push(hook(ExtensionHookEvent::AfterCommit, "echo x"));
+        let dir = Path::new("/tmp/repo-workdir");
+        let selected = select_extension_hooks(&ext, ExtensionHookEvent::AfterCommit, Some(dir));
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].1, dir);
     }
 }
 

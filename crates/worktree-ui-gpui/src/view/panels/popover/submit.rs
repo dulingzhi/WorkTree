@@ -398,6 +398,9 @@ impl PopoverHost {
         if message.is_empty() {
             return;
         }
+        // Iteration 08-1: `BeforeCommit` hooks fire from `apply_state_snapshot`
+        // when `commit_in_flight` transitions to non-zero (inside `WorkTreeView`'s
+        // own update), so we must NOT re-enter `WorkTreeView` from here.
         self.store.dispatch(Msg::Commit {
             repo_id,
             message,

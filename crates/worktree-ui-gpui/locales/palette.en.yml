@@ -124,3 +124,4 @@ palette:
     worktrees: Worktrees
     history: History
     app: App
+    extension: Extension

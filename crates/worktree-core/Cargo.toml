@@ -24,6 +24,7 @@ regex = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
 smallvec = { workspace = true }
+toml = { workspace = true }
 strsim = { workspace = true }
 thiserror = { workspace = true }
 

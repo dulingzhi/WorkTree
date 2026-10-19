@@ -1,9 +1,18 @@
 use super::*;
 use rustc_hash::FxHashMap;
+use worktree_core::extensions::Extensions;
 
 pub struct WorkTreeView {
     pub(super) store: Arc<AppStore>,
     pub(super) state: Arc<AppState>,
+    /// Iteration 08-1: declarative extension system config (script commands +
+    /// lifecycle hooks), loaded from `extensions.toml` at startup. User-facing
+    /// commands surface in the command palette; hooks fire from this view's
+    /// orchestration points (see `execute_command` / repo-open / commit).
+    pub(super) extensions: Extensions,
+    /// Iteration 08-1: repo ids that have already fired a `RepositoryOpened`
+    /// extension hook, so the hook runs once per repo (not on every snapshot).
+    pub(super) extension_opened_repos: FxHashSet<RepoId>,
     pub(super) window_handle: gpui::AnyWindowHandle,
     pub(super) _ui_model: Entity<AppUiModel>,
     pub(super) _poller: Poller,

@@ -9,6 +9,7 @@ pub mod diff_tree;
 pub mod domain;
 pub mod encoding;
 pub mod error;
+pub mod extensions;
 pub mod external_merge_tool;
 pub mod file_diff;
 pub mod git_ops_trace;
