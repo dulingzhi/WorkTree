@@ -810,7 +810,10 @@ impl WorkTreeView {
             // Iteration 08-1: hand the palette its own copy of the extension
             // config so it can show extension commands without re-entering this
             // `WorkTreeView` update.
-            palette.set_extensions(self.extensions.clone(), cx);
+            palette.set_extensions(
+                self.merged_extensions(self.active_repo_workdir().as_deref()),
+                cx,
+            );
             palette.open(restore_focus, fallback_focus, has_active_repo, window, cx);
         });
     }
@@ -1861,7 +1864,8 @@ impl WorkTreeView {
             Some(id) => id,
             None => return,
         };
-        let Some(cmd) = self.extensions.commands.iter().find(|c| c.id == user_id) else {
+        let merged = self.merged_extensions(self.active_repo_workdir().as_deref());
+        let Some(cmd) = merged.commands.iter().find(|c| c.id == user_id) else {
             self.push_toast(
                 components::ToastKind::Error,
                 format!("Extension command `{user_id}` was not found in extensions.toml"),
@@ -1962,6 +1966,28 @@ impl WorkTreeView {
     /// shell pipeline as palette commands (see [`WorkTreeView::run_extension_command`])
     /// in `workdir`, falling back to the app data dir when none is supplied.
     /// Failures surface as error toasts; successful runs stay silent so hooks
+    /// Iteration 09-A: resolve the effective extension config for a working
+    /// directory by merging the global config (loaded at startup) with the
+    /// repository-local `extensions.toml` when present. Without a workdir the
+    /// global config is returned unchanged, so behaviour matches v1 when no
+    /// repository config exists.
+    fn merged_extensions(
+        &self,
+        workdir: Option<&std::path::Path>,
+    ) -> worktree_core::extensions::Extensions {
+        match workdir {
+            Some(dir) => worktree_core::extensions::merge_extensions(
+                &self.extensions,
+                &worktree_core::extensions::load_extensions(&dir.join("extensions.toml")),
+            ),
+            None => self.extensions.clone(),
+        }
+    }
+
+    /// Fire every extension hook registered for `event`. Hooks run the same
+    /// shell pipeline as palette commands (see [`WorkTreeView::run_extension_command`])
+    /// in `workdir`, falling back to the app data dir when none is supplied.
+    /// Failures surface as error toasts; successful runs stay silent so hooks
     /// keep out of the way. Iteration 08-1, v1.
     pub(in crate::view) fn run_extension_hooks(
         &mut self,
@@ -1969,7 +1995,11 @@ impl WorkTreeView {
         workdir: Option<std::path::PathBuf>,
         cx: &mut gpui::Context<Self>,
     ) {
-        let hooks = select_extension_hooks(&self.extensions, event, workdir.as_deref());
+        let hooks = select_extension_hooks(
+            &self.merged_extensions(workdir.as_deref()),
+            event,
+            workdir.as_deref(),
+        );
         if hooks.is_empty() {
             return;
         }

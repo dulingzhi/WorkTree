@@ -111,6 +111,28 @@ pub fn load_extensions(path: &Path) -> Extensions {
     }
 }
 
+/// Merge a global extension config with a repository-local one (iteration 09-A).
+///
+/// * Commands sharing an `id` are overridden by the repository-local entry
+///   (repository config wins; the global command's position is preserved when
+///   it already existed, otherwise the repo command is appended).
+/// * Hooks are concatenated so that both the global and repository-local hooks
+///   for an event fire — hooks carry no identity, so "override" is meaningless.
+///
+/// Both inputs are themselves tolerant (see [`load_extensions`]); merging two
+/// valid configs can never fail.
+pub fn merge_extensions(global: &Extensions, repo: &Extensions) -> Extensions {
+    let mut merged = global.clone();
+    for repo_cmd in &repo.commands {
+        match merged.commands.iter().position(|c| c.id == repo_cmd.id) {
+            Some(pos) => merged.commands[pos] = repo_cmd.clone(),
+            None => merged.commands.push(repo_cmd.clone()),
+        }
+    }
+    merged.hooks.extend(repo.hooks.iter().cloned());
+    merged
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -204,5 +226,44 @@ command = "echo before"
         std::fs::write(&path, "[[command]\nid = ").expect("write");
         let ext = load_extensions(&path);
         assert!(ext.commands.is_empty());
+    }
+
+    #[test]
+    fn merge_extensions_appends_repo_commands() {
+        let global = parse_extensions("[[command]]\nid = \"g\"\ncommand = \"g-cmd\"\n").unwrap();
+        let repo = parse_extensions("[[command]]\nid = \"r\"\ncommand = \"r-cmd\"\n").unwrap();
+        let merged = merge_extensions(&global, &repo);
+        assert_eq!(merged.commands.len(), 2);
+        assert_eq!(merged.commands[0].id, "g");
+        assert_eq!(merged.commands[1].id, "r");
+    }
+
+    #[test]
+    fn merge_extensions_repo_overrides_global_by_id() {
+        let global =
+            parse_extensions("[[command]]\nid = \"lint\"\ncommand = \"cargo clippy\"\n").unwrap();
+        let repo = parse_extensions(
+            "[[command]]\nid = \"lint\"\ncommand = \"cargo clippy --features repo\"\n",
+        )
+        .unwrap();
+        let merged = merge_extensions(&global, &repo);
+        assert_eq!(merged.commands.len(), 1);
+        assert_eq!(merged.commands[0].command, "cargo clippy --features repo");
+    }
+
+    #[test]
+    fn merge_extensions_concats_hooks() {
+        let global =
+            parse_extensions("[[hook]]\nevent = \"AfterCommit\"\ncommand = \"git push\"\n")
+                .unwrap();
+        let repo = parse_extensions(
+            "[[hook]]\nevent = \"BeforeCommit\"\ncommand = \"cargo fmt --check\"\n",
+        )
+        .unwrap();
+        let merged = merge_extensions(&global, &repo);
+        assert_eq!(merged.hooks.len(), 2);
+        // Global hook preserved, repo hook appended (hooks have no id to override).
+        assert_eq!(merged.hooks[0].event, ExtensionHookEvent::AfterCommit);
+        assert_eq!(merged.hooks[1].event, ExtensionHookEvent::BeforeCommit);
     }
 }
