@@ -25,6 +25,7 @@ mod dialog;
 mod discard_all_confirm;
 mod discard_changes_confirm;
 mod dispatch;
+mod extensions_manager;
 mod file_history;
 mod file_review;
 mod file_review_batch;

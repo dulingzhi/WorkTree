@@ -476,6 +476,12 @@ pub(in crate::view) enum PopoverKind {
     RepoSettingsPrompt {
         repo_id: RepoId,
     },
+    /// 09-A Slice 2: per-repository extension manager — lists the active
+    /// (global ∪ repo-local) extension commands and hooks with source badges
+    /// and runtime enable/disable, without editing any toml file.
+    ExtensionsManager {
+        repo_id: RepoId,
+    },
     HistoryBranchFilter {
         repo_id: RepoId,
     },

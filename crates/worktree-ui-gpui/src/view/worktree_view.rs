@@ -1,5 +1,5 @@
 use super::*;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use worktree_core::extensions::Extensions;
 
 pub struct WorkTreeView {
@@ -13,6 +13,10 @@ pub struct WorkTreeView {
     /// Iteration 08-1: repo ids that have already fired a `RepositoryOpened`
     /// extension hook, so the hook runs once per repo (not on every snapshot).
     pub(super) extension_opened_repos: FxHashSet<RepoId>,
+    /// Iteration 09-A Slice 2: extension command/hook ids disabled at runtime
+    /// from the extension manager. Membership removes the entry from the
+    /// active (palette / hook / execution) set without editing any toml file.
+    pub(super) disabled_extension_ids: FxHashSet<String>,
     pub(super) window_handle: gpui::AnyWindowHandle,
     pub(super) _ui_model: Entity<AppUiModel>,
     pub(super) _poller: Poller,

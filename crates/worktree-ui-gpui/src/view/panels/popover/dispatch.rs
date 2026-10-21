@@ -134,6 +134,9 @@ impl PopoverHost {
             }
             PopoverKind::AgentSafetyReview { repo_id } => agent_safety::panel(self, repo_id, cx),
             PopoverKind::RepoSettingsPrompt { repo_id } => repo_settings::panel(self, repo_id, cx),
+            PopoverKind::ExtensionsManager { repo_id } => {
+                extensions_manager::panel(self, repo_id, cx)
+            }
             PopoverKind::UndoLastActionPrompt { repo_id } => {
                 undo_last_action::panel(self, repo_id, cx)
             }

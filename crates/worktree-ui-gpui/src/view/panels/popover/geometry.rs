@@ -227,6 +227,7 @@ pub(in crate::view) fn popover_width_spec(kind: &PopoverKind) -> Option<PopoverW
         PopoverKind::AgentSessionsAggregate { .. } => Some(DIALOG_540_WIDTH),
         PopoverKind::AgentSafetyReview { .. } => Some(DIALOG_540_WIDTH),
         PopoverKind::RepoSettingsPrompt { .. } => Some(DIALOG_440_WIDTH),
+        PopoverKind::ExtensionsManager { .. } => Some(DIALOG_440_WIDTH),
         PopoverKind::UndoLastActionPrompt { .. } => Some(DIALOG_440_WIDTH),
         PopoverKind::AssumeUnchangedManager { .. } => Some(DIALOG_540_WIDTH),
         PopoverKind::Statistics { .. } => Some(DIALOG_540_WIDTH),

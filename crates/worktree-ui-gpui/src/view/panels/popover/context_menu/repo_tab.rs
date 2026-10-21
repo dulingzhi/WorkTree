@@ -65,6 +65,16 @@ fn model_for_state(
         }),
     });
 
+    items.push(ContextMenuItem::Entry {
+        label: "Manage extensions…".into(),
+        icon: Some("icons/settings.svg".into()),
+        shortcut: None,
+        disabled: false,
+        action: Box::new(ContextMenuAction::OpenPopover {
+            kind: PopoverKind::ExtensionsManager { repo_id },
+        }),
+    });
+
     if let Some(ref workdir) = workdir {
         items.push(ContextMenuItem::Separator);
         items.push(ContextMenuItem::Entry {

@@ -811,7 +811,7 @@ impl WorkTreeView {
             // config so it can show extension commands without re-entering this
             // `WorkTreeView` update.
             palette.set_extensions(
-                self.merged_extensions(self.active_repo_workdir().as_deref()),
+                self.active_extensions(self.active_repo_workdir().as_deref()),
                 cx,
             );
             palette.open(restore_focus, fallback_focus, has_active_repo, window, cx);
@@ -1864,7 +1864,7 @@ impl WorkTreeView {
             Some(id) => id,
             None => return,
         };
-        let merged = self.merged_extensions(self.active_repo_workdir().as_deref());
+        let merged = self.active_extensions(self.active_repo_workdir().as_deref());
         let Some(cmd) = merged.commands.iter().find(|c| c.id == user_id) else {
             self.push_toast(
                 components::ToastKind::Error,
@@ -1984,6 +1984,20 @@ impl WorkTreeView {
         }
     }
 
+    /// Iteration 09-A Slice 2: the merged extension set with any runtime-disabled
+    /// entries removed. This is what the palette, hook firing, and command
+    /// execution actually consume, so a toggle in the extension manager takes
+    /// effect immediately without editing any toml file.
+    fn active_extensions(
+        &self,
+        workdir: Option<&std::path::Path>,
+    ) -> worktree_core::extensions::Extensions {
+        retain_enabled(
+            self.merged_extensions(workdir),
+            &self.disabled_extension_ids,
+        )
+    }
+
     /// Fire every extension hook registered for `event`. Hooks run the same
     /// shell pipeline as palette commands (see [`WorkTreeView::run_extension_command`])
     /// in `workdir`, falling back to the app data dir when none is supplied.
@@ -1996,7 +2010,7 @@ impl WorkTreeView {
         cx: &mut gpui::Context<Self>,
     ) {
         let hooks = select_extension_hooks(
-            &self.merged_extensions(workdir.as_deref()),
+            &self.active_extensions(workdir.as_deref()),
             event,
             workdir.as_deref(),
         );
@@ -2771,6 +2785,7 @@ impl WorkTreeView {
                 .map(|dir| worktree_core::extensions::load_extensions(&dir.join("extensions.toml")))
                 .unwrap_or_default(),
             extension_opened_repos: Default::default(),
+            disabled_extension_ids: Default::default(),
             window_handle: window.window_handle(),
             _ui_model: ui_model,
             store,
@@ -3155,6 +3170,27 @@ impl WorkTreeView {
         self.popover_host
             .update(cx, |host, cx| host.sync_change_tracking_view(next, cx));
         self.schedule_ui_settings_persist(cx);
+    }
+
+    /// Iteration 09-A Slice 2: runtime enable/disable of an extension entry by
+    /// id. Disabled ids are dropped from [`WorkTreeView::active_extensions`],
+    /// so they vanish from the palette, stop firing as hooks, and cannot be
+    /// executed — without editing any toml file. Hooks without an id are
+    /// always enabled and are ignored here.
+    pub(in crate::view) fn set_extension_enabled(
+        &mut self,
+        id: String,
+        enabled: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if enabled {
+            self.disabled_extension_ids.remove(&id);
+        } else {
+            self.disabled_extension_ids.insert(id);
+        }
+        // No persistence: the disabled set is a runtime affordance, not a
+        // user-edited config, so it is intentionally not written to toml.
+        cx.notify();
     }
 
     pub(in crate::view) fn set_commit_push_after_enabled(
@@ -5300,14 +5336,41 @@ fn select_extension_hooks(
         .collect()
 }
 
+/// Iteration 09-A Slice 2: drop commands and id-bearing hooks whose id is in
+/// `disabled`. Hooks without an id can never be toggled off, so they are always
+/// kept; only id-bearing hooks honor the disabled set. Pure and side-effect free
+/// so it can be unit-tested without a window. [`WorkTreeView::active_extensions`]
+/// delegates to this after computing the merged (global ∪ repo-local) set.
+fn retain_enabled(
+    mut extensions: worktree_core::extensions::Extensions,
+    disabled: &FxHashSet<String>,
+) -> worktree_core::extensions::Extensions {
+    if disabled.is_empty() {
+        return extensions;
+    }
+    extensions
+        .commands
+        .retain(|command| !disabled.contains(&command.id));
+    // Hooks without an id (legacy v1 entries) can never be toggled off, so they
+    // are always kept. Only id-bearing hooks honor the disabled set.
+    extensions
+        .hooks
+        .retain(|hook| hook.id.is_empty() || !disabled.contains(&hook.id));
+    extensions
+}
+
 #[cfg(test)]
 mod extension_hook_tests {
     use super::*;
+    use rustc_hash::FxHashSet;
     use std::path::Path;
-    use worktree_core::extensions::{ExtensionHook, ExtensionHookEvent};
+    use worktree_core::extensions::{
+        ExtensionCommand, ExtensionHook, ExtensionHookEvent, Extensions,
+    };
 
     fn hook(event: ExtensionHookEvent, command: &str) -> ExtensionHook {
         ExtensionHook {
+            id: String::new(),
             event,
             command: command.to_string(),
         }
@@ -5353,6 +5416,53 @@ mod extension_hook_tests {
         let selected = select_extension_hooks(&ext, ExtensionHookEvent::AfterCommit, Some(dir));
         assert_eq!(selected.len(), 1);
         assert_eq!(selected[0].1, dir);
+    }
+
+    #[test]
+    fn retain_enabled_drops_disabled_commands_and_id_hooks() {
+        let mut ext = Extensions::default();
+        ext.commands.push(ExtensionCommand {
+            id: "a".into(),
+            ..Default::default()
+        });
+        ext.commands.push(ExtensionCommand {
+            id: "b".into(),
+            ..Default::default()
+        });
+        ext.hooks.push(ExtensionHook {
+            id: "h1".into(),
+            event: ExtensionHookEvent::AfterCommit,
+            command: "x".into(),
+        });
+        // An id-less hook can never be toggled off, so it survives a disabled set.
+        ext.hooks.push(ExtensionHook {
+            id: String::new(),
+            event: ExtensionHookEvent::AfterCommit,
+            command: "y".into(),
+        });
+
+        let mut disabled = FxHashSet::default();
+        disabled.insert("a".into());
+        disabled.insert("h1".into());
+
+        let filtered = retain_enabled(ext, &disabled);
+        assert_eq!(filtered.commands.len(), 1);
+        assert_eq!(filtered.commands[0].id, "b");
+        // Only the id-less hook remains: the disabled id-hook was dropped.
+        assert_eq!(filtered.hooks.len(), 1);
+        assert_eq!(filtered.hooks[0].id, "");
+    }
+
+    #[test]
+    fn retain_enabled_is_identity_for_empty_disabled_set() {
+        let mut ext = Extensions::default();
+        ext.commands.push(ExtensionCommand {
+            id: "a".into(),
+            ..Default::default()
+        });
+        let filtered = retain_enabled(ext, &FxHashSet::default());
+        assert_eq!(filtered.commands.len(), 1);
+        assert_eq!(filtered.commands[0].id, "a");
     }
 }
 

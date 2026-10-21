@@ -66,6 +66,10 @@ impl Default for ExtensionCommand {
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
 #[serde(default)]
 pub struct ExtensionHook {
+    /// Optional stable id used for runtime enable/disable (iteration 09-A).
+    /// Legacy hooks omit it; only hooks with a non-empty `id` can be toggled
+    /// off from the extension manager, so an absent id always stays enabled.
+    pub id: String,
     pub event: ExtensionHookEvent,
     pub command: String,
 }
@@ -131,6 +135,82 @@ pub fn merge_extensions(global: &Extensions, repo: &Extensions) -> Extensions {
     }
     merged.hooks.extend(repo.hooks.iter().cloned());
     merged
+}
+
+/// Where an extension entry came from in the merged (global ∪ repo-local) view.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ExtensionSource {
+    /// Loaded from the global `extensions.toml` (the app data dir).
+    Global,
+    /// Loaded from the repository-local `extensions.toml` (the repo workdir).
+    Repo,
+}
+
+/// A command paired with the source config it was resolved from.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AnnotatedExtension {
+    pub command: ExtensionCommand,
+    pub source: ExtensionSource,
+}
+
+/// A hook paired with the source config it was resolved from.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AnnotatedHook {
+    pub hook: ExtensionHook,
+    pub source: ExtensionSource,
+}
+
+/// Like [`merge_extensions`] but records, for every resulting command and hook,
+/// whether it originated from the repository-local config (`Repo`) or the global
+/// config (`Global`). The extension manager UI (iteration 09-A Slice 2) uses
+/// this to render a source badge and to drive runtime enable/disable.
+///
+/// * Commands sharing an `id` with a repository-local entry are reported as
+///   `Repo` (the repository config wins, matching [`merge_extensions`]).
+/// * Hooks are reported in the same concatenation order as [`merge_extensions`]
+///   — global hooks first, then repository-local hooks — each tagged by source.
+pub fn merge_extensions_with_source(
+    global: &Extensions,
+    repo: &Extensions,
+) -> (Vec<AnnotatedExtension>, Vec<AnnotatedHook>) {
+    let mut commands = Vec::with_capacity(global.commands.len() + repo.commands.len());
+    for global_cmd in &global.commands {
+        commands.push(AnnotatedExtension {
+            command: global_cmd.clone(),
+            source: ExtensionSource::Global,
+        });
+    }
+    for repo_cmd in &repo.commands {
+        match commands
+            .iter_mut()
+            .find(|annotated| annotated.command.id == repo_cmd.id)
+        {
+            Some(existing) => {
+                existing.command = repo_cmd.clone();
+                existing.source = ExtensionSource::Repo;
+            }
+            None => commands.push(AnnotatedExtension {
+                command: repo_cmd.clone(),
+                source: ExtensionSource::Repo,
+            }),
+        }
+    }
+
+    let mut hooks = Vec::with_capacity(global.hooks.len() + repo.hooks.len());
+    for global_hook in &global.hooks {
+        hooks.push(AnnotatedHook {
+            hook: global_hook.clone(),
+            source: ExtensionSource::Global,
+        });
+    }
+    for repo_hook in &repo.hooks {
+        hooks.push(AnnotatedHook {
+            hook: repo_hook.clone(),
+            source: ExtensionSource::Repo,
+        });
+    }
+
+    (commands, hooks)
 }
 
 #[cfg(test)]
@@ -265,5 +345,46 @@ command = "echo before"
         // Global hook preserved, repo hook appended (hooks have no id to override).
         assert_eq!(merged.hooks[0].event, ExtensionHookEvent::AfterCommit);
         assert_eq!(merged.hooks[1].event, ExtensionHookEvent::BeforeCommit);
+    }
+
+    #[test]
+    fn merge_with_source_tags_global_and_repo_commands() {
+        let global = parse_extensions("[[command]]\nid = \"g\"\ncommand = \"g-cmd\"\n").unwrap();
+        let repo = parse_extensions(
+            "[[command]]\nid = \"r\"\ncommand = \"r-cmd\"\n\
+             [[command]]\nid = \"g\"\ncommand = \"r-over\"\n",
+        )
+        .unwrap();
+        let (commands, _hooks) = merge_extensions_with_source(&global, &repo);
+        assert_eq!(commands.len(), 2);
+        let global_cmd = commands.iter().find(|c| c.command.id == "g").unwrap();
+        // The shared-id command is overridden by the repo config and tagged Repo.
+        assert_eq!(global_cmd.source, ExtensionSource::Repo);
+        assert_eq!(global_cmd.command.command, "r-over");
+        let repo_cmd = commands.iter().find(|c| c.command.id == "r").unwrap();
+        assert_eq!(repo_cmd.source, ExtensionSource::Repo);
+    }
+
+    #[test]
+    fn merge_with_source_concats_hooks_with_source() {
+        let global =
+            parse_extensions("[[hook]]\nevent = \"AfterCommit\"\ncommand = \"git push\"\n")
+                .unwrap();
+        let repo = parse_extensions(
+            "[[hook]]\nevent = \"BeforeCommit\"\ncommand = \"cargo fmt --check\"\n",
+        )
+        .unwrap();
+        let (_commands, hooks) = merge_extensions_with_source(&global, &repo);
+        assert_eq!(hooks.len(), 2);
+        assert_eq!(hooks[0].source, ExtensionSource::Global);
+        assert_eq!(hooks[1].source, ExtensionSource::Repo);
+    }
+
+    #[test]
+    fn merge_with_source_empty_configs_are_empty() {
+        let (commands, hooks) =
+            merge_extensions_with_source(&Extensions::default(), &Extensions::default());
+        assert!(commands.is_empty());
+        assert!(hooks.is_empty());
     }
 }
