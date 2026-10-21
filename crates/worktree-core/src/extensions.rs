@@ -137,13 +137,41 @@ pub fn merge_extensions(global: &Extensions, repo: &Extensions) -> Extensions {
     merged
 }
 
-/// Where an extension entry came from in the merged (global ∪ repo-local) view.
+/// Where an extension entry came from in the merged (builtin ∪ global ∪
+/// repo-local) view.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ExtensionSource {
+    /// Shipped with GitComet itself and embedded into the binary. Lowest
+    /// precedence: a global or repository-local entry with the same `id`
+    /// overrides a builtin one.
+    Builtin,
     /// Loaded from the global `extensions.toml` (the app data dir).
     Global,
     /// Loaded from the repository-local `extensions.toml` (the repo workdir).
     Repo,
+}
+
+/// The bundled extension document, embedded at compile time. See
+/// `resources/builtin-extensions.toml` for the shipped set and its scope.
+const BUILTIN_EXTENSIONS_TOML: &str = include_str!("../resources/builtin-extensions.toml");
+
+/// Extensions shipped with GitComet itself (iteration 09-A Slice 3). These form
+/// the lowest-precedence layer of the merged set: a global or repository-local
+/// command with the same `id` overrides a builtin one, and every builtin entry
+/// is source-tagged [`ExtensionSource::Builtin`] so the extension manager can
+/// surface and toggle it.
+///
+/// The document is embedded at compile time. A malformed file is a build
+/// authoring error, but we degrade to an empty config (with a warning) rather
+/// than panic on first use, matching the tolerance of [`load_extensions`].
+pub fn builtin_extensions() -> Extensions {
+    match parse_extensions(BUILTIN_EXTENSIONS_TOML) {
+        Ok(ext) => ext,
+        Err(err) => {
+            crate::applog_warn!("bundled builtin-extensions.toml parse failed: {err}");
+            Extensions::default()
+        }
+    }
 }
 
 /// A command paired with the source config it was resolved from.
@@ -161,24 +189,46 @@ pub struct AnnotatedHook {
 }
 
 /// Like [`merge_extensions`] but records, for every resulting command and hook,
-/// whether it originated from the repository-local config (`Repo`) or the global
-/// config (`Global`). The extension manager UI (iteration 09-A Slice 2) uses
-/// this to render a source badge and to drive runtime enable/disable.
+/// which config layer it resolved from: [`ExtensionSource::Builtin`],
+/// [`ExtensionSource::Global`], or [`ExtensionSource::Repo`]. The extension
+/// manager UI (iteration 09-A Slice 2/3) uses this to render a source badge and
+/// to drive runtime enable/disable.
 ///
-/// * Commands sharing an `id` with a repository-local entry are reported as
-///   `Repo` (the repository config wins, matching [`merge_extensions`]).
-/// * Hooks are reported in the same concatenation order as [`merge_extensions`]
-///   — global hooks first, then repository-local hooks — each tagged by source.
+/// * Commands are layered **builtin → global → repo**; an entry with a shared
+///   `id` is overridden by the higher-precedence layer and reported with that
+///   layer's source (repo > global > builtin). This mirrors the runtime
+///   precedence used by [`merge_extensions`].
+/// * Hooks are concatenated in the same precedence order (builtin first, then
+///   global, then repository-local), each tagged by source. Hooks carry no
+///   identity, so order is the only meaningful signal — all fire on their
+///   event.
 pub fn merge_extensions_with_source(
+    builtin: &Extensions,
     global: &Extensions,
     repo: &Extensions,
 ) -> (Vec<AnnotatedExtension>, Vec<AnnotatedHook>) {
-    let mut commands = Vec::with_capacity(global.commands.len() + repo.commands.len());
-    for global_cmd in &global.commands {
+    let mut commands =
+        Vec::with_capacity(builtin.commands.len() + global.commands.len() + repo.commands.len());
+    for builtin_cmd in &builtin.commands {
         commands.push(AnnotatedExtension {
-            command: global_cmd.clone(),
-            source: ExtensionSource::Global,
+            command: builtin_cmd.clone(),
+            source: ExtensionSource::Builtin,
         });
+    }
+    for global_cmd in &global.commands {
+        match commands
+            .iter_mut()
+            .find(|annotated| annotated.command.id == global_cmd.id)
+        {
+            Some(existing) => {
+                existing.command = global_cmd.clone();
+                existing.source = ExtensionSource::Global;
+            }
+            None => commands.push(AnnotatedExtension {
+                command: global_cmd.clone(),
+                source: ExtensionSource::Global,
+            }),
+        }
     }
     for repo_cmd in &repo.commands {
         match commands
@@ -196,7 +246,13 @@ pub fn merge_extensions_with_source(
         }
     }
 
-    let mut hooks = Vec::with_capacity(global.hooks.len() + repo.hooks.len());
+    let mut hooks = Vec::with_capacity(builtin.hooks.len() + global.hooks.len() + repo.hooks.len());
+    for builtin_hook in &builtin.hooks {
+        hooks.push(AnnotatedHook {
+            hook: builtin_hook.clone(),
+            source: ExtensionSource::Builtin,
+        });
+    }
     for global_hook in &global.hooks {
         hooks.push(AnnotatedHook {
             hook: global_hook.clone(),
@@ -355,7 +411,8 @@ command = "echo before"
              [[command]]\nid = \"g\"\ncommand = \"r-over\"\n",
         )
         .unwrap();
-        let (commands, _hooks) = merge_extensions_with_source(&global, &repo);
+        let (commands, _hooks) =
+            merge_extensions_with_source(&Extensions::default(), &global, &repo);
         assert_eq!(commands.len(), 2);
         let global_cmd = commands.iter().find(|c| c.command.id == "g").unwrap();
         // The shared-id command is overridden by the repo config and tagged Repo.
@@ -374,7 +431,8 @@ command = "echo before"
             "[[hook]]\nevent = \"BeforeCommit\"\ncommand = \"cargo fmt --check\"\n",
         )
         .unwrap();
-        let (_commands, hooks) = merge_extensions_with_source(&global, &repo);
+        let (_commands, hooks) =
+            merge_extensions_with_source(&Extensions::default(), &global, &repo);
         assert_eq!(hooks.len(), 2);
         assert_eq!(hooks[0].source, ExtensionSource::Global);
         assert_eq!(hooks[1].source, ExtensionSource::Repo);
@@ -382,9 +440,90 @@ command = "echo before"
 
     #[test]
     fn merge_with_source_empty_configs_are_empty() {
-        let (commands, hooks) =
-            merge_extensions_with_source(&Extensions::default(), &Extensions::default());
+        let (commands, hooks) = merge_extensions_with_source(
+            &Extensions::default(),
+            &Extensions::default(),
+            &Extensions::default(),
+        );
         assert!(commands.is_empty());
         assert!(hooks.is_empty());
+    }
+
+    #[test]
+    fn merge_with_source_tags_builtin_commands() {
+        // A builtin-only command keeps the Builtin source.
+        let builtin =
+            parse_extensions("[[command]]\nid = \"fetch-all\"\ncommand = \"git fetch\"\n").unwrap();
+        let (commands, _hooks) =
+            merge_extensions_with_source(&builtin, &Extensions::default(), &Extensions::default());
+        assert_eq!(commands.len(), 1);
+        assert_eq!(commands[0].source, ExtensionSource::Builtin);
+        assert_eq!(commands[0].command.id, "fetch-all");
+    }
+
+    #[test]
+    fn merge_with_source_precedence_repo_over_global_over_builtin() {
+        // Same id across all three layers: repo wins and is tagged Repo.
+        let builtin = parse_extensions("[[command]]\nid = \"lint\"\ncommand = \"b\"\n").unwrap();
+        let global = parse_extensions("[[command]]\nid = \"lint\"\ncommand = \"g\"\n").unwrap();
+        let repo = parse_extensions("[[command]]\nid = \"lint\"\ncommand = \"r\"\n").unwrap();
+        let (commands, _hooks) = merge_extensions_with_source(&builtin, &global, &repo);
+        assert_eq!(commands.len(), 1);
+        assert_eq!(commands[0].source, ExtensionSource::Repo);
+        assert_eq!(commands[0].command.command, "r");
+
+        // Global overrides builtin but not repo.
+        let (commands, _hooks) =
+            merge_extensions_with_source(&builtin, &global, &Extensions::default());
+        assert_eq!(commands.len(), 1);
+        assert_eq!(commands[0].source, ExtensionSource::Global);
+        assert_eq!(commands[0].command.command, "g");
+    }
+
+    #[test]
+    fn merge_with_source_concats_hooks_in_precedence_order() {
+        let builtin =
+            parse_extensions("[[hook]]\nevent = \"AfterCommit\"\ncommand = \"b-push\"\n").unwrap();
+        let global =
+            parse_extensions("[[hook]]\nevent = \"AfterCommit\"\ncommand = \"g-push\"\n").unwrap();
+        let repo =
+            parse_extensions("[[hook]]\nevent = \"AfterCommit\"\ncommand = \"r-push\"\n").unwrap();
+        let (_commands, hooks) = merge_extensions_with_source(&builtin, &global, &repo);
+        assert_eq!(hooks.len(), 3);
+        assert_eq!(hooks[0].source, ExtensionSource::Builtin);
+        assert_eq!(hooks[1].source, ExtensionSource::Global);
+        assert_eq!(hooks[2].source, ExtensionSource::Repo);
+    }
+
+    #[test]
+    fn builtin_extensions_parse_and_tag_as_builtin() {
+        // Guards the embedded resource: it must parse and ship the expected
+        // commands (ids + sane fields). If someone edits the bundled TOML this
+        // test catches a malformed or regressed default set.
+        let builtin = builtin_extensions();
+        assert!(
+            builtin
+                .commands
+                .iter()
+                .any(|c| c.id == "fetch-all" && !c.command.is_empty() && c.requires_repo),
+            "builtin set must ship fetch-all with a script and requires_repo"
+        );
+        assert!(
+            builtin
+                .commands
+                .iter()
+                .any(|c| c.id == "pull-rebase" && !c.command.is_empty() && c.requires_repo),
+            "builtin set must ship pull-rebase with a script and requires_repo"
+        );
+        // Whatever the bundled set contains, every entry must be resolvable and
+        // tagged Builtin when merged with empty global/repo configs.
+        let (commands, _hooks) =
+            merge_extensions_with_source(&builtin, &Extensions::default(), &Extensions::default());
+        assert_eq!(commands.len(), builtin.commands.len());
+        assert!(
+            commands
+                .iter()
+                .all(|c| c.source == ExtensionSource::Builtin)
+        );
     }
 }

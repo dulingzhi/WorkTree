@@ -1,6 +1,7 @@
-//! Iteration 09-A Slice 2: per-repository extension manager. Lists the active
-//! (global ∪ repo-local) extension commands and hooks, tagging each with its
-//! source (`Global` / `Repo`) and offering runtime enable/disable toggles.
+//! Iteration 09-A Slice 2/3: per-repository extension manager. Lists the active
+//! (bundled ∪ global ∪ repo-local) extension commands and hooks, tagging each
+//! with its source (`Built-in` / `Global` / `Repo`) and offering runtime
+//! enable/disable toggles.
 //!
 //! Toggling writes only to [`WorkTreeView::disabled_extension_ids`]; it never
 //! edits a toml file, so a disabled extension drops out of the command palette,
@@ -39,13 +40,15 @@ pub(super) fn panel(
         );
     };
 
-    // The manager resolves the merged set itself (global app-data config + the
-    // repository-local overlay) so it never depends on view construction order.
+    // The manager resolves the merged set itself (bundled builtin + global
+    // app-data config + the repository-local overlay) so it never depends on
+    // view construction order. Precedence repo > global > builtin.
+    let builtin_ext = worktree_core::extensions::builtin_extensions();
     let global_ext = session::app_data_dir()
         .map(|dir| worktree_core::extensions::load_extensions(&dir.join("extensions.toml")))
         .unwrap_or_default();
     let repo_ext = worktree_core::extensions::load_extensions(&workdir.join("extensions.toml"));
-    let (commands, hooks) = merge_extensions_with_source(&global_ext, &repo_ext);
+    let (commands, hooks) = merge_extensions_with_source(&builtin_ext, &global_ext, &repo_ext);
 
     let disabled = this
         .root_view
@@ -143,6 +146,7 @@ pub(super) fn panel(
 
 fn source_label(source: ExtensionSource) -> &'static str {
     match source {
+        ExtensionSource::Builtin => crate::i18n::tr_str("input.extensions_manager.source_builtin"),
         ExtensionSource::Global => crate::i18n::tr_str("input.extensions_manager.source_global"),
         ExtensionSource::Repo => crate::i18n::tr_str("input.extensions_manager.source_repo"),
     }

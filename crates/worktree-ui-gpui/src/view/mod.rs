@@ -1975,12 +1975,16 @@ impl WorkTreeView {
         &self,
         workdir: Option<&std::path::Path>,
     ) -> worktree_core::extensions::Extensions {
+        // Iteration 09-A Slice 3: the bundled set is the lowest-precedence base
+        // layer, overridden by the global config (loaded at startup) and then by
+        // the repository-local overlay (precedence repo > global > builtin).
+        let builtin = worktree_core::extensions::builtin_extensions();
         match workdir {
             Some(dir) => worktree_core::extensions::merge_extensions(
-                &self.extensions,
+                &worktree_core::extensions::merge_extensions(&builtin, &self.extensions),
                 &worktree_core::extensions::load_extensions(&dir.join("extensions.toml")),
             ),
-            None => self.extensions.clone(),
+            None => worktree_core::extensions::merge_extensions(&builtin, &self.extensions),
         }
     }
 

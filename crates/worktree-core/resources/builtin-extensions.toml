@@ -1,0 +1,25 @@
+# Bundled extensions shipped with GitComet (iteration 09-A Slice 3).
+#
+# These form the *lowest-precedence* layer of the merged extension set. A
+# global or repository-local `extensions.toml` command/hook with the same `id`
+# overrides a builtin entry; the extension manager tags every builtin entry as
+# "Built-in" so users can see and toggle it. Builtin entries are embedded into
+# the binary at compile time, so editing this file ships a new default set.
+#
+# Scope note: Slice 3 ships *script* commands only. Validation-style extensions
+# that must intercept a commit (e.g. conventional-commit enforcement) need a
+# separate `BuiltinHook` interception kind and are intentionally deferred.
+
+[[command]]
+id = "fetch-all"
+label = "Fetch all remotes (prune)"
+command = "git fetch --all --prune"
+requires_repo = true
+confirm = false
+
+[[command]]
+id = "pull-rebase"
+label = "Pull with rebase (autostash)"
+command = "git pull --rebase --autostash"
+requires_repo = true
+confirm = true

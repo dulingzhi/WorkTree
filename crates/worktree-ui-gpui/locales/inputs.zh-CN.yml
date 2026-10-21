@@ -93,6 +93,7 @@ input:
     no_commands: "没有扩展命令"
     hooks_title: "生命周期钩子"
     no_hooks: "没有生命周期钩子"
+    source_builtin: "内置"
     source_global: "全局"
     source_repo: "仓库"
     enabled: "已启用"

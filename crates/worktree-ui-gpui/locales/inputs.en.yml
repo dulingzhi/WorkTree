@@ -100,6 +100,7 @@ input:
     no_commands: "No extension commands"
     hooks_title: "Lifecycle hooks"
     no_hooks: "No lifecycle hooks"
+    source_builtin: "Built-in"
     source_global: "Global"
     source_repo: "Repo"
     enabled: "Enabled"
