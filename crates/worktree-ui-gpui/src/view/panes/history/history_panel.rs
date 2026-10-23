@@ -45,7 +45,7 @@ impl HistoryView {
         let bg = theme.colors.surface.canvas;
 
         let body: AnyElement = if count == 0 {
-            match repo.map(|r| &r.log) {
+            match repo.map(Self::display_log_loadable_for_repo) {
                 None => components::empty_state(
                     theme,
                     crate::i18n::tr("misc.history_panel.title"),
@@ -102,6 +102,9 @@ impl HistoryView {
                 state.last_item_size.is_some()
                     && repo.is_some_and(|repo| {
                         !repo.log_loading_more
+                            // A file scope loads a fixed window; pagination is
+                            // not wired for it, so never page the repo walk.
+                            && repo.history_state.history_file_scope.is_none()
                             && matches!(
                                 &repo.log,
                                 Loadable::Ready(page) if page.next_cursor.is_some()

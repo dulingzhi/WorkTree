@@ -1715,6 +1715,36 @@ fn display_log_page_uses_retained_page_while_loading() {
     assert!(Arc::ptr_eq(&display, &page));
 }
 
+#[test]
+fn display_log_page_prefers_the_file_history_while_scoped() {
+    let mut repo = RepoState::new_opening(
+        RepoId(9),
+        RepoSpec {
+            workdir: "/tmp/repo".into(),
+        },
+    );
+    let repo_page = Arc::new(log_page(vec![commit("a", &[], "repo")], None));
+    let file_page = Arc::new(log_page(vec![commit("b", &[], "file")], None));
+    repo.log = Loadable::Ready(Arc::clone(&repo_page));
+    repo.history_state.log = Loadable::Ready(Arc::clone(&repo_page));
+
+    // Unscoped: the pane shows the whole-repository walk.
+    let unscoped =
+        HistoryView::display_log_page_for_repo(&repo).expect("repo walk should be displayed");
+    assert!(Arc::ptr_eq(&unscoped, &repo_page));
+
+    repo.history_state.history_file_scope = Some(std::path::PathBuf::from("src/lib.rs"));
+    repo.history_state.file_history = Loadable::Ready(Arc::clone(&file_page));
+
+    let scoped =
+        HistoryView::display_log_page_for_repo(&repo).expect("file history should be displayed");
+    assert!(Arc::ptr_eq(&scoped, &file_page));
+    assert_eq!(
+        HistoryView::history_file_scope(&repo),
+        Some(std::path::Path::new("src/lib.rs"))
+    );
+}
+
 /// A worktree reveal scrolls to the worktree's own row, which sits one line
 /// *above* the commit that located it. The selected-list-index cache it
 /// writes is keyed on that commit, though, so it has to remember the

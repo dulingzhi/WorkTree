@@ -358,7 +358,34 @@ impl HistoryView {
         });
     }
 
+    /// The file the history pane is scoped to, or `None` for the whole-repo walk.
+    pub(in crate::view) fn history_file_scope(repo: &RepoState) -> Option<&std::path::Path> {
+        repo.history_state.history_file_scope.as_deref()
+    }
+
+    /// The loadable the pane renders: one file's history while a file scope is
+    /// active, otherwise the whole-repository walk. Keeping this choice in a
+    /// single place is what lets the rest of the pane (columns, selection,
+    /// compare, diff) work unchanged in both modes.
+    pub(in crate::view) fn display_log_loadable_for_repo(
+        repo: &RepoState,
+    ) -> &Loadable<Arc<LogPage>> {
+        if Self::history_file_scope(repo).is_some() {
+            &repo.history_state.file_history
+        } else {
+            &repo.log
+        }
+    }
+
     pub(in crate::view) fn display_log_page_for_repo(repo: &RepoState) -> Option<Arc<LogPage>> {
+        if Self::history_file_scope(repo).is_some() {
+            // A file scope keeps no "retained while loading" page, so a reload
+            // shows the empty/loading state until the new page lands.
+            return match &repo.history_state.file_history {
+                Loadable::Ready(page) => Some(Arc::clone(page)),
+                Loadable::Loading | Loadable::NotLoaded | Loadable::Error(_) => None,
+            };
+        }
         match &repo.log {
             Loadable::Ready(page) => Some(Arc::clone(page)),
             Loadable::Loading => repo
@@ -371,6 +398,12 @@ impl HistoryView {
     }
 
     fn live_log_page_has_more_for_repo(repo: &RepoState) -> Option<bool> {
+        if Self::history_file_scope(repo).is_some() {
+            // Pagination is not wired for a file scope — it loads a fixed
+            // window — so report "no more" and never send `LoadMoreHistory`
+            // against the whole-repository walk.
+            return Some(false);
+        }
         match &repo.log {
             Loadable::Ready(page) => Some(page.next_cursor.is_some()),
             Loadable::Loading | Loadable::NotLoaded | Loadable::Error(_) => None,
