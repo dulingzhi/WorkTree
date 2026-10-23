@@ -371,6 +371,16 @@ pub enum Msg {
         path: PathBuf,
         limit: usize,
     },
+    /// Scope the history pane to a single file, or clear the scope with `None`.
+    ///
+    /// Setting `Some(path)` also loads that file's history; clearing only drops
+    /// the scope (the previously loaded page is left in place so switching back
+    /// is instant). This is the entry point for showing a file's history in the
+    /// docked pane instead of a transient popover.
+    SetHistoryFileScope {
+        repo_id: RepoId,
+        path: Option<PathBuf>,
+    },
     LoadBlame {
         repo_id: RepoId,
         path: PathBuf,

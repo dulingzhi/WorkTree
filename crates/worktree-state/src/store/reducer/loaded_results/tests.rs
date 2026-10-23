@@ -7,7 +7,7 @@ use super::{
     load_reflog, load_stashes, load_submodules, load_tags, load_worktrees, merge_preview_loaded,
     reflog_loaded, refresh_branches, remote_branches_loaded, remote_tags_loaded, remotes_loaded,
     reset_browse_to_live, reveal_file_browser_path, select_commit, select_commit_multi,
-    set_file_browser_search, set_file_browser_source, set_sidebar_mode,
+    set_file_browser_search, set_file_browser_source, set_history_file_scope, set_sidebar_mode,
     squash_message_preview_loaded, staged_status_loaded, stashes_loaded, status_loaded,
     submodules_loaded, tags_loaded, toggle_file_browser_dir, upstream_divergence_loaded,
     worktree_status_loaded, worktrees_loaded,
@@ -280,6 +280,54 @@ fn author_emails_loaded_stores_map_and_ignores_failures() {
             .get("Jai")
             .map(String::as_str),
         Some("814683@qq.com")
+    );
+}
+
+#[test]
+fn set_history_file_scope_sets_the_flag_and_loads_that_file() {
+    let repo_id = RepoId(1);
+    let mut state = new_state_with_repo(repo_id);
+    let scoped_path = PathBuf::from("src/lib.rs");
+
+    let effects = set_history_file_scope(&mut state, repo_id, Some(scoped_path.clone()));
+    assert_eq!(effects.len(), 1);
+    assert!(matches!(
+        effects[0],
+        Effect::LoadFileHistory {
+            repo_id: rid,
+            ref path,
+            limit
+        } if rid == repo_id && path == &scoped_path && limit == 200
+    ));
+    let repo = repo_mut(&mut state, repo_id);
+    assert_eq!(
+        repo.history_state.history_file_scope.as_ref(),
+        Some(&scoped_path),
+        "the pane is scoped to the file"
+    );
+    assert_eq!(
+        repo.history_state.file_history_path.as_ref(),
+        Some(&scoped_path)
+    );
+    assert!(repo.history_state.file_history.is_loading());
+}
+
+#[test]
+fn clearing_history_file_scope_keeps_the_loaded_page() {
+    let repo_id = RepoId(1);
+    let mut state = new_state_with_repo(repo_id);
+    let path = PathBuf::from("src/lib.rs");
+
+    set_history_file_scope(&mut state, repo_id, Some(path.clone()));
+    file_history_loaded(&mut state, repo_id, path.clone(), Ok(empty_log_page()));
+
+    let effects = set_history_file_scope(&mut state, repo_id, None);
+    assert!(effects.is_empty(), "clearing the scope loads nothing");
+    let repo = repo_mut(&mut state, repo_id);
+    assert_eq!(repo.history_state.history_file_scope, None);
+    assert!(
+        matches!(repo.history_state.file_history, Loadable::Ready(_)),
+        "the loaded page is kept so re-scoping to the same file is instant"
     );
 }
 

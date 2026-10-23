@@ -21,7 +21,8 @@ pub(super) use history_loads::{
     ai_commit_context_loaded, author_emails_loaded, blame_loaded, commits_searched,
     file_history_loaded, hover_commit_message_loaded, load_ai_commit_context, load_blame,
     load_file_history, load_hover_commit_message, load_recent_commit_messages, load_reflog,
-    load_stashes, recent_commit_messages_loaded, reflog_loaded, search_commits, stashes_loaded,
+    load_stashes, recent_commit_messages_loaded, reflog_loaded, search_commits,
+    set_history_file_scope, stashes_loaded,
 };
 pub(super) use merge_preview::merge_preview_loaded;
 pub(super) use selection::{
@@ -144,6 +145,9 @@ pub(super) fn reduce_loaded_results(msg: Msg, state: &mut AppState) -> ReduceOut
             path,
             limit,
         } => loaded_results::load_file_history(state, repo_id, path, limit),
+        Msg::SetHistoryFileScope { repo_id, path } => {
+            loaded_results::set_history_file_scope(state, repo_id, path)
+        }
         Msg::LoadBlame {
             repo_id,
             path,

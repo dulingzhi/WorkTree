@@ -320,6 +320,31 @@ pub(in crate::store::reducer) fn load_file_history(
     }]
 }
 
+/// Number of commits requested when scoping the history pane to one file.
+/// Matches the window the transient file-history popover used, so the pane
+/// opens on the same slice of the file's timeline.
+pub(in crate::store::reducer) const FILE_HISTORY_LIMIT: usize = 200;
+
+/// Scope the history pane to `path`, or clear the scope with `None`.
+///
+/// Scoping also reloads that file's history through
+/// [`load_file_history`]. Clearing is pure state: the loaded page is kept so
+/// re-scoping to the same file is instant.
+pub(in crate::store::reducer) fn set_history_file_scope(
+    state: &mut AppState,
+    repo_id: RepoId,
+    path: Option<PathBuf>,
+) -> Vec<Effect> {
+    let Some(repo_state) = state.repos.iter_mut().find(|r| r.id == repo_id) else {
+        return Vec::new();
+    };
+    repo_state.history_state.history_file_scope = path.clone();
+    match path {
+        Some(path) => load_file_history(state, repo_id, path, FILE_HISTORY_LIMIT),
+        None => Vec::new(),
+    }
+}
+
 pub(in crate::store::reducer) fn load_blame(
     state: &mut AppState,
     repo_id: RepoId,

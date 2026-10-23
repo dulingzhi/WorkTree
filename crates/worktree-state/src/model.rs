@@ -838,6 +838,15 @@ pub struct HistoryState {
     pub log_rev: u64,
     pub file_history_path: Option<PathBuf>,
     pub file_history: Loadable<Shared<LogPage>>,
+    /// The file the history pane is currently scoped to, or `None` when the pane
+    /// shows the whole-repository walk.
+    ///
+    /// Set by `Msg::SetHistoryFileScope`. While it is `Some(path)` the history
+    /// pane renders [`HistoryState::file_history`] instead of
+    /// [`HistoryState::log`], so a file's history is shown in the full-height
+    /// docked pane (with its normal selection/compare/diff actions) rather than
+    /// in a transient popover.
+    pub history_file_scope: Option<PathBuf>,
     pub blame_path: Option<PathBuf>,
     pub blame_source: Option<BlameSource>,
     pub blame: Loadable<Shared<Vec<BlameLine>>>,
@@ -914,6 +923,7 @@ impl Default for HistoryState {
             log_rev: 0,
             file_history_path: None,
             file_history: Loadable::NotLoaded,
+            history_file_scope: None,
             blame_path: None,
             blame_source: None,
             blame: Loadable::NotLoaded,
