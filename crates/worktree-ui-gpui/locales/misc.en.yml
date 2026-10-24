@@ -47,6 +47,8 @@ misc:
     ref_filter_tooltip_active: "Ref filter: %{count} selected — history shows only commits reachable from them"
     mode_tooltip: "History mode (Full reachable / First-parent / No merges / Merges only / All branches)"
     scanning: "Scanning history… %{count} commits"
+    file_scope: "File: %{path}"
+    file_scope_clear: "Clear"
     column_message: MESSAGE
     column_date: DATE
     column_sha: SHA

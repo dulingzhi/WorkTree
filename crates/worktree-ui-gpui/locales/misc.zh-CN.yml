@@ -37,6 +37,8 @@ misc:
     ref_filter_tooltip_active: "引用筛选：已选 %{count} 项 —— 仅显示从所选分支/标签可达的提交"
     mode_tooltip: "历史模式（全部可达 / 仅第一父提交 / 排除合并 / 仅合并提交 / 所有分支）"
     scanning: "正在扫描历史… %{count} 个提交"
+    file_scope: "文件：%{path}"
+    file_scope_clear: "清除"
     column_message: 信息
     column_date: 日期
     column_sha: SHA

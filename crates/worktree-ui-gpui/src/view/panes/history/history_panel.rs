@@ -210,6 +210,9 @@ impl HistoryView {
                         )),
                 )
             })
+            .when_some(self.file_scope_bar(theme, cx), |panel, bar| {
+                panel.child(bar)
+            })
             .child(
                 div()
                     .flex()
@@ -218,6 +221,52 @@ impl HistoryView {
                     .min_h(px(0.0))
                     .child(div().flex_1().min_h(px(0.0)).child(body)),
             )
+    }
+
+    /// The "File: <path> ✕" bar shown while the pane is scoped to one file, or
+    /// `None` for the whole-repository walk. Without it a scoped pane would have
+    /// no way back to the repository history.
+    fn file_scope_bar(&self, theme: AppTheme, cx: &mut gpui::Context<Self>) -> Option<gpui::Div> {
+        let repo_id = self.active_repo_id()?;
+        let path = self
+            .active_repo()
+            .and_then(HistoryView::history_file_scope)?
+            .to_string_lossy()
+            .into_owned();
+        Some(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(6.0))
+                .w_full()
+                .px(ui_scale::design_px_from_percent(8.0, self.ui_scale_percent))
+                .py(ui_scale::design_px_from_percent(2.0, self.ui_scale_percent))
+                .bg(theme.colors.interaction.hover_background)
+                .border_b_1()
+                .border_color(theme.colors.stroke.subtle)
+                .text_xs()
+                .text_color(theme.colors.foreground.secondary)
+                .whitespace_nowrap()
+                .overflow_hidden()
+                .debug_selector(|| "history_file_scope_bar".to_string())
+                .child(crate::i18n::t!(
+                    "misc.history_panel.file_scope",
+                    path = path
+                ))
+                .child(
+                    div()
+                        .id("history_file_scope_clear")
+                        .debug_selector(|| "history_file_scope_clear".to_string())
+                        .child(crate::i18n::tr("misc.history_panel.file_scope_clear"))
+                        .on_click(cx.listener(move |this, _e: &ClickEvent, _window, cx| {
+                            this.store.dispatch(Msg::SetHistoryFileScope {
+                                repo_id,
+                                path: None,
+                            });
+                            cx.notify();
+                        })),
+                ),
+        )
     }
 
     /// Enter on a worktree row opens that worktree, matching what clicking its
