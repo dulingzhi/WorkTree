@@ -4,6 +4,7 @@ members = [
   "crates/worktree",
   "crates/worktree-core",
   "crates/worktree-git-gix",
+  "crates/worktree-git-native",
   "crates/worktree-state",
   "crates/worktree-test-support",
   "crates/worktree-tree-sitter-alloc",
@@ -31,6 +32,7 @@ rust-version = "1.98.0"
 # Internal crates
 worktree-core = { path = "crates/worktree-core" }
 worktree-git-gix = { path = "crates/worktree-git-gix" }
+worktree-git-native = { path = "crates/worktree-git-native" }
 worktree-state = { path = "crates/worktree-state" }
 worktree-test-support = { path = "crates/worktree-test-support" }
 worktree-ui-gpui = { path = "crates/worktree-ui-gpui", default-features = false }
@@ -44,6 +46,8 @@ clap = { version = "4.6.6", features = ["derive"] }
 criterion = "0.8.2"
 # Groovy grammar: the `tree-sitter-groovy` crate name is taken by amaanq's fork,
 encoding_rs = "0.8"
+flate2 = "1"
+memmap2 = "0.9"
 # which ships no highlights query. This one does.
 dekobon-tree-sitter-groovy = "0.2.2"
 fontdb = "0.24.0"

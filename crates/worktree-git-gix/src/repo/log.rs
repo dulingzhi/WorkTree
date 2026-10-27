@@ -360,6 +360,10 @@ fn commit_stats_blob_bytes(repo: &gix::Repository, id: Option<gix::ObjectId>) ->
         // No blob on this side (pure addition/deletion) diffs as empty content.
         return Some(Vec::new());
     };
+    #[cfg(feature = "native-object")]
+    {
+        return super::blob_bytes(repo, &id);
+    }
     let object = repo.find_object(id).ok()?;
     if object.kind != gix::object::Kind::Blob {
         return None;
@@ -1396,6 +1400,11 @@ impl GixRepo {
     fn first_parent_id(&self, commit: &CommitId) -> Option<String> {
         let repo = self._repo.to_thread_local();
         let id = repo.rev_parse_single(commit.as_ref()).ok()?.detach();
+        #[cfg(feature = "native-object")]
+        {
+            let c = super::find_commit_owned(&repo, &id)?;
+            return c.parents.first().map(|p| p.to_string());
+        }
         let commit = repo.find_commit(id).ok()?;
         commit.parent_ids().next().map(|parent| parent.to_string())
     }
@@ -2539,6 +2548,7 @@ mod tests {
     /// builds a *fresh* `GixRepo`, so the in-process LRU is empty and the second
     /// pass can only be served from disk. Read-only with respect to the repo.
     #[test]
+    #[cfg(not(feature = "native-object"))]
     fn real_repo_history_cache_probe() {
         use super::super::history_cache as hc;
 

@@ -695,6 +695,11 @@ pub(super) fn load_log_page(
     // therefore be able to hand the fingerprint over instead of paying twice.
     fingerprint: Option<u64>,
 ) -> Option<LogPage> {
+    #[cfg(feature = "native-object")]
+    {
+        return None;
+    }
+
     let fingerprint = fingerprint.unwrap_or_else(|| ref_fingerprint(repo, mode_idx));
     let path = cache_path(repo_path, fingerprint, log_request_hash(mode_idx, author));
 
@@ -823,6 +828,11 @@ pub(super) fn store_log_page(
     // enumerated refs, so storing does not enumerate them again.
     fingerprint: Option<u64>,
 ) {
+    #[cfg(feature = "native-object")]
+    {
+        return;
+    }
+
     if cursor_oid.is_some() {
         return;
     }
@@ -1023,6 +1033,11 @@ pub(super) fn load_reflog_window(
     repo_path: &Path,
     limit: usize,
 ) -> Option<Vec<ReflogEntry>> {
+    #[cfg(feature = "native-object")]
+    {
+        return None;
+    }
+
     let fingerprint = reflog_fingerprint(repo);
     let path = cache_path(repo_path, fingerprint, reflog_request_hash());
 
@@ -1100,6 +1115,11 @@ pub(super) fn store_reflog_window(
     lines: &[gix::refs::log::Line],
     requested: usize,
 ) {
+    #[cfg(feature = "native-object")]
+    {
+        return;
+    }
+
     if lines.is_empty() {
         return;
     }
@@ -1219,6 +1239,11 @@ pub(super) fn load_blame(
     commit_id: &str,
     options: u64,
 ) -> Option<Vec<BlameLine>> {
+    #[cfg(feature = "native-object")]
+    {
+        return None;
+    }
+
     let fingerprint = blame_fingerprint(commit_id, options);
     let cache_path = cache_path(repo_path, fingerprint, blame_request_hash(path));
 
@@ -1278,6 +1303,11 @@ pub(super) fn store_blame(
     options: u64,
     lines: &[BlameLine],
 ) {
+    #[cfg(feature = "native-object")]
+    {
+        return;
+    }
+
     if lines.is_empty() {
         return;
     }
@@ -1464,6 +1494,11 @@ pub(super) fn load_search(
     // the store that follows a miss.
     fingerprint: Option<u64>,
 ) -> Option<Vec<Commit>> {
+    #[cfg(feature = "native-object")]
+    {
+        return None;
+    }
+
     let fingerprint = fingerprint.unwrap_or_else(|| all_refs_fingerprint_inner(repo, false));
     let path = cache_path(repo_path, fingerprint, search_request_hash(query));
 
@@ -1548,6 +1583,11 @@ pub(super) fn store_search(
     requested: usize,
     fingerprint: Option<u64>,
 ) {
+    #[cfg(feature = "native-object")]
+    {
+        return;
+    }
+
     // An empty result is cached too: "nothing matches" is a real answer, and
     // re-running a negative search costs exactly as much as a positive one.
     let fingerprint = fingerprint.unwrap_or_else(|| all_refs_fingerprint_inner(repo, false));

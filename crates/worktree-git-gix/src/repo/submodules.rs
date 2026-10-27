@@ -1124,7 +1124,7 @@ fn resolve_submodule_target_commit_id(
     repo: &gix::Repository,
     reference: &str,
 ) -> Result<gix::ObjectId> {
-    let object = repo
+    let object_id = repo
         .rev_parse_single(reference)
         .map_err(|_| {
             Error::new(ErrorKind::Backend(format!(
@@ -1132,7 +1132,20 @@ fn resolve_submodule_target_commit_id(
                 reference
             )))
         })?
-        .object()
+        .detach();
+
+    #[cfg(feature = "native-object")]
+    {
+        return super::peel_to_commit_id(repo, &object_id).ok_or_else(|| {
+            Error::new(ErrorKind::Backend(format!(
+                "submodule reference '{}' does not point to a commit",
+                reference
+            )))
+        });
+    }
+
+    let object = repo
+        .find_object(object_id)
         .map_err(|e| {
             Error::new(ErrorKind::Backend(format!(
                 "resolve submodule reference '{}': {e}",
@@ -1158,6 +1171,19 @@ fn first_parent_commit_id(
             commit_id.as_ref()
         ))));
     };
+    #[cfg(feature = "native-object")]
+    {
+        let Some(c) = super::find_commit_owned(repo, &object_id) else {
+            return Err(Error::new(ErrorKind::Backend(format!(
+                "gix find commit: {object_id}"
+            ))));
+        };
+        return Ok(c
+            .parents
+            .first()
+            .map(|id| object_id_to_commit_id(*id)));
+    }
+
     let commit = repo
         .find_commit(object_id)
         .map_err(|e| Error::new(ErrorKind::Backend(format!("gix find commit: {e}"))))?;

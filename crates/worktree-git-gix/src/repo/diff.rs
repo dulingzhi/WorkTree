@@ -533,22 +533,25 @@ impl GixRepo {
 
         let mut tmp_file =
             tempfile::NamedTempFile::new_in(std::env::temp_dir()).map_err(io_err_to_error)?;
-        // Route the `git cat-file` subprocess through `run_git_raw_output` so it
-        // inherits the transient lock-conflict retry (os error 5 on Windows when
-        // another program briefly locks `.git` state or the temp dir).
-        let mut command = self.git_workdir_cmd();
-        command.arg("cat-file").arg("blob").arg(blob_id.to_string());
-        let output = run_git_raw_output(command, "git cat-file")?;
-        if !output.status.success() {
-            return Err(git_command_failed_error("git cat-file", output));
-        }
+        // Read the blob in-process via the shared object backend instead of
+        // spawning `git cat-file`. This avoids the transient Windows `.git`
+        // lock-conflict (os error 5) the former subprocess path hit, and is
+        // faster for cached previews. [`gix_object_id_is_blob`] above already
+        // guaranteed `blob_id` is a blob, so a `None` here is unexpected; if it
+        // does happen we surface a clear backend error rather than a wrong cache.
+        let bytes = gix_blob_bytes_from_object_id_optional(&repo, blob_id)?
+            .ok_or_else(|| {
+                Error::new(ErrorKind::Backend(format!(
+                    "blob {blob_id} missing despite a blob header lookup"
+                )))
+            })?;
         // Diff sides must be valid UTF-8 for the viewer; a blob saved in a
         // legacy encoding (GBK and friends) is transcode-detected in place.
         let mut utf8_check = StreamingUtf8Check::default();
-        utf8_check.push(&output.stdout);
+        utf8_check.push(&bytes);
         let blob_is_utf8 = utf8_check.finish();
         tmp_file
-            .write_all(&output.stdout)
+            .write_all(&bytes)
             .map_err(io_err_to_error)?;
         if !blob_is_utf8 {
             rewrite_temp_file_as_utf8(&mut tmp_file)?;
@@ -1020,6 +1023,11 @@ fn gix_blob_bytes_from_object_id_optional(
     repo: &gix::Repository,
     object_id: gix::ObjectId,
 ) -> Result<Option<Vec<u8>>> {
+    #[cfg(feature = "native-object")]
+    {
+        return Ok(super::blob_bytes(repo, &object_id));
+    }
+
     let Some(object) = repo
         .try_find_object(object_id)
         .map_err(|e| Error::new(ErrorKind::Backend(format!("gix try_find_object: {e}"))))?
@@ -1101,6 +1109,15 @@ fn gix_revision_path_blob_object_id_optional(
     let Some(object_id) = gix_revision_id_optional(repo, revision)? else {
         return Ok(None);
     };
+
+    #[cfg(feature = "native-object")]
+    {
+        let tree = super::find_tree_owned(repo, &object_id);
+        return match tree.and_then(|t| super::tree_lookup_entry(repo, &t, path)) {
+            Some((_, oid)) => Ok(Some(oid)),
+            None => Ok(None),
+        };
+    }
 
     let object = match repo.find_object(object_id) {
         Ok(object) => object,
@@ -1423,6 +1440,14 @@ fn gix_first_parent_optional(repo: &gix::Repository, commit: &str) -> Result<Opt
     let Some(commit_id) = gix_revision_id_optional(repo, commit)? else {
         return Ok(None);
     };
+
+    #[cfg(feature = "native-object")]
+    {
+        let Some(c) = super::find_commit_owned(repo, &commit_id) else {
+            return Ok(None);
+        };
+        return Ok(c.parents.first().map(|id| id.to_string()));
+    }
 
     let commit = match repo.find_commit(commit_id) {
         Ok(commit) => commit,

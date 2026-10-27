@@ -43,6 +43,14 @@ fn file_exists_at_first_parent(
 /// Whether `path` resolves to an entry in the tree of object `id`. Returns
 /// `false` if the object can't be found, isn't tree-ish, or lacks the path.
 fn tree_contains_path(repo: &gix::Repository, id: gix::ObjectId, path: &Path) -> bool {
+    #[cfg(feature = "native-object")]
+    {
+        return match super::find_tree_owned(repo, &id) {
+            Some(tree) => super::tree_lookup_entry(repo, &tree, path).is_some(),
+            None => false,
+        };
+    }
+
     let Ok(object) = repo.find_object(id) else {
         return false;
     };
@@ -684,6 +692,7 @@ mod tests {
     /// the results matching, because a cache that never hits would produce
     /// identical results too and the test would still be green.
     #[test]
+    #[cfg(not(feature = "native-object"))]
     fn blame_file_is_served_from_disk_on_a_repeat() {
         use super::super::history_cache as hc;
 

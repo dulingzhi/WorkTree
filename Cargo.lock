@@ -8904,7 +8904,19 @@ dependencies = [
  "syn 3.0.3",
  "tempfile",
  "worktree-core",
+ "worktree-git-native",
  "worktree-test-support",
+]
+
+[[package]]
+name = "worktree-git-native"
+version = "0.3.0"
+dependencies = [
+ "criterion",
+ "flate2",
+ "gix",
+ "memmap2",
+ "tempfile",
 ]
 
 [[package]]

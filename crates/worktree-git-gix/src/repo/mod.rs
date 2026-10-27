@@ -53,6 +53,15 @@ mod file_browser;
 mod git_ops;
 mod history;
 pub(crate) mod history_cache;
+
+#[cfg(feature = "native-object")]
+mod native_object;
+
+#[cfg(feature = "native-object")]
+pub(crate) use native_object::{
+    blob_bytes, collect_tree_entries, find_commit_owned, find_tree_owned, peel_to_commit_id,
+    tree_lookup_entry,
+};
 mod lfs;
 mod log;
 mod mergetool;

@@ -161,6 +161,16 @@ fn list_tree_files_at_oid(
     repo: &gix::Repository,
     tree_id: gix::ObjectId,
 ) -> Result<Vec<FileEntry>> {
+    #[cfg(feature = "native-object")]
+    {
+        let tree = super::find_tree_owned(repo, &tree_id).ok_or_else(|| {
+            Error::new(ErrorKind::Backend(format!("gix peel_to_tree: {tree_id}")))
+        })?;
+        let mut entries = Vec::new();
+        super::collect_tree_entries(repo, &tree, String::new(), &mut entries, 0)?;
+        return Ok(entries);
+    }
+
     let object = repo
         .find_object(tree_id)
         .map_err(|e| Error::new(ErrorKind::Backend(format!("gix find_object: {e}"))))?;

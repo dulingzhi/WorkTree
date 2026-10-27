@@ -1,0 +1,34 @@
+[package]
+name = "worktree-git-native"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+# This crate is intentionally NOT in the workspace `default-members`, so the
+# default `cargo build` (which targets `default-members`) does not compile it.
+# It is the Stage-0 spike for the cache-free, biturbo-style object store. It is
+# pulled in only by `cargo build -p worktree-git-native`, its tests, and its
+# benchmark, or by `worktree-git-gix` when the (off by default) `native-object`
+# feature is enabled.
+#
+# We do not inherit the workspace lints here: the workspace sets
+# `unsafe_code = "forbid"`, but a memory-mapped pack reader requires one
+# `unsafe` call (`Mmap::map`). We restrict the relaxation to this crate only.
+[lints.rust]
+unsafe_code = "warn"
+
+[dependencies]
+flate2 = { workspace = true }
+memmap2 = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+criterion = { workspace = true }
+gix = { workspace = true }
+
+[[bench]]
+name = "object_read"
+harness = false
