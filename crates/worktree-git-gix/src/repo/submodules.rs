@@ -854,9 +854,16 @@ fn submodule_range_unavailable_reason(
 }
 
 fn submodule_commit_available(repo: &gix::Repository, commit_id: &CommitId) -> bool {
-    object_id_from_commit_id(commit_id)
-        .and_then(|object_id| repo.find_commit(object_id).ok())
-        .is_some()
+    let Some(object_id) = object_id_from_commit_id(commit_id) else {
+        return false;
+    };
+    #[cfg(feature = "native-object")]
+    {
+        // A commit exists iff the high-level handle would resolve it; native
+        // lookup + gix fallback is byte-identical for existence checking.
+        return super::find_commit_owned(repo, &object_id).is_some();
+    }
+    repo.find_commit(object_id).is_ok()
 }
 
 fn submodule_range_changes_from_commits(
