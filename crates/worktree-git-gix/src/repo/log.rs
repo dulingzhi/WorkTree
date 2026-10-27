@@ -1316,6 +1316,17 @@ impl GixRepo {
         let Ok(id) = repo.rev_parse_single(commit.as_ref()) else {
             return false;
         };
+        #[cfg(feature = "native-object")]
+        {
+            let object_id = id.detach();
+            // Peel to a tree in-process and look the path up, mirroring the
+            // gix peel_to_tree + lookup_entry_by_path below. Both use gix's own
+            // parser, so the boolean result is byte-identical.
+            return match super::find_tree_owned(&repo, &object_id) {
+                Some(tree) => super::tree_lookup_entry(&repo, &tree, path).is_some(),
+                None => false,
+            };
+        }
         let Ok(object) = id.object() else {
             return false;
         };
