@@ -78,6 +78,18 @@ pub(super) fn gix_index_stage_blob_bytes_optional(
         return Ok(None);
     };
 
+    #[cfg(feature = "native-object")]
+    {
+        return super::blob_bytes(repo, &object_id)
+            .ok_or_else(|| {
+                Error::new(ErrorKind::Backend(format!(
+                    "conflict stage object for :{stage}:{} is missing or not a blob",
+                    path.display()
+                )))
+            })
+            .map(Some);
+    }
+
     let Some(object) = repo
         .try_find_object(object_id)
         .map_err(|e| Error::new(ErrorKind::Backend(format!("gix try_find_object: {e}"))))?
@@ -106,6 +118,18 @@ fn gix_blob_bytes_from_object_id_optional(
     let Some(object_id) = object_id else {
         return Ok(None);
     };
+
+    #[cfg(feature = "native-object")]
+    {
+        return super::blob_bytes(repo, &object_id)
+            .ok_or_else(|| {
+                Error::new(ErrorKind::Backend(format!(
+                    "conflict stage object for :{stage}:{} is missing or not a blob",
+                    path.display()
+                )))
+            })
+            .map(Some);
+    }
 
     let Some(object) = repo
         .try_find_object(object_id)
