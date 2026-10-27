@@ -1158,6 +1158,35 @@ fn gix_revision_path_blob_entry_optional(
         return Ok(None);
     };
 
+    #[cfg(feature = "native-object")]
+    {
+        // Mirror the gix path below: peel the revision to a tree, look the path
+        // up, and read the blob in-process. `short_id` is reproduced byte-for-byte
+        // via `shorten_or_id()` so the diff-side annotation is identical.
+        let tree = super::find_tree_owned(repo, &object_id);
+        return match tree.and_then(|t| super::tree_lookup_entry(repo, &t, path)) {
+            Some((mode, oid)) => {
+                let Some(bytes) = super::blob_bytes(repo, &oid) else {
+                    return Ok(None);
+                };
+                // `shorten_or_id` is a method on the repo-bound `gix::Id` (it reads
+                // the ODB to pick the shortest unambiguous prefix), so we materialize
+                // the id from the repo here. The blob *bytes* are still read natively;
+                // only this tiny annotation string goes through gix, guaranteeing the
+                // diff-side label is byte-identical to the legacy path.
+                let id = repo.find_object(oid).map_err(|e| {
+                    Error::new(ErrorKind::Backend(format!("gix find object {oid}: {e}")))
+                })?;
+                Ok(Some(RevisionPathBlobEntry {
+                    bytes,
+                    mode,
+                    short_id: id.id().shorten_or_id().to_string(),
+                }))
+            }
+            None => Ok(None),
+        };
+    }
+
     let object = match repo.find_object(object_id) {
         Ok(object) => object,
         Err(_) => return Ok(None),

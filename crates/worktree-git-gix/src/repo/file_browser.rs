@@ -48,6 +48,14 @@ impl GixRepo {
         let repo = self._repo.to_thread_local();
         let oid = gix::ObjectId::from_hex(commit_id.0.as_bytes())
             .map_err(|e| Error::new(ErrorKind::Backend(format!("invalid commit id: {e}"))))?;
+        #[cfg(feature = "native-object")]
+        {
+            let commit = super::find_commit_owned(&repo, &oid).ok_or_else(|| {
+                Error::new(ErrorKind::Backend(format!("gix find_commit: {oid}")))
+            })?;
+            return list_tree_files_at_oid(&repo, commit.tree);
+        }
+
         let commit = repo
             .find_commit(oid)
             .map_err(|e| Error::new(ErrorKind::Backend(format!("gix find_commit: {e}"))))?;

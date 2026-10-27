@@ -1215,6 +1215,26 @@ fn gitlink_commit_id_in_object(
     object_id: gix::ObjectId,
     path: &Path,
 ) -> Result<Option<CommitId>> {
+    #[cfg(feature = "native-object")]
+    {
+        // Mirror the gix path below: peel to a tree in-process, look the path up,
+        // and return the gitlink entry id when it names a commit. A resolved
+        // `object_id` always exists, so a native miss maps to the same backend
+        // error gix would raise on a missing/unpeelable object.
+        let tree = super::find_tree_owned(repo, &object_id).ok_or_else(|| {
+            Error::new(ErrorKind::Backend(format!(
+                "gix peel tree for submodule '{}': {object_id}",
+                path.display()
+            )))
+        })?;
+        return match super::tree_lookup_entry(repo, &tree, path) {
+            Some((mode, oid)) if mode.is_commit() => {
+                Ok(Some(object_id_to_commit_id(oid)))
+            }
+            _ => Ok(None),
+        };
+    }
+
     let object = repo.find_object(object_id).map_err(|e| {
         Error::new(ErrorKind::Backend(format!(
             "gix find object {object_id}: {e}"
