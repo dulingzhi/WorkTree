@@ -112,6 +112,21 @@ pub(crate) fn peek_object_kind(repo: &gix::Repository, id: &ObjectId) -> Option<
     read_owned(repo, id).map(|o| o.kind())
 }
 
+/// Read the raw, header-stripped object body at `id` without decoding it.
+///
+/// Used by call sites that want to re-parse the bytes through gix's own
+/// `CommitRef` accessors so the result is byte-identical regardless of which
+/// backend produced the bytes. Falls back to the gix handle (detached data)
+/// when the native reader misses or errors, mirroring [`read_owned`].
+#[cfg(feature = "native-object")]
+pub(crate) fn object_body(repo: &gix::Repository, id: &ObjectId) -> Option<Vec<u8>> {
+    let hex = id.to_string();
+    if let Some((_, body)) = worktree_git_native::read_object_any(repo.git_dir(), &hex) {
+        return Some(body);
+    }
+    repo.find_object(*id).ok().map(|o| o.detach().data)
+}
+
 // ---------------------------------------------------------------------------
 // Peeling (replicates gix's peel semantics)
 // ---------------------------------------------------------------------------

@@ -59,8 +59,8 @@ mod native_object;
 
 #[cfg(feature = "native-object")]
 pub(crate) use native_object::{
-    blob_bytes, collect_tree_entries, find_commit_owned, find_tree_owned, peel_to_commit_id,
-    tree_lookup_entry,
+    blob_bytes, collect_tree_entries, find_commit_owned, find_tree_owned, object_body,
+    peel_to_commit_id, tree_lookup_entry,
 };
 mod lfs;
 mod log;

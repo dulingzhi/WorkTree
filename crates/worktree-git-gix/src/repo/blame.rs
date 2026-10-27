@@ -26,18 +26,26 @@ struct BlameCommitMetadata {
     prior_exists: bool,
 }
 
-/// Whether `path` exists in the tree of `commit`'s first parent. Returns
+/// Whether `path` exists in the tree of `commit_id`'s first parent. Returns
 /// `false` for root commits (no parent) or when the path is absent there,
 /// which is exactly when navigating to the parent revision is a dead end.
 fn file_exists_at_first_parent(
     repo: &gix::Repository,
-    commit: &gix::Commit<'_>,
+    commit_id: &gix::ObjectId,
     path: &Path,
 ) -> bool {
-    let Some(parent_id) = commit.parent_ids().next() else {
+    #[cfg(feature = "native-object")]
+    let parent_id =
+        super::find_commit_owned(repo, commit_id).and_then(|c| c.parents.first().copied());
+    #[cfg(not(feature = "native-object"))]
+    let parent_id = repo
+        .find_commit(*commit_id)
+        .ok()
+        .and_then(|c| c.parent_ids().next().map(|p| p.detach()));
+    let Some(parent_id) = parent_id else {
         return false;
     };
-    tree_contains_path(repo, parent_id.detach(), path)
+    tree_contains_path(repo, parent_id, path)
 }
 
 /// Whether `path` resolves to an entry in the tree of object `id`. Returns
@@ -188,6 +196,70 @@ fn blame_commit_metadata<'a>(
     match cache.entry((commit_id, source_path.map(Path::to_path_buf))) {
         Entry::Occupied(entry) => Ok(entry.into_mut()),
         Entry::Vacant(entry) => {
+            // Native fast path: read the commit's raw object body directly and
+            // re-parse it through gix's own `CommitRef` accessors. The gix handle
+            // (`repo.find_commit(..).author()`/`.message()`) routes through the
+            // very same `CommitRefIter` parser, so this is byte-identical to the
+            // legacy path below while avoiding the high-level object lookup and
+            // the surrounding cache layer.
+            #[cfg(feature = "native-object")]
+            {
+                let raw = super::object_body(repo, &commit_id).ok_or_else(|| {
+                    Error::new(ErrorKind::Backend(format!(
+                        "gix find_commit {commit_id}: native miss"
+                    )))
+                })?;
+                let commit = gix::objs::CommitRef::from_bytes(&raw, repo.object_hash()).map_err(
+                    |e| {
+                        Error::new(ErrorKind::Backend(format!(
+                            "gix find_commit {commit_id}: {e}"
+                        )))
+                    },
+                )?;
+
+                // For a renamed file we must check whether the *historical* path
+                // (the file's name at this commit) existed in the first parent,
+                // not the current name which may not exist in that older tree.
+                let prior_exists = file_exists_at_first_parent(
+                    repo,
+                    &commit_id,
+                    source_path.unwrap_or(blamed_path),
+                );
+
+                let (author, author_time_unix) = match commit.author() {
+                    Ok(signature) => (
+                        bstr_to_arc_str(signature.name.as_ref()),
+                        signature.time().ok().map(|time| time.seconds),
+                    ),
+                    Err(_) => (Arc::<str>::default(), None),
+                };
+                // Split subject from body the way git itself does, via gix's
+                // message parser: the subject is the whole first paragraph (folded
+                // into one line, so a multi-line subject keeps every line) and the
+                // body is everything after the blank-line separator.
+                let message = commit.message();
+                let summary = {
+                    let folded = message.summary();
+                    let bytes: &[u8] = &folded;
+                    bstr_to_arc_str(bytes)
+                };
+                let body = message.body.and_then(|b| {
+                    let bytes: &[u8] = b;
+                    let bytes = bytes.strip_suffix(b"\n").unwrap_or(bytes);
+                    let bytes = bytes.strip_suffix(b"\r").unwrap_or(bytes);
+                    (!bytes.is_empty()).then(|| bstr_to_arc_str(bytes))
+                });
+
+                return Ok(entry.insert(BlameCommitMetadata {
+                    commit_id_text: oid_to_arc_str(&commit_id),
+                    author,
+                    author_time_unix,
+                    summary,
+                    body,
+                    prior_exists,
+                }));
+            }
+
             let commit = repo.find_commit(commit_id).map_err(|e| {
                 Error::new(ErrorKind::Backend(format!(
                     "gix find_commit {commit_id}: {e}"
@@ -198,7 +270,7 @@ fn blame_commit_metadata<'a>(
             // file's name at this commit) existed in the first parent, not the
             // current name which may not exist in that older tree.
             let prior_exists =
-                file_exists_at_first_parent(repo, &commit, source_path.unwrap_or(blamed_path));
+                file_exists_at_first_parent(repo, &commit_id, source_path.unwrap_or(blamed_path));
 
             let (author, author_time_unix) = match commit.author() {
                 Ok(signature) => (
