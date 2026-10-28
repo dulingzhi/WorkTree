@@ -17,10 +17,7 @@ fn git(dir: &Path) -> Command {
 }
 
 fn run(dir: &Path, args: &[&str]) -> String {
-    let out = git(dir)
-        .args(args)
-        .output()
-        .expect("spawn git");
+    let out = git(dir).args(args).output().expect("spawn git");
     assert!(
         out.status.success(),
         "git {:?} failed: {}",
@@ -67,7 +64,10 @@ fn build_fixture() -> (tempfile::TempDir, PathBuf, Vec<(String, String)>) {
     run(repo, &["tag", "-a", "v1.0-annot", "-m", "annotated"]);
 
     // Pack everything with deep deltas (exercises OFS_DELTA / REF_DELTA paths).
-    run(repo, &["repack", "-a", "-d", "-q", "--depth=50", "--window=20"]);
+    run(
+        repo,
+        &["repack", "-a", "-d", "-q", "--depth=50", "--window=20"],
+    );
 
     // Touch one more commit *after* the repack so a fresh loose object exists
     // alongside the packs (exercises the loose-object fallback path).

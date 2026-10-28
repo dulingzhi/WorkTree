@@ -360,8 +360,7 @@ fn commit_stats_blob_bytes(repo: &gix::Repository, id: Option<gix::ObjectId>) ->
         // No blob on this side (pure addition/deletion) diffs as empty content.
         return Some(Vec::new());
     };
-    #[cfg(feature = "native-object")]
-    {
+    if cfg!(feature = "native-object") {
         return super::blob_bytes(repo, &id);
     }
     let object = repo.find_object(id).ok()?;
@@ -1316,8 +1315,7 @@ impl GixRepo {
         let Ok(id) = repo.rev_parse_single(commit.as_ref()) else {
             return false;
         };
-        #[cfg(feature = "native-object")]
-        {
+        if cfg!(feature = "native-object") {
             let object_id = id.detach();
             // Peel to a tree in-process and look the path up, mirroring the
             // gix peel_to_tree + lookup_entry_by_path below. Both use gix's own
@@ -1411,8 +1409,7 @@ impl GixRepo {
     fn first_parent_id(&self, commit: &CommitId) -> Option<String> {
         let repo = self._repo.to_thread_local();
         let id = repo.rev_parse_single(commit.as_ref()).ok()?.detach();
-        #[cfg(feature = "native-object")]
-        {
+        if cfg!(feature = "native-object") {
             let c = super::find_commit_owned(&repo, &id)?;
             return c.parents.first().map(|p| p.to_string());
         }

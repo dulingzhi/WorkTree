@@ -26,8 +26,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use gix::objs::{tree::EntryMode, Kind, Object, Tree};
 use gix::ObjectId;
+use gix::objs::{Kind, Object, Tree, tree::EntryMode};
 
 use worktree_core::domain::{FileEntry, FileEntryKind};
 use worktree_core::error::{Error, ErrorKind};
@@ -78,7 +78,10 @@ fn read_owned(repo: &gix::Repository, id: &ObjectId) -> Option<Object> {
 
 /// Return the object `id` as an owned commit, or `None` if it is not a commit.
 #[cfg(feature = "native-object")]
-pub(crate) fn find_commit_owned(repo: &gix::Repository, id: &ObjectId) -> Option<gix::objs::Commit> {
+pub(crate) fn find_commit_owned(
+    repo: &gix::Repository,
+    id: &ObjectId,
+) -> Option<gix::objs::Commit> {
     match read_owned(repo, id)? {
         Object::Commit(c) => Some(c),
         _ => None,
@@ -107,7 +110,12 @@ pub(crate) fn blob_bytes(repo: &gix::Repository, id: &ObjectId) -> Option<Vec<u8
 }
 
 /// Return the kind of the object at `id`, or `None` if it cannot be read.
+///
+/// Nothing calls this yet — the Stage-0 hot paths only need the object *body*
+/// (see [`object_body`] / [`blob_bytes`]). `#[expect]` rather than `#[allow]`:
+/// the annotation starts failing the build the moment a call site shows up.
 #[cfg(feature = "native-object")]
+#[expect(dead_code)]
 pub(crate) fn peek_object_kind(repo: &gix::Repository, id: &ObjectId) -> Option<Kind> {
     read_owned(repo, id).map(|o| o.kind())
 }
@@ -262,7 +270,10 @@ pub(crate) fn tree_lookup_entry(
             std::path::Component::Normal(s) => s.to_string_lossy().into_owned(),
             _ => return None,
         };
-        let next = cur.entries.iter().find(|e| e.filename.to_string() == name)?;
+        let next = cur
+            .entries
+            .iter()
+            .find(|e| e.filename == name.as_str())?;
         if components.peek().is_some() {
             cur = peel_to_tree_owned(repo, &next.oid)?;
         } else {
@@ -275,8 +286,11 @@ pub(crate) fn tree_lookup_entry(
 /// Resolve the blob bytes at `path` within the tree named by `tree_id`, or
 /// `None` when the path is absent or not a blob/symlink. Mirrors the
 /// `find_object -> peel_to_tree -> lookup_entry_by_path -> find_object` chain
-/// used by the high-level image-blob helpers.
+/// used by the high-level image-blob helpers. Those helpers still go through
+/// gix in Stage-0, so `#[expect]` (not `#[allow]`) keeps this honest: the
+/// annotation fails the build as soon as the first caller lands.
 #[cfg(feature = "native-object")]
+#[expect(dead_code)]
 pub(crate) fn blob_at_tree_path(
     repo: &gix::Repository,
     tree_id: &ObjectId,

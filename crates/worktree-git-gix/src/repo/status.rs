@@ -452,12 +452,13 @@ fn apply_unmerged_conflicts(repo: &gix::Repository, unstaged: &mut Vec<FileStatu
 }
 
 fn tree_id_for_commit(repo: &gix::Repository, commit_id: &gix::ObjectId) -> Result<gix::ObjectId> {
-    #[cfg(feature = "native-object")]
-    {
+    if cfg!(feature = "native-object") {
         return super::find_commit_owned(repo, commit_id)
             .map(|c| c.tree)
             .ok_or_else(|| {
-                Error::new(ErrorKind::Backend(format!("gix commit lookup: {commit_id}")))
+                Error::new(ErrorKind::Backend(format!(
+                    "gix commit lookup: {commit_id}"
+                )))
             });
     }
 

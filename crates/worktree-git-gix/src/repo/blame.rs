@@ -51,8 +51,7 @@ fn file_exists_at_first_parent(
 /// Whether `path` resolves to an entry in the tree of object `id`. Returns
 /// `false` if the object can't be found, isn't tree-ish, or lacks the path.
 fn tree_contains_path(repo: &gix::Repository, id: gix::ObjectId, path: &Path) -> bool {
-    #[cfg(feature = "native-object")]
-    {
+    if cfg!(feature = "native-object") {
         return match super::find_tree_owned(repo, &id) {
             Some(tree) => super::tree_lookup_entry(repo, &tree, path).is_some(),
             None => false,
@@ -202,20 +201,18 @@ fn blame_commit_metadata<'a>(
             // very same `CommitRefIter` parser, so this is byte-identical to the
             // legacy path below while avoiding the high-level object lookup and
             // the surrounding cache layer.
-            #[cfg(feature = "native-object")]
-            {
+            if cfg!(feature = "native-object") {
                 let raw = super::object_body(repo, &commit_id).ok_or_else(|| {
                     Error::new(ErrorKind::Backend(format!(
                         "gix find_commit {commit_id}: native miss"
                     )))
                 })?;
-                let commit = gix::objs::CommitRef::from_bytes(&raw, repo.object_hash()).map_err(
-                    |e| {
+                let commit =
+                    gix::objs::CommitRef::from_bytes(&raw, repo.object_hash()).map_err(|e| {
                         Error::new(ErrorKind::Backend(format!(
                             "gix find_commit {commit_id}: {e}"
                         )))
-                    },
-                )?;
+                    })?;
 
                 // For a renamed file we must check whether the *historical* path
                 // (the file's name at this commit) existed in the first parent,

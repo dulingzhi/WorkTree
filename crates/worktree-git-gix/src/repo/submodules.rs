@@ -857,8 +857,7 @@ fn submodule_commit_available(repo: &gix::Repository, commit_id: &CommitId) -> b
     let Some(object_id) = object_id_from_commit_id(commit_id) else {
         return false;
     };
-    #[cfg(feature = "native-object")]
-    {
+    if cfg!(feature = "native-object") {
         // A commit exists iff the high-level handle would resolve it; native
         // lookup + gix fallback is byte-identical for existence checking.
         return super::find_commit_owned(repo, &object_id).is_some();
@@ -1141,8 +1140,7 @@ fn resolve_submodule_target_commit_id(
         })?
         .detach();
 
-    #[cfg(feature = "native-object")]
-    {
+    if cfg!(feature = "native-object") {
         return super::peel_to_commit_id(repo, &object_id).ok_or_else(|| {
             Error::new(ErrorKind::Backend(format!(
                 "submodule reference '{}' does not point to a commit",
@@ -1151,14 +1149,12 @@ fn resolve_submodule_target_commit_id(
         });
     }
 
-    let object = repo
-        .find_object(object_id)
-        .map_err(|e| {
-            Error::new(ErrorKind::Backend(format!(
-                "resolve submodule reference '{}': {e}",
-                reference
-            )))
-        })?;
+    let object = repo.find_object(object_id).map_err(|e| {
+        Error::new(ErrorKind::Backend(format!(
+            "resolve submodule reference '{}': {e}",
+            reference
+        )))
+    })?;
     let commit = object.peel_to_commit().map_err(|e| {
         Error::new(ErrorKind::Backend(format!(
             "submodule reference '{}' does not point to a commit: {e}",
@@ -1178,17 +1174,13 @@ fn first_parent_commit_id(
             commit_id.as_ref()
         ))));
     };
-    #[cfg(feature = "native-object")]
-    {
+    if cfg!(feature = "native-object") {
         let Some(c) = super::find_commit_owned(repo, &object_id) else {
             return Err(Error::new(ErrorKind::Backend(format!(
                 "gix find commit: {object_id}"
             ))));
         };
-        return Ok(c
-            .parents
-            .first()
-            .map(|id| object_id_to_commit_id(*id)));
+        return Ok(c.parents.first().map(|id| object_id_to_commit_id(*id)));
     }
 
     let commit = repo
@@ -1222,8 +1214,7 @@ fn gitlink_commit_id_in_object(
     object_id: gix::ObjectId,
     path: &Path,
 ) -> Result<Option<CommitId>> {
-    #[cfg(feature = "native-object")]
-    {
+    if cfg!(feature = "native-object") {
         // Mirror the gix path below: peel to a tree in-process, look the path up,
         // and return the gitlink entry id when it names a commit. A resolved
         // `object_id` always exists, so a native miss maps to the same backend
@@ -1235,9 +1226,7 @@ fn gitlink_commit_id_in_object(
             )))
         })?;
         return match super::tree_lookup_entry(repo, &tree, path) {
-            Some((mode, oid)) if mode.is_commit() => {
-                Ok(Some(object_id_to_commit_id(oid)))
-            }
+            Some((mode, oid)) if mode.is_commit() => Ok(Some(object_id_to_commit_id(oid))),
             _ => Ok(None),
         };
     }

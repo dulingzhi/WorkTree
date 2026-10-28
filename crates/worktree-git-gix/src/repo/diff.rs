@@ -539,20 +539,17 @@ impl GixRepo {
         // faster for cached previews. [`gix_object_id_is_blob`] above already
         // guaranteed `blob_id` is a blob, so a `None` here is unexpected; if it
         // does happen we surface a clear backend error rather than a wrong cache.
-        let bytes = gix_blob_bytes_from_object_id_optional(&repo, blob_id)?
-            .ok_or_else(|| {
-                Error::new(ErrorKind::Backend(format!(
-                    "blob {blob_id} missing despite a blob header lookup"
-                )))
-            })?;
+        let bytes = gix_blob_bytes_from_object_id_optional(&repo, blob_id)?.ok_or_else(|| {
+            Error::new(ErrorKind::Backend(format!(
+                "blob {blob_id} missing despite a blob header lookup"
+            )))
+        })?;
         // Diff sides must be valid UTF-8 for the viewer; a blob saved in a
         // legacy encoding (GBK and friends) is transcode-detected in place.
         let mut utf8_check = StreamingUtf8Check::default();
         utf8_check.push(&bytes);
         let blob_is_utf8 = utf8_check.finish();
-        tmp_file
-            .write_all(&bytes)
-            .map_err(io_err_to_error)?;
+        tmp_file.write_all(&bytes).map_err(io_err_to_error)?;
         if !blob_is_utf8 {
             rewrite_temp_file_as_utf8(&mut tmp_file)?;
         }
@@ -1023,8 +1020,7 @@ fn gix_blob_bytes_from_object_id_optional(
     repo: &gix::Repository,
     object_id: gix::ObjectId,
 ) -> Result<Option<Vec<u8>>> {
-    #[cfg(feature = "native-object")]
-    {
+    if cfg!(feature = "native-object") {
         return Ok(super::blob_bytes(repo, &object_id));
     }
 
@@ -1110,8 +1106,7 @@ fn gix_revision_path_blob_object_id_optional(
         return Ok(None);
     };
 
-    #[cfg(feature = "native-object")]
-    {
+    if cfg!(feature = "native-object") {
         let tree = super::find_tree_owned(repo, &object_id);
         return match tree.and_then(|t| super::tree_lookup_entry(repo, &t, path)) {
             Some((_, oid)) => Ok(Some(oid)),
@@ -1158,8 +1153,7 @@ fn gix_revision_path_blob_entry_optional(
         return Ok(None);
     };
 
-    #[cfg(feature = "native-object")]
-    {
+    if cfg!(feature = "native-object") {
         // Mirror the gix path below: peel the revision to a tree, look the path
         // up, and read the blob in-process. `short_id` is reproduced byte-for-byte
         // via `shorten_or_id()` so the diff-side annotation is identical.
@@ -1470,8 +1464,7 @@ fn gix_first_parent_optional(repo: &gix::Repository, commit: &str) -> Result<Opt
         return Ok(None);
     };
 
-    #[cfg(feature = "native-object")]
-    {
+    if cfg!(feature = "native-object") {
         let Some(c) = super::find_commit_owned(repo, &commit_id) else {
             return Ok(None);
         };

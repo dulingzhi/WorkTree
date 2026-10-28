@@ -48,8 +48,16 @@ fn make_repo() -> (tempfile::TempDir, PathBuf, Vec<(String, String)>) {
     run(&["add", "."]);
     run(&["commit", "-q", "-m", "loose commit"]);
 
-    let git_dir = PathBuf::from(String::from_utf8(git(repo, &["rev-parse", "--absolute-git-dir"])).unwrap().trim());
-    let listing = String::from_utf8(git(repo, &["cat-file", "--batch-all-objects", "--batch-check"])).unwrap();
+    let git_dir = PathBuf::from(
+        String::from_utf8(git(repo, &["rev-parse", "--absolute-git-dir"]))
+            .unwrap()
+            .trim(),
+    );
+    let listing = String::from_utf8(git(
+        repo,
+        &["cat-file", "--batch-all-objects", "--batch-check"],
+    ))
+    .unwrap();
     let objects: Vec<(String, String)> = listing
         .lines()
         .filter_map(|l| {

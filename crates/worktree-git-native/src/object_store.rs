@@ -223,11 +223,11 @@ impl LocCache {
                 Some(v) => v,
                 None => break,
             };
-            if let Some(entry) = self.map.get(&key) {
-                if entry.1 == tick {
-                    self.bytes -= entry.0.data.len();
-                    self.map.remove(&key);
-                }
+            if let Some(entry) = self.map.get(&key)
+                && entry.1 == tick
+            {
+                self.bytes -= entry.0.data.len();
+                self.map.remove(&key);
             }
         }
         self.compact_if_needed();
@@ -297,12 +297,15 @@ impl ObjectStore {
         // hundreds of thousands of entries as the map grows would cost more
         // than parsing the indexes.
         let total: usize = idx_paths.iter().map(|p| index_object_count(p)).sum();
-        let mut map: OidMap = HashMap::with_capacity_and_hasher(total, BuildHasherDefault::default());
+        let mut map: OidMap =
+            HashMap::with_capacity_and_hasher(total, BuildHasherDefault::default());
 
         for idx_path in idx_paths {
             // Map the payload first: an index without a usable pack is ignored
             // so those objects fall through to the loose store (and ultimately
             // to the git CLI) exactly as before.
+            // SAFETY: `PackData::open` only needs the pack file to stay valid
+            // for as long as the mapping lives; see its own SAFETY contract.
             let data = match unsafe { PackData::open(&idx_path.with_extension("pack")) } {
                 Some(d) => d,
                 None => continue,
@@ -374,8 +377,7 @@ impl ObjectStore {
 // Registry: one lazily-built store per git_dir
 // ---------------------------------------------------------------------------
 
-fn store_registry(
-) -> &'static RwLock<HashMap<PathBuf, Arc<ObjectStore>>> {
+fn store_registry() -> &'static RwLock<HashMap<PathBuf, Arc<ObjectStore>>> {
     static STORES: OnceLock<RwLock<HashMap<PathBuf, Arc<ObjectStore>>>> = OnceLock::new();
     STORES.get_or_init(|| RwLock::new(HashMap::new()))
 }
@@ -383,10 +385,10 @@ fn store_registry(
 /// One `ObjectStore` per `git_dir`, built lazily on the first object read.
 fn store_for(git_dir: &Path) -> Arc<ObjectStore> {
     let registry = store_registry();
-    if let Ok(guard) = registry.read() {
-        if let Some(store) = guard.get(git_dir) {
-            return store.clone();
-        }
+    if let Ok(guard) = registry.read()
+        && let Some(store) = guard.get(git_dir)
+    {
+        return store.clone();
     }
     let store = Arc::new(ObjectStore::open(git_dir));
     if let Ok(mut guard) = registry.write() {
@@ -447,11 +449,7 @@ fn compute_object_dirs(git_dir: &Path) -> Vec<PathBuf> {
     let base = match std::fs::read_to_string(git_dir.join("commondir")) {
         Ok(c) => {
             let p = PathBuf::from(c.trim());
-            if p.is_absolute() {
-                p
-            } else {
-                git_dir.join(p)
-            }
+            if p.is_absolute() { p } else { git_dir.join(p) }
         }
         Err(_) => git_dir.to_path_buf(),
     };
@@ -664,12 +662,11 @@ fn pack_signature(pack_dirs: &[PathBuf]) -> PackSignature {
                     continue;
                 }
                 count += 1;
-                if let Ok(meta) = entry.metadata() {
-                    if let Ok(time) = meta.modified() {
-                        if let Ok(delta) = time.duration_since(std::time::UNIX_EPOCH) {
-                            newest = newest.max(delta.as_nanos());
-                        }
-                    }
+                if let Ok(meta) = entry.metadata()
+                    && let Ok(time) = meta.modified()
+                    && let Ok(delta) = time.duration_since(std::time::UNIX_EPOCH)
+                {
+                    newest = newest.max(delta.as_nanos());
                 }
             }
         }
@@ -798,10 +795,10 @@ fn resolve_pack_object(store: &ObjectStore, loc: PackLoc, depth: usize) -> Optio
 
 /// Look an object up in the pack index, then in the loose store.
 fn read_object_raw(store: &ObjectStore, oid: &[u8; 20], depth: usize) -> Option<ObjRef> {
-    if let Some(&loc) = store.map.get(oid) {
-        if let Some(obj) = resolve_pack_object(store, loc, depth) {
-            return Some(obj);
-        }
+    if let Some(&loc) = store.map.get(oid)
+        && let Some(obj) = resolve_pack_object(store, loc, depth)
+    {
+        return Some(obj);
     }
     // Fewer than 1% of objects are loose in a gc'd repository, so this miss is
     // cheap: it is a single `CreateFileW`, and only after the index has failed.
@@ -866,10 +863,10 @@ fn git_capture_bytes(git_dir: &Path, args: &[&str]) -> Option<Vec<u8>> {
 /// base is missing, promisor/partial clones). The returned bytes are the object
 /// body, identical to `git cat-file <type> <hex>` stdout.
 pub fn fetch_object_bytes(git_dir: &Path, hex: &str, obj_type: &str) -> Option<Vec<u8>> {
-    if let Some((ty, data)) = read_object(git_dir, hex) {
-        if ty.as_str() == obj_type {
-            return Some(data);
-        }
+    if let Some((ty, data)) = read_object(git_dir, hex)
+        && ty.as_str() == obj_type
+    {
+        return Some(data);
     }
     git_capture_bytes(git_dir, &["cat-file", obj_type, hex])
 }

@@ -17,8 +17,12 @@ rust-version.workspace = true
 # We do not inherit the workspace lints here: the workspace sets
 # `unsafe_code = "forbid"`, but a memory-mapped pack reader requires one
 # `unsafe` call (`Mmap::map`). We restrict the relaxation to this crate only.
+#
+# `allow` (not `warn`): CI lints with `-D warnings`, which would promote a
+# `warn` back into a hard error and undo the relaxation. Every `unsafe` block
+# here carries an explicit SAFETY comment instead.
 [lints.rust]
-unsafe_code = "warn"
+unsafe_code = "allow"
 
 [dependencies]
 flate2 = { workspace = true }

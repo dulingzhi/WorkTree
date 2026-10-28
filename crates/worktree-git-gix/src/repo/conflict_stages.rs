@@ -78,8 +78,7 @@ pub(super) fn gix_index_stage_blob_bytes_optional(
         return Ok(None);
     };
 
-    #[cfg(feature = "native-object")]
-    {
+    if cfg!(feature = "native-object") {
         return super::blob_bytes(repo, &object_id)
             .ok_or_else(|| {
                 Error::new(ErrorKind::Backend(format!(
@@ -119,8 +118,7 @@ fn gix_blob_bytes_from_object_id_optional(
         return Ok(None);
     };
 
-    #[cfg(feature = "native-object")]
-    {
+    if cfg!(feature = "native-object") {
         return super::blob_bytes(repo, &object_id)
             .ok_or_else(|| {
                 Error::new(ErrorKind::Backend(format!(
