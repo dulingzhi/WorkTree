@@ -270,10 +270,7 @@ pub(crate) fn tree_lookup_entry(
             std::path::Component::Normal(s) => s.to_string_lossy().into_owned(),
             _ => return None,
         };
-        let next = cur
-            .entries
-            .iter()
-            .find(|e| e.filename == name.as_str())?;
+        let next = cur.entries.iter().find(|e| e.filename == name.as_str())?;
         if components.peek().is_some() {
             cur = peel_to_tree_owned(repo, &next.oid)?;
         } else {

@@ -125,15 +125,40 @@ fn native_read_is_type_aware() {
     // Asking for the wrong type must NOT return an object (mirrors `git
     // cat-file <wrong> <oid>` failing). This guards against accidentally
     // returning a blob body for a `commit` request, etc.
-    let wrong = match objects[0].1.as_str() {
-        "commit" => "blob",
-        _ => "commit",
+    //
+    // The (oid, wrong-type) pair has to be one git itself rejects. `git
+    // cat-file` *peels* when it can — `cat-file commit <tag>` and `cat-file
+    // tree <commit>` both succeed — so those pairs would only prove the CLI
+    // fallback mirrors git, not that the native reader is type-aware. Picking
+    // `objects[0]` was the old shape and it flaked: the enumeration order is
+    // OID-sorted, commit OIDs embed the commit timestamp, so which object lands
+    // first (tag vs. commit vs. blob) changes from run to run.
+    let first_of = |want: &str| {
+        objects
+            .iter()
+            .find(|(_, ty)| ty == want)
+            .map(|(oid, _)| oid.clone())
     };
-    let oid = &objects[0].0;
-    assert!(
-        worktree_git_native::read_object(&git_dir, oid, wrong).is_none(),
-        "native read should reject type mismatch for {oid}",
-    );
+    let commit = first_of("commit").expect("fixture has a commit");
+    let blob = first_of("blob").expect("fixture has a blob");
+
+    for (oid, wrong) in [(&commit, "blob"), (&blob, "commit")] {
+        let git_ok = git(&git_dir)
+            .args(["cat-file", wrong, oid.as_str()])
+            .output()
+            .expect("spawn git")
+            .status
+            .success();
+        assert!(
+            !git_ok,
+            "fixture premise: `git cat-file {wrong} {oid}` must fail, otherwise this test \
+             cannot tell a native type bug from git's own peeling"
+        );
+        assert!(
+            worktree_git_native::read_object(&git_dir, oid, wrong).is_none(),
+            "native read should reject type mismatch for {oid} (asked for {wrong})",
+        );
+    }
 }
 
 #[test]
