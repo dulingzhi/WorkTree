@@ -845,6 +845,14 @@ impl PopoverHost {
             ContextMenuAction::SetHistoryScope { repo_id, scope } => {
                 self.store.dispatch(Msg::SetHistoryScope { repo_id, scope });
             }
+            ContextMenuAction::ShowFileHistory { repo_id, path } => {
+                let main_pane = self.main_pane.clone();
+                cx.defer(move |cx| {
+                    main_pane.update(cx, |pane, cx| {
+                        pane.show_file_history(repo_id, path, cx);
+                    });
+                });
+            }
             ContextMenuAction::SetDiffContentMode { mode } => {
                 self.diff_content_mode = mode;
                 let main_pane = self.main_pane.clone();

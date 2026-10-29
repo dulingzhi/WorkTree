@@ -225,12 +225,9 @@ pub(super) fn model(
         icon: Some("icons/refresh.svg".into()),
         shortcut: Some(secondary_shortcut("H").into()),
         disabled: false,
-        action: Box::new(ContextMenuAction::OpenPopover {
-            kind: PopoverKind::FileHistory {
-                repo_id,
-                path: path.to_path_buf(),
-                is_dir: false,
-            },
+        action: Box::new(ContextMenuAction::ShowFileHistory {
+            repo_id,
+            path: path.to_path_buf(),
         }),
     });
     if is_conflicted {

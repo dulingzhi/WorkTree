@@ -294,6 +294,13 @@ pub(in crate::view) enum ContextMenuAction {
         repo_id: RepoId,
         scope: worktree_core::domain::LogScope,
     },
+    /// Dock the main pane's history to one file/folder instead of opening the
+    /// transient `FileHistory` popover: sets the file scope and drops an open
+    /// diff so the pane is on screen.
+    ShowFileHistory {
+        repo_id: RepoId,
+        path: std::path::PathBuf,
+    },
     SetDiffContentMode {
         mode: DiffContentMode,
     },

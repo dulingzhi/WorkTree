@@ -1856,9 +1856,7 @@ fn file_and_diff_context_menu_shortcuts_match_expected_actions(cx: &mut gpui::Te
     assert_shortcut_action!(
         commit_file_model,
         "H",
-        ContextMenuAction::OpenPopover {
-            kind: PopoverKind::FileHistory { repo_id: rid, path, .. }
-        } if *rid == repo_id && path == &commit_file_path
+        ContextMenuAction::ShowFileHistory { repo_id: rid, path } if *rid == repo_id && path == &commit_file_path
     );
     assert_shortcut_action!(
         commit_file_model,
@@ -1892,9 +1890,7 @@ fn file_and_diff_context_menu_shortcuts_match_expected_actions(cx: &mut gpui::Te
     assert_shortcut_action!(
         unstaged_status_model,
         &sec("H"),
-        ContextMenuAction::OpenPopover {
-            kind: PopoverKind::FileHistory { repo_id: rid, path, .. }
-        } if *rid == repo_id && path == &unstaged_path
+        ContextMenuAction::ShowFileHistory { repo_id: rid, path } if *rid == repo_id && path == &unstaged_path
     );
     assert_shortcut_action!(
         unstaged_status_model,
@@ -1946,9 +1942,7 @@ fn file_and_diff_context_menu_shortcuts_match_expected_actions(cx: &mut gpui::Te
     assert_shortcut_action!(
         staged_status_model,
         &sec("H"),
-        ContextMenuAction::OpenPopover {
-            kind: PopoverKind::FileHistory { repo_id: rid, path, .. }
-        } if *rid == repo_id && path == &staged_path
+        ContextMenuAction::ShowFileHistory { repo_id: rid, path } if *rid == repo_id && path == &staged_path
     );
     assert_shortcut_action!(
         staged_status_model,
@@ -2007,9 +2001,7 @@ fn file_and_diff_context_menu_shortcuts_match_expected_actions(cx: &mut gpui::Te
     assert_shortcut_action!(
         conflicted_status_model,
         &sec("H"),
-        ContextMenuAction::OpenPopover {
-            kind: PopoverKind::FileHistory { repo_id: rid, path, .. }
-        } if *rid == repo_id && path == &conflicted_path
+        ContextMenuAction::ShowFileHistory { repo_id: rid, path } if *rid == repo_id && path == &conflicted_path
     );
     assert_shortcut_action!(
         conflicted_status_model,
@@ -7027,7 +7019,7 @@ fn ctrl_d_opens_discard_confirm_popover(cx: &mut gpui::TestAppContext) {
 }
 
 #[gpui::test]
-fn ctrl_h_opens_file_history_popover(cx: &mut gpui::TestAppContext) {
+fn ctrl_h_scopes_the_history_pane_to_the_file(cx: &mut gpui::TestAppContext) {
     let (store, events) = AppStore::new(Arc::new(TestBackend));
     let (view, cx) = cx.add_window_view(|window, cx| {
         super::super::WorkTreeView::new(store, events, None, window, cx)
@@ -7055,16 +7047,31 @@ fn ctrl_h_opens_file_history_popover(cx: &mut gpui::TestAppContext) {
     cx.simulate_keystrokes("ctrl-h");
     draw_and_drain_test_window(cx);
 
-    let is_file_history = cx.update(|_window, app| {
-        let host = view.read(app).popover_host.read(app);
-        matches!(
-            host.popover_kind_for_tests(),
-            Some(PopoverKind::FileHistory { .. })
-        )
+    // Ctrl+H now docks the history pane to the file instead of opening a
+    // transient popover: the observable effect is the file scope landing in
+    // the store (and the diff target being dropped so the pane is on screen).
+    let scope = cx.update(|_window, app| {
+        let snapshot = view.read(app).store.snapshot();
+        let repo = snapshot
+            .repos
+            .iter()
+            .find(|r| Some(r.id) == snapshot.active_repo)?;
+        Some((
+            repo.history_state.history_file_scope.clone(),
+            repo.diff_state.diff_target.is_some(),
+        ))
     });
+    let Some((scoped_path, diff_still_open)) = scope else {
+        panic!("the active repository must be present in the snapshot");
+    };
+    assert_eq!(
+        scoped_path.as_deref(),
+        Some(path.as_path()),
+        "expected Ctrl+H to scope the history pane to the diffed file"
+    );
     assert!(
-        is_file_history,
-        "expected Ctrl+H to open the FileHistory popover"
+        !diff_still_open,
+        "the diff target must be dropped so the history pane is actually visible"
     );
 }
 

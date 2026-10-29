@@ -237,17 +237,8 @@ impl MainPaneView {
                     .whitespace_nowrap()
                     .child(badge_label),
             )
-            .on_click(cx.listener(move |this, e: &ClickEvent, window, cx| {
-                this.open_popover_at(
-                    PopoverKind::FileHistory {
-                        repo_id,
-                        path: path.clone(),
-                        is_dir: false,
-                    },
-                    e.position(),
-                    window,
-                    cx,
-                );
+            .on_click(cx.listener(move |this, _e: &ClickEvent, _window, cx| {
+                this.show_file_history(repo_id, path.clone(), cx);
             }))
             .worktree_tooltip(theme, crate::i18n::tr("tail.diff.show_file_history"));
 

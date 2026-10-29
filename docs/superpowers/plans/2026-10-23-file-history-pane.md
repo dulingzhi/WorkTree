@@ -45,9 +45,16 @@
 | Slice | 内容 | 状态 |
 |---|---|---|
 | **S1 — 状态层** | `history_file_scope` 字段 + `Msg::SetHistoryFileScope` + `set_history_file_scope`（设作用域并加载）+ 单测 | ✅ 已完成 |
-| S2 — 面板渲染 | History 面板按作用域在 `log` / `file_history` 间切换；作用域条（路径 + 清除） | 待做 |
-| S3 — 入口改接 | 右键「Show file history」/ diff 标题栏 / `Ctrl+H` 改为派发 `SetHistoryFileScope` 并切到 History 面板，不再开弹层 | 待做 |
-| S4 — 收尾 | i18n（作用域条文案）、弹层去留决策、全量门禁 + CI | 待做 |
+| **S2 — 面板渲染** | History 面板按作用域在 `log` / `file_history` 间切换 | ✅ 已完成 |
+| **S3a — 作用域条** | 路径 + 清除按钮（`misc.history_panel.file_scope*`） | ✅ 已完成 |
+| **S3b — 入口改接** | 右键「File/Folder history」×4、diff 标题栏点击、`Ctrl+H` → `ContextMenuAction::ShowFileHistory` / `MainPaneView::show_file_history`，不再开弹层 | 进行中 |
+| **S4 — 收尾** | 弹层去留决策、全量门禁 + CI | 待做 |
+
+### S3b 关键事实（别重开）
+
+- `MainPaneView::render`（`panes/main.rs:129`）只在 `diff_state.diff_target.is_none()` 时渲染 `history_view`。开着 diff 时派发作用域用户看不见，所以 `show_file_history` 必须同时丢掉 diff target（走已有封装 `clear_diff_selection_or_exit` → `Msg::ClearDiffSelection`）。
+- 只在确实开着 diff 时才派发 `ClearDiffSelection`：该 reducer 无条件 `bump_diff_state_rev()`，白 bump 一次会多刷一帧。
+- 四处右键菜单走 `ContextMenuAction::ShowFileHistory`（`impl_menu.rs`，宿主是 `PopoverHost`，经 `main_pane` 转到 `MainPaneView`）；`diff_view_title.rs` 与 `diff_view/shortcuts.rs` 直接在 `MainPaneView` 上调用。
 
 ## 4. 决策点
 

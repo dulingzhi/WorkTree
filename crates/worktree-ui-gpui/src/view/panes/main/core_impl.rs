@@ -276,6 +276,45 @@ impl MainPaneView {
         }
     }
 
+    /// Scope the history pane to one file (or folder) and make sure the pane is
+    /// actually the thing on screen.
+    ///
+    /// The main pane renders the diff view whenever a diff target is open, so a
+    /// file scope set while a diff is up would stay invisible until the user
+    /// closed it by hand. Dropping the target here is what turns "show file
+    /// history" from a transient popover into a docked pane.
+    pub(in crate::view) fn show_file_history(
+        &mut self,
+        repo_id: RepoId,
+        path: std::path::PathBuf,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if matches!(
+            clear_diff_selection_action(self.view_mode),
+            ClearDiffSelectionAction::ExitFocusedMergetool
+        ) {
+            self.clear_diff_selection_or_exit(repo_id, cx);
+            return;
+        }
+
+        self.store.dispatch(Msg::SetHistoryFileScope {
+            repo_id,
+            path: Some(path),
+        });
+        // Only drop the diff when there is one: `ClearDiffSelection` bumps the
+        // diff-state rev, and bumping it unconditionally would repaint the pane
+        // for nothing in the (common) no-diff case.
+        let diff_open = self
+            .state
+            .repos
+            .iter()
+            .any(|repo| repo.id == repo_id && repo.diff_state.diff_target.is_some());
+        if diff_open {
+            self.clear_diff_selection_or_exit(repo_id, cx);
+        }
+        cx.notify();
+    }
+
     pub(in crate::view) fn reveal_history_commit(
         &mut self,
         repo_id: RepoId,

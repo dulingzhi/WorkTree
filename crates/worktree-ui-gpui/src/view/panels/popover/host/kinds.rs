@@ -161,6 +161,12 @@ pub(in crate::view) enum PopoverKind {
         repo_id: RepoId,
         kind: RepoPopoverKind,
     },
+    /// Kept alive only by its own tests: every product entry point now docks
+    /// the history pane to the file (`ContextMenuAction::ShowFileHistory`)
+    /// instead of opening this popover. `#[allow]` rather than `#[expect]`
+    /// because the test-only build *does* construct it while the shipped build
+    /// does not. Slice S4 decides whether to retire the popover for good.
+    #[allow(dead_code)]
     FileHistory {
         repo_id: RepoId,
         path: std::path::PathBuf,

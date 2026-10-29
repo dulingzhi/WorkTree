@@ -987,21 +987,7 @@ impl MainPaneView {
                 handled = true;
             }
             "h" if !mods.shift => {
-                let bounds = window.window_bounds().get_bounds();
-                let anchor = point(
-                    (bounds.size.width * 0.5).max(px(64.0)),
-                    (bounds.size.height * 0.25).max(px(24.0)),
-                );
-                self.open_popover_at(
-                    PopoverKind::FileHistory {
-                        repo_id,
-                        path: path.clone(),
-                        is_dir: false,
-                    },
-                    anchor,
-                    window,
-                    cx,
-                );
+                self.show_file_history(repo_id, path.clone(), cx);
                 handled = true;
             }
             "e" if !mods.shift && crate::external_editor::configured_setting().is_some() => {
